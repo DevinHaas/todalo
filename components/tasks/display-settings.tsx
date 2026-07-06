@@ -1,7 +1,15 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import { LayoutGrid, CalendarDays, List, HelpCircle, ChevronDown } from "lucide-react";
+import {
+  LayoutGrid,
+  CalendarDays,
+  List,
+  HelpCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -90,6 +98,27 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
     <div className="flex items-center justify-between border-t pt-3 text-sm font-semibold">
       {children}
       <ChevronDown className="size-4" />
+    </div>
+  );
+}
+
+export function LayoutSwitcher() {
+  const { layout, setLayout } = useDisplaySettings();
+  const index = LAYOUTS.findIndex((l) => l.key === layout);
+
+  const cycle = (delta: number) => {
+    const next = (index + delta + LAYOUTS.length) % LAYOUTS.length;
+    setLayout(LAYOUTS[next].key);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Button type="button" variant="ghost" size="icon" onClick={() => cycle(-1)}>
+        <ChevronLeft className="size-4" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" onClick={() => cycle(1)}>
+        <ChevronRight className="size-4" />
+      </Button>
     </div>
   );
 }

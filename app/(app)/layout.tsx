@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getTodayTaskCount } from "@/lib/tasks";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { DisplaySettingsProvider, DisplayMenu } from "@/components/tasks/display-settings";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { DisplaySettingsProvider, DisplayMenu, LayoutSwitcher } from "@/components/tasks/display-settings";
 
 export default async function AppLayout({
   children,
@@ -24,8 +24,8 @@ export default async function AppLayout({
       <AppSidebar user={session.user} todayCount={todayCount} />
       <SidebarInset>
         <DisplaySettingsProvider>
-          <div className="flex items-center justify-between border-b px-4 py-2">
-            <SidebarTrigger />
+          <div className="flex items-center justify-between px-4 py-2">
+            <LayoutSwitcher />
             <DisplayMenu />
           </div>
           <main className="p-6">{children}</main>
