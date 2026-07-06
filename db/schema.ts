@@ -129,6 +129,7 @@ export const tasks = pgTable(
     description: text("description"),
     status: taskStatus("status").default("todo").notNull(),
     dueDate: timestamp("due_date"),
+    dueDateEnd: timestamp("due_date_end"),
     recurrence: jsonb("recurrence").$type<Recurrence>(),
     googleCalendarEventId: text("google_calendar_event_id"),
     completedAt: timestamp("completed_at"),

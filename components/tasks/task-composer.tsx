@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { createTask } from "@/app/(app)/tasks/actions";
+import { combineDateAndTime } from "@/lib/task-dates";
+import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 
 function startOfToday() {
   const d = new Date();
@@ -132,19 +134,30 @@ export function TaskComposer({ defaultToToday = false }: { defaultToToday?: bool
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(defaultToToday ? startOfToday() : undefined);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function reset() {
     setTitle("");
     setDescription("");
     setDueDate(defaultToToday ? startOfToday() : undefined);
+    setStartTime("");
+    setEndTime("");
     setExpanded(false);
   }
 
   function submit() {
     if (!title.trim()) return;
+    const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
+    const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;
     startTransition(async () => {
-      await createTask({ title, description: description || undefined, dueDate });
+      await createTask({
+        title,
+        description: description || undefined,
+        dueDate: finalDueDate,
+        dueDateEnd,
+      });
       reset();
     });
   }
@@ -177,8 +190,16 @@ export function TaskComposer({ defaultToToday = false }: { defaultToToday?: bool
         placeholder="Description"
         className="border-0 px-0 text-sm focus-visible:ring-0"
       />
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <DatePicker dueDate={dueDate} onChange={setDueDate} />
+        {dueDate && (
+          <TimeRangeInputs
+            startTime={startTime}
+            endTime={endTime}
+            onStartTimeChange={setStartTime}
+            onEndTimeChange={setEndTime}
+          />
+        )}
         <StubPill icon={Flag} label="Priority" />
         <StubPill icon={AlarmClock} label="Reminders" />
         <StubPill icon={Paperclip} label="Attachment" />

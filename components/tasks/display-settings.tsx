@@ -35,11 +35,20 @@ export const LAYOUTS = [
 
 export type Layout = (typeof LAYOUTS)[number]["key"];
 
+export const CALENDAR_RANGES = [
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+] as const;
+
+export type CalendarRange = (typeof CALENDAR_RANGES)[number]["key"];
+
 type DisplaySettings = {
   layout: Layout;
   setLayout: (layout: Layout) => void;
   showCompleted: boolean;
   setShowCompleted: (value: boolean) => void;
+  calendarRange: CalendarRange;
+  setCalendarRange: (range: CalendarRange) => void;
 };
 
 const DisplaySettingsContext = createContext<DisplaySettings | null>(null);
@@ -47,9 +56,12 @@ const DisplaySettingsContext = createContext<DisplaySettings | null>(null);
 export function DisplaySettingsProvider({ children }: { children: React.ReactNode }) {
   const [layout, setLayout] = useState<Layout>("list");
   const [showCompleted, setShowCompleted] = useState(false);
+  const [calendarRange, setCalendarRange] = useState<CalendarRange>("month");
 
   return (
-    <DisplaySettingsContext.Provider value={{ layout, setLayout, showCompleted, setShowCompleted }}>
+    <DisplaySettingsContext.Provider
+      value={{ layout, setLayout, showCompleted, setShowCompleted, calendarRange, setCalendarRange }}
+    >
       {children}
     </DisplaySettingsContext.Provider>
   );
@@ -124,7 +136,8 @@ export function LayoutSwitcher() {
 }
 
 export function DisplayMenu() {
-  const { layout, setLayout, showCompleted, setShowCompleted } = useDisplaySettings();
+  const { layout, setLayout, showCompleted, setShowCompleted, calendarRange, setCalendarRange } =
+    useDisplaySettings();
 
   return (
     <Dialog>
@@ -157,6 +170,23 @@ export function DisplayMenu() {
             </Button>
           ))}
         </div>
+
+        {layout === "calendar" && (
+          <div className="flex gap-1 rounded-md border p-1">
+            {CALENDAR_RANGES.map(({ key, label }) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={calendarRange === key ? "secondary" : "ghost"}
+                className="flex-1"
+                onClick={() => setCalendarRange(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <span className="text-sm">Completed tasks</span>

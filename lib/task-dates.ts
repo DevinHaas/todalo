@@ -29,3 +29,16 @@ export function isOverdue(task: DueDated) {
   if (!task.dueDate) return false;
   return new Date(task.dueDate) < startOfToday() && !isDueToday(task);
 }
+
+export function hasDueTime(date: Date) {
+  return date.getHours() !== 0 || date.getMinutes() !== 0;
+}
+
+// Combines a calendar date with an "HH:mm" time string (from a native
+// <input type="time">), keeping the date's y/m/d and applying the time.
+export function combineDateAndTime(date: Date, time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const result = new Date(date);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}

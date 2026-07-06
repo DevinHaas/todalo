@@ -9,9 +9,11 @@ import type { Task } from "@/lib/tasks";
 export function ViewSwitcher({
   tasks,
   listView,
+  calendarView,
 }: {
   tasks: Task[];
   listView?: React.ReactNode;
+  calendarView?: React.ReactNode;
 }) {
   const { layout } = useDisplaySettings();
 
@@ -19,7 +21,7 @@ export function ViewSwitcher({
     <div>
       {layout === "list" && (listView ?? <ListView tasks={tasks} />)}
       {layout === "board" && <BoardView tasks={tasks} />}
-      {layout === "calendar" && <CalendarView tasks={tasks} />}
+      {layout === "calendar" && (calendarView ?? <CalendarView tasks={tasks} />)}
     </div>
   );
 }

@@ -8,11 +8,10 @@ import { Button } from "@/components/ui/button";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import type { Task } from "@/lib/tasks";
-import { isOverdue } from "@/lib/task-dates";
+import { isOverdue, hasDueTime } from "@/lib/task-dates";
 
 function formatDueDate(dueDate: Date) {
-  const hasTime = dueDate.getHours() !== 0 || dueDate.getMinutes() !== 0;
-  return format(dueDate, hasTime ? "d MMM HH:mm" : "d MMM");
+  return format(dueDate, hasDueTime(dueDate) ? "d MMM HH:mm" : "d MMM");
 }
 
 export function TaskRow({ task }: { task: Task }) {

@@ -15,6 +15,7 @@ const taskInput = z.object({
   projectId: z.string().optional(),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
   dueDate: z.coerce.date().optional(),
+  dueDateEnd: z.coerce.date().optional(),
   recurrence: recurrenceSchema.optional(),
 });
 

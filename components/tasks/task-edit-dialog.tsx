@@ -19,8 +19,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { updateTask } from "@/app/(app)/tasks/actions";
+import { combineDateAndTime, hasDueTime } from "@/lib/task-dates";
+import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 import type { Task } from "@/lib/tasks";
 import type { Recurrence } from "@/lib/recurrence";
+
+function formatTime(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
 const RECURRENCE_OPTIONS: { value: string; recurrence: Recurrence | null }[] = [
   { value: "none", recurrence: null },
@@ -40,6 +46,12 @@ export function TaskEditDialog({
   const [dueDate, setDueDate] = useState<Date | undefined>(
     task.dueDate ? new Date(task.dueDate) : undefined,
   );
+  const [startTime, setStartTime] = useState(
+    task.dueDate && hasDueTime(new Date(task.dueDate)) ? formatTime(new Date(task.dueDate)) : "",
+  );
+  const [endTime, setEndTime] = useState(
+    task.dueDateEnd ? formatTime(new Date(task.dueDateEnd)) : "",
+  );
   const [recurrenceValue, setRecurrenceValue] = useState(
     task.recurrence?.type ?? "none",
   );
@@ -49,8 +61,15 @@ export function TaskEditDialog({
     const recurrence =
       RECURRENCE_OPTIONS.find((o) => o.value === recurrenceValue)?.recurrence ??
       undefined;
+    const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
+    const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;
     startTransition(async () => {
-      await updateTask({ id: task.id, dueDate, recurrence: recurrence ?? undefined });
+      await updateTask({
+        id: task.id,
+        dueDate: finalDueDate,
+        dueDateEnd,
+        recurrence: recurrence ?? undefined,
+      });
       setOpen(false);
     });
   }
@@ -77,6 +96,16 @@ export function TaskEditDialog({
                 <Calendar mode="single" selected={dueDate} onSelect={setDueDate} />
               </PopoverContent>
             </Popover>
+            {dueDate && (
+              <div className="mt-2">
+                <TimeRangeInputs
+                  startTime={startTime}
+                  endTime={endTime}
+                  onStartTimeChange={setStartTime}
+                  onEndTimeChange={setEndTime}
+                />
+              </div>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Repeat</label>
