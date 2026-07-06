@@ -5,7 +5,6 @@ import { format, setHours } from "date-fns";
 import { X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { TaskComposer } from "@/components/tasks/task-composer";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isDueToday, isOverdue, hasDueTime } from "@/lib/task-dates";
@@ -67,9 +66,9 @@ function AllDayRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="group flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5">
+    <div className="group flex items-center gap-1.5 rounded bg-muted/50 px-1.5 py-0.5">
       <Checkbox
-        className="rounded-full"
+        className="size-3.5 rounded-full"
         checked={task.status === "done"}
         disabled={isPending}
         onCheckedChange={() => startTransition(() => completeTask(task.id))}
@@ -79,8 +78,8 @@ function AllDayRow({ task }: { task: Task }) {
           type="button"
           className={
             task.status === "done"
-              ? "flex-1 text-left text-sm font-semibold text-muted-foreground line-through"
-              : "flex-1 text-left text-sm font-semibold"
+              ? "flex-1 text-left text-xs font-medium text-muted-foreground line-through"
+              : "flex-1 text-left text-xs font-medium"
           }
         >
           {task.title}
@@ -88,12 +87,12 @@ function AllDayRow({ task }: { task: Task }) {
       </TaskEditDialog>
       <Button
         variant="ghost"
-        size="sm"
+        size="icon-sm"
         disabled={isPending}
-        className="opacity-0 group-hover:opacity-100"
+        className="size-5 opacity-0 group-hover:opacity-100"
         onClick={() => startTransition(() => deleteTask(task.id))}
       >
-        <X className="size-4" />
+        <X className="size-3" />
       </Button>
     </div>
   );
@@ -119,15 +118,14 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
   return (
     <div>
       <section className="mb-2 flex gap-2">
-        <div className="w-12 shrink-0 pt-1.5 text-xs text-muted-foreground">All day</div>
-        <div className="min-w-0 flex-1 space-y-px">
+        <div className="w-12 shrink-0 pt-0.5 text-xs text-muted-foreground">All day</div>
+        <div className="min-w-0 flex-1 space-y-0.5">
           {overdueTasks.map((task) => (
             <AllDayRow key={task.id} task={task} />
           ))}
           {allDayTasks.map((task) => (
             <AllDayRow key={task.id} task={task} />
           ))}
-          <TaskComposer defaultToToday />
         </div>
       </section>
 
