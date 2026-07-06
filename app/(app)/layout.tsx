@@ -1,7 +1,9 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getTodayTaskCount } from "@/lib/tasks";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default async function AppLayout({
   children,
@@ -14,18 +16,17 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  const todayCount = await getTodayTaskCount(session.user.id);
+
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b px-6 py-3 text-sm">
-        <nav className="flex gap-4">
-          <Link href="/today">Today</Link>
-          <Link href="/list">List</Link>
-          <Link href="/board">Board</Link>
-          <Link href="/calendar">Calendar</Link>
-        </nav>
-        <span className="text-muted-foreground">{session.user.email}</span>
-      </header>
-      <main className="p-6">{children}</main>
-    </div>
+    <SidebarProvider>
+      <AppSidebar user={session.user} todayCount={todayCount} />
+      <SidebarInset>
+        <div className="flex items-center border-b px-4 py-2">
+          <SidebarTrigger />
+        </div>
+        <main className="p-6">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

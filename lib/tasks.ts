@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
+import { isDueTodayOrOverdue } from "@/lib/task-dates";
 
 export async function getTasksForUser(userId: string, projectId?: string) {
   return db
@@ -15,3 +16,8 @@ export async function getTasksForUser(userId: string, projectId?: string) {
 }
 
 export type Task = Awaited<ReturnType<typeof getTasksForUser>>[number];
+
+export async function getTodayTaskCount(userId: string) {
+  const userTasks = await getTasksForUser(userId);
+  return userTasks.filter((t) => t.status !== "done" && isDueTodayOrOverdue(t)).length;
+}

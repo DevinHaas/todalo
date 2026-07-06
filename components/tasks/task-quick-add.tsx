@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createTask } from "@/app/(app)/tasks/actions";
 
-export function TaskQuickAdd() {
+export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
   const [title, setTitle] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -18,6 +18,7 @@ export function TaskQuickAdd() {
         startTransition(async () => {
           await createTask({ title });
           setTitle("");
+          onCreated?.();
         });
       }}
     >
