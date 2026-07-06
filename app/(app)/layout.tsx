@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTodayTaskCount } from "@/lib/tasks";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { DisplaySettingsProvider, DisplayMenu } from "@/components/tasks/display-settings";
 
 export default async function AppLayout({
   children,
@@ -22,10 +23,13 @@ export default async function AppLayout({
     <SidebarProvider>
       <AppSidebar user={session.user} todayCount={todayCount} />
       <SidebarInset>
-        <div className="flex items-center border-b px-4 py-2">
-          <SidebarTrigger />
-        </div>
-        <main className="p-6">{children}</main>
+        <DisplaySettingsProvider>
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <SidebarTrigger />
+            <DisplayMenu />
+          </div>
+          <main className="p-6">{children}</main>
+        </DisplaySettingsProvider>
       </SidebarInset>
     </SidebarProvider>
   );
