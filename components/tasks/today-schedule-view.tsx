@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
+import { TaskComposer } from "@/components/tasks/task-composer";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isDueToday, isOverdue, hasDueTime } from "@/lib/task-dates";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
@@ -14,9 +15,19 @@ import type { Task } from "@/lib/tasks";
 const HOUR_HEIGHT = 48; // px per hour
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const DEFAULT_DURATION_MINUTES = 30;
+const CLICK_SLOT_MINUTES = 15;
+const MINUTES_PER_DAY = 24 * 60;
 
 function offsetFor(date: Date) {
   return (date.getHours() + date.getMinutes() / 60) * HOUR_HEIGHT;
+}
+
+// Inverse of offsetFor: pixel offset within the grid -> minutes since
+// midnight, snapped to the nearest slot.
+function minutesForOffset(y: number) {
+  const rawMinutes = (y / HOUR_HEIGHT) * 60;
+  const snapped = Math.round(rawMinutes / CLICK_SLOT_MINUTES) * CLICK_SLOT_MINUTES;
+  return Math.min(Math.max(snapped, 0), MINUTES_PER_DAY - CLICK_SLOT_MINUTES);
 }
 
 function CurrentTimeLine() {
@@ -50,6 +61,7 @@ function TimedTaskBlock({ task }: { task: Task }) {
     <TaskEditDialog task={task}>
       <button
         type="button"
+        onClick={(e) => e.stopPropagation()}
         className="absolute left-14 right-2 z-0 overflow-hidden rounded-md bg-accent px-2 py-1 text-left"
         style={{ top, height }}
       >
@@ -101,6 +113,16 @@ function AllDayRow({ task }: { task: Task }) {
 export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
   const { showCompleted } = useDisplaySettings();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
+
+  function handleGridClick(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const startMinutes = minutesForOffset(e.clientY - rect.top);
+    const start = new Date();
+    start.setHours(0, startMinutes, 0, 0);
+    const end = new Date(start.getTime() + CLICK_SLOT_MINUTES * 60_000);
+    setSlot({ start, end });
+  }
 
   const visibleTasks = showCompleted ? tasks : tasks.filter((t) => t.status !== "done");
   const overdueTasks = visibleTasks.filter(isOverdue);
@@ -130,7 +152,11 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
       </section>
 
       <div ref={scrollRef} className="relative h-[600px] overflow-y-auto border-t">
-        <div className="relative" style={{ height: HOURS.length * HOUR_HEIGHT }}>
+        <div
+          className="relative"
+          style={{ height: HOURS.length * HOUR_HEIGHT }}
+          onClick={handleGridClick}
+        >
           {HOURS.map((hour) => (
             <div
               key={hour}
@@ -154,6 +180,14 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
           <CurrentTimeLine />
         </div>
       </div>
+
+      <TaskComposer
+        open={slot !== null}
+        onOpenChange={(open) => !open && setSlot(null)}
+        initialDueDate={slot?.start}
+        initialStartTime={slot ? format(slot.start, "HH:mm") : undefined}
+        initialEndTime={slot ? format(slot.end, "HH:mm") : undefined}
+      />
     </div>
   );
 }

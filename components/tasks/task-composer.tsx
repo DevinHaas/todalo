@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { addDays, format, isSameDay, nextSaturday, startOfWeek } from "date-fns";
 import { Plus, Sun, CalendarIcon, X, Flag, AlarmClock, Paperclip, MoreHorizontal, Inbox, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createTask } from "@/app/(app)/tasks/actions";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
@@ -129,14 +130,50 @@ function StubPill({ icon: Icon, label }: { icon: React.ComponentType<{ className
   );
 }
 
-export function TaskComposer({ defaultToToday = false }: { defaultToToday?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+export function TaskComposer({
+  defaultToToday = false,
+  open,
+  onOpenChange,
+  initialDueDate,
+  initialStartTime,
+  initialEndTime,
+}: {
+  defaultToToday?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialDueDate?: Date;
+  initialStartTime?: string;
+  initialEndTime?: string;
+}) {
+  const controlled = open !== undefined;
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
+  const expanded = controlled ? open : uncontrolledExpanded;
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(defaultToToday ? startOfToday() : undefined);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  // Controlled mode (e.g. clicking a calendar slot) seeds the form from the
+  // slot that was clicked each time the dialog opens.
+  useEffect(() => {
+    if (!controlled || !open) return;
+    setTitle("");
+    setDescription("");
+    setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
+    setStartTime(initialStartTime ?? "");
+    setEndTime(initialEndTime ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, open]);
+
+  function setExpanded(value: boolean) {
+    if (controlled) {
+      onOpenChange?.(value);
+    } else {
+      setUncontrolledExpanded(value);
+    }
+  }
 
   function reset() {
     setTitle("");
@@ -162,21 +199,8 @@ export function TaskComposer({ defaultToToday = false }: { defaultToToday?: bool
     });
   }
 
-  if (!expanded) {
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="flex w-full items-center gap-2 border-t py-3 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <Plus className="size-4 text-destructive" />
-        Add task
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-lg border p-3">
+  const form = (
+    <>
       <Input
         autoFocus
         value={title}
@@ -222,6 +246,34 @@ export function TaskComposer({ defaultToToday = false }: { defaultToToday?: bool
           </Button>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (controlled) {
+    return (
+      <Dialog open={open} onOpenChange={setExpanded}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="sr-only">Add task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">{form}</div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="flex w-full items-center gap-2 border-t py-3 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="size-4 text-destructive" />
+        Add task
+      </button>
+    );
+  }
+
+  return <div className="space-y-2 rounded-lg border p-3">{form}</div>;
 }
