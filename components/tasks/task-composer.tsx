@@ -150,7 +150,9 @@ export function TaskComposer({
   const expanded = controlled ? open : uncontrolledExpanded;
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState<Date | undefined>(defaultToToday ? startOfToday() : undefined);
+  const [dueDate, setDueDate] = useState<Date | undefined>(
+    initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
+  );
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -178,7 +180,7 @@ export function TaskComposer({
   function reset() {
     setTitle("");
     setDescription("");
-    setDueDate(defaultToToday ? startOfToday() : undefined);
+    setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
     setStartTime("");
     setEndTime("");
     setExpanded(false);
