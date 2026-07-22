@@ -1,12 +1,16 @@
 import { requireUserId } from "@/lib/auth";
 import { getTasksForUser } from "@/lib/tasks";
+import { getCalendarEventsForUser } from "@/lib/calendar-events";
 import { isDueTodayOrOverdue } from "@/lib/task-dates";
 import { TaskQuickAdd } from "@/components/tasks/task-quick-add";
 import { ViewSwitcher } from "@/components/tasks/view-switcher";
 
 export default async function UpcomingPage() {
   const userId = await requireUserId();
-  const allTasks = await getTasksForUser(userId);
+  const [allTasks, events] = await Promise.all([
+    getTasksForUser(userId),
+    getCalendarEventsForUser(userId),
+  ]);
   const tasks = allTasks.filter((t) => !isDueTodayOrOverdue(t));
 
   return (
@@ -15,7 +19,7 @@ export default async function UpcomingPage() {
       <div className="mb-6 max-w-xl">
         <TaskQuickAdd />
       </div>
-      <ViewSwitcher tasks={tasks} />
+      <ViewSwitcher tasks={tasks} events={events} />
     </div>
   );
 }

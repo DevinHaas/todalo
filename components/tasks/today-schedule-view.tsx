@@ -7,10 +7,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { TaskComposer } from "@/components/tasks/task-composer";
+import { EventBlock, EventRow } from "@/components/tasks/event-item";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isDueToday, isOverdue, hasDueTime } from "@/lib/task-dates";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks";
+import type { CalendarEvent } from "@/lib/calendar-events";
+
+function isToday(date: Date) {
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
 
 const HOUR_HEIGHT = 48; // px per hour
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -110,7 +121,7 @@ function AllDayRow({ task }: { task: Task }) {
   );
 }
 
-export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
+export function TodayScheduleView({ tasks, events = [] }: { tasks: Task[]; events?: CalendarEvent[] }) {
   const { showCompleted } = useDisplaySettings();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
@@ -129,6 +140,9 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
   const todayTasks = visibleTasks.filter(isDueToday);
   const allDayTasks = todayTasks.filter((t) => !t.dueDate || !hasDueTime(new Date(t.dueDate)));
   const timedTasks = todayTasks.filter((t) => t.dueDate && hasDueTime(new Date(t.dueDate)));
+  const todayEvents = events.filter((e) => isToday(e.start));
+  const allDayEvents = todayEvents.filter((e) => e.allDay);
+  const timedEvents = todayEvents.filter((e) => !e.allDay);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -142,6 +156,9 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
       <section className="mb-2 flex gap-2">
         <div className="w-12 shrink-0 pt-0.5 text-xs text-muted-foreground">All day</div>
         <div className="min-w-0 flex-1 space-y-0.5">
+          {allDayEvents.map((event) => (
+            <EventRow key={event.id} event={event} />
+          ))}
           {overdueTasks.map((task) => (
             <AllDayRow key={task.id} task={task} />
           ))}
@@ -171,8 +188,11 @@ export function TodayScheduleView({ tasks }: { tasks: Task[] }) {
           ))}
 
           {/* ponytail: no per-hour collision layout (side-by-side overlap
-              handling) — tasks are assumed non-overlapping for now; add
-              column layout if overlapping timed tasks become common. */}
+              handling) — tasks/events are assumed non-overlapping for now;
+              add column layout if overlaps become common. */}
+          {timedEvents.map((event) => (
+            <EventBlock key={event.id} event={event} />
+          ))}
           {timedTasks.map((task) => (
             <TimedTaskBlock key={task.id} task={task} />
           ))}

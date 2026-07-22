@@ -5,6 +5,7 @@ import { getTodayTaskCount } from "@/lib/tasks";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DisplaySettingsProvider, DisplayMenu, LayoutSwitcher } from "@/components/tasks/display-settings";
+import { CalendarSyncListener } from "@/components/calendar-sync-listener";
 
 export default async function AppLayout({
   children,
@@ -21,6 +22,7 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
+      <CalendarSyncListener />
       <AppSidebar user={session.user} todayCount={todayCount} />
       <SidebarInset>
         <DisplaySettingsProvider>
