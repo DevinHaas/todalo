@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   CalendarClock,
@@ -55,6 +55,7 @@ export function AppSidebar({
   todayCount: number;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
 
   return (
@@ -71,7 +72,16 @@ export function AppSidebar({
             <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => authClient.signOut()}>Log out</DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/settings">Settings</Link>} />
+            <DropdownMenuItem
+              onSelect={() =>
+                authClient.signOut({
+                  fetchOptions: { onSuccess: () => router.push("/login") },
+                })
+              }
+            >
+              Log out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

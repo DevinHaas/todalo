@@ -5,11 +5,13 @@ import { addDays, eachDayOfInterval, format, isToday, startOfWeek } from "date-f
 import { Button } from "@/components/ui/button";
 import { TaskComposer } from "@/components/tasks/task-composer";
 import { AllDayRow, ScheduleGrid, scheduleGridTemplate } from "@/components/tasks/schedule-grid";
+import { EventRow } from "@/components/tasks/event-item";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { hasDueTime } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
+import type { CalendarEvent } from "@/lib/calendar-events";
 
-export function WeekScheduleView({ tasks }: { tasks: Task[] }) {
+export function WeekScheduleView({ tasks, events = [] }: { tasks: Task[]; events?: CalendarEvent[] }) {
   const { showCompleted } = useDisplaySettings();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [slot, setSlot] = useState<{ day: Date; start: Date; end: Date } | null>(null);
@@ -22,6 +24,12 @@ export function WeekScheduleView({ tasks }: { tasks: Task[] }) {
     if (!task.dueDate) continue;
     const key = format(new Date(task.dueDate), "yyyy-MM-dd");
     tasksByDate.set(key, [...(tasksByDate.get(key) ?? []), task]);
+  }
+
+  const eventsByDate = new Map<string, CalendarEvent[]>();
+  for (const event of events) {
+    const key = format(event.start, "yyyy-MM-dd");
+    eventsByDate.set(key, [...(eventsByDate.get(key) ?? []), event]);
   }
 
   return (
@@ -41,6 +49,7 @@ export function WeekScheduleView({ tasks }: { tasks: Task[] }) {
       <ScheduleGrid
         days={days}
         tasksByDate={tasksByDate}
+        eventsByDate={eventsByDate}
         onSlotClick={(day, start, end) => setSlot({ day, start, end })}
         header={
           <>
@@ -66,8 +75,12 @@ export function WeekScheduleView({ tasks }: { tasks: Task[] }) {
                 const allDayTasks = (tasksByDate.get(key) ?? []).filter(
                   (t) => !t.dueDate || !hasDueTime(new Date(t.dueDate))
                 );
+                const allDayEvents = (eventsByDate.get(key) ?? []).filter((e) => e.allDay);
                 return (
                   <div key={key} className="space-y-0.5 border-l px-1 first:border-l-0 first:pl-0">
+                    {allDayEvents.map((event) => (
+                      <EventRow key={event.id} event={event} />
+                    ))}
                     {allDayTasks.map((task) => (
                       <AllDayRow key={task.id} task={task} />
                     ))}

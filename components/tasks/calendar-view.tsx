@@ -16,15 +16,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { WeekScheduleView } from "@/components/tasks/week-schedule-view";
+import { EventChip } from "@/components/tasks/event-item";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import type { Task } from "@/lib/tasks";
+import type { CalendarEvent } from "@/lib/calendar-events";
 
-export function CalendarView({ tasks }: { tasks: Task[] }) {
+export function CalendarView({ tasks, events = [] }: { tasks: Task[]; events?: CalendarEvent[] }) {
   const { calendarRange } = useDisplaySettings();
-  return calendarRange === "week" ? <WeekScheduleView tasks={tasks} /> : <MonthView tasks={tasks} />;
+  return calendarRange === "week" ? (
+    <WeekScheduleView tasks={tasks} events={events} />
+  ) : (
+    <MonthView tasks={tasks} events={events} />
+  );
 }
 
-function MonthView({ tasks }: { tasks: Task[] }) {
+function MonthView({ tasks, events }: { tasks: Task[]; events: CalendarEvent[] }) {
   const [month, setMonth] = useState(() => new Date());
 
   const gridStart = startOfWeek(startOfMonth(month));
@@ -36,6 +42,12 @@ function MonthView({ tasks }: { tasks: Task[] }) {
     if (!task.dueDate) continue;
     const key = format(new Date(task.dueDate), "yyyy-MM-dd");
     tasksByDay.set(key, [...(tasksByDay.get(key) ?? []), task]);
+  }
+
+  const eventsByDay = new Map<string, CalendarEvent[]>();
+  for (const event of events) {
+    const key = format(event.start, "yyyy-MM-dd");
+    eventsByDay.set(key, [...(eventsByDay.get(key) ?? []), event]);
   }
 
   function goPrev() {
@@ -66,6 +78,7 @@ function MonthView({ tasks }: { tasks: Task[] }) {
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const dayTasks = tasksByDay.get(key) ?? [];
+          const dayEvents = eventsByDay.get(key) ?? [];
           return (
             <div
               key={key}
@@ -76,6 +89,9 @@ function MonthView({ tasks }: { tasks: Task[] }) {
               <div className={isToday(day) ? "mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground" : "mb-1 text-xs"}>
                 {format(day, "d")}
               </div>
+              {dayEvents.map((event) => (
+                <EventChip key={event.id} event={event} />
+              ))}
               {dayTasks.map((task) => (
                 <TaskEditDialog key={task.id} task={task}>
                   <button

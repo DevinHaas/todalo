@@ -13,10 +13,12 @@ import {
 import { ChevronDown } from "lucide-react";
 import { TaskRow } from "@/components/tasks/task-row";
 import { TaskComposer } from "@/components/tasks/task-composer";
+import { EventRow } from "@/components/tasks/event-item";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isOverdue } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
+import type { CalendarEvent } from "@/lib/calendar-events";
 
 function startOfToday() {
   const d = new Date();
@@ -36,7 +38,7 @@ function dayLabel(date: Date) {
   return `${base} · ${weekday}`;
 }
 
-export function UpcomingListView({ tasks }: { tasks: Task[] }) {
+export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events?: CalendarEvent[] }) {
   const [overdueOpen, setOverdueOpen] = useState(true);
   const { showCompleted } = useDisplaySettings();
   const today = startOfToday();
@@ -131,9 +133,13 @@ export function UpcomingListView({ tasks }: { tasks: Task[] }) {
 
         {days.map((day) => {
           const dayTasks = visibleTasks.filter((t) => t.dueDate && isSameDay(new Date(t.dueDate), day));
+          const dayEvents = events.filter((e) => isSameDay(e.start, day));
           return (
             <section key={dayKey(day)} id={dayKey(day)} className="scroll-mt-4">
               <h2 className="mb-2 text-sm font-semibold text-muted-foreground">{dayLabel(day)}</h2>
+              {dayEvents.map((event) => (
+                <EventRow key={event.id} event={event} />
+              ))}
               {dayTasks.map((task) => (
                 <TaskRow key={task.id} task={task} />
               ))}

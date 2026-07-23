@@ -9,6 +9,7 @@ import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { hasDueTime } from "@/lib/task-dates";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks";
+import type { CalendarEvent } from "@/lib/calendar-events";
 
 export const HOUR_HEIGHT = 48; // px per hour
 export const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -87,6 +88,32 @@ export function TimedTaskBlock({ task }: { task: Task }) {
   );
 }
 
+export function TimedEventBlock({ event }: { event: CalendarEvent }) {
+  const top = offsetFor(event.start);
+  const height = Math.max(offsetFor(event.end) - top, 20);
+
+  return (
+    <a
+      href={event.htmlLink ?? undefined}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="absolute inset-x-1 z-0 overflow-hidden rounded-md border-l-2 px-2 py-1 text-left"
+      style={{
+        top,
+        height,
+        borderColor: event.color,
+        backgroundColor: `color-mix(in srgb, ${event.color} 15%, transparent)`,
+      }}
+    >
+      <div className="truncate text-sm font-medium">{event.title}</div>
+      <div className="text-xs text-muted-foreground">
+        {format(event.start, "HH:mm")}–{format(event.end, "HH:mm")}
+      </div>
+    </a>
+  );
+}
+
 export function AllDayRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
 
@@ -126,11 +153,13 @@ export function AllDayRow({ task }: { task: Task }) {
 export function ScheduleGrid({
   days,
   tasksByDate,
+  eventsByDate,
   onSlotClick,
   header,
 }: {
   days: Date[];
   tasksByDate: Map<string, Task[]>;
+  eventsByDate?: Map<string, CalendarEvent[]>;
   onSlotClick: (day: Date, start: Date, end: Date) => void;
   header?: React.ReactNode;
 }) {
@@ -208,12 +237,16 @@ export function ScheduleGrid({
             const timedTasks = (tasksByDate.get(key) ?? []).filter(
               (t) => t.dueDate && hasDueTime(new Date(t.dueDate))
             );
+            const timedEvents = (eventsByDate?.get(key) ?? []).filter((e) => !e.allDay);
             return (
               <div
                 key={key}
                 className="relative border-l first:border-l-0"
                 onClick={(e) => handleColumnClick(day, e)}
               >
+                {timedEvents.map((event) => (
+                  <TimedEventBlock key={event.id} event={event} />
+                ))}
                 {timedTasks.map((task) => (
                   <TimedTaskBlock key={task.id} task={task} />
                 ))}

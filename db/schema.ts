@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   index,
+  uniqueIndex,
   integer,
   jsonb,
   pgEnum,
@@ -151,5 +152,108 @@ export const taskRelations = relations(tasks, ({ one }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id],
+  }),
+}));
+
+// One row per connected Google account. Backs the account-level "Show
+// events in Today/Upcoming" master toggle — gates rendering only, not sync,
+// so flipping it back on is instant.
+export const calendarAccountSettings = pgTable("calendar_account_settings", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => account.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  showEvents: boolean("show_events").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const syncedCalendars = pgTable(
+  "synced_calendars",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => account.id, { onDelete: "cascade" }),
+    googleCalendarId: text("google_calendar_id").notNull(),
+    summary: text("summary").notNull(),
+    color: text("color").notNull(),
+    // Per-calendar visibility (the eye icon) — gates sync + rendering.
+    // Turning this off stops the watch channel and clears the cache.
+    enabled: boolean("enabled").default(true).notNull(),
+    syncToken: text("sync_token"),
+    syncedAt: timestamp("synced_at"),
+    channelId: text("channel_id"),
+    resourceId: text("resource_id"),
+    channelExpiresAt: timestamp("channel_expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("synced_calendars_userId_idx").on(table.userId),
+    uniqueIndex("synced_calendars_account_calendar_idx").on(table.accountId, table.googleCalendarId),
+  ],
+);
+
+export const calendarEvents = pgTable(
+  "calendar_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    calendarId: text("calendar_id")
+      .notNull()
+      .references(() => syncedCalendars.id, { onDelete: "cascade" }),
+    // Denormalized for the Today/Upcoming read path — avoids a join through
+    // syncedCalendars just to filter by user.
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    googleEventId: text("google_event_id").notNull(),
+    title: text("title").notNull(),
+    start: timestamp("start").notNull(),
+    end: timestamp("end").notNull(),
+    allDay: boolean("all_day").default(false).notNull(),
+    eventType: text("event_type"),
+    htmlLink: text("html_link"),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("calendar_events_calendar_google_idx").on(table.calendarId, table.googleEventId),
+    index("calendar_events_userId_start_idx").on(table.userId, table.start),
+  ],
+);
+
+export const calendarAccountSettingsRelations = relations(calendarAccountSettings, ({ one }) => ({
+  account: one(account, {
+    fields: [calendarAccountSettings.accountId],
+    references: [account.id],
+  }),
+}));
+
+export const syncedCalendarsRelations = relations(syncedCalendars, ({ one, many }) => ({
+  account: one(account, {
+    fields: [syncedCalendars.accountId],
+    references: [account.id],
+  }),
+  events: many(calendarEvents),
+}));
+
+export const calendarEventRelations = relations(calendarEvents, ({ one }) => ({
+  calendar: one(syncedCalendars, {
+    fields: [calendarEvents.calendarId],
+    references: [syncedCalendars.id],
   }),
 }));
