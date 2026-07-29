@@ -30,10 +30,17 @@ function formatTime(date: Date) {
 
 const RECURRENCE_OPTIONS: { value: string; recurrence: Recurrence | null }[] = [
   { value: "none", recurrence: null },
-  { value: "daily", recurrence: { type: "daily" } },
-  { value: "weekly", recurrence: { type: "weekly" } },
-  { value: "monthly", recurrence: { type: "monthly" } },
+  { value: "daily", recurrence: { n: 1, unit: "day", basedOn: "scheduled" } },
+  { value: "weekly", recurrence: { n: 1, unit: "week", basedOn: "scheduled" } },
+  { value: "monthly", recurrence: { n: 1, unit: "month", basedOn: "scheduled" } },
 ];
+
+function recurrenceOptionValue(recurrence: Recurrence | null | undefined): string {
+  const match = RECURRENCE_OPTIONS.find(
+    (o) => o.recurrence && o.recurrence.n === recurrence?.n && o.recurrence.unit === recurrence?.unit,
+  );
+  return match?.value ?? "none";
+}
 
 export function TaskEditDialog({
   task,
@@ -53,7 +60,7 @@ export function TaskEditDialog({
     task.dueDateEnd ? formatTime(new Date(task.dueDateEnd)) : "",
   );
   const [recurrenceValue, setRecurrenceValue] = useState(
-    task.recurrence?.type ?? "none",
+    recurrenceOptionValue(task.recurrence),
   );
   const [isPending, startTransition] = useTransition();
 
