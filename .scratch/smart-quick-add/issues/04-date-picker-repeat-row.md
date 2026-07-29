@@ -11,4 +11,4 @@
 - [x] "Every week on \<weekday>" sets weekly recurrence anchored to the picked date's weekday
 - [x] "Every month on the \<Nth>" sets monthly recurrence anchored to the picked date's day-of-month
 - [x] "Every N days" lets the user enter N and sets `{n: N, unit: "day"}`
-- [ ] "Custom..." opens the Custom Repeat dialog
+- [x] "Custom..." opens the Custom Repeat dialog

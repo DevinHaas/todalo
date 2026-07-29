@@ -77,136 +77,151 @@ function DatePicker({
 }) {
   const [open, setOpen] = useState(false);
   const [everyNDays, setEveryNDays] = useState("1");
+  const [customOpen, setCustomOpen] = useState(false);
   const anchor = dueDate ?? startOfToday();
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={dueDate ? "text-primary" : undefined}
-          >
-            {dueDate && isSameDay(dueDate, startOfToday()) ? (
-              <Sun className="size-4" />
-            ) : (
-              <CalendarIcon className="size-4" />
-            )}
-            {dueDateLabel(dueDate)}
-            {dueDate && (
-              <X
-                className="size-3.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(undefined);
-                }}
-              />
-            )}
-          </Button>
-        }
-      />
-      <PopoverContent className="w-auto p-0">
-        <div className="p-1">
-          {quickDateOptions().map(({ label, day, date }) => (
-            <button
-              key={label}
-              type="button"
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                onChange(date);
-                setOpen(false);
-              }}
-            >
-              {label}
-              <span className="text-muted-foreground">{day}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-            onClick={() => {
-              onChange(undefined);
-              setOpen(false);
-            }}
-          >
-            No Date
-          </button>
-        </div>
-        <Calendar
-          mode="single"
-          selected={dueDate}
-          onSelect={(date) => {
-            onChange(date);
-            setOpen(false);
-          }}
-        />
-        <div className="border-t p-1">
-          <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Repeat</div>
-          <button
-            type="button"
-            className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
-              !recurrence ? "text-primary" : ""
-            }`}
-            onClick={() => {
-              onRecurrenceChange(undefined);
-              setOpen(false);
-            }}
-          >
-            Don&apos;t repeat
-          </button>
-          {repeatPresets(anchor).map(({ label, recurrence: preset }) => (
-            <button
-              key={label}
-              type="button"
-              className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
-                recurrence?.n === preset.n && recurrence?.unit === preset.unit ? "text-primary" : ""
-              }`}
-              onClick={() => {
-                onRecurrenceChange(preset);
-                setOpen(false);
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          <div className="flex items-center gap-1.5 px-2 py-1.5 text-sm">
-            <span>Every</span>
-            <Input
-              type="number"
-              min={1}
-              value={everyNDays}
-              onChange={(e) => setEveryNDays(e.target.value)}
-              className="h-7 w-14 px-1.5"
-            />
-            <span>days</span>
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="ml-auto"
-              onClick={() => {
-                const n = parseInt(everyNDays, 10);
-                if (n > 0) {
-                  onRecurrenceChange({ n, unit: "day", basedOn: "scheduled" });
+              className={dueDate ? "text-primary" : undefined}
+            >
+              {dueDate && isSameDay(dueDate, startOfToday()) ? (
+                <Sun className="size-4" />
+              ) : (
+                <CalendarIcon className="size-4" />
+              )}
+              {dueDateLabel(dueDate)}
+              {dueDate && (
+                <X
+                  className="size-3.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(undefined);
+                  }}
+                />
+              )}
+            </Button>
+          }
+        />
+        <PopoverContent className="w-auto p-0">
+          <div className="p-1">
+            {quickDateOptions().map(({ label, day, date }) => (
+              <button
+                key={label}
+                type="button"
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                onClick={() => {
+                  onChange(date);
                   setOpen(false);
-                }
+                }}
+              >
+                {label}
+                <span className="text-muted-foreground">{day}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                onChange(undefined);
+                setOpen(false);
               }}
             >
-              Set
-            </Button>
+              No Date
+            </button>
           </div>
-          <button
-            type="button"
-            disabled
-            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground"
-          >
-            Custom...
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+          <Calendar
+            mode="single"
+            selected={dueDate}
+            onSelect={(date) => {
+              onChange(date);
+              setOpen(false);
+            }}
+          />
+          <div className="border-t p-1">
+            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Repeat</div>
+            <button
+              type="button"
+              className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                !recurrence ? "text-primary" : ""
+              }`}
+              onClick={() => {
+                onRecurrenceChange(undefined);
+                setOpen(false);
+              }}
+            >
+              Don&apos;t repeat
+            </button>
+            {repeatPresets(anchor).map(({ label, recurrence: preset }) => (
+              <button
+                key={label}
+                type="button"
+                className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                  recurrence?.n === preset.n && recurrence?.unit === preset.unit ? "text-primary" : ""
+                }`}
+                onClick={() => {
+                  onRecurrenceChange(preset);
+                  setOpen(false);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <div className="flex items-center gap-1.5 px-2 py-1.5 text-sm">
+              <span>Every</span>
+              <Input
+                type="number"
+                min={1}
+                value={everyNDays}
+                onChange={(e) => setEveryNDays(e.target.value)}
+                className="h-7 w-14 px-1.5"
+              />
+              <span>days</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => {
+                  const n = parseInt(everyNDays, 10);
+                  if (n > 0) {
+                    onRecurrenceChange({ n, unit: "day", basedOn: "scheduled" });
+                    setOpen(false);
+                  }
+                }}
+              >
+                Set
+              </Button>
+            </div>
+            <button
+              type="button"
+              className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                setCustomOpen(true);
+                setOpen(false);
+              }}
+            >
+              Custom...
+            </button>
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Custom repeat</DialogTitle>
+          </DialogHeader>
+          {/* Based on / Every N <unit> / Ends controls land in ticket 05. */}
+          <p className="text-sm text-muted-foreground">Coming soon.</p>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
