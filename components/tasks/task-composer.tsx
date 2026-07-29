@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { createTask } from "@/app/(app)/tasks/actions";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
+import type { Recurrence } from "@/lib/recurrence";
 
 function startOfToday() {
   const d = new Date();
@@ -42,14 +43,41 @@ function dueDateLabel(date: Date | undefined) {
   return format(date, "d MMM");
 }
 
+function ordinal(n: number) {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
+}
+
+// "Every week on <weekday>" and "Every month on the <Nth>" anchor to the
+// currently picked date (falling back to today when nothing is picked yet)
+// rather than storing a separate weekday/day-of-month field — addWeeks /
+// addMonths naturally preserve it.
+function repeatPresets(anchor: Date): { label: string; recurrence: Recurrence }[] {
+  return [
+    { label: "Every day", recurrence: { n: 1, unit: "day", basedOn: "scheduled" } },
+    { label: `Every week on ${format(anchor, "EEEE")}`, recurrence: { n: 1, unit: "week", basedOn: "scheduled" } },
+    {
+      label: `Every month on the ${ordinal(anchor.getDate())}`,
+      recurrence: { n: 1, unit: "month", basedOn: "scheduled" },
+    },
+  ];
+}
+
 function DatePicker({
   dueDate,
   onChange,
+  recurrence,
+  onRecurrenceChange,
 }: {
   dueDate: Date | undefined;
   onChange: (date: Date | undefined) => void;
+  recurrence: Recurrence | undefined;
+  onRecurrenceChange: (recurrence: Recurrence | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [everyNDays, setEveryNDays] = useState("1");
+  const anchor = dueDate ?? startOfToday();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -114,6 +142,69 @@ function DatePicker({
             setOpen(false);
           }}
         />
+        <div className="border-t p-1">
+          <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Repeat</div>
+          <button
+            type="button"
+            className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
+              !recurrence ? "text-primary" : ""
+            }`}
+            onClick={() => {
+              onRecurrenceChange(undefined);
+              setOpen(false);
+            }}
+          >
+            Don&apos;t repeat
+          </button>
+          {repeatPresets(anchor).map(({ label, recurrence: preset }) => (
+            <button
+              key={label}
+              type="button"
+              className={`flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                recurrence?.n === preset.n && recurrence?.unit === preset.unit ? "text-primary" : ""
+              }`}
+              onClick={() => {
+                onRecurrenceChange(preset);
+                setOpen(false);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <div className="flex items-center gap-1.5 px-2 py-1.5 text-sm">
+            <span>Every</span>
+            <Input
+              type="number"
+              min={1}
+              value={everyNDays}
+              onChange={(e) => setEveryNDays(e.target.value)}
+              className="h-7 w-14 px-1.5"
+            />
+            <span>days</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => {
+                const n = parseInt(everyNDays, 10);
+                if (n > 0) {
+                  onRecurrenceChange({ n, unit: "day", basedOn: "scheduled" });
+                  setOpen(false);
+                }
+              }}
+            >
+              Set
+            </Button>
+          </div>
+          <button
+            type="button"
+            disabled
+            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground"
+          >
+            Custom...
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -155,6 +246,7 @@ export function TaskComposer({
   );
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [recurrence, setRecurrence] = useState<Recurrence | undefined>(undefined);
   const [isPending, startTransition] = useTransition();
 
   // Controlled mode (e.g. clicking a calendar slot) seeds the form from the
@@ -166,6 +258,7 @@ export function TaskComposer({
     setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
     setStartTime(initialStartTime ?? "");
     setEndTime(initialEndTime ?? "");
+    setRecurrence(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlled, open]);
 
@@ -183,6 +276,7 @@ export function TaskComposer({
     setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
     setStartTime("");
     setEndTime("");
+    setRecurrence(undefined);
     setExpanded(false);
   }
 
@@ -196,6 +290,7 @@ export function TaskComposer({
         description: description || undefined,
         dueDate: finalDueDate,
         dueDateEnd,
+        recurrence,
       });
       reset();
     });
@@ -217,7 +312,12 @@ export function TaskComposer({
         className="border-0 px-0 text-sm focus-visible:ring-0"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <DatePicker dueDate={dueDate} onChange={setDueDate} />
+        <DatePicker
+          dueDate={dueDate}
+          onChange={setDueDate}
+          recurrence={recurrence}
+          onRecurrenceChange={setRecurrence}
+        />
         {dueDate && (
           <TimeRangeInputs
             startTime={startTime}
