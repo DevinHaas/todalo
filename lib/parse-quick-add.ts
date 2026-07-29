@@ -218,8 +218,22 @@ function stripMatches(text: string, matches: Candidate[]): string {
   return result.replace(/\s+/g, " ").trim();
 }
 
-export function parseQuickAdd(text: string, referenceDate: Date = new Date()): ParseQuickAddResult {
-  const accepted = resolveOverlaps(collectCandidates(text, referenceDate));
+export interface ParseQuickAddOptions {
+  // Excludes a candidate from highlighting and from the derived fields below
+  // — how click-to-reject un-highlights a match for the rest of a compose
+  // session without persisting anything. See CONTEXT.md's "Matched phrase".
+  isRejected?: (match: QuickAddMatch) => boolean;
+}
+
+export function parseQuickAdd(
+  text: string,
+  referenceDate: Date = new Date(),
+  options: ParseQuickAddOptions = {},
+): ParseQuickAddResult {
+  const isRejected = options.isRejected ?? (() => false);
+  const accepted = resolveOverlaps(collectCandidates(text, referenceDate)).filter(
+    (c) => !isRejected({ start: c.start, end: c.end, kind: c.kind, text: text.slice(c.start, c.end) }),
+  );
 
   const dateMatch = accepted.find((c) => c.kind === "date");
   const timeMatch = accepted.find((c) => c.kind === "time");
