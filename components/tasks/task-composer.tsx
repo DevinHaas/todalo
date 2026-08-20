@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import { addDays, format, isSameDay, nextSaturday, startOfWeek } from "date-fns";
 import { Plus, Sun, CalendarIcon, X, Flag, AlarmClock, Paperclip, MoreHorizontal, Inbox, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,24 @@ import {
 import { createTask } from "@/app/(app)/tasks/actions";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
+import { parseQuickAdd, type QuickAddMatch } from "@/lib/parse-quick-add";
+import {
+  canonicalDateText,
+  canonicalRecurrenceText,
+  canonicalTimeText,
+  initialSyncState,
+  spliceMatch,
+  syncQuickAddFields,
+} from "@/lib/quick-add-sync";
+import { cn } from "@/lib/utils";
 import type { Recurrence } from "@/lib/recurrence";
+
+const PARSE_DEBOUNCE_MS = 150;
+
+// Shared box model between the transparent input and the backdrop it sits
+// on, so highlighted spans in the backdrop line up exactly under the text
+// rendered by the input. See docs/adr/0002-quick-add-highlighting-technique.md.
+const TITLE_FIELD_CLASSES = "h-8 border-0 px-0 py-1 text-base font-medium whitespace-pre md:text-sm";
 
 const UNIT_OPTIONS: { value: Recurrence["unit"]; label: (n: number) => string }[] = [
   { value: "day", label: (n) => (n === 1 ? "day" : "days") },
@@ -409,25 +426,118 @@ export function TaskComposer({
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
   const expanded = controlled ? open : uncontrolledExpanded;
   const [title, setTitle] = useState("");
+  const [debouncedTitle, setDebouncedTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState<Date | undefined>(
-    initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
+  const [rejected, setRejected] = useState<Set<string>>(new Set());
+  const [syncState, dispatchSync] = useReducer(syncQuickAddFields, initialSyncState, () =>
+    syncQuickAddFields(initialSyncState, {
+      type: "seed",
+      date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
+      time: initialStartTime ?? "",
+    }),
   );
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [recurrence, setRecurrence] = useState<Recurrence | undefined>(undefined);
+  const dueDate = syncState.date.value;
+  const startTime = syncState.time.value;
+  const recurrence = syncState.recurrence.value;
+  const [endTime, setEndTime] = useState(initialEndTime ?? "");
   const [isPending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedTitle(title), PARSE_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [title]);
+
+  const isRejected = useCallback(
+    (match: QuickAddMatch) => rejected.has(match.text.toLowerCase()),
+    [rejected],
+  );
+
+  const parsed = useMemo(() => parseQuickAdd(debouncedTitle, undefined, { isRejected }), [debouncedTitle, isRejected]);
+
+  // Live parsing drives dueDate/startTime/recurrence unless a manual edit
+  // (DatePicker/TimeRangeInputs/Repeat row/reject) has overridden that field
+  // — see lib/quick-add-sync.ts for the last-touch-wins rules.
+  useEffect(() => {
+    dispatchSync({ type: "parse", parsed });
+  }, [parsed]);
+
+  const segments = useMemo(() => {
+    // Only trust the debounced parse's offsets once the title has caught up
+    // to it — otherwise a highlight could momentarily land under the wrong
+    // word while the user is still mid-keystroke.
+    const matches = debouncedTitle === title ? parsed.matches : [];
+    const result: { text: string; match: QuickAddMatch | null }[] = [];
+    let cursor = 0;
+    for (const match of matches) {
+      if (match.start > cursor) result.push({ text: title.slice(cursor, match.start), match: null });
+      result.push({ text: title.slice(match.start, match.end), match });
+      cursor = match.end;
+    }
+    if (cursor < title.length) result.push({ text: title.slice(cursor), match: null });
+    return result;
+  }, [title, debouncedTitle, parsed.matches]);
+
+  function reject(match: QuickAddMatch) {
+    setRejected((prev) => new Set(prev).add(match.text.toLowerCase()));
+    dispatchSync({ type: "reject", kind: match.kind });
+  }
+
+  function syncScroll() {
+    if (backdropRef.current && inputRef.current) {
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  }
+
+  // A manual field edit overrides live parsing and rewrites whatever phrase
+  // is currently matched in the title to a canonical form, so the title and
+  // the picker never visibly disagree — see spec's "Field sync" bullet.
+  function currentMatch(kind: QuickAddMatch["kind"]) {
+    return parseQuickAdd(title, undefined, { isRejected }).matches.find((m) => m.kind === kind);
+  }
+
+  // Shared by all three manual-edit handlers below: rewrites the currently
+  // matched phrase (if any) to its canonical form and returns the text that
+  // should anchor the field going forward — null if no phrase is set.
+  function applyManualPhrase(kind: QuickAddMatch["kind"], canonical: string | null): string | null {
+    const match = currentMatch(kind);
+    if (canonical && match) {
+      setTitle((t) => spliceMatch(t, match, canonical));
+      return canonical;
+    }
+    return match?.text ?? null;
+  }
+
+  function handleDueDateChange(date: Date | undefined) {
+    const matchText = applyManualPhrase("date", date ? canonicalDateText(date) : null);
+    dispatchSync({ type: "manualDate", date, matchText });
+  }
+
+  function handleStartTimeChange(time: string) {
+    const matchText = applyManualPhrase("time", time ? canonicalTimeText(time) : null);
+    dispatchSync({ type: "manualTime", time, matchText });
+  }
+
+  function handleRecurrenceChange(nextRecurrence: Recurrence | undefined) {
+    const matchText = applyManualPhrase("recurrence", nextRecurrence ? canonicalRecurrenceText(nextRecurrence) : null);
+    dispatchSync({ type: "manualRecurrence", recurrence: nextRecurrence, matchText });
+  }
 
   // Controlled mode (e.g. clicking a calendar slot) seeds the form from the
   // slot that was clicked each time the dialog opens.
   useEffect(() => {
     if (!controlled || !open) return;
     setTitle("");
+    setDebouncedTitle("");
     setDescription("");
-    setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
-    setStartTime(initialStartTime ?? "");
+    setRejected(new Set());
+    dispatchSync({
+      type: "seed",
+      date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
+      time: initialStartTime ?? "",
+    });
     setEndTime(initialEndTime ?? "");
-    setRecurrence(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlled, open]);
 
@@ -441,21 +551,26 @@ export function TaskComposer({
 
   function reset() {
     setTitle("");
+    setDebouncedTitle("");
+    setRejected(new Set());
     setDescription("");
-    setDueDate(initialDueDate ?? (defaultToToday ? startOfToday() : undefined));
-    setStartTime("");
+    // Unlike the controlled-open effect above, resetting after a submit/cancel
+    // always clears start/end time — only dueDate reseeds from the initial
+    // prop — matching this function's pre-sync behavior.
+    dispatchSync({ type: "seed", date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined), time: "" });
     setEndTime("");
-    setRecurrence(undefined);
     setExpanded(false);
   }
 
   function submit() {
     if (!title.trim()) return;
+    const finalParsed = parseQuickAdd(title, undefined, { isRejected });
+    const finalTitle = finalParsed.strippedTitle || title.trim();
     const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
     const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;
     startTransition(async () => {
       await createTask({
-        title,
+        title: finalTitle,
         description: description || undefined,
         dueDate: finalDueDate,
         dueDateEnd,
@@ -467,13 +582,44 @@ export function TaskComposer({
 
   const form = (
     <>
-      <Input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Task name"
-        className="border-0 px-0 text-base font-medium focus-visible:ring-0"
-      />
+      <div className="relative h-8 min-w-0">
+        <div
+          ref={backdropRef}
+          aria-hidden
+          className={cn(
+            TITLE_FIELD_CLASSES,
+            "pointer-events-none absolute inset-0 overflow-hidden text-transparent",
+          )}
+        >
+          {segments.map((segment, i) =>
+            segment.match ? (
+              <span
+                key={i}
+                role="button"
+                tabIndex={-1}
+                onClick={() => reject(segment.match!)}
+                className="relative z-10 cursor-pointer rounded bg-primary/20 pointer-events-auto"
+              >
+                {segment.text}
+              </span>
+            ) : (
+              <span key={i}>{segment.text}</span>
+            ),
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onScroll={syncScroll}
+          placeholder="Task name"
+          className={cn(
+            TITLE_FIELD_CLASSES,
+            "absolute inset-0 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0",
+          )}
+        />
+      </div>
       <Input
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -483,15 +629,15 @@ export function TaskComposer({
       <div className="flex flex-wrap items-center gap-2">
         <DatePicker
           dueDate={dueDate}
-          onChange={setDueDate}
+          onChange={handleDueDateChange}
           recurrence={recurrence}
-          onRecurrenceChange={setRecurrence}
+          onRecurrenceChange={handleRecurrenceChange}
         />
         {dueDate && (
           <TimeRangeInputs
             startTime={startTime}
             endTime={endTime}
-            onStartTimeChange={setStartTime}
+            onStartTimeChange={handleStartTimeChange}
             onEndTimeChange={setEndTime}
           />
         )}
