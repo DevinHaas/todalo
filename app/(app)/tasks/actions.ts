@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
-import { getNextDueDate, recurrenceSchema } from "@/lib/recurrence";
+import { nextOccurrenceOnCompletion, recurrenceSchema } from "@/lib/recurrence";
 import { pushTaskToCalendar, deleteTaskFromCalendar } from "@/lib/google-calendar";
 
 const taskInput = z.object({
@@ -74,12 +74,15 @@ export async function completeTask(id: string) {
   if (!task) return;
 
   if (task.recurrence) {
-    const base = task.dueDate ?? new Date();
-    await db
-      .update(tasks)
-      .set({ dueDate: getNextDueDate(base, task.recurrence), completedAt: null })
-      .where(eq(tasks.id, id));
-    await syncToCalendar(userId, id);
+    const completedAt = new Date();
+    const next = nextOccurrenceOnCompletion(task.dueDate, completedAt, task.recurrence);
+    if (next) {
+      await db.update(tasks).set({ dueDate: next, completedAt: null }).where(eq(tasks.id, id));
+      await syncToCalendar(userId, id);
+    } else {
+      // `until` has passed — complete this occurrence without rescheduling.
+      await db.update(tasks).set({ completedAt, status: "done" }).where(eq(tasks.id, id));
+    }
   } else {
     await db.update(tasks).set({ completedAt: new Date(), status: "done" }).where(eq(tasks.id, id));
   }
