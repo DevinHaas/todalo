@@ -8,10 +8,167 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createTask } from "@/app/(app)/tasks/actions";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 import type { Recurrence } from "@/lib/recurrence";
+
+const UNIT_OPTIONS: { value: Recurrence["unit"]; label: (n: number) => string }[] = [
+  { value: "day", label: (n) => (n === 1 ? "day" : "days") },
+  { value: "week", label: (n) => (n === 1 ? "week" : "weeks") },
+  { value: "month", label: (n) => (n === 1 ? "month" : "months") },
+  { value: "year", label: (n) => (n === 1 ? "year" : "years") },
+];
+
+function CustomRepeatDialog({
+  open,
+  onOpenChange,
+  recurrence,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  recurrence: Recurrence | undefined;
+  onConfirm: (recurrence: Recurrence) => void;
+}) {
+  const [basedOn, setBasedOn] = useState<Recurrence["basedOn"]>("scheduled");
+  const [n, setN] = useState("1");
+  const [unit, setUnit] = useState<Recurrence["unit"]>("day");
+  const [ends, setEnds] = useState<"never" | "on">("never");
+  const [until, setUntil] = useState<Date | undefined>(undefined);
+  const [untilPickerOpen, setUntilPickerOpen] = useState(false);
+
+  // Re-seed from the current recurrence (or defaults) each time the dialog opens.
+  useEffect(() => {
+    if (!open) return;
+    setBasedOn(recurrence?.basedOn ?? "scheduled");
+    setN(String(recurrence?.n ?? 1));
+    setUnit(recurrence?.unit ?? "day");
+    setEnds(recurrence?.until ? "on" : "never");
+    setUntil(recurrence?.until ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function confirm() {
+    const parsedN = parseInt(n, 10);
+    if (!(parsedN > 0)) return;
+    if (ends === "on" && !until) return;
+    onConfirm({ n: parsedN, unit, basedOn, until: ends === "on" ? until : null });
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Custom repeat</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">Based on</div>
+            <div className="flex gap-1.5">
+              <Button
+                type="button"
+                variant={basedOn === "scheduled" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBasedOn("scheduled")}
+              >
+                Scheduled date
+              </Button>
+              <Button
+                type="button"
+                variant={basedOn === "completed" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBasedOn("completed")}
+              >
+                Completed date
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span>Every</span>
+            <Input
+              type="number"
+              min={1}
+              value={n}
+              onChange={(e) => setN(e.target.value)}
+              className="h-8 w-16 px-1.5"
+            />
+            <Select value={unit} onValueChange={(value) => setUnit(value as Recurrence["unit"])}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UNIT_OPTIONS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label(parseInt(n, 10) || 1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium text-muted-foreground">Ends</div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant={ends === "never" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEnds("never")}
+              >
+                Never
+              </Button>
+              <Popover open={untilPickerOpen} onOpenChange={setUntilPickerOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={ends === "on" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setEnds("on");
+                        setUntilPickerOpen(true);
+                      }}
+                    >
+                      {ends === "on" && until ? `On ${format(until, "d MMM yyyy")}` : "On date"}
+                    </Button>
+                  }
+                />
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={until}
+                    onSelect={(date) => {
+                      setUntil(date);
+                      setUntilPickerOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={confirm} disabled={!(parseInt(n, 10) > 0) || (ends === "on" && !until)}>
+            Set
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function startOfToday() {
   const d = new Date();
@@ -212,15 +369,12 @@ function DatePicker({
           </div>
         </PopoverContent>
       </Popover>
-      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Custom repeat</DialogTitle>
-          </DialogHeader>
-          {/* Based on / Every N <unit> / Ends controls land in ticket 05. */}
-          <p className="text-sm text-muted-foreground">Coming soon.</p>
-        </DialogContent>
-      </Dialog>
+      <CustomRepeatDialog
+        open={customOpen}
+        onOpenChange={setCustomOpen}
+        recurrence={recurrence}
+        onConfirm={onRecurrenceChange}
+      />
     </>
   );
 }
