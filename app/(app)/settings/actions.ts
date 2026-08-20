@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { account, syncedCalendars, calendarAccountSettings, calendarEvents } from "@/db/schema";
+import { account, syncedCalendars, calendarAccountSettings, calendarEvents, userSettings } from "@/db/schema";
 import { auth, requireUserId } from "@/lib/auth";
 import { ensureWatchChannel, stopWatchChannel, syncCalendar } from "@/lib/google-calendar-sync";
 
@@ -142,4 +142,18 @@ export async function disconnectAccount(input: z.infer<typeof accountIdInput>) {
 
   revalidatePath("/settings");
   revalidatePath("/");
+}
+
+export async function setSmartDateRecognitionEnabled(enabled: boolean) {
+  const userId = await requireUserId();
+
+  await db
+    .insert(userSettings)
+    .values({ userId, smartDateRecognitionEnabled: enabled })
+    .onConflictDoUpdate({
+      target: userSettings.userId,
+      set: { smartDateRecognitionEnabled: enabled, updatedAt: new Date() },
+    });
+
+  revalidatePath("/settings");
 }

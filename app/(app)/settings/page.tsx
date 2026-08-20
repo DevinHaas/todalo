@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { listGoogleCalendars } from "@/lib/google-calendar-sync";
 import { CalendarAccountCard } from "@/components/settings/calendar-account-card";
 import { LinkGoogleAccountButton } from "@/components/settings/link-google-account-button";
+import { GeneralSettings } from "@/components/settings/general-settings";
 
 export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -64,7 +65,9 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
+      <GeneralSettings />
+
+      <div className="flex items-center justify-between border-t pt-6">
         <h1 className="text-lg font-semibold">Calendars</h1>
       </div>
 

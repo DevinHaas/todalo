@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { createTask } from "@/app/(app)/tasks/actions";
-import { parseQuickAdd, type QuickAddMatch } from "@/lib/parse-quick-add";
+import { parseQuickAddOrPlain, type QuickAddMatch } from "@/lib/parse-quick-add";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { cn } from "@/lib/utils";
+import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -16,6 +17,7 @@ const PARSE_DEBOUNCE_MS = 150;
 const FIELD_CLASSES = "h-8 rounded-lg border px-2.5 py-1 text-base whitespace-pre md:text-sm";
 
 export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
+  const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
   const [title, setTitle] = useState("");
   const [debouncedTitle, setDebouncedTitle] = useState("");
   const [rejected, setRejected] = useState<Set<string>>(new Set());
@@ -34,8 +36,8 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
   );
 
   const parsed = useMemo(
-    () => parseQuickAdd(debouncedTitle, undefined, { isRejected }),
-    [debouncedTitle, isRejected],
+    () => parseQuickAddOrPlain(debouncedTitle, smartDateRecognitionEnabled, undefined, { isRejected }),
+    [debouncedTitle, smartDateRecognitionEnabled, isRejected],
   );
 
   const segments = useMemo(() => {
@@ -76,7 +78,7 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
       onSubmit={(e) => {
         e.preventDefault();
         if (!title.trim()) return;
-        const final = parseQuickAdd(title, undefined, { isRejected });
+        const final = parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected });
         const finalTitle = final.strippedTitle || title.trim();
         let dueDate = final.dueDate ?? undefined;
         if (final.startTime) {

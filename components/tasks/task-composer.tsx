@@ -18,7 +18,8 @@ import {
 import { createTask } from "@/app/(app)/tasks/actions";
 import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
-import { parseQuickAdd, type QuickAddMatch } from "@/lib/parse-quick-add";
+import { parseQuickAddOrPlain, type QuickAddMatch } from "@/lib/parse-quick-add";
+import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
 import {
   canonicalDateText,
   canonicalRecurrenceText,
@@ -422,6 +423,7 @@ export function TaskComposer({
   initialStartTime?: string;
   initialEndTime?: string;
 }) {
+  const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
   const controlled = open !== undefined;
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
   const expanded = controlled ? open : uncontrolledExpanded;
@@ -454,7 +456,10 @@ export function TaskComposer({
     [rejected],
   );
 
-  const parsed = useMemo(() => parseQuickAdd(debouncedTitle, undefined, { isRejected }), [debouncedTitle, isRejected]);
+  const parsed = useMemo(
+    () => parseQuickAddOrPlain(debouncedTitle, smartDateRecognitionEnabled, undefined, { isRejected }),
+    [debouncedTitle, smartDateRecognitionEnabled, isRejected],
+  );
 
   // Live parsing drives dueDate/startTime/recurrence unless a manual edit
   // (DatePicker/TimeRangeInputs/Repeat row/reject) has overridden that field
@@ -494,7 +499,9 @@ export function TaskComposer({
   // is currently matched in the title to a canonical form, so the title and
   // the picker never visibly disagree — see spec's "Field sync" bullet.
   function currentMatch(kind: QuickAddMatch["kind"]) {
-    return parseQuickAdd(title, undefined, { isRejected }).matches.find((m) => m.kind === kind);
+    return parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected }).matches.find(
+      (m) => m.kind === kind,
+    );
   }
 
   // Shared by all three manual-edit handlers below: rewrites the currently
@@ -564,7 +571,7 @@ export function TaskComposer({
 
   function submit() {
     if (!title.trim()) return;
-    const finalParsed = parseQuickAdd(title, undefined, { isRejected });
+    const finalParsed = parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected });
     const finalTitle = finalParsed.strippedTitle || title.trim();
     const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
     const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;

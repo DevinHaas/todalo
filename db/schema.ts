@@ -236,6 +236,28 @@ export const calendarEvents = pgTable(
   ],
 );
 
+// One row per user, holding global app preferences. Extend with more
+// fields (time format, date format, week start) as they're built — not
+// done yet, see .scratch/smart-quick-add/spec.md.
+export const userSettings = pgTable("user_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  smartDateRecognitionEnabled: boolean("smart_date_recognition_enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+  user: one(user, {
+    fields: [userSettings.userId],
+    references: [user.id],
+  }),
+}));
+
 export const calendarAccountSettingsRelations = relations(calendarAccountSettings, ({ one }) => ({
   account: one(account, {
     fields: [calendarAccountSettings.accountId],

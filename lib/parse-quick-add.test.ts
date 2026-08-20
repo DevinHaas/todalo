@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseQuickAdd } from "./parse-quick-add";
+import { parseQuickAdd, parseQuickAddOrPlain } from "./parse-quick-add";
 
 // Wednesday 2026-01-14, used as a fixed "now" so date math is deterministic.
 const REFERENCE = new Date(2026, 0, 14);
@@ -148,5 +148,22 @@ describe("parseQuickAdd", () => {
     const [match] = result.matches;
     expect(text.slice(match.start, match.end)).toBe(match.text);
     expect(match.kind).toBe("date");
+  });
+});
+
+describe("parseQuickAddOrPlain", () => {
+  it("parses normally when enabled", () => {
+    const result = parseQuickAddOrPlain("call mom tomorrow", true, REFERENCE);
+    expect(result.dueDate).toEqual(dateOnly(2026, 0, 15));
+    expect(result.strippedTitle).toBe("call mom");
+  });
+
+  it("leaves the title untouched with no matches when disabled", () => {
+    const result = parseQuickAddOrPlain("call mom tomorrow", false, REFERENCE);
+    expect(result.matches).toEqual([]);
+    expect(result.strippedTitle).toBe("call mom tomorrow");
+    expect(result.dueDate).toBeNull();
+    expect(result.startTime).toBeNull();
+    expect(result.recurrence).toBeNull();
   });
 });

@@ -247,3 +247,18 @@ export function parseQuickAdd(
     recurrence: recurrenceMatch ? (recurrenceMatch.value as Recurrence) : null,
   };
 }
+
+// The Settings > General > "Smart date recognition" toggle gates parsing at
+// this single choke point — callers (TaskQuickAdd, TaskComposer) route every
+// parse through here instead of branching on `enabled` themselves.
+export function parseQuickAddOrPlain(
+  text: string,
+  enabled: boolean,
+  referenceDate?: Date,
+  options: ParseQuickAddOptions = {},
+): ParseQuickAddResult {
+  if (!enabled) {
+    return { matches: [], strippedTitle: text.trim(), dueDate: null, startTime: null, recurrence: null };
+  }
+  return parseQuickAdd(text, referenceDate, options);
+}
