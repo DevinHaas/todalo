@@ -29,6 +29,7 @@ import { TaskMetadataFields, useMetadataOptions, dateInputValue, dateInputDate }
 import { copyTaskUrl } from "@/lib/task-url";
 import { TaskAttachments } from "./task-attachments";
 import { getTaskEditorData } from "@/app/(app)/tasks/metadata-actions";
+import { useTaskDateLabel } from "./use-task-date-label";
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -95,6 +96,7 @@ export function TaskEditDialog({
     recurrenceOptionValue(task.recurrence),
   );
   const [isPending, startTransition] = useTransition();
+  const dueDateLabel = useTaskDateLabel(dueDate);
   const [freshFor, setFreshFor] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -147,8 +149,7 @@ export function TaskEditDialog({
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
-        <fieldset disabled={isPending || freshFor !== task.id} className="space-y-4">
-          {freshFor !== task.id && !error && <p role="status">Loading current task…</p>}
+        {freshFor !== task.id ? <p role={error ? "alert" : "status"}>{error ?? "Loading current task…"}</p> : <fieldset disabled={isPending} className="space-y-4">
           {error && <p role="alert" className="text-destructive">{error}</p>}
           <label className="block space-y-1">Task name<Input autoFocus value={title} onChange={event => setTitle(event.target.value)} /></label>
           <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
@@ -162,7 +163,7 @@ export function TaskEditDialog({
               <PopoverTrigger
                 render={
                   <Button variant="outline">
-                    {dueDate ? dueDate.toLocaleDateString() : "No due date"}
+                    {dueDate ? dueDateLabel : "No due date"}
                   </Button>
                 }
               />
@@ -204,7 +205,7 @@ export function TaskEditDialog({
           <Button onClick={() => save()} disabled={isPending || !title.trim()} className="w-full">
             Save {(variant === "details" || platform === "mac") && <ShortcutHint commandId="editor.save" />}
           </Button>
-        </fieldset>
+        </fieldset>}
       </DialogContent>
     </Dialog>
   );

@@ -69,7 +69,15 @@ Reviewed integration `1f20d994e135619dc588d9b37d3ae4a8bfaea942` against `b907b7a
 
 ## Verification and limits
 
-- 24 test files / 270 tests pass; full web and database typechecks pass; changed review files have no new lint errors/warnings; task-composer retains its two baseline effect findings. Diff check passes.
+- 25 test files / 272 tests pass after final browser follow-up; full web and database typechecks pass; changed review files have no new lint errors/warnings; task-composer retains its two baseline effect findings. Diff check passes.
 - Full web lint retains exactly three pre-existing `react-hooks/set-state-in-effect` errors: `components/tasks/task-composer.tsx:77`, `:622`, and `hooks/use-mobile.ts:14`. Composer/Ramble state behavior preserved.
 - Isolated webpack production build passes compilation, TypeScript, static generation and route tracing with public Google Font access. Default Turbopack cannot resolve the cached dependency symlinks outside this isolated worktree; no production config workaround is committed.
 - Lead applied migrations 0006–0009 and verified file task/attachment creation/download. No new migration added by review fixes. Real Mac/Windows OS clipboard capture, browser-specific reserved key behavior and non-US layout/manual limits remain explicitly recorded in browser notes.
+
+## Final browser follow-up (after integration 6db97f6)
+
+- Lead confirms Quick Add arrows, explicit project/section/move submit buttons, default-body project file paste, stale-focus command declines, and stale deadline save safety pass. Reduced motion passes: transition-property is none and transform is none; the leftover duration value does not represent an active transition.
+- Direct task route and TaskRow deadline labels exposed locale-dependent hydration mismatch. [Date formatting seam](../../apps/web/lib/task-date-label.ts) uses explicit locale/timezone; [hydration adapter](../../apps/web/components/tasks/use-task-date-label.ts) supplies an identical UTC server/initial hydration snapshot, then the browser's local calendar zone. This avoids shifting locally selected dates to their UTC predecessor. Deadline rows, task detail pages and editor due-date labels share the adapter. Tests cover differing host timezones and local-midnight calendar dates.
+- Fresh editor fields are now rendered only after the authenticated task load. The pending state exposes a loading/error message; no stale metadata inputs or Save control are visible, and the save handler still declines until current data has loaded. Inputs autofocus after mounting current data, so loading cannot overwrite user typing.
+- Lead's live dev CSS was stale: it referenced an empty --font-sans while production CSS already referenced Geist correctly. An explicit :root theme variable with a safe Geist/system fallback now also supports variable-consuming CSS and portals. Final browser confirmation must use freshly compiled CSS.
+- The isolated webpack production build passed after the scoped Quick Add capture fix. This follow-up date/font/pending-presentation patch was verified with 272 tests, typechecks and focused lint; it does not claim a new production build after these final presentation edits.
