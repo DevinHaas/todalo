@@ -20,10 +20,10 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `navigation.inbox` | Inbox | global | g then i | g then i | available / 2 |  |
 | `navigation.today` | Today | global | g then t | g then t | available / 1 |  |
 | `navigation.upcoming` | Upcoming | global | g then u | g then u | available / 1 |  |
-| `navigation.labels` | Labels | global | g then l | g then l | planned / 3 |  |
+| `navigation.labels` | Labels | global | g then l | g then l | available / 3 |  |
 | `navigation.projects` | Projects | global | g then p | g then p | available / 2 |  |
 | `navigation.sections` | Navigate sections | global | g then / | g then / | available / 2 |  |
-| `navigation.filters` | Filters & Labels | global | g then v | g then v | planned / 3 |  |
+| `navigation.filters` | Filters & Labels | global | g then v | g then v | available / 3 |  |
 | `navigation.settings` | Settings | global | o then s | o then s | available / 1 |  |
 | `navigation.help` | Help & resources | global | o then h | o then h | available / 1 |  |
 | `navigation.account` | Account menu | global | o then u | o then u | available / 1 |  |
@@ -46,25 +46,25 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `task.edit` | Edit task | task | Meta+e | Ctrl+e | available / 1 |  |
 | `task.date` | Choose date | task | t | t | available / 1 |  |
 | `task.clear-date` | Clear date | task | Shift+t | Shift+t | available / 1 |  |
-| `task.priority-1` | Set priority 1 | task | 1 | 1 | planned / 3 |  |
-| `task.priority-2` | Set priority 2 | task | 2 | 2 | planned / 3 |  |
-| `task.priority-3` | Set priority 3 | task | 3 | 3 | planned / 3 |  |
-| `task.priority-4` | Set priority 4 | task | 4 | 4 | planned / 3 |  |
-| `task.priority` | Choose priority | task | y | y | planned / 3 |  |
-| `task.labels` | Edit labels | task | l | l | planned / 3 |  |
+| `task.priority-1` | Set priority 1 | task | 1 | 1 | available / 3 |  |
+| `task.priority-2` | Set priority 2 | task | 2 | 2 | available / 3 |  |
+| `task.priority-3` | Set priority 3 | task | 3 | 3 | available / 3 |  |
+| `task.priority-4` | Set priority 4 | task | 4 | 4 | available / 3 |  |
+| `task.priority` | Choose priority | task | y | y | available / 3 |  |
+| `task.labels` | Edit labels | task | l | l | available / 3 | Bulk picker replaces labels on all selected tasks. |
 | `task.move` | Move task | task | v | v | available / 2 |  |
 | `task.menu` | Task action menu | task | . | . | available / 1 |  |
 | `task.select` | Select focused task | task | x | x | available / 1 | Windows web omits X; desktop documents it. Todalo adopts the documented desktop binding. |
 | `task.toolbar` | Focus selection toolbar | task | , | , | available / 1 |  |
 | `task.delete` | Delete selected tasks | task | Meta+Backspace | Shift+Delete | available / 1 |  |
-| `task.copy-url` | Copy task URL | task | Meta+Shift+c | Ctrl+Shift+c | planned / 3 |  |
+| `task.copy-url` | Copy task URL | task | Meta+Shift+c | Ctrl+Shift+c | available / 3 | Owned canonical task route; visible clipboard access errors and manual link fallback. |
 | `task.nest` | Nest task | task | Ctrl+] | Ctrl+] | available / 2 | Explicit Control on macOS; use a custom binding on layouts without dedicated brackets. |
 | `task.unnest` | Unnest task | task | Ctrl+[ | Ctrl+[ | available / 2 |  |
 | `task.toggle-children` | Toggle child tasks | task | Shift+e | Shift+e | available / 2 |  |
 | `view.layout` | Switch layout | view | Shift+v | Shift+v | planned / 4 |  |
 | `project.section` | Create section | project | s | s | available / 2 |  |
 | `project.sort-date` | Sort by date | project | d | d | available / 2 | Uses web project baseline D; macOS sorting subsection contradicts with Option+D. |
-| `project.sort-priority` | Sort by priority | project | p | p | planned / 3 | Web project baseline; macOS Option+P entry is disputed. |
+| `project.sort-priority` | Sort by priority | project | p | p | available / 3 | Web project baseline; macOS Option+P entry is disputed. |
 | `project.sort-name` | Sort by name | project | n | n | available / 2 | Web project baseline; macOS Option+N entry is disputed. |
 | `project.menu` | Project action menu | project | w | w | available / 2 |  |
 | `view.first` | First task | view | Meta+ArrowUp | Ctrl+Home | available / 2 |  |
@@ -76,11 +76,11 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `calendar.next-week` | Calendar: next week | calendar | Shift+ArrowRight | Shift+ArrowRight | planned / 4 |  |
 | `calendar.previous-week` | Calendar: previous week | calendar | Shift+ArrowLeft | Shift+ArrowLeft | planned / 4 |  |
 | `task.paste-file` | Paste file as a task | project | Meta+v | Ctrl+v | planned / 4 |  |
-| `quick-add.description` | Reveal description | quick-add | ArrowDown | ArrowDown | planned / 3 |  |
-| `quick-add.actions` | Reveal additional actions | quick-add | Shift+ArrowDown | Shift+ArrowDown | planned / 3 |  |
-| `quick-add.deadline` | Choose deadline while composing | quick-add | { | { | planned / 3 |  |
-| `task.deadline` | Choose deadline | task | d | d | planned / 3 | Changelog default; task context takes precedence over project sorting. |
-| `task.clear-deadline` | Clear deadline | task | Shift+d | Shift+d | planned / 3 |  |
+| `quick-add.description` | Reveal description | quick-add | ArrowDown | ArrowDown | available / 3 | Scoped to the composing task name input. |
+| `quick-add.actions` | Reveal additional actions | quick-add | Shift+ArrowDown | Shift+ArrowDown | available / 3 | Scoped to the composing task name input. |
+| `quick-add.deadline` | Choose deadline while composing | quick-add | { | { | available / 3 | Scoped command; existing text syntax parsing is unchanged. |
+| `task.deadline` | Choose deadline | task | d | d | available / 3 | Changelog default; actual task focus or selection in the collection takes precedence over project sorting. |
+| `task.clear-deadline` | Clear deadline | task | Shift+d | Shift+d | available / 3 |  |
 | `native.print` | Print view | global | Meta+p | Ctrl+p | native / 0 | Preserved browser behavior; customization is unavailable. |
 | `native.zoom-in` | Increase zoom | global | Meta+= | Ctrl+= | native / 0 | Preserved browser behavior; customization is unavailable. |
 | `native.zoom-out` | Decrease zoom | global | Meta+- | Ctrl+- | native / 0 | Preserved browser behavior; customization is unavailable. |
