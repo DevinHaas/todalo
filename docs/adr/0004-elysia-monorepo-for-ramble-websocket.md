@@ -1,0 +1,7 @@
+# Elysia server in a Turborepo monorepo for the ramble WebSocket
+
+Ramble mode needs a real-time, bidirectional connection: mic audio streaming out, transcript segments streaming back, for the duration of a session. Next.js App Router Route Handlers run over plain HTTP request/response and don't support the WebSocket `Upgrade` handshake — the only way to get a real WebSocket on `next start`/standalone output is a custom Node entrypoint wrapping Next's request handler.
+
+Instead of that, the repo was split into a Turborepo monorepo: `apps/web` (the existing Next.js app, unchanged in behavior) and `apps/api` (a new Elysia server — Bun-native, matching the runtime this repo already uses via `bun.lock`/`oven/bun`), which owns the WebSocket route and the ElevenLabs API key. `packages/db` and `packages/auth` are shared between both so `apps/api` reads/writes the same `tasks` table and verifies the same Better Auth session cookie Next issues, without inventing a second auth mechanism. The two apps deploy as separate Coolify applications on the *same domain*, path-routed (`/api/ramble/*` → Elysia) rather than split across subdomains — same-domain keeps the session cookie readable by both without CORS/cross-origin cookie configuration.
+
+This is a much bigger change than the feature itself — it restructures build, deploy, and how shared code is packaged for the whole app, not just where one WebSocket route lives.

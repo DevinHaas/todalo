@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+**/node_modules/
+.turbo/
 /.pnp
 .pnp.*
 .yarn/*
@@ -15,10 +17,12 @@
 
 # next.js
 /.next/
+**/.next/
 /out/
 
 # production
 /build
+**/dist/
 
 # misc
 .DS_Store
@@ -32,6 +36,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,3 +45,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .playwright-mcp/
+.local-models/
+
+# afk-ralph loop transcripts
+.scratch/*/.ralph-logs/

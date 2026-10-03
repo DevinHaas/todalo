@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
-bun run db/migrate.ts
-node server.js
+bun run packages/db/src/migrate.ts
+exec node apps/web/server.js

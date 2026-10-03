@@ -4,7 +4,7 @@
 // expected to render `matches` and CONTEXT.md's "Matched phrase" entry.
 
 import { addDays, isBefore, startOfDay, startOfWeek } from "date-fns";
-import type { Recurrence } from "@/lib/recurrence";
+import type { Recurrence } from "./recurrence";
 
 export type QuickAddMatchKind = "date" | "time" | "recurrence";
 

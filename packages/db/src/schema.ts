@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   pgTable,
   text,
   timestamp,
@@ -10,7 +11,7 @@ import {
   jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import type { Recurrence } from "@/lib/recurrence";
+import type { Recurrence } from "@todalo/ramble/recurrence";
 
 // Better Auth tables (regenerate with `bunx @better-auth/cli generate` after changing lib/auth.ts config)
 export const user = pgTable("user", {
@@ -126,6 +127,9 @@ export const tasks = pgTable(
     projectId: text("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),
+    parentId: text("parent_id").references((): AnyPgColumn => tasks.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull(),
     description: text("description"),
     status: taskStatus("status").default("todo").notNull(),
@@ -141,7 +145,10 @@ export const tasks = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("tasks_userId_idx").on(table.userId)],
+  (table) => [
+    index("tasks_userId_idx").on(table.userId),
+    index("tasks_parentId_idx").on(table.parentId),
+  ],
 );
 
 export const projectRelations = relations(projects, ({ many }) => ({

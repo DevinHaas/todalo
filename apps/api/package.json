@@ -1,0 +1,30 @@
+{
+  "name": "@todalo/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../.env --watch src/index.ts",
+    "dev:local": "bun --env-file=../../.env --watch scripts/dev-local.ts",
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist --packages=external",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. apps/api",
+    "test:integration": "bun --env-file=../../.env scripts/verify-websocket.ts",
+    "test:live-speech": "bun --env-file=../../.env scripts/verify-live-speech.ts",
+    "test:live-llm": "bun --env-file=../../.env scripts/verify-live-llm.ts",
+    "local-models": "bun scripts/local-models.ts"
+  },
+  "dependencies": {
+    "@todalo/auth": "*",
+    "@todalo/db": "*",
+    "@todalo/ramble": "*",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "^1.4.28"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

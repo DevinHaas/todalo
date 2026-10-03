@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth } from "@todalo/auth";
 
 const email = process.env.TEST_USER_EMAIL ?? "test@todalo.dev";
 const password = process.env.TEST_USER_PASSWORD ?? "password123";

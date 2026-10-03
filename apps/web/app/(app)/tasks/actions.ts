@@ -8,11 +8,13 @@ import { tasks } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
 import { nextOccurrenceOnCompletion, recurrenceSchema } from "@/lib/recurrence";
 import { pushTaskToCalendar, deleteTaskFromCalendar } from "@/lib/google-calendar";
+import { assertTaskParent } from "@todalo/db/task-parent";
 
 const taskInput = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   projectId: z.string().optional(),
+  parentId: z.string().min(1).nullable().optional(),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
   dueDate: z.coerce.date().optional(),
   dueDateEnd: z.coerce.date().optional(),
@@ -34,6 +36,7 @@ async function syncToCalendar(userId: string, taskId: string) {
 export async function createTask(input: z.infer<typeof taskInput>) {
   const userId = await requireUserId();
   const data = taskInput.parse(input);
+  if (data.parentId) await assertTaskParent({ userId, parentId: data.parentId });
   const [task] = await db.insert(tasks).values({ userId, ...data }).returning();
   if (task.dueDate) await syncToCalendar(userId, task.id);
   revalidatePath("/");
@@ -44,6 +47,12 @@ const updateTaskInput = taskInput.partial().extend({ id: z.string() });
 export async function updateTask(input: z.infer<typeof updateTaskInput>) {
   const userId = await requireUserId();
   const { id, ...data } = updateTaskInput.parse(input);
+  if (data.parentId !== undefined) {
+    const [existing] = await db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+    if (!existing) throw new Error("Task not found");
+    await assertTaskParent({ userId, taskId: id, parentId: data.parentId });
+  }
   await db
     .update(tasks)
     .set(data)

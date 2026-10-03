@@ -1,0 +1,24 @@
+{
+  "name": "@todalo/ramble",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./semantic": "./src/semantic.ts",
+    "./quick-add": "./src/quick-add.ts",
+    "./recurrence": "./src/recurrence.ts"
+  },
+  "scripts": {
+    "test": "vitest run --root ../.. packages/ramble",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "date-fns": "^4.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
