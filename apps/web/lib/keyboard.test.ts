@@ -1,0 +1,76 @@
+import { describe, expect, it } from "vitest";
+import { defaultPreferences, effectiveBindings, validatePreferences, KeyboardDispatcher, bindingFromEvent, parsePreferences, safePreferences, snapshotPreferences } from "./keyboard";
+import { keyboardAccountPreferences } from "./keyboard-account-preferences";
+
+describe("account keyboard preferences", () => {
+  it("keeps disabled commands disabled and adapts portable modifiers", () => {
+    const preferences = { ...defaultPreferences(), overrides: { "general.capture": [], "navigation.today": ["Primary+e"] } };
+    expect(effectiveBindings("general.capture", preferences, "mac")).toEqual([]);
+    expect(effectiveBindings("navigation.today", preferences, "mac")).toEqual(["Meta+e"]);
+    expect(effectiveBindings("navigation.today", preferences, "windows")).toEqual(["Ctrl+e"]);
+  });
+  it("rejects ambiguous prefixes and system reservations before saving", () => {
+    const errors = validatePreferences({ ...defaultPreferences(), overrides: { "general.capture": ["g"], "general.help": ["Primary+q"] } });
+    expect(errors.some(error => error.commandId === "general.capture" && error.otherId === "navigation.today")).toBe(true);
+    expect(errors.some(error => error.commandId === "general.help" && /reserved/i.test(error.message))).toBe(true);
+  });
+  it("accepts the documented baseline and rejects malformed persisted preferences", () => {
+    expect(validatePreferences(defaultPreferences())).toEqual([]);
+    expect(() => parsePreferences({ version: 9 })).toThrow(/version/);
+  });
+  it("retains a previous effective configuration when new defaults conflict", () => {
+    const registry = [{ id: "capture", label: "Capture", group: "General", context: "global" as const, availability: "available" as const, defaults: ["q"] }];
+    const saved = snapshotPreferences(defaultPreferences(), registry);
+    const updatedRegistry = [...registry, { ...registry[0]!, id: "new", defaults: ["q"] }];
+    const result = safePreferences(saved, "mac", updatedRegistry);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(effectiveBindings("capture", result.preferences, "mac", updatedRegistry)).toEqual(["q"]);
+    expect(effectiveBindings("new", result.preferences, "mac", updatedRegistry)).toEqual([]);
+  });
+  it("isolates account persistence and leaves saved settings untouched on invalid writes", async () => {
+    const rows = new Map<string, unknown>();
+    let account: string | null = "alice";
+    const api = keyboardAccountPreferences(async () => { if (!account) throw new Error("Unauthorized"); return account; }, { read: async id => rows.get(id), write: async (id, value) => { rows.set(id, value); } });
+    await api.save({ ...defaultPreferences(), overrides: { "general.capture": [] } });
+    account = "bob";
+    expect((await api.load()).preferences.overrides).toEqual({});
+    await expect(api.save({ ...defaultPreferences(), overrides: { "general.help": ["q"] } })).rejects.toThrow(/Conflicts/);
+    account = "alice";
+    expect((await api.load()).preferences.overrides["general.capture"]).toEqual([]);
+    account = null;
+    await expect(api.load()).rejects.toThrow("Unauthorized");
+  });
+});
+
+describe("browser dispatch", () => {
+  it("pauses app commands while typing, composing or in a modal and allows only explicit editor commands", () => {
+    const dispatcher = new KeyboardDispatcher();
+    const event = { key: "q", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false };
+    const capture = [{ id: "capture", bindings: ["q"] }];
+    expect(dispatcher.dispatch(event, capture, "view", 0, { typing: true }).consumed).toBe(false);
+    expect(dispatcher.dispatch(event, capture, "view", 0, { composing: true }).consumed).toBe(false);
+    expect(dispatcher.dispatch(event, capture, "view", 0, { modal: true }).consumed).toBe(false);
+    expect(dispatcher.dispatch({ ...event, key: "Enter", metaKey: true }, [{ id: "save", bindings: ["Meta+Enter"], allowInEditor: true, allowInModal: true }], "editor", 0, { typing: true, modal: true }).commandId).toBe("save");
+  });
+  it("uses character symbols on non-US layouts and keeps Command distinct from Control", () => {
+    expect(bindingFromEvent({ key: "?", shiftKey: true, ctrlKey: false, metaKey: false, altKey: false, repeat: false })).toBe("?");
+    expect(bindingFromEvent({ key: "]", shiftKey: false, ctrlKey: true, metaKey: false, altKey: false, repeat: false })).toBe("Ctrl+]");
+  });
+  it("ignores repeated destructive keys but allows navigation repeats", () => {
+    const dispatcher = new KeyboardDispatcher();
+    const event = { key: "e", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: true };
+    expect(dispatcher.dispatch(event, [{ id: "complete", bindings: ["e"] }], "task").consumed).toBe(false);
+    expect(dispatcher.dispatch({ ...event, key: "j" }, [{ id: "next", bindings: ["j"], repeat: true }], "task").commandId).toBe("next");
+  });
+  it("matches produced characters and resets sequences after a second or changed context", () => {
+    const dispatcher = new KeyboardDispatcher();
+    const commands = [{ id: "today", bindings: ["g then t"], repeat: false }];
+    const event = (key: string) => ({ key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false });
+    expect(dispatcher.dispatch(event("g"), commands, "today", 0)).toEqual({ consumed: true });
+    expect(dispatcher.dispatch(event("t"), commands, "today", 900)).toEqual({ consumed: true, commandId: "today" });
+    dispatcher.dispatch(event("g"), commands, "today", 1000);
+    expect(dispatcher.dispatch(event("t"), commands, "today", 2001).consumed).toBe(false);
+    dispatcher.dispatch(event("g"), commands, "today", 3000);
+    expect(dispatcher.dispatch(event("t"), commands, "other", 3001).consumed).toBe(false);
+  });
+});

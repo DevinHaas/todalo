@@ -39,6 +39,7 @@ import {
 import { TaskComposer } from "@/components/tasks/task-composer";
 import { authClient } from "@/lib/auth-client";
 import { useRamble } from "@/components/ramble/ramble-provider";
+import { useKeyboard, ShortcutHint } from "@/components/keyboard/keyboard-provider";
 
 // ponytail: Filters & Labels / Goals / Reporting / More have no backing
 // features yet — shown inert for visual parity, wire up when they exist.
@@ -59,6 +60,7 @@ export function AppSidebar({
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const openRamble = useRamble();
+  const keyboard = useKeyboard();
 
   return (
     <Sidebar collapsible="icon">
@@ -91,16 +93,18 @@ export function AppSidebar({
         <button
           type="button"
           aria-label="Add task"
+          data-keyboard-capture
           onClick={() => setAddOpen(true)}
           className="flex h-8 flex-1 items-center gap-2 rounded-md px-2 text-sm font-medium text-brand hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
         >
           <Plus className="size-4" />
           <span className="group-data-[collapsible=icon]:hidden">Add task</span>
+          <span className="ml-auto group-data-[collapsible=icon]:hidden"><ShortcutHint commandId="general.capture" /></span>
         </button>
         <button
           type="button"
           aria-label="Open Ramble"
-          title="Ramble (Ctrl/⌘ + Shift + R)"
+          title={`Ramble ${keyboard.bindings("general.ramble").join(" or ")}`}
           onClick={() => openRamble()}
           className="flex size-8 shrink-0 items-center justify-center rounded-md text-brand hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring"
         >
@@ -173,8 +177,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        {/* ponytail: no help center yet */}
-        <SidebarMenuButton disabled className="text-muted-foreground">
+        <SidebarMenuButton onClick={keyboard.openHelp} className="text-muted-foreground">
           <HelpCircle className="size-4" />
           <span>Help & resources</span>
         </SidebarMenuButton>
