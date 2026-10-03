@@ -25,6 +25,8 @@ import { combineDateAndTime, hasDueTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 import type { Task } from "@/lib/tasks";
 import type { Recurrence } from "@/lib/recurrence";
+import { TaskMetadataFields, useMetadataOptions, dateInputValue, dateInputDate } from "./task-metadata-fields";
+import { copyTaskUrl } from "@/lib/task-url";
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -70,6 +72,11 @@ export function TaskEditDialog({
   const { platform } = useKeyboard();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
+  const [priority, setPriority] = useState(task.priority);
+  const [deadline, setDeadline] = useState(dateInputValue(task.deadline));
+  const [labelIds, setLabelIds] = useState(task.labelIds);
+  const metadata = useMetadataOptions(open);
+  const [copied, setCopied] = useState(false);
   const [dateOpen, setDateOpen] = useState(initialDateOpen);
   const [error, setError] = useState<string | null>(null);
   const saving = useRef(false);
@@ -99,6 +106,7 @@ export function TaskEditDialog({
       try { await updateTask({
         id: task.id,
         title: title.trim(), description,
+        priority, deadline: dateInputDate(deadline), labelIds,
         dueDate: finalDueDate ?? null,
         dueDateEnd,
         recurrence,
@@ -120,7 +128,7 @@ export function TaskEditDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children && <DialogTrigger render={children as React.ReactElement} />}
-      <DialogContent ref={scope}>
+      <DialogContent ref={scope} className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
@@ -128,6 +136,9 @@ export function TaskEditDialog({
           {error && <p role="alert" className="text-destructive">{error}</p>}
           <label className="block space-y-1">Task name<Input autoFocus value={title} onChange={event => setTitle(event.target.value)} /></label>
           <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
+          {metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}
+          <TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} disabled={isPending} />
+          <div className="flex flex-wrap gap-3 text-sm"><a href={`/tasks/${encodeURIComponent(task.id)}`} className="underline">Task link</a><button type="button" className="underline" onClick={() => startTransition(async () => { try { await copyTaskUrl(task.id); setCopied(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not copy task link"); } })}>Copy link <ShortcutHint commandId="task.copy-url" /></button>{copied && <span role="status">Task link copied.</span>}</div>
           <div>
             <label className="mb-1 block text-sm font-medium">Due date</label>
             <Popover open={dateOpen} onOpenChange={setDateOpen}>

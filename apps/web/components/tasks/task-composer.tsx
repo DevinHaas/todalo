@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Recurrence } from "@/lib/recurrence";
 import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { TaskMetadataFields, useMetadataOptions, dateInputDate } from "./task-metadata-fields";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -470,6 +471,14 @@ export function TaskComposer({
   const [title, setTitle] = useState("");
   const [debouncedTitle, setDebouncedTitle] = useState("");
   const [description, setDescription] = useState("");
+  const descriptionRef = useRef<HTMLInputElement>(null);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [metadataFocus, setMetadataFocus] = useState<"priority" | "labels" | "deadline" | undefined>();
+  const [priority, setPriority] = useState(4);
+  const [deadline, setDeadline] = useState("");
+  const [labelIds, setLabelIds] = useState<string[]>([]);
+  const metadata = useMetadataOptions(actionsOpen);
   const [rejected, setRejected] = useState<Set<string>>(new Set());
   const [syncState, dispatchSync] = useReducer(syncQuickAddFields, initialSyncState, () =>
     syncQuickAddFields(initialSyncState, {
@@ -614,6 +623,7 @@ export function TaskComposer({
     setDebouncedTitle("");
     setDescription("");
     setRejected(new Set());
+    setDescriptionOpen(false); setActionsOpen(false); setMetadataFocus(undefined); setPriority(4); setDeadline(""); setLabelIds([]);
     dispatchSync({
       type: "seed",
       date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
@@ -637,6 +647,7 @@ export function TaskComposer({
     setDebouncedTitle("");
     setRejected(new Set());
     setDescription("");
+    setDescriptionOpen(false); setActionsOpen(false); setMetadataFocus(undefined); setPriority(4); setDeadline(""); setLabelIds([]);
     // Unlike the controlled-open effect above, resetting after a submit/cancel
     // always clears start/end time — only dueDate reseeds from the initial
     // prop — matching this function's pre-sync behavior.
@@ -660,6 +671,7 @@ export function TaskComposer({
       try { const id = await createTask({
         title: finalTitle,
         description: description || undefined,
+        priority, deadline: dateInputDate(deadline), labelIds,
         dueDate: finalDueDate,
         dueDateEnd,
         recurrence: finalState.recurrence.value,
@@ -669,6 +681,7 @@ export function TaskComposer({
       });
       if (direction) {
         setTitle(""); setDebouncedTitle(""); setDescription(""); setRejected(new Set());
+        setPriority(4); setDeadline(""); setLabelIds([]);
         dispatchSync({ type: "seed", date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined), time: "" });
         currentPlacement.current = { edge: direction, anchorId: id };
         onCreated?.(id, direction);
@@ -682,6 +695,9 @@ export function TaskComposer({
     "editor.submit-below": () => document.activeElement?.tagName !== "INPUT" ? false : submit("below"),
     "editor.save-above": () => submit("above"),
     "general.dismiss": () => reset(),
+    "quick-add.description": () => { if (document.activeElement !== inputRef.current) return false; setDescriptionOpen(true); requestAnimationFrame(() => descriptionRef.current?.focus()); },
+    "quick-add.actions": () => { if (document.activeElement !== inputRef.current) return false; setMetadataFocus("priority"); setActionsOpen(true); },
+    "quick-add.deadline": () => { if (document.activeElement !== inputRef.current) return false; setMetadataFocus("deadline"); setActionsOpen(true); },
   }, { enabled: expanded, scope, allowInEditor: true, allowInModal: controlled });
 
   const form = (
@@ -726,12 +742,15 @@ export function TaskComposer({
           )}
         />
       </div>
-      <Input
+      {descriptionOpen && <Input
+        ref={descriptionRef}
+        aria-label="Description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description"
         className="border-0 px-0 text-sm focus-visible:ring-0"
-      />
+      />}
+      {!descriptionOpen && <button type="button" className="text-sm text-muted-foreground" onClick={() => { setDescriptionOpen(true); requestAnimationFrame(() => descriptionRef.current?.focus()); }}>Add description <ShortcutHint commandId="quick-add.description" /></button>}
       <div className="flex flex-wrap items-center gap-2">
         <DatePicker
           dueDate={dueDate}
@@ -743,13 +762,14 @@ export function TaskComposer({
           onStartTimeChange={handleStartTimeChange}
           onEndTimeChange={handleEndTimeChange}
         />
-        <StubPill icon={Flag} label="Priority" />
+        <Button type="button" variant="outline" size="sm" onClick={() => { setMetadataFocus("priority"); setActionsOpen(true); }}><Flag className="size-4" />Priority {priority}</Button>
         <StubPill icon={AlarmClock} label="Reminders" />
         <StubPill icon={Paperclip} label="Attachment" />
-        <Button type="button" variant="outline" size="icon-sm" disabled>
+        <Button type="button" variant="outline" size="icon-sm" aria-label="Additional actions" aria-expanded={actionsOpen} onClick={() => { setMetadataFocus(undefined); setActionsOpen(value => !value); }}>
           <MoreHorizontal className="size-4" />
         </Button>
       </div>
+      {actionsOpen && <div className="rounded border p-3"><p className="mb-2 text-sm">Additional actions <ShortcutHint commandId="quick-add.actions" /> · Deadline <ShortcutHint commandId="quick-add.deadline" /></p>{metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}<TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} focusField={metadataFocus} disabled={isPending} /></div>}
       <div className="flex items-center justify-between border-t pt-3">
         <Button type="button" variant="outline" size="sm" disabled>
           <Inbox className="size-4" />
@@ -777,7 +797,7 @@ export function TaskComposer({
   if (controlled) {
     return (
       <Dialog open={open} onOpenChange={setExpanded}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="sr-only">Add task</DialogTitle>
           </DialogHeader>

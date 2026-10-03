@@ -31,6 +31,9 @@ export function TaskRow({ task }: { task: Task }) {
       />
       {keyboard ? titleButton : <TaskEditDialog task={task}>{titleButton}</TaskEditDialog>}
       {dueDate && <DatePill dueDate={dueDate} overdue={isOverdue(task)} />}
+      {task.priority < 4 && <span className="text-xs font-semibold" aria-label={`Priority ${task.priority}`}>P{task.priority}</span>}
+      {task.deadline && <span className="text-xs text-muted-foreground">Deadline {new Date(task.deadline).toLocaleDateString()}</span>}
+      {task.labelIds.length > 0 && <span className="text-xs text-muted-foreground">{task.labelIds.length} label{task.labelIds.length > 1 ? "s" : ""}</span>}
       <ProjectPill />
       <Button
         variant="ghost"

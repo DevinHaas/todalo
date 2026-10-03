@@ -18,6 +18,8 @@ export function OrganizationNavigation({ items }: { items: FindItem[] }) {
     "navigation.home": () => router.push("/home"),
     "navigation.inbox": () => router.push("/inbox"),
     "navigation.projects": () => router.push("/projects"),
+    "navigation.labels": () => router.push("/labels"),
+    "navigation.filters": () => router.push("/filters"),
     "navigation.sections": () => show("sections"),
     "general.search": () => show("find"),
     "general.quick-find": () => show("find"),
