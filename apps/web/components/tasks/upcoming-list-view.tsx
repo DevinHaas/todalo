@@ -19,6 +19,7 @@ import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isOverdue } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
+import { taskTreeOrder } from "@/lib/task-keyboard";
 
 function startOfToday() {
   const d = new Date();
@@ -127,7 +128,7 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
               Overdue
               <span className="font-normal text-muted-foreground">{overdueTasks.length}</span>
             </button>
-            {overdueOpen && overdueTasks.map((task) => <TaskRow key={task.id} task={task} />)}
+            {overdueOpen && taskTreeOrder(overdueTasks).map((task) => <TaskRow key={task.id} task={task} />)}
           </section>
         )}
 
@@ -140,7 +141,7 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
               {dayEvents.map((event) => (
                 <EventRow key={event.id} event={event} />
               ))}
-              {dayTasks.map((task) => (
+              {taskTreeOrder(dayTasks).map((task) => (
                 <TaskRow key={task.id} task={task} />
               ))}
               <TaskComposer initialDueDate={day} />
@@ -151,7 +152,7 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
         {laterTasks.length > 0 && (
           <section>
             <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Later</h2>
-            {laterTasks.map((task) => (
+            {taskTreeOrder(laterTasks).map((task) => (
               <TaskRow key={task.id} task={task} />
             ))}
           </section>

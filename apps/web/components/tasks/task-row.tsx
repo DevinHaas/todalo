@@ -9,41 +9,41 @@ import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import type { Task } from "@/lib/tasks";
 import { isOverdue } from "@/lib/task-dates";
 import { DatePill, ProjectPill } from "@/components/tasks/task-pills";
+import { useTaskKeyboard } from "./task-keyboard-provider";
 
 export function TaskRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+  const keyboard = useTaskKeyboard();
+  const selected = keyboard?.selectedIds.has(task.id);
+  const titleButton = <button type="button" onClick={keyboard ? () => keyboard.open(task) : undefined} className={task.status === "done" ? "flex-1 text-left line-through text-muted-foreground" : "flex-1 text-left"}>{task.title}</button>;
 
   return (
-    <div className="group flex items-center gap-3 border-b py-2">
+    <>
+    {keyboard?.creationSlot(task.id, "above")}
+    <div data-task-id={task.id} tabIndex={0} aria-label={task.title} onFocus={() => keyboard?.focus(task.id)} hidden={Boolean(task.parentId && keyboard?.collapsedIds.has(task.parentId))} className={`group flex items-center gap-3 border-b py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "bg-primary/10 ring-1 ring-primary" : ""} ${task.parentId ? "ml-6" : ""}`}>
+      {selected && <span className="sr-only">Selected</span>}
       <Checkbox
         checked={task.status === "done"}
         disabled={isPending}
-        onCheckedChange={() => startTransition(() => completeTask(task.id))}
+        aria-label={`Complete ${task.title}`}
+        onCheckedChange={() => keyboard ? keyboard.mutate("complete", [task.id]) : startTransition(() => completeTask(task.id))}
       />
-      <TaskEditDialog task={task}>
-        <button
-          type="button"
-          className={
-            task.status === "done"
-              ? "flex-1 text-left line-through text-muted-foreground"
-              : "flex-1 text-left"
-          }
-        >
-          {task.title}
-        </button>
-      </TaskEditDialog>
+      {keyboard ? titleButton : <TaskEditDialog task={task}>{titleButton}</TaskEditDialog>}
       {dueDate && <DatePill dueDate={dueDate} overdue={isOverdue(task)} />}
       <ProjectPill />
       <Button
         variant="ghost"
         size="sm"
+        aria-label={`Delete ${task.title}`}
         disabled={isPending}
-        className="opacity-0 group-hover:opacity-100"
-        onClick={() => startTransition(() => deleteTask(task.id))}
+        className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        onClick={() => keyboard ? keyboard.mutate("delete", [task.id]) : startTransition(() => deleteTask(task.id))}
       >
         <X className="size-4" />
       </Button>
     </div>
+    {keyboard?.creationSlot(task.id, "below")}
+    </>
   );
 }

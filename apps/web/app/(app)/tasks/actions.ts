@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, asc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
@@ -16,9 +16,9 @@ const taskInput = z.object({
   projectId: z.string().optional(),
   parentId: z.string().min(1).nullable().optional(),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
-  dueDate: z.coerce.date().optional(),
-  dueDateEnd: z.coerce.date().optional(),
-  recurrence: recurrenceSchema.optional(),
+  dueDate: z.coerce.date().nullable().optional(),
+  dueDateEnd: z.coerce.date().nullable().optional(),
+  recurrence: recurrenceSchema.nullable().optional(),
 });
 
 async function syncToCalendar(userId: string, taskId: string) {
@@ -33,13 +33,37 @@ async function syncToCalendar(userId: string, taskId: string) {
   }
 }
 
-export async function createTask(input: z.infer<typeof taskInput>) {
+const createTaskInput = taskInput.extend({ placement: z.object({ edge: z.enum(["top", "bottom", "above", "below"]), anchorId: z.string().optional() }).optional() });
+export async function createTask(input: z.infer<typeof createTaskInput>) {
   const userId = await requireUserId();
-  const data = taskInput.parse(input);
+  const { placement, ...data } = createTaskInput.parse(input);
   if (data.parentId) await assertTaskParent({ userId, parentId: data.parentId });
-  const [task] = await db.insert(tasks).values({ userId, ...data }).returning();
+  let sortOrder = 0;
+  if (placement) {
+    const collection = await db.select({ id: tasks.id, sortOrder: tasks.sortOrder, projectId: tasks.projectId }).from(tasks).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`)).orderBy(asc(tasks.sortOrder));
+    const anchor = collection.find(task => task.id === placement.anchorId);
+    if ((placement.edge === "above" || placement.edge === "below") && !anchor) throw new Error("Task not found");
+    sortOrder = placement.edge === "top" ? (collection[0]?.sortOrder ?? 0) - 1 : placement.edge === "bottom" ? (collection.at(-1)?.sortOrder ?? -1) + 1 : anchor!.sortOrder + (placement.edge === "below" ? 1 : 0);
+    if (anchor) await db.update(tasks).set({ sortOrder: sql`${tasks.sortOrder} + 1` }).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`, sql`${tasks.sortOrder} >= ${sortOrder}`));
+  }
+  const [task] = await db.insert(tasks).values({ userId, ...data, sortOrder }).returning();
   if (task.dueDate) await syncToCalendar(userId, task.id);
   revalidatePath("/");
+  return task.id;
+}
+
+/** Authorize the entire selection before running any per-task side effects. */
+export async function bulkTaskAction(input: { ids: string[]; action: "complete" | "delete" | "clear-date" }) {
+  const userId = await requireUserId();
+  const { ids, action } = z.object({ ids: z.array(z.string().min(1)).min(1).max(200), action: z.enum(["complete", "delete", "clear-date"]) }).parse(input);
+  const unique = [...new Set(ids)];
+  const owned = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, unique)));
+  if (owned.length !== unique.length) throw new Error("Task not found");
+  for (const id of unique) {
+    if (action === "complete") await completeTask(id);
+    else if (action === "delete") await deleteTask(id);
+    else await updateTask({ id, dueDate: null, dueDateEnd: null });
+  }
 }
 
 const updateTaskInput = taskInput.partial().extend({ id: z.string() });

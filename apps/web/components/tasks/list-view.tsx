@@ -2,6 +2,7 @@ import { TaskRow } from "@/components/tasks/task-row";
 import { EventRow } from "@/components/tasks/event-item";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
+import { taskTreeOrder } from "@/lib/task-keyboard";
 
 function isToday(date: Date) {
   const now = new Date();
@@ -37,7 +38,7 @@ export function ListView({ tasks, events = [] }: { tasks: Task[]; events?: Calen
               {bucket.events.map((event) => (
                 <EventRow key={event.id} event={event} />
               ))}
-              {bucket.items.map((task) => (
+              {taskTreeOrder(bucket.items).map((task) => (
                 <TaskRow key={task.id} task={task} />
               ))}
             </section>

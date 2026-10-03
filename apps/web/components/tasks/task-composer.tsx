@@ -32,6 +32,7 @@ import {
 } from "@/lib/quick-add-sync";
 import { cn } from "@/lib/utils";
 import type { Recurrence } from "@/lib/recurrence";
+import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -443,6 +444,10 @@ export function TaskComposer({
   initialDueDate,
   initialStartTime,
   initialEndTime,
+  openInline = false,
+  projectId,
+  placement,
+  onCreated,
 }: {
   defaultToToday?: boolean;
   open?: boolean;
@@ -450,11 +455,15 @@ export function TaskComposer({
   initialDueDate?: Date;
   initialStartTime?: string;
   initialEndTime?: string;
+  openInline?: boolean;
+  projectId?: string | null;
+  placement?: { edge: "top" | "bottom" | "above" | "below"; anchorId?: string };
+  onCreated?: (id: string, direction?: "above" | "below") => void;
 }) {
   const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
   const openRamble = useRamble();
   const controlled = open !== undefined;
-  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(openInline);
   const expanded = controlled ? open : uncontrolledExpanded;
   const [title, setTitle] = useState("");
   const [debouncedTitle, setDebouncedTitle] = useState("");
@@ -475,6 +484,10 @@ export function TaskComposer({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const scope = useRef<HTMLDivElement>(null);
+  const submitting = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const currentPlacement = useRef(placement);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedTitle(title), PARSE_DEBOUNCE_MS);
@@ -613,6 +626,7 @@ export function TaskComposer({
       onOpenChange?.(value);
     } else {
       setUncontrolledExpanded(value);
+      onOpenChange?.(value);
     }
   }
 
@@ -628,8 +642,9 @@ export function TaskComposer({
     setExpanded(false);
   }
 
-  function submit() {
-    if (!title.trim() || isPending) return;
+  function submit(direction?: "above" | "below") {
+    if (!title.trim() || isPending || submitting.current) return false;
+    submitting.current = true; setSaveError(null);
     const finalParsed = parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected });
     // Flush the latest title through the same manual-override rules before saving.
     const finalState = syncQuickAddFields(syncState, { type: "parse", parsed: finalParsed });
@@ -640,19 +655,35 @@ export function TaskComposer({
       ? combineDateAndTime(date, finalState.endTime.value)
       : undefined;
     startTransition(async () => {
-      await createTask({
+      try { const id = await createTask({
         title: finalTitle,
         description: description || undefined,
         dueDate: finalDueDate,
         dueDateEnd,
         recurrence: finalState.recurrence.value,
+        projectId: projectId ?? undefined,
+        placement: currentPlacement.current,
       });
-      reset();
+      if (direction) {
+        setTitle(""); setDebouncedTitle(""); setDescription(""); setRejected(new Set());
+        dispatchSync({ type: "seed", date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined), time: "" });
+        currentPlacement.current = { edge: direction, anchorId: id };
+        onCreated?.(id, direction);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      } else { reset(); onCreated?.(id); }
+      } catch (reason) { setSaveError(reason instanceof Error ? reason.message : "Task could not save. Please retry."); }
+      finally { submitting.current = false; }
     });
   }
+  useKeyboardCommands({
+    "editor.submit-below": () => document.activeElement?.tagName !== "INPUT" ? false : submit("below"),
+    "editor.save-above": () => submit("above"),
+    "general.dismiss": () => reset(),
+  }, { enabled: expanded, scope, allowInEditor: true, allowInModal: controlled });
 
   const form = (
-    <>
+    <div ref={scope} className="space-y-2">
+      {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
       <div className="relative h-8 min-w-0">
         <div
           ref={backdropRef}
@@ -683,14 +714,9 @@ export function TaskComposer({
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
           onScroll={syncScroll}
           placeholder="Task name"
+          aria-label="Task name"
           className={cn(
             TITLE_FIELD_CLASSES,
             "absolute inset-0 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0",
@@ -737,12 +763,12 @@ export function TaskComposer({
           <Button type="button" variant="outline" onClick={reset}>
             Cancel
           </Button>
-          <Button type="button" onClick={submit} disabled={!title.trim() || isPending}>
-            Add task
+          <Button type="button" onClick={() => submit()} disabled={!title.trim() || isPending}>
+            Add task <ShortcutHint commandId="editor.submit-below" />
           </Button>
         </div>
       </div>
-    </>
+    </div>
   );
 
   if (controlled) {
