@@ -63,7 +63,7 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("calendar.today", "Calendar: go to today", "Calendar", "calendar", ["t"], 4, { availability: "available", platformDefaults: { mac: ["t", "Alt+Shift+y"] }, note: "Windows Option+Shift+Y is unresolved and not silently adapted." }),
   command("calendar.next-week", "Calendar: next week", "Calendar", "calendar", ["Shift+ArrowRight"], 4, { availability: "available" }),
   command("calendar.previous-week", "Calendar: previous week", "Calendar", "calendar", ["Shift+ArrowLeft"], 4, { availability: "available" }),
-  command("task.paste-file", "Paste file as a task", "Quick Add", "project", ["Primary+v"], 4),
+  command("task.paste-file", "Paste file as a task", "Quick Add", "project", ["Primary+v"], 4, { availability: "available", note: "Native paste reads files in a project. Custom bindings require clipboard permission; browsers may expose only images and omit filenames." }),
   command("quick-add.description", "Reveal description", "Quick Add", "quick-add", ["ArrowDown"], 3),
   command("quick-add.actions", "Reveal additional actions", "Quick Add", "quick-add", ["Shift+ArrowDown"], 3),
   command("quick-add.deadline", "Choose deadline while composing", "Quick Add", "quick-add", ["{"], 3),

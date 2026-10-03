@@ -57,6 +57,20 @@
       "when": 1791063703529,
       "tag": "0007_dusty_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791065309998,
+      "tag": "0008_funny_plazm",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791065481073,
+      "tag": "0009_faithful_weapon_omega",
+      "breakpoints": true
     }
   ]
 }
