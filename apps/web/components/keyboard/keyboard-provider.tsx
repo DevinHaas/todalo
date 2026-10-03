@@ -15,7 +15,7 @@ export interface KeyboardHandlerOptions {
   allowInEditor?: boolean;
   allowInModal?: boolean;
 }
-type Handler = () => void | boolean;
+type Handler = (event?: KeyboardEvent) => void | boolean;
 type Registration = { handlers: Record<string, Handler>; options: KeyboardHandlerOptions };
 interface KeyboardContextValue {
   preferences: KeyboardPreferences; platform: Platform; syncError: string | null;
@@ -38,7 +38,7 @@ export function useKeyboardCommands(handlers: Record<string, Handler>, options: 
   const ids = Object.keys(handlers).sort().join("|");
   const { enabled = true, scope, allowInEditor = false, allowInModal = false } = options;
   useEffect(() => {
-    const wrappers = Object.fromEntries(ids.split("|").filter(Boolean).map(id => [id, () => handlersRef.current[id]?.()]));
+    const wrappers = Object.fromEntries(ids.split("|").filter(Boolean).map(id => [id, (event?: KeyboardEvent) => handlersRef.current[id]?.(event)]));
     return register({ handlers: wrappers, options: { enabled, scope, allowInEditor, allowInModal } });
   }, [register, ids, enabled, scope, allowInEditor, allowInModal]);
 }
@@ -143,7 +143,7 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
       const result = dispatcher.current.dispatch(event, candidates.map(({ command }) => ({ id: command.id, bindings: bindings(command.id), repeat: command.repeat })), context);
       if (result.commandId) {
         const candidate = candidates.find(item => item.command.id === result.commandId);
-        if (candidate?.handler() === false) return;
+        if (candidate?.handler(event) === false) return;
       }
       if (result.consumed) { event.preventDefault(); event.stopPropagation(); }
     };

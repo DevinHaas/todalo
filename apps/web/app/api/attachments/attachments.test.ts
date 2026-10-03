@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { POST } from "./route";
 import { GET as download } from "./[id]/route";
 import { GET as list } from "../tasks/[id]/attachments/route";
+import { ProjectFilePasteController } from "@/lib/project-file-paste";
 
 const boundary = vi.hoisted(() => ({ userId: "alice" as string | null, fail: false, rows: {} as Record<string, Record<string, unknown>[]> }));
 vi.mock("@/lib/auth", () => ({ requireUserId: async () => { if (!boundary.userId) throw new Error("Not authenticated"); return boundary.userId; } }));
@@ -72,4 +73,16 @@ it("creates each file as its own task preserving binary content and safe Unicode
   const response = await download(new Request("https://todalo.test"), { params: Promise.resolve({ id: first.id }) });
   expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([0, 255, 128, 10]);
   expect(response.headers.get("content-disposition")).toContain("%C3%BCber%27s.txt");
+});
+it("runs project native paste through upload, task attachment listing and download", async () => {
+  const errors: string[] = []; let taskId = "";
+  const controller = new ProjectFilePasteController({ platform: "windows", bindings: () => ["Ctrl+v"], error: message => errors.push(message), upload: async files => {
+    const response = await upload("work", files); const result = await response.json();
+    if (!response.ok) throw new Error(result.error); taskId = result.tasks[0].id;
+  } });
+  const preventDefault = vi.fn();
+  await controller.paste({ clipboardData: { files: [new File(["pasted bytes"], "actual.txt")] }, target: null, defaultPrevented: false, preventDefault });
+  expect(errors).toEqual([]); expect(preventDefault).toHaveBeenCalledOnce();
+  const [attachment] = await (await list(new Request("https://todalo.test"), { params: Promise.resolve({ id: taskId }) })).json();
+  expect(await (await download(new Request("https://todalo.test"), { params: Promise.resolve({ id: attachment.id }) })).text()).toBe("pasted bytes");
 });

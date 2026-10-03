@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Task } from "@/lib/tasks";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
+import { ProjectFilePaste } from "./project-file-paste";
 
 export function ProjectView({ project, sections, tasks }: { project: { id: string; name: string; color: string | null }; sections: { id: string; name: string }[]; tasks: Task[] }) {
   const scope = useRef<HTMLDivElement>(null); const router = useRouter();
@@ -30,6 +31,7 @@ export function ProjectView({ project, sections, tasks }: { project: { id: strin
   function run(action: () => Promise<unknown>) { startTransition(async () => { try { setError(""); await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save changes"); } }); }
   const groups = [{ id: null, name: "Tasks" }, ...sections];
   return <div ref={scope} tabIndex={-1} className="space-y-5 outline-none" data-project-id={project.id}>
+    <ProjectFilePaste projectId={project.id} scope={scope} />
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{project.name}</h1><div className="flex gap-2"><Button variant="outline" onClick={() => setSectionOpen(true)}>Add section <ShortcutHint commandId="project.section" /></Button><Button variant="outline" onClick={() => setMenuOpen(true)}>Project menu <ShortcutHint commandId="project.menu" /></Button></div></div>
     <div className="flex flex-wrap items-center gap-3"><label className="text-sm">Sort <select aria-label="Project sort" className="ml-2 rounded border p-1" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="manual">Manual</option><option value="date">Date</option><option value="name">Name</option></select></label><span className="text-xs text-muted-foreground">Date <ShortcutHint commandId="project.sort-date" /> · Name <ShortcutHint commandId="project.sort-name" /></span></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
