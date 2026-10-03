@@ -25,6 +25,7 @@ import { combineDateAndTime, hasDueTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 import type { Task } from "@/lib/tasks";
 import type { Recurrence } from "@/lib/recurrence";
+import { TaskAttachments } from "./task-attachments";
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -128,6 +129,7 @@ export function TaskEditDialog({
           {error && <p role="alert" className="text-destructive">{error}</p>}
           <label className="block space-y-1">Task name<Input autoFocus value={title} onChange={event => setTitle(event.target.value)} /></label>
           <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
+          {variant === "details" && <TaskAttachments key={task.id} taskId={task.id} />}
           <div>
             <label className="mb-1 block text-sm font-medium">Due date</label>
             <Popover open={dateOpen} onOpenChange={setDateOpen}>
