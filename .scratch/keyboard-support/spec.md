@@ -4,7 +4,7 @@ Sources: [original approved design](../../docs/research/keyboard-support-design.
 
 Status: approved for full implementation on October 3, 2026. Canonical tracker specification.
 
-Research: [Todoist shortcut inventory](todoist-keyboard-shortcuts-2026-10-03.md), verified October 3, 2026, with official source links and unresolved documentation discrepancies.
+Research: [Todoist shortcut inventory](../../docs/research/todoist-keyboard-shortcuts-2026-10-03.md), verified October 3, 2026, with official source links and unresolved documentation discrepancies.
 
 ## Accepted decisions
 
@@ -63,7 +63,7 @@ Relevant files:
 
 Visual reference: the user-provided Todoist screenshot, supplied October 3, 2026. Use its panel layout and shortcut presentation as the reference; command availability and bindings follow Todalo's command registry and the accepted scope above.
 
-![Todoist keyboard shortcut help panel supplied by the user](assets/keyboard-shortcuts-help-reference-2026-10-03.png)
+![Todoist keyboard shortcut help panel supplied by the user](../../docs/research/assets/keyboard-shortcuts-help-reference-2026-10-03.png)
 
 - On desktop, open a tall panel anchored to the right over a dimmed view of the current page. Use Todalo's theme colors, a neutral surface, a subtle border, and restrained rounding. Support both light and dark themes.
 - Keep the header visible while the command list scrolls independently. Show the title **Keyboard Shortcuts**, a clearly labeled close button, and a link to shortcut settings for customization.
@@ -155,4 +155,3 @@ The full research inventory remains the binding reference, including platform-sp
 ## Implementation authorization
 
 The implementation request of October 3, 2026 authorizes the full agreed scope, including the help panel and all four stages. Earlier pending-confirmation language in the original source is superseded.
-
