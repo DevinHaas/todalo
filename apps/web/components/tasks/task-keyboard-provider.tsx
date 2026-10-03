@@ -10,6 +10,7 @@ import { TaskEditDialog } from "./task-edit-dialog";
 import { TaskComposer } from "./task-composer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { OrganizationTaskActions } from "@/components/organization/organization-task-actions";
 
 type Edge = "top" | "bottom" | "above" | "below";
 type Mode = "details" | "inline" | "date" | "menu";
@@ -89,10 +90,11 @@ export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Ta
   const state = controller.current;
   // Revision observes the mutable controller while its methods remain a single public seam.
   void revision;
-  const composer = creation && <TaskComposer key={`${creation.edge}-${creation.anchor?.id ?? "list"}`} openInline projectId={creation.anchor?.projectId ?? projectId} initialDueDate={creation.anchor?.dueDate ? new Date(creation.anchor.dueDate) : undefined} defaultToToday={pathname === "/today" || pathname === "/upcoming"} placement={{ edge: creation.edge, anchorId: creation.anchor?.id }} onOpenChange={open => { if (!open) { setCreation(null); restore(); } }} onCreated={(id, direction) => { if (direction) setCreation({ edge: direction, anchor: { ...creation.anchor, id, projectId: creation.anchor?.projectId ?? projectId ?? null } as Task }); else { setCreation(null); restore(); } }} />;
+  const composer = creation && <TaskComposer key={`${creation.edge}-${creation.anchor?.id ?? "list"}`} openInline sectionId={creation.anchor?.sectionId} projectId={creation.anchor?.projectId ?? projectId} initialDueDate={creation.anchor?.dueDate ? new Date(creation.anchor.dueDate) : undefined} defaultToToday={pathname === "/today" || pathname === "/upcoming"} placement={{ edge: creation.edge, anchorId: creation.anchor?.id }} onOpenChange={open => { if (!open) { setCreation(null); restore(); } }} onCreated={(id, direction) => { if (direction) setCreation({ edge: direction, anchor: { ...creation.anchor, id, projectId: creation.anchor?.projectId ?? projectId ?? null } as Task }); else { setCreation(null); restore(); } }} />;
   function creationSlot(id: string, edge: "above" | "below") { return creation?.anchor?.id === id && creation.edge === edge ? composer : null; }
   return <TaskKeyboardContext.Provider value={{ focusedId: state.focused, selectedIds: state.selected, focus, open, mutate, insert, root, collapsedIds, toggleChildren, toggleAllChildren, creationSlot }}>
     <div ref={root} tabIndex={-1} aria-label="Task collection" className="outline-none">
+      <OrganizationTaskActions tasks={tasks} />
       {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       {state.selected.size > 0 && <div ref={toolbar} role="toolbar" aria-label="Selected task actions" className="mb-3 flex flex-wrap items-center gap-2 rounded border bg-muted p-2">
         <span className="text-sm">{state.selected.size} selected</span>

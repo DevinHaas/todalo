@@ -57,6 +57,7 @@ describe("authenticated organization actions", () => {
   it("guards project and section ownership on the existing task create/update interface", async () => {
     await expect(createTask({ title: "Forbidden", projectId: "foreign" })).rejects.toThrow("Project not found");
     await expect(updateTask({ id: "parent", sectionId: "foreign-section" })).rejects.toThrow("Section not found");
+    await expect(updateTask({ id: "other", parentId: "parent", projectId: "foreign" })).rejects.toThrow("Project not found");
     await createTask({ title: "Review", projectId: "work", sectionId: "todo" });
     expect((await getTasksForUser("alice")).find(task => task.title === "Review")).toMatchObject({ projectId: "work", sectionId: "todo" });
   });

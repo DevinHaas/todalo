@@ -17,6 +17,7 @@ export function OrganizationTaskActions({ tasks }: { tasks: Task[] }) {
     const reveal = () => {
       if (!window.location.hash.startsWith("#task-")) return;
       const id = window.location.hash.slice(6); const target = tasks.find(task => task.id === id);
+      if (target?.sectionId) window.dispatchEvent(new CustomEvent("todalo:reveal-section", { detail: target.sectionId }));
       if (target?.parentId && keyboardRef.current?.collapsedIds.has(target.parentId)) keyboardRef.current.toggleChildren(target.parentId);
       requestAnimationFrame(() => {
         const row = [...(keyboardRef.current?.root.current?.querySelectorAll<HTMLElement>("[data-task-id]") ?? [])].find(element => element.dataset.taskId === id);
@@ -51,7 +52,8 @@ export function OrganizationTaskActions({ tasks }: { tasks: Task[] }) {
   return <>
     {error && <p role="alert" className="rounded border p-2 text-sm text-destructive">{error}</p>}
     <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>Move task <ShortcutHint commandId="task.move" /></DialogTitle></DialogHeader>
-      {!destinations ? <p role="status">Loading destinations…</p> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!focused) return; const ids = keyboard?.selectedIds.size ? [...keyboard.selectedIds] : [focused.id]; run(async () => { await moveTasks(ids, { projectId: projectId || null, sectionId: sectionId || null }); setOpen(false); }); }}>
+      {error && <div role="alert" className="text-destructive">{error} {!destinations && <button type="button" className="underline" onClick={() => run(async () => { setDestinations(await getOrganizationDestinations()); })}>Retry</button>}</div>}
+      {!destinations ? <p role="status">{pending ? "Loading destinations…" : "Choose Retry to reload destinations."}</p> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!focused) return; const ids = keyboard?.selectedIds.size ? [...keyboard.selectedIds] : [focused.id]; run(async () => { await moveTasks(ids, { projectId: projectId || null, sectionId: sectionId || null }); setOpen(false); }); }}>
         <label className="block space-y-1"><span>Project</span><select aria-label="Move to project" className="w-full rounded border bg-background p-2" value={projectId} onChange={event => { setProjectId(event.target.value); setSectionId(""); }}><option value="">Inbox</option>{destinations.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
         {projectId && <label className="block space-y-1"><span>Section</span><select aria-label="Move to section" className="w-full rounded border bg-background p-2" value={sectionId} onChange={event => setSectionId(event.target.value)}><option value="">No section</option>{destinations.sections.filter(section => section.projectId === projectId).map(section => <option key={section.id} value={section.id}>{section.name}</option>)}</select></label>}
         <Button disabled={pending}>Move task{keyboard && keyboard.selectedIds.size > 1 ? "s" : ""}</Button>

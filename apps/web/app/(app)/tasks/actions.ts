@@ -56,7 +56,7 @@ export async function createTask(input: z.infer<typeof createTaskInput>) {
   }
   const [task] = await db.insert(tasks).values({ userId, ...data, sortOrder }).returning();
   if (task.dueDate) await syncToCalendar(userId, task.id);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return task.id;
 }
 
@@ -81,6 +81,9 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
   const { id, ...data } = updateTaskInput.parse(input);
   const [owned] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
   if (!owned) throw new Error("Task not found");
+  if (data.projectId !== undefined || data.sectionId !== undefined) {
+    await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });
+  }
   if (data.parentId) {
     await assertTaskParent({ userId, taskId: id, parentId: data.parentId });
     const [parent] = await db.select().from(tasks).where(and(eq(tasks.id, data.parentId), eq(tasks.userId, userId))).limit(1);
@@ -101,7 +104,7 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
     .set(data)
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   if ("dueDate" in data) await syncToCalendar(userId, id);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function deleteTask(id: string) {
@@ -114,7 +117,7 @@ export async function deleteTask(id: string) {
     await deleteTaskFromCalendar(userId, task.googleCalendarEventId);
   }
   await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function completeTask(id: string) {
@@ -138,7 +141,7 @@ export async function completeTask(id: string) {
   } else {
     await db.update(tasks).set({ completedAt: new Date(), status: "done" }).where(eq(tasks.id, id));
   }
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function reorderTask(id: string, status: "todo" | "in_progress" | "done", sortOrder: number) {
@@ -147,5 +150,5 @@ export async function reorderTask(id: string, status: "todo" | "in_progress" | "
     .update(tasks)
     .set({ status, sortOrder })
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
