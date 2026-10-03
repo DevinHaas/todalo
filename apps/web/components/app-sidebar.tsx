@@ -119,12 +119,13 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                {/* ponytail: no search backend yet */}
-                <SidebarMenuButton disabled>
+                <SidebarMenuButton onClick={() => document.querySelector<HTMLButtonElement>("[data-quick-find]")?.click()}>
                   <Search />
                   <span>Search</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {[["Home", "/home"], ["Inbox", "/inbox"], ["Projects", "/projects"]].map(([label, href]) => <SidebarMenuItem key={href}><SidebarMenuButton isActive={pathname === href} render={<Link href={href}><Layers /><span>{label}</span></Link>} /></SidebarMenuItem>)}
 
               <SidebarMenuItem>
                 <SidebarMenuButton

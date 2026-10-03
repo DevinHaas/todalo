@@ -2,7 +2,7 @@
   "name": "@todalo/db",
   "version": "0.1.0",
   "private": true,
-  "exports": { ".": "./src/index.ts", "./schema": "./src/schema.ts", "./task-parent": "./src/task-parent.ts", "./task-parent-validation": "./src/task-parent-validation.ts" },
+  "exports": { ".": "./src/index.ts", "./schema": "./src/schema.ts", "./task-parent": "./src/task-parent.ts", "./task-parent-validation": "./src/task-parent-validation.ts", "./task-organization": "./src/task-organization.ts", "./task-organization-validation": "./src/task-organization-validation.ts" },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run --root ../.. packages/db" },
   "dependencies": {
     "@todalo/ramble": "*",
