@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import type { Task } from "@/lib/tasks";
+import { useTaskDateLabel } from "./use-task-date-label";
 import { isOverdue } from "@/lib/task-dates";
 import { DatePill, ProjectPill } from "@/components/tasks/task-pills";
 import { useTaskKeyboard } from "./task-keyboard-provider";
@@ -14,6 +15,7 @@ import { useTaskKeyboard } from "./task-keyboard-provider";
 export function TaskRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+  const deadlineLabel = useTaskDateLabel(task.deadline);
   const keyboard = useTaskKeyboard();
   const selected = keyboard?.selectedIds.has(task.id);
   const titleButton = <button type="button" onClick={keyboard ? () => keyboard.open(task) : undefined} className={task.status === "done" ? "flex-1 text-left line-through text-muted-foreground" : "flex-1 text-left"}>{task.title}</button>;
@@ -32,7 +34,7 @@ export function TaskRow({ task }: { task: Task }) {
       {keyboard ? titleButton : <TaskEditDialog task={task}>{titleButton}</TaskEditDialog>}
       {dueDate && <DatePill dueDate={dueDate} overdue={isOverdue(task)} />}
       {task.priority < 4 && <span className="text-xs font-semibold" aria-label={`Priority ${task.priority}`}>P{task.priority}</span>}
-      {task.deadline && <span className="text-xs text-muted-foreground">Deadline {new Date(task.deadline).toLocaleDateString()}</span>}
+      {task.deadline && <span className="text-xs text-muted-foreground">Deadline {deadlineLabel}</span>}
       {task.labelIds.length > 0 && <span className="text-xs text-muted-foreground">{task.labelIds.length} label{task.labelIds.length > 1 ? "s" : ""}</span>}
       <ProjectPill />
       <Button
