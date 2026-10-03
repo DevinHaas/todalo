@@ -34,6 +34,11 @@ export class TaskFocusController {
     return this.focused;
   }
   targets() { return this.selected.size ? this.visible.filter(id => this.selected.has(id)) : this.focused ? [this.focused] : []; }
+  resolveTargets(activeId: string | null, selectionToolbar = false) {
+    if (!selectionToolbar && (!activeId || !this.visible.includes(activeId))) return [];
+    if (this.selected.size) return this.visible.filter(id => this.selected.has(id));
+    return activeId && this.visible.includes(activeId) ? [activeId] : [];
+  }
   remove(ids: string[]) {
     const index = this.focused ? this.visible.indexOf(this.focused) : 0;
     this.visible = this.visible.filter(id => !ids.includes(id));

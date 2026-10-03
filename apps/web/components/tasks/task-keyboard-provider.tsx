@@ -18,6 +18,7 @@ type Mode = "details" | "inline" | "date" | "menu";
 type TaskAction = "complete" | "delete" | "clear-date";
 interface TaskKeyboardContextValue {
   focusedId: string | null; selectedIds: Set<string>; root: RefObject<HTMLDivElement | null>;
+  resolveTargets(): { task: Task | undefined; ids: string[] }; nestedAllowed: boolean;
   focus(id: string): void; open(task: Task, mode?: Mode): void;
   mutate(action: TaskAction, ids?: string[]): void; insert(edge: Edge, anchor?: Task): void;
   collapsedIds: Set<string>; toggleChildren(id: string): void; toggleAllChildren(): void;
@@ -26,7 +27,7 @@ interface TaskKeyboardContextValue {
 const TaskKeyboardContext = createContext<TaskKeyboardContextValue | null>(null);
 export function useTaskKeyboard() { return useContext(TaskKeyboardContext); }
 
-export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Task[]; children: React.ReactNode; projectId?: string }) {
+export function TaskKeyboardProvider({ tasks, children, projectId, nestedAllowed = true }: { tasks: Task[]; children: React.ReactNode; projectId?: string; nestedAllowed?: boolean }) {
   const pathname = usePathname();
   const root = useRef<HTMLDivElement>(null);
   const toolbar = useRef<HTMLDivElement>(null);
@@ -56,19 +57,21 @@ export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Ta
     if (!columns.length) return move(direction);
     const id = controller.current.moveColumn(columns, direction); refresh(value => value + 1); focusElement(id); return Boolean(id);
   }
-  function focusedTask() {
+  function resolveTargets() {
     syncVisible();
-    const active = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>('[data-task-id]') : null;
-    if (!active || !root.current?.contains(active)) return undefined;
-    return tasks.find(task => task.id === active.dataset.taskId);
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const row = active?.closest<HTMLElement>('[data-task-id]');
+    const task = row && root.current?.contains(row) ? tasks.find(task => task.id === row.dataset.taskId) : undefined;
+    const selectionToolbar = Boolean(active?.closest('[role="toolbar"]') && root.current?.contains(active));
+    return { task, ids: controller.current.resolveTargets(task?.id ?? null, selectionToolbar) };
   }
+  function focusedTask() { return resolveTargets().task; }
   function restore() { requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); else focusElement(controller.current.focused); }); }
   function open(task: Task, mode: Mode = "details") { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; focus(task.id); setEditor({ task, mode }); }
   function insert(edge: Edge, anchor?: Task) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setCreation({ edge, anchor }); }
   function mutate(action: TaskAction, explicit?: string[]) {
     syncVisible();
-    if (!explicit && !controller.current.selected.size && !focusedTask()) return false;
-    const ids = explicit ?? controller.current.targets();
+    const ids = explicit ?? resolveTargets().ids;
     if (!ids.length || working.current) return false;
     working.current = true; setError(null);
     startTransition(async () => {
@@ -100,16 +103,16 @@ export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Ta
   void revision;
   const composer = creation && <TaskComposer key={`${creation.edge}-${creation.anchor?.id ?? "list"}`} openInline sectionId={creation.anchor?.sectionId} projectId={creation.anchor?.projectId ?? projectId} initialDueDate={creation.anchor?.dueDate ? new Date(creation.anchor.dueDate) : undefined} defaultToToday={pathname === "/today" || pathname === "/upcoming"} placement={{ edge: creation.edge, anchorId: creation.anchor?.id }} onOpenChange={open => { if (!open) { setCreation(null); restore(); } }} onCreated={(id, direction) => { if (direction) setCreation({ edge: direction, anchor: { ...creation.anchor, id, projectId: creation.anchor?.projectId ?? projectId ?? null } as Task }); else { setCreation(null); restore(); } }} />;
   function creationSlot(id: string, edge: "above" | "below") { return creation?.anchor?.id === id && creation.edge === edge ? composer : null; }
-  return <TaskKeyboardContext.Provider value={{ focusedId: state.focused, selectedIds: state.selected, focus, open, mutate, insert, root, collapsedIds, toggleChildren, toggleAllChildren, creationSlot }}>
+  return <TaskKeyboardContext.Provider value={{ focusedId: state.focused, selectedIds: state.selected, resolveTargets, nestedAllowed, focus, open, mutate, insert, root, collapsedIds, toggleChildren, toggleAllChildren, creationSlot }}>
     <div ref={root} tabIndex={-1} aria-label="Task collection" className="outline-none">
       <OrganizationTaskActions tasks={tasks} />
-      <TaskMetadataActions tasks={tasks} />
+      <TaskMetadataActions />
       {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       {state.selected.size > 0 && <div ref={toolbar} role="toolbar" aria-label="Selected task actions" className="mb-3 flex flex-wrap items-center gap-2 rounded border bg-muted p-2">
         <span className="text-sm">{state.selected.size} selected</span>
         <Button size="sm" disabled={pending} onClick={() => mutate("complete")}>Complete <ShortcutHint commandId="task.complete" /></Button>
         <Button size="sm" variant="outline" disabled={pending} onClick={() => mutate("delete")}>Delete <ShortcutHint commandId="task.delete" /></Button>
-        <TaskMetadataActions tasks={tasks} toolbar />
+        <TaskMetadataActions toolbar />
         <Button size="sm" variant="ghost" onClick={() => { state.selected.clear(); refresh(value => value + 1); focusElement(state.focused); }}>Clear selection</Button>
       </div>}
       {creation?.edge === "top" ? composer : null}

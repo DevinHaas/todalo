@@ -11,7 +11,7 @@ export function ProjectDirectory({ projects }: { projects: { id: string; name: s
   return <div className="max-w-3xl space-y-6">
     <form className="flex gap-2" onSubmit={event => { event.preventDefault(); startTransition(async () => { try { setError(""); await createProject({ name }); setName(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create project"); } }); }}>
       <Input aria-label="New project name" placeholder="New project name" value={name} onChange={event => setName(event.target.value)} required maxLength={200} />
-      <Button disabled={pending || !name.trim()}>Create project</Button>
+      <Button type="submit" disabled={pending || !name.trim()}>Create project</Button>
     </form>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <ul className="divide-y rounded border">{projects.map(project => <li key={project.id}><Link className="block p-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring" href={`/projects/${project.id}`}>{project.name}</Link></li>)}</ul>

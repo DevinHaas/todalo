@@ -21,8 +21,8 @@ export default async function TodayPage() {
       <ViewSwitcher
         tasks={allTasks}
         events={events}
-        listView={<TodayView tasks={allTasks} events={events} />}
-        calendarView={<TodayScheduleView tasks={allTasks} events={events} />}
+        listView={<TodayView key="today-list" tasks={allTasks} events={events} />}
+        calendarView={<TodayScheduleView key="today-calendar" tasks={allTasks} events={events} />}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { ListView } from "@/components/tasks/list-view";
 import { BoardView } from "@/components/tasks/board-view";
 import { CalendarView } from "@/components/tasks/calendar-view";
@@ -16,12 +17,14 @@ export function ViewSwitcher({
   listView,
   calendarView,
   projectId,
+  nestedAllowed,
 }: {
   tasks: Task[];
   events?: CalendarEvent[];
   listView?: React.ReactNode;
   calendarView?: React.ReactNode;
   projectId?: string;
+  nestedAllowed?: boolean;
 }) {
   const { layout, setLayout } = useDisplaySettings();
   useKeyboardCommands({ "view.layout": () => {
@@ -33,10 +36,8 @@ export function ViewSwitcher({
   } });
 
   return (
-    <TaskKeyboardProvider tasks={tasks} projectId={projectId}>
-      {layout === "list" && (listView ?? <ListView tasks={tasks} events={events} />)}
-      {layout === "board" && <BoardView tasks={tasks} />}
-      {layout === "calendar" && (calendarView ?? <CalendarView tasks={tasks} events={events} projectId={projectId} />)}
+    <TaskKeyboardProvider tasks={tasks} projectId={projectId} nestedAllowed={nestedAllowed}>
+      <Fragment key={layout}>{layout === "list" ? (listView ?? <ListView tasks={tasks} events={events} />) : layout === "board" ? <BoardView tasks={tasks} /> : (calendarView ?? <CalendarView tasks={tasks} events={events} projectId={projectId} />)}</Fragment>
     </TaskKeyboardProvider>
   );
 }

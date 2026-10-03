@@ -1,41 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SQL } from "drizzle-orm";
 import { createTask, updateTask } from "./actions";
-import { createLabel, getMetadata, saveFilter, bulkTaskMetadata } from "./metadata-actions";
+import { createLabel, getMetadata, saveFilter, bulkTaskMetadata, getTaskEditorData } from "./metadata-actions";
 import { getTasksForUser, getOwnedTask } from "@/lib/tasks";
 
 const boundary = vi.hoisted(() => ({ userId: "alice" as string | null, rows: {} as Record<string, Record<string, unknown>[]> }));
 vi.mock("@/lib/auth", () => ({ requireUserId: async () => { if (!boundary.userId) throw new Error("Not authenticated"); return boundary.userId; } }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("@todalo/db", async () => {
-  const { getTableName } = await import("drizzle-orm");
-  const { PgDialect } = await import("drizzle-orm/pg-core");
-  function matches(row: Record<string, unknown>, predicate?: SQL) {
-    if (!predicate) return true;
-    const query = new PgDialect().sqlToQuery(predicate);
-    const expression = query.sql.replace(/"\w+"\."(\w+)"/g, (_, column: string) => `row[${JSON.stringify(column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()))}]`).replace(/\$(\d+)/g, (_, index: string) => `parameters[${Number(index) - 1}]`).replace(/(row\["\w+"\]) in \(([^)]+)\)/g, "[$2].includes($1)").replace(/\band\b/g, "&&").replace(/\bor\b/g, "||").replace(/ = /g, " === ");
-    return Boolean(new Function("row", "parameters", `return ${expression}`)(row, query.params));
-  }
-  function builder(kind: string, table?: Parameters<typeof getTableName>[0], fields?: Record<string, { name: string }>) {
-    let predicate: SQL | undefined; let values: Record<string, unknown>[] = []; let limit = Infinity;
-    const chain = {
-      from(value: typeof table) { table = value; return chain; }, where(value: SQL) { predicate = value; return chain; },
-      orderBy() { return chain; }, limit(value: number) { limit = value; return chain; }, returning() { return chain; },
-      set(value: Record<string, unknown>) { values = [value]; return chain; }, values(value: Record<string, unknown> | Record<string, unknown>[]) { values = Array.isArray(value) ? value : [value]; return chain; },
-      then(resolve: (rows: Record<string, unknown>[]) => unknown, reject: (error: unknown) => unknown) {
-        try {
-          const key = getTableName(table!); const rows = boundary.rows[key] ??= [];
-          let result = rows.filter(row => matches(row, predicate)).slice(0, limit);
-          if (kind === "insert") { result = values.map((value, index) => ({ id: `new-${rows.length + index}`, priority: 4, ...value })); rows.push(...result); }
-          if (kind === "update") result.forEach(row => Object.assign(row, values[0]));
-          if (kind === "delete") boundary.rows[key] = rows.filter(row => !result.includes(row));
-          if (fields) result = result.map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, row[column.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())]])));
-          return Promise.resolve(result).then(resolve, reject);
-        } catch (error) { return Promise.reject(error).then(resolve, reject); }
-      },
-    }; return chain;
-  }
-  return { db: { select: (fields?: Record<string, { name: string }>) => builder("select", undefined, fields), insert: (table: Parameters<typeof getTableName>[0]) => builder("insert", table), update: (table: Parameters<typeof getTableName>[0]) => builder("update", table), delete: (table: Parameters<typeof getTableName>[0]) => builder("delete", table) } };
+  const { relationalBoundary } = await import("@/lib/testing/relational-boundary");
+  return relationalBoundary(boundary);
 });
 beforeEach(() => {
   boundary.userId = "alice"; boundary.rows = {
@@ -44,6 +17,21 @@ beforeEach(() => {
   };
 });
 describe("authenticated metadata persistence", () => {
+  it("reopens an editor with fresh metadata and preserves it when changing description", async () => {
+    await bulkTaskMetadata({ ids: ["task"], deadline: new Date("2026-10-10") });
+    const fresh = await getTaskEditorData("task");
+    expect(fresh.deadline).toEqual(new Date("2026-10-10"));
+    expect(fresh).not.toHaveProperty("userId");
+    await updateTask({ id: "task", description: "Updated after deadline", deadline: fresh.deadline });
+    expect((await getTaskEditorData("task")).deadline).toEqual(new Date("2026-10-10"));
+    await expect(getTaskEditorData("foreign-task")).rejects.toThrow("Task not found");
+  });
+  it("returns only directory fields needed by the UI", async () => {
+    await saveFilter({ name: "Open tasks", definition: { status: "open", due: "any" } });
+    const data = await getMetadata();
+    expect(Object.keys(data.labels[0]).sort()).toEqual(["color", "id", "name"]);
+    expect(Object.keys(data.filters[0]).sort()).toEqual(["definition", "id", "name"]);
+  });
   it("creates labeled tasks and retrieves edited description, deadline and priority through task reads", async () => {
     const id = await createTask({ title: "Plan", priority: 1, labelIds: ["urgent"] });
     await updateTask({ id, description: "A complete plan", deadline: new Date("2026-10-10"), priority: 2 });

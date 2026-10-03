@@ -55,6 +55,13 @@ describe("account keyboard preferences", () => {
 });
 
 describe("browser dispatch", () => {
+  it("dispatches Quick Add description and additional actions while editing the task name", () => {
+    const dispatcher = new KeyboardDispatcher();
+    const commands = ["quick-add.description", "quick-add.actions", "quick-add.deadline"].map(id => ({ id, bindings: effectiveBindings(id, defaultPreferences(), "mac"), allowInEditor: true, allowInModal: true }));
+    const event = { key: "ArrowDown", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false };
+    expect(dispatcher.dispatch(event, commands, "quick-add", 0, { typing: true, modal: true }).commandId).toBe("quick-add.description");
+    expect(dispatcher.dispatch({ ...event, shiftKey: true }, commands, "quick-add", 1, { typing: true, modal: true }).commandId).toBe("quick-add.actions");
+  });
   it("falls through declined task actions to calendar actions and consumes only handled commands", () => {
     const dispatcher = new KeyboardDispatcher();
     const event = { key: "t", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false };

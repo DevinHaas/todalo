@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useKeyboard, useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,6 +28,7 @@ import type { Recurrence } from "@/lib/recurrence";
 import { TaskMetadataFields, useMetadataOptions, dateInputValue, dateInputDate } from "./task-metadata-fields";
 import { copyTaskUrl } from "@/lib/task-url";
 import { TaskAttachments } from "./task-attachments";
+import { getTaskEditorData } from "@/app/(app)/tasks/metadata-actions";
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -68,7 +69,7 @@ export function TaskEditDialog({
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
-  function setOpen(value: boolean) { setInternalOpen(value); onOpenChange?.(value); }
+  function setOpen(value: boolean) { if (!value) setFreshFor(null); setInternalOpen(value); onOpenChange?.(value); }
   const scope = useRef<HTMLDivElement>(null);
   const { platform } = useKeyboard();
   const [title, setTitle] = useState(task.title);
@@ -94,9 +95,22 @@ export function TaskEditDialog({
     recurrenceOptionValue(task.recurrence),
   );
   const [isPending, startTransition] = useTransition();
+  const [freshFor, setFreshFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getTaskEditorData(task.id).then(fresh => {
+      if (cancelled) return;
+      setTitle(fresh.title); setDescription(fresh.description ?? ""); setPriority(fresh.priority); setDeadline(dateInputValue(fresh.deadline)); setLabelIds(fresh.labelIds);
+      setDueDate(fresh.dueDate ? new Date(fresh.dueDate) : undefined);
+      setStartTime(fresh.dueDate && hasDueTime(new Date(fresh.dueDate)) ? formatTime(new Date(fresh.dueDate)) : "");
+      setEndTime(fresh.dueDateEnd ? formatTime(new Date(fresh.dueDateEnd)) : ""); setRecurrenceValue(recurrenceOptionValue(fresh.recurrence)); setFreshFor(task.id);
+    }).catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Task could not load. Close and reopen to retry."); });
+    return () => { cancelled = true; };
+  }, [open, task.id]);
 
   function save(after?: "above" | "below", direction?: number) {
-    if (saving.current || !title.trim()) return false;
+    if (saving.current || freshFor !== task.id || !title.trim()) return false;
     saving.current = true; setError(null);
     const recurrence =
       RECURRENCE_OPTIONS.find((o) => o.value === recurrenceValue)?.recurrence ??
@@ -133,7 +147,8 @@ export function TaskEditDialog({
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <fieldset disabled={isPending || freshFor !== task.id} className="space-y-4">
+          {freshFor !== task.id && !error && <p role="status">Loading current task…</p>}
           {error && <p role="alert" className="text-destructive">{error}</p>}
           <label className="block space-y-1">Task name<Input autoFocus value={title} onChange={event => setTitle(event.target.value)} /></label>
           <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
@@ -189,7 +204,7 @@ export function TaskEditDialog({
           <Button onClick={() => save()} disabled={isPending || !title.trim()} className="w-full">
             Save {(variant === "details" || platform === "mac") && <ShortcutHint commandId="editor.save" />}
           </Button>
-        </div>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );

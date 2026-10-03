@@ -8,6 +8,9 @@ interface PasteEvent {
 export function isPasteEditor(target: unknown) {
   return Boolean((target as { closest?: (selector: string) => unknown } | null)?.closest?.('input,textarea,select,[contenteditable=""],[contenteditable="true"],[role="textbox"]'));
 }
+export function isProjectPasteTarget(target: unknown, scope: { contains(target: Node | null): boolean } | null, body: unknown) {
+  return Boolean(scope && (target === body || scope.contains(target as Node | null)));
+}
 export class ProjectFilePasteController {
   composing = false;
   private busy = false;
