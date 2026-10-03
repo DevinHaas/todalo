@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
+import { ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { nextLayout } from "@/lib/view-navigation";
 import {
   LayoutGrid,
   CalendarDays,
@@ -119,18 +121,18 @@ export function LayoutSwitcher() {
   const index = LAYOUTS.findIndex((l) => l.key === layout);
 
   const cycle = (delta: number) => {
-    const next = (index + delta + LAYOUTS.length) % LAYOUTS.length;
-    setLayout(LAYOUTS[next].key);
+    setLayout(nextLayout(layout, delta));
   };
 
   return (
     <div className="flex items-center gap-1">
-      <Button type="button" variant="ghost" size="icon" onClick={() => cycle(-1)}>
+      <Button type="button" variant="ghost" size="icon" aria-label="Previous layout" onClick={() => cycle(-1)}>
         <ChevronLeft className="size-4" />
       </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => cycle(1)}>
+      <Button type="button" variant="ghost" size="icon" aria-label="Next layout" onClick={() => cycle(1)}>
         <ChevronRight className="size-4" />
       </Button>
+      <span className="text-xs text-muted-foreground">{LAYOUTS[index].label} <ShortcutHint commandId="view.layout" /></span>
     </div>
   );
 }

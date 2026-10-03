@@ -10,10 +10,12 @@ import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { hasDueTime } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
+import { ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import type { ViewDateAction } from "@/lib/view-navigation";
 
-export function WeekScheduleView({ tasks, events = [] }: { tasks: Task[]; events?: CalendarEvent[] }) {
+export function WeekScheduleView({ tasks, events = [], anchor, onNavigate, projectId }: { tasks: Task[]; events?: CalendarEvent[]; anchor: Date; onNavigate: (action: ViewDateAction) => void; projectId?: string }) {
   const { showCompleted } = useDisplaySettings();
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const weekStart = startOfWeek(anchor, { weekStartsOn: 1 });
   const [slot, setSlot] = useState<{ day: Date; start: Date; end: Date } | null>(null);
   const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
   const gridTemplate = scheduleGridTemplate(days);
@@ -35,14 +37,14 @@ export function WeekScheduleView({ tasks, events = [] }: { tasks: Task[]; events
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <Button variant="outline" size="sm" onClick={() => setWeekStart((d) => addDays(d, -7))}>
-          Prev
+        <Button variant="outline" size="sm" onClick={() => onNavigate("previous-week")}>
+          Prev <ShortcutHint commandId="calendar.previous-week" />
         </Button>
-        <h2 className="text-lg font-medium">
+        <div className="text-center"><h2 className="text-lg font-medium" aria-live="polite">
           {format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}
-        </h2>
-        <Button variant="outline" size="sm" onClick={() => setWeekStart((d) => addDays(d, 7))}>
-          Next
+        </h2><Button variant="ghost" size="sm" onClick={() => onNavigate("today")}>Today <ShortcutHint commandId="calendar.today" /></Button></div>
+        <Button variant="outline" size="sm" onClick={() => onNavigate("next-week")}>
+          Next <ShortcutHint commandId="calendar.next-week" />
         </Button>
       </div>
 
@@ -93,6 +95,7 @@ export function WeekScheduleView({ tasks, events = [] }: { tasks: Task[]; events
       />
 
       <TaskComposer
+        projectId={projectId}
         open={slot !== null}
         onOpenChange={(open) => !open && setSlot(null)}
         initialDueDate={slot?.day}

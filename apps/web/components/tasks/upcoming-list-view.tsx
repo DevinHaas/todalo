@@ -9,6 +9,7 @@ import {
   isSameDay,
   isToday,
   startOfWeek,
+  parseISO,
 } from "date-fns";
 import { ChevronDown } from "lucide-react";
 import { TaskRow } from "@/components/tasks/task-row";
@@ -20,6 +21,9 @@ import { isOverdue } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
 import { taskTreeOrder } from "@/lib/task-keyboard";
+import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { navigateViewDate, type ViewDateAction } from "@/lib/view-navigation";
+import { Button } from "@/components/ui/button";
 
 function startOfToday() {
   const d = new Date();
@@ -43,24 +47,38 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
   const [overdueOpen, setOverdueOpen] = useState(true);
   const { showCompleted } = useDisplaySettings();
   const today = startOfToday();
-  const windowEnd = addYears(today, 1);
-  const daysShown = differenceInCalendarDays(windowEnd, today) + 1;
-  const days = Array.from({ length: daysShown }, (_, i) => addDays(today, i));
+  const [activeDay, setActiveDay] = useState(dayKey(today));
+  const activeDate = parseISO(activeDay);
+  const weekStart = startOfWeek(activeDate, { weekStartsOn: 1 });
+  const [windowStart, setWindowStart] = useState(() => startOfWeek(today, { weekStartsOn: 1 }));
+  const [windowEnd, setWindowEnd] = useState(() => addYears(today, 1));
+  const daysShown = differenceInCalendarDays(windowEnd, windowStart) + 1;
+  const days = Array.from({ length: daysShown }, (_, i) => addDays(windowStart, i));
 
   const visibleTasks = showCompleted ? tasks : tasks.filter((t) => t.status !== "done");
-  const overdueTasks = visibleTasks.filter(isOverdue);
+  const overdueTasks = visibleTasks.filter(task => isOverdue(task) && task.dueDate && new Date(task.dueDate) < windowStart);
   const laterTasks = visibleTasks.filter(
     (t) => t.dueDate && new Date(t.dueDate) > windowEnd && !isSameDay(new Date(t.dueDate), windowEnd),
   );
 
   const listRef = useRef<HTMLDivElement>(null);
-  const [activeDay, setActiveDay] = useState(dayKey(today));
 
   // The strip shows a fixed 7-day week rather than scrolling: it just swaps
   // to the week containing whichever day is active.
-  const activeDate = days.find((d) => dayKey(d) === activeDay) ?? today;
-  const weekStart = startOfWeek(activeDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  function goToDay(day: Date) {
+    const key = dayKey(day);
+    if (day < windowStart) setWindowStart(startOfWeek(day, { weekStartsOn: 1 }));
+    if (day > windowEnd) setWindowEnd(addDays(startOfWeek(day, { weekStartsOn: 1 }), 6));
+    setActiveDay(key);
+    requestAnimationFrame(() => {
+      const container = listRef.current;
+      const section = container?.querySelector<HTMLElement>(`section[id="${key}"]`);
+      if (container && section) container.scrollTo({ top: container.scrollTop + section.getBoundingClientRect().top - container.getBoundingClientRect().top });
+    });
+  }
+  function navigate(action: ViewDateAction) { goToDay(navigateViewDate(activeDate, action)); }
+  useKeyboardCommands({ "upcoming.today": () => navigate("today"), "upcoming.next-week": () => navigate("next-week"), "upcoming.previous-week": () => navigate("previous-week") });
 
   // Scroll-spy: highlight whichever day section is topmost in the scroll
   // container, so the strip stays in sync with manual scrolling too.
@@ -84,6 +102,8 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
       if (current) setActiveDay(current.id);
     };
 
+    const todaySection = container.querySelector<HTMLElement>(`section[id="${dayKey(startOfToday())}"]`);
+    if (todaySection) container.scrollTop += todaySection.getBoundingClientRect().top - container.getBoundingClientRect().top;
     updateActiveDay();
     container.addEventListener("scroll", updateActiveDay, { passive: true });
     return () => container.removeEventListener("scroll", updateActiveDay);
@@ -91,14 +111,17 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
 
   return (
     <div>
-      {/* ponytail: fixed 7-day strip that swaps to the active week, no
-          prev/next chrome — add if users want to jump weeks manually. */}
+      <div className="mx-auto mb-2 flex max-w-2xl flex-wrap items-center justify-between gap-2">
+        <Button size="sm" variant="ghost" onClick={() => navigate("previous-week")}>Previous week <ShortcutHint commandId="upcoming.previous-week" /></Button>
+        <Button size="sm" variant="outline" onClick={() => navigate("today")}>Today <ShortcutHint commandId="upcoming.today" /></Button>
+        <Button size="sm" variant="ghost" onClick={() => navigate("next-week")}>Next week <ShortcutHint commandId="upcoming.next-week" /></Button>
+      </div>
       <div className="mx-auto mb-4 flex max-w-2xl gap-1 border-b pb-2">
         {weekDays.map((day) => (
           <a
             key={dayKey(day)}
             href={`#${dayKey(day)}`}
-            onClick={() => setActiveDay(dayKey(day))}
+            onClick={event => { event.preventDefault(); goToDay(day); }}
             className={
               "flex flex-1 flex-col items-center rounded-md px-3 py-1 text-xs " +
               (dayKey(day) === activeDay
