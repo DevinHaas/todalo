@@ -8,6 +8,8 @@ import { parseQuickAddOrPlain, type QuickAddMatch } from "@/lib/parse-quick-add"
 import { combineDateAndTime } from "@/lib/task-dates";
 import { cn } from "@/lib/utils";
 import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
+import { useRamble } from "@/components/ramble/ramble-provider";
+import { AudioLines } from "lucide-react";
 
 // Shared box model between the transparent input and the backdrop it sits
 // on, so highlighted spans in the backdrop line up exactly under the text
@@ -16,6 +18,7 @@ const FIELD_CLASSES = "h-8 rounded-lg border px-2.5 py-1 text-base whitespace-pr
 
 export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
   const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
+  const openRamble = useRamble();
   const [title, setTitle] = useState("");
   const [rejected, setRejected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -127,6 +130,9 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
       </div>
       <Button type="submit" disabled={isPending}>
         Add
+      </Button>
+      <Button type="button" variant="ghost" size="icon" aria-label="Open Ramble" onClick={() => openRamble()}>
+        <AudioLines className="size-4" />
       </Button>
     </form>
   );

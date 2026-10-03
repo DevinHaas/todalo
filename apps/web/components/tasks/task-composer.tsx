@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import { addDays, format, isSameDay, nextSaturday, startOfWeek } from "date-fns";
-import { Plus, Sun, CalendarIcon, X, Flag, AlarmClock, Paperclip, MoreHorizontal, Inbox, ChevronDown } from "lucide-react";
+import { Plus, Sun, CalendarIcon, X, Flag, AlarmClock, Paperclip, MoreHorizontal, Inbox, ChevronDown, AudioLines } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -20,6 +20,7 @@ import { combineDateAndTime } from "@/lib/task-dates";
 import { TimeRangeInputs } from "@/components/tasks/time-range-inputs";
 import { parseQuickAddOrPlain, type QuickAddMatch } from "@/lib/parse-quick-add";
 import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
+import { useRamble } from "@/components/ramble/ramble-provider";
 import {
   canonicalDateText,
   canonicalRecurrenceText,
@@ -451,6 +452,7 @@ export function TaskComposer({
   initialEndTime?: string;
 }) {
   const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
+  const openRamble = useRamble();
   const controlled = open !== undefined;
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false);
   const expanded = controlled ? open : uncontrolledExpanded;
@@ -726,6 +728,12 @@ export function TaskComposer({
           <ChevronDown className="size-3.5" />
         </Button>
         <div className="flex gap-2">
+          <Button type="button" variant="ghost" size="icon" aria-label="Open Ramble" disabled={isPending} onClick={() => {
+            setExpanded(false);
+            openRamble({ defaultDueDate: dueDate ? format(dueDate, "yyyy-MM-dd") : null });
+          }}>
+            <AudioLines className="size-4" />
+          </Button>
           <Button type="button" variant="outline" onClick={reset}>
             Cancel
           </Button>

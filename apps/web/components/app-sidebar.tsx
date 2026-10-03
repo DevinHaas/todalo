@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Star,
+  AudioLines,
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TaskComposer } from "@/components/tasks/task-composer";
 import { authClient } from "@/lib/auth-client";
+import { useRamble } from "@/components/ramble/ramble-provider";
 
 // ponytail: Filters & Labels / Goals / Reporting / More have no backing
 // features yet — shown inert for visual parity, wire up when they exist.
@@ -56,6 +58,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
+  const openRamble = useRamble();
 
   return (
     <Sidebar collapsible="icon">
@@ -84,15 +87,26 @@ export function AppSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-start">
         <button
           type="button"
           aria-label="Add task"
           onClick={() => setAddOpen(true)}
-          className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-brand hover:opacity-80 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+          className="flex h-8 flex-1 items-center gap-2 rounded-md px-2 text-sm font-medium text-brand hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
         >
           <Plus className="size-4" />
           <span className="group-data-[collapsible=icon]:hidden">Add task</span>
         </button>
+        <button
+          type="button"
+          aria-label="Open Ramble"
+          title="Ramble (Ctrl/⌘ + Shift + R)"
+          onClick={() => openRamble()}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-brand hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <AudioLines className="size-5" />
+        </button>
+        </div>
         <TaskComposer open={addOpen} onOpenChange={setAddOpen} />
       </SidebarHeader>
 
