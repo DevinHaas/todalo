@@ -27,6 +27,7 @@ import type { Task } from "@/lib/tasks";
 import type { Recurrence } from "@/lib/recurrence";
 import { TaskMetadataFields, useMetadataOptions, dateInputValue, dateInputDate } from "./task-metadata-fields";
 import { copyTaskUrl } from "@/lib/task-url";
+import { TaskAttachments } from "./task-attachments";
 
 function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -139,6 +140,7 @@ export function TaskEditDialog({
           {metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}
           <TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} disabled={isPending} />
           <div className="flex flex-wrap gap-3 text-sm"><a href={`/tasks/${encodeURIComponent(task.id)}`} className="underline">Task link</a><button type="button" className="underline" onClick={() => startTransition(async () => { try { await copyTaskUrl(task.id); setCopied(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not copy task link"); } })}>Copy link <ShortcutHint commandId="task.copy-url" /></button>{copied && <span role="status">Task link copied.</span>}</div>
+          {variant === "details" && <TaskAttachments key={task.id} taskId={task.id} />}
           <div>
             <label className="mb-1 block text-sm font-medium">Due date</label>
             <Popover open={dateOpen} onOpenChange={setDateOpen}>

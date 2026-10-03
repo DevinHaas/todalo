@@ -56,12 +56,19 @@ export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Ta
     if (!columns.length) return move(direction);
     const id = controller.current.moveColumn(columns, direction); refresh(value => value + 1); focusElement(id); return Boolean(id);
   }
-  function focusedTask() { syncVisible(); return tasks.find(task => task.id === controller.current.focused); }
+  function focusedTask() {
+    syncVisible();
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>('[data-task-id]') : null;
+    if (!active || !root.current?.contains(active)) return undefined;
+    return tasks.find(task => task.id === active.dataset.taskId);
+  }
   function restore() { requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); else focusElement(controller.current.focused); }); }
   function open(task: Task, mode: Mode = "details") { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; focus(task.id); setEditor({ task, mode }); }
   function insert(edge: Edge, anchor?: Task) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setCreation({ edge, anchor }); }
   function mutate(action: TaskAction, explicit?: string[]) {
-    syncVisible(); const ids = explicit ?? controller.current.targets();
+    syncVisible();
+    if (!explicit && !controller.current.selected.size && !focusedTask()) return false;
+    const ids = explicit ?? controller.current.targets();
     if (!ids.length || working.current) return false;
     working.current = true; setError(null);
     startTransition(async () => {
