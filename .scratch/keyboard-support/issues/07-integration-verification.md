@@ -1,7 +1,7 @@
 # 07: Full specification review and verification
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 04, 05, 06
 
 ## What to build
@@ -21,3 +21,4 @@ Review full integration diff on standards and spec axes, fix all actionable find
 
 ## Comments
 
+Claimed after full metadata merge `28a7316`: tickets 01–06 resolved, combined 23 files / 261 tests and web/database typechecks pass. Lead applied migrations 0006–0009. [Browser verification notes](/private/tmp/todalo-keyboard-browser-verification.md) contain live checks; final review must address the known form-submit, typography and React-key findings and distinguish existing lint/build environment limitations.
