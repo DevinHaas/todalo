@@ -3,6 +3,18 @@ import { defaultPreferences, effectiveBindings, validatePreferences, KeyboardDis
 import { keyboardAccountPreferences } from "./keyboard-account-preferences";
 
 describe("account keyboard preferences", () => {
+  it("uses verified calendar and Upcoming platform defaults and dispatches a saved layout override", () => {
+    const preferences = defaultPreferences();
+    expect(effectiveBindings("upcoming.today", preferences, "mac")).toEqual(["Alt+Shift+y"]);
+    expect(effectiveBindings("upcoming.today", preferences, "windows")).toEqual(["Home"]);
+    expect(effectiveBindings("calendar.today", preferences, "mac")).toEqual(["t", "Alt+Shift+y"]);
+    expect(effectiveBindings("calendar.today", preferences, "windows")).toEqual(["t"]);
+    const custom = { ...preferences, overrides: { "view.layout": ["Alt+v"] } };
+    const dispatcher = new KeyboardDispatcher();
+    const commands = [{ id: "view.layout", bindings: effectiveBindings("view.layout", custom, "mac") }];
+    expect(dispatcher.dispatch({ key: "v", metaKey: false, ctrlKey: false, altKey: true, shiftKey: false, repeat: false }, commands, "project").commandId).toBe("view.layout");
+    expect(dispatcher.dispatch({ key: "V", metaKey: false, ctrlKey: false, altKey: false, shiftKey: true, repeat: false }, commands, "project").consumed).toBe(false);
+  });
   it("keeps disabled commands disabled and adapts portable modifiers", () => {
     const preferences = { ...defaultPreferences(), overrides: { "general.capture": [], "navigation.today": ["Primary+e"] } };
     expect(effectiveBindings("general.capture", preferences, "mac")).toEqual([]);
@@ -43,6 +55,17 @@ describe("account keyboard preferences", () => {
 });
 
 describe("browser dispatch", () => {
+  it("falls through declined task actions to calendar actions and consumes only handled commands", () => {
+    const dispatcher = new KeyboardDispatcher();
+    const event = { key: "t", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false };
+    const commands = [
+      { id: "task-date", bindings: ["t"], handle: () => false },
+      { id: "calendar-today", bindings: ["t"], handle: () => true },
+    ];
+    expect(dispatcher.dispatch(event, commands, "calendar").commandId).toBe("calendar-today");
+    expect(dispatcher.dispatch(event, commands.map(command => ({ ...command, handle: () => false })), "calendar").consumed).toBe(false);
+    expect(dispatcher.dispatch(event, commands.map(command => ({ ...command, handle: () => true })), "task").commandId).toBe("task-date");
+  });
   it("pauses app commands while typing, composing or in a modal and allows only explicit editor commands", () => {
     const dispatcher = new KeyboardDispatcher();
     const event = { key: "q", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false };

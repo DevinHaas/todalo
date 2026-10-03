@@ -17,6 +17,8 @@ Dependency graph: 01 → {02, 03} → {04, 05, 06} → 07. Claims and resolution
 - [02 resolved](issues/02-task-keyboard-actions.md#answer): focused task/editor implementation `5afc7db`, merge `0cc26a7`; 232 tests and web typecheck pass. Ticket 03 remains claimed; preserve task null/bulk/placement changes when integrating its organization extension.
 - [Task browser verification](/private/tmp/todalo-keyboard-browser-verification.md): J/K navigation, X selection, comma details, Enter and Meta+E editor behavior, typing suppression, and E completion with nearest-focus restoration checked by lead.
 - [03 resolved](issues/03-personal-organization.md#answer): organization implementation `9ca7cf6`, integration merge `2f07788`; 242 tests and web/database typechecks pass. Additive sections migration 0007 is not yet live-executed. Tickets 04, 05 and 06 are claimed for the next frontier.
+- Migration 0007 has now been applied to the configured development database by the lead; [browser verification notes](/private/tmp/todalo-keyboard-browser-verification.md) track live navigation/organization checks.
+- [05 resolved](issues/05-view-calendar-parity.md#answer): calendar/layout implementation `7c368ce` integrated; 18 test files / 246 tests and full web typecheck pass. Effective layout/navigation bindings, actual focused task precedence, project task dates, and Google event overlays are implemented. Windows calendar Option alternative remains disputed; Today retains its day/overdue schedule. Interactive checks continue in ticket 07.
 
 ## Fog
 

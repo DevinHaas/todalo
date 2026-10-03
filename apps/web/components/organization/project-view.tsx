@@ -14,8 +14,9 @@ import { Input } from "@/components/ui/input";
 import type { Task } from "@/lib/tasks";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { ProjectFilePaste } from "./project-file-paste";
+import type { CalendarEvent } from "@/lib/calendar-events";
 
-export function ProjectView({ project, sections, tasks }: { project: { id: string; name: string; color: string | null }; sections: { id: string; name: string }[]; tasks: Task[] }) {
+export function ProjectView({ project, sections, tasks, events = [] }: { project: { id: string; name: string; color: string | null }; sections: { id: string; name: string }[]; tasks: Task[]; events?: CalendarEvent[] }) {
   const scope = useRef<HTMLDivElement>(null); const router = useRouter();
   const { showCompleted } = useDisplaySettings();
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -35,7 +36,7 @@ export function ProjectView({ project, sections, tasks }: { project: { id: strin
     <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{project.name}</h1><div className="flex gap-2"><Button variant="outline" onClick={() => setSectionOpen(true)}>Add section <ShortcutHint commandId="project.section" /></Button><Button variant="outline" onClick={() => setMenuOpen(true)}>Project menu <ShortcutHint commandId="project.menu" /></Button></div></div>
     <div className="flex flex-wrap items-center gap-3"><label className="text-sm">Sort <select aria-label="Project sort" className="ml-2 rounded border p-1" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="manual">Manual</option><option value="date">Date</option><option value="name">Name</option></select></label><span className="text-xs text-muted-foreground">Date <ShortcutHint commandId="project.sort-date" /> · Name <ShortcutHint commandId="project.sort-name" /></span></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
-    <ViewSwitcher projectId={project.id} tasks={sorted} listView={<div className="space-y-6">{groups.map(group => {
+    <ViewSwitcher projectId={project.id} tasks={sorted} events={events} listView={<div className="space-y-6">{groups.map(group => {
       const groupTasks = sorted.filter(task => task.sectionId === group.id);
       const tree = groupTasks.filter(task => !task.parentId || !groupTasks.some(parent => parent.id === task.parentId)).flatMap(parent => [parent, ...groupTasks.filter(child => child.parentId === parent.id)]);
       return <section key={group.id ?? "root"} id={group.id ? `section-${group.id}` : undefined} tabIndex={-1}><div className="flex items-center gap-3"><h2 className="mb-2 text-sm font-semibold">{group.id ? <button type="button" aria-expanded={!collapsedSections.has(group.id)} onClick={() => setCollapsedSections(current => { const next = new Set(current); if (!next.delete(group.id!)) next.add(group.id!); return next; })}>{collapsedSections.has(group.id) ? "▸" : "▾"} {group.name}</button> : group.name}</h2>{group.id && <button type="button" className="text-xs underline" disabled={pending} onClick={() => run(() => deleteSection(group.id!))}>Delete section</button>}</div><div hidden={Boolean(group.id && collapsedSections.has(group.id))}>{tree.map(task => <TaskRow key={task.id} task={task} />)}<TaskComposer projectId={project.id} sectionId={group.id} /></div></section>;

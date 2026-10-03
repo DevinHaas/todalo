@@ -140,11 +140,7 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
       }
       candidates.sort((a, b) => priority[b.command.context] - priority[a.command.context]);
       const context = `${pathname}:${editor}:${modal}:${candidates.map(item => item.command.id).join(",")}`;
-      const result = dispatcher.current.dispatch(event, candidates.map(({ command }) => ({ id: command.id, bindings: bindings(command.id), repeat: command.repeat })), context);
-      if (result.commandId) {
-        const candidate = candidates.find(item => item.command.id === result.commandId);
-        if (candidate?.handler(event) === false) return;
-      }
+      const result = dispatcher.current.dispatch(event, candidates.map(({ command, handler }) => ({ id: command.id, bindings: bindings(command.id), repeat: command.repeat, handle: () => handler(event) })), context);
       if (result.consumed) { event.preventDefault(); event.stopPropagation(); }
     };
     const reset = () => dispatcher.current.reset();
