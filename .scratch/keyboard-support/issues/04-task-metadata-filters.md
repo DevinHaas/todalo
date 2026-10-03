@@ -1,7 +1,7 @@
 # 04: Priorities, labels, filters, descriptions and deadlines
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 02, 03
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver priorities/priority picker/sort, labels and saved filter pages/editors, 
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-

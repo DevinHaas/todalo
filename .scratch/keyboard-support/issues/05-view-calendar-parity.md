@@ -1,7 +1,7 @@
 # 05: Layout switching and Upcoming/calendar navigation
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 02, 03
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver keyboard layout switching, Upcoming today/week movement and personal cal
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-

@@ -1,7 +1,7 @@
 # 06: Paste files into project tasks with attachments
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 02, 03
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver documented project file-paste task creation with actual attachment stora
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-
