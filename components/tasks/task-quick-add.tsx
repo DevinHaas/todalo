@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { createTask } from "@/app/(app)/tasks/actions";
@@ -8,8 +8,6 @@ import { parseQuickAddOrPlain, type QuickAddMatch } from "@/lib/parse-quick-add"
 import { combineDateAndTime } from "@/lib/task-dates";
 import { cn } from "@/lib/utils";
 import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
-
-const PARSE_DEBOUNCE_MS = 150;
 
 // Shared box model between the transparent input and the backdrop it sits
 // on, so highlighted spans in the backdrop line up exactly under the text
@@ -19,16 +17,10 @@ const FIELD_CLASSES = "h-8 rounded-lg border px-2.5 py-1 text-base whitespace-pr
 export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
   const { enabled: smartDateRecognitionEnabled } = useSmartDateRecognition();
   const [title, setTitle] = useState("");
-  const [debouncedTitle, setDebouncedTitle] = useState("");
   const [rejected, setRejected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedTitle(title), PARSE_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [title]);
 
   const isRejected = useCallback(
     (match: QuickAddMatch) => rejected.has(match.text.toLowerCase()),
@@ -36,15 +28,16 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
   );
 
   const parsed = useMemo(
-    () => parseQuickAddOrPlain(debouncedTitle, smartDateRecognitionEnabled, undefined, { isRejected }),
-    [debouncedTitle, smartDateRecognitionEnabled, isRejected],
+    () => parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected }),
+    [title, smartDateRecognitionEnabled, isRejected],
   );
 
   const segments = useMemo(() => {
-    // Only trust the debounced parse's offsets once the title has caught up
-    // to it — otherwise a highlight could momentarily land under the wrong
-    // word while the user is still mid-keystroke.
-    const matches = debouncedTitle === title ? parsed.matches : [];
+    // A match still touching the end of the title is the word currently
+    // being typed — its boundaries are still moving, so leave it plain
+    // until a following character (typically a space) closes it off.
+    // Otherwise it'd restyle on every keystroke, which reads as blinking.
+    const matches = parsed.matches.filter((m) => m.end < title.length);
     const result: { text: string; match: QuickAddMatch | null }[] = [];
     let cursor = 0;
     for (const match of matches) {
@@ -54,7 +47,7 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
     }
     if (cursor < title.length) result.push({ text: title.slice(cursor), match: null });
     return result;
-  }, [title, debouncedTitle, parsed.matches]);
+  }, [title, parsed.matches]);
 
   function reject(match: QuickAddMatch) {
     setRejected((prev) => new Set(prev).add(match.text.toLowerCase()));
@@ -68,7 +61,6 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
 
   function reset() {
     setTitle("");
-    setDebouncedTitle("");
     setRejected(new Set());
   }
 
@@ -80,14 +72,15 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
         if (!title.trim()) return;
         const final = parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected });
         const finalTitle = final.strippedTitle || title.trim();
-        let dueDate = final.dueDate ?? undefined;
-        if (final.startTime) {
-          dueDate = combineDateAndTime(dueDate ?? startOfDay(new Date()), final.startTime);
-        }
+        const baseDate = final.dueDate ?? startOfDay(new Date());
+        const dueDate = final.startTime ? combineDateAndTime(baseDate, final.startTime) : final.dueDate ?? undefined;
+        const dueDateEnd =
+          final.startTime && final.endTime ? combineDateAndTime(baseDate, final.endTime) : undefined;
         startTransition(async () => {
           await createTask({
             title: finalTitle,
             dueDate,
+            dueDateEnd,
             recurrence: final.recurrence ?? undefined,
           });
           reset();
@@ -111,7 +104,7 @@ export function TaskQuickAdd({ onCreated }: { onCreated?: () => void }) {
                 role="button"
                 tabIndex={-1}
                 onClick={() => reject(segment.match!)}
-                className="relative z-10 cursor-pointer rounded bg-primary/20 pointer-events-auto"
+                className="relative z-10 inline-flex items-center cursor-pointer rounded px-px py-0.5 -mx-px bg-destructive/20 pointer-events-auto"
               >
                 {segment.text}
               </span>

@@ -4,6 +4,7 @@ import {
   canonicalRecurrenceText,
   canonicalTimeText,
   initialSyncState,
+  quickAddTimeMatchText,
   syncQuickAddFields,
   type QuickAddSyncState,
 } from "./quick-add-sync";
@@ -16,6 +17,74 @@ function parseAction(text: string) {
 }
 
 describe("syncQuickAddFields", () => {
+  it("flushes the latest title before saving and retains a manual choice for unchanged text", () => {
+    let state = syncQuickAddFields(initialSyncState, parseAction("meeting tomorrow 09:00 - 10:00 every day"));
+    const latest = parseAction("meeting friday 19:00 - 20:00 every week");
+    state = syncQuickAddFields(state, latest);
+    expect(state.date.value).toEqual(new Date(2026, 0, 16));
+    expect(state.time.value).toBe("19:00");
+    expect(state.endTime.value).toBe("20:00");
+    expect(state.recurrence.value?.unit).toBe("week");
+    state = syncQuickAddFields(state, {
+      type: "manualEndTime", time: "21:00", matchText: quickAddTimeMatchText(latest.parsed.matches),
+    });
+    expect(syncQuickAddFields(state, latest).endTime.value).toBe("21:00");
+  });
+
+  it("resumes end-time parsing when a detached duration changes after a manual edit", () => {
+    const original = parseAction("meeting 19:00 today for 1h");
+    let state = syncQuickAddFields(initialSyncState, original);
+    state = syncQuickAddFields(state, {
+      type: "manualEndTime", time: "22:00", matchText: quickAddTimeMatchText(original.parsed.matches),
+    });
+    expect(syncQuickAddFields(state, original).endTime.value).toBe("22:00");
+    state = syncQuickAddFields(state, parseAction("meeting 19:00 today for 2h"));
+    expect(state.endTime.value).toBe("21:00");
+    expect(state.endTime.overridden).toBe(false);
+  });
+
+  it("preserves calendar seeds through plain typing until a matching phrase takes over", () => {
+    const date = new Date(2026, 0, 20);
+    let state = syncQuickAddFields(initialSyncState, {
+      type: "seed", date, time: "09:00", endTime: "10:00",
+    });
+    for (const title of ["", "call mom"]) {
+      state = syncQuickAddFields(state, parseAction(title));
+      expect(state.date.value).toEqual(date);
+      expect(state.time.value).toBe("09:00");
+      expect(state.endTime.value).toBe("10:00");
+      expect(state.date.overridden).toBe(false);
+    }
+    state = syncQuickAddFields(state, parseAction("call mom tomorrow 19:30 for 1h"));
+    expect(state.date.value).toEqual(new Date(2026, 0, 15));
+    expect(state.time.value).toBe("19:30");
+    expect(state.endTime.value).toBe("20:30");
+    state = syncQuickAddFields(state, parseAction("call mom"));
+    expect(state.date.value).toBeUndefined();
+    expect(state.time.value).toBe("");
+    expect(state.endTime.value).toBe("");
+  });
+
+  it("keeps a manual end time until its parsed range changes, then clears both on rejection", () => {
+    let state = syncQuickAddFields(initialSyncState, parseAction("meeting 19:30 - 20:00"));
+    expect(state.time.value).toBe("19:30");
+    expect(state.endTime.value).toBe("20:00");
+    state = syncQuickAddFields(state, {
+      type: "manualEndTime", time: "21:00", matchText: "19:30 - 20:00",
+    });
+    state = syncQuickAddFields(state, parseAction("meeting 19:30 - 20:00 tomorrow"));
+    expect(state.endTime.value).toBe("21:00");
+    state = syncQuickAddFields(state, parseAction("meeting 19:30 - 20:30 tomorrow"));
+    expect(state.endTime.value).toBe("20:30");
+    expect(state.endTime.overridden).toBe(false);
+    state = syncQuickAddFields(state, { type: "reject", kind: "time" });
+    state = syncQuickAddFields(state, parseAction("meeting 19:30 for 2h"));
+    expect(state.time.value).toBe("");
+    expect(state.endTime.value).toBe("");
+    expect(state.time.locked).toBe(true);
+    expect(state.endTime.locked).toBe(true);
+  });
+
   it("applies a freshly typed date match to the date field", () => {
     const state = syncQuickAddFields(initialSyncState, parseAction("call mom tomorrow"));
     expect(state.date.value).toEqual(new Date(2026, 0, 15));

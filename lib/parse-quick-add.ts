@@ -20,14 +20,21 @@ export interface ParseQuickAddResult {
   strippedTitle: string;
   dueDate: Date | null;
   startTime: string | null;
+  endTime: string | null;
   recurrence: Recurrence | null;
+}
+
+interface TimeValue {
+  start: string;
+  end: string | null;
+  duration?: number;
 }
 
 interface Candidate {
   start: number;
   end: number;
   kind: QuickAddMatchKind;
-  value: Date | string | Recurrence;
+  value: Date | string | Recurrence | TimeValue;
 }
 
 const WEEKDAYS: Record<string, number> = {
@@ -116,13 +123,33 @@ function pad(n: number): string {
   return n.toString().padStart(2, "0");
 }
 
+// Normalizes an hour/minute/optional-meridiem capture into "HH:MM". Without
+// a meridiem the hour is read as 24-hour (bare "19:30"); with one it's 12-hour.
+function normalizeTime(hourStr: string, minStr: string | undefined, meridiem: string | undefined): string | null {
+  const hour = parseInt(hourStr, 10);
+  const minute = minStr ? parseInt(minStr, 10) : 0;
+  if (minute > 59) return null;
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    return `${pad(to24Hour(hour, meridiem))}:${pad(minute)}`;
+  }
+  if (hour < 0 || hour > 23) return null;
+  return `${pad(hour)}:${pad(minute)}`;
+}
+
+function addMinutesToTime(time: string, minutesToAdd: number): string {
+  const [h, m] = time.split(":").map(Number);
+  const total = ((h * 60 + m + minutesToAdd) % 1440 + 1440) % 1440;
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+}
+
 function dailyRecurrence(unit: Recurrence["unit"], n = 1): Recurrence {
   return { n, unit, basedOn: "scheduled", until: null };
 }
 
 function collectCandidates(text: string, reference: Date): Candidate[] {
   const candidates: Candidate[] = [];
-  const push = (m: RegExpExecArray, kind: QuickAddMatchKind, value: Date | string | Recurrence) => {
+  const push = (m: RegExpExecArray, kind: QuickAddMatchKind, value: Date | string | Recurrence | TimeValue) => {
     candidates.push({ start: m.index, end: m.index + m[0].length, kind, value });
   };
 
@@ -161,13 +188,76 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
     }
   }
 
-  const timeRe = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/gi;
+  // Order matters here only in that longer matches win overlaps regardless
+  // (see resolveOverlaps) — a range/duration phrase always out-lengths the
+  // bare single-time phrase it contains, so it's picked automatically.
+
+  // Include the introducing word in the highlight and stripped phrase.
+  // A colon or meridiem anchors the start so plain "4 to 5" stays text.
+  // Keep invalid anchored ranges together rather than recognizing just
+  // one endpoint as a standalone time.
+  const invalidTimeRanges: { start: number; end: number }[] = [];
+  const timeRangeRe =
+    /(?<![\w:])(?:(?:at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|until|to)\s*(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?\b(?![\w:])/gi;
+  while ((m = timeRangeRe.exec(text))) {
+    if (!m[2] && !m[3]) continue;
+    const start = normalizeTime(m[1], m[2], m[3]);
+    const end = start ? normalizeTime(m[4], m[5], m[6]) : null;
+    if (start && end) push(m, "time", { start, end });
+    else invalidTimeRanges.push({ start: m.index, end: m.index + m[0].length });
+  }
+  const overlapsInvalidRange = (match: RegExpExecArray) => invalidTimeRanges.some(
+    (range) => match.index < range.end && match.index + match[0].length > range.start,
+  );
+
+  // "19:30 for 30min", "7:30pm for 1h"
+  const timeForDurationRe =
+    /\b(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)?\s+for\s+(\d+)\s*(min|mins|minutes|h|hr|hrs|hours)\b/gi;
+  while ((m = timeForDurationRe.exec(text))) {
+    if (overlapsInvalidRange(m)) continue;
+    const start = normalizeTime(m[1], m[2], m[3]);
+    if (!start) continue;
+    const n = parseInt(m[4], 10);
+    const minutes = m[5].toLowerCase().startsWith("h") ? n * 60 : n;
+    push(m, "time", { start, end: addMinutesToTime(start, minutes) });
+  }
+
+  // Single 12-hour times need only their meridiem, not an introducing word
+  // or a duration: "4pm", "4:30pm", "at 7:30pm".
+  const timeRe = /(?<![\w:])(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b(?![\w:])/gi;
   while ((m = timeRe.exec(text))) {
-    const hour = parseInt(m[1], 10);
-    const minute = m[2] ? parseInt(m[2], 10) : 0;
-    if (hour >= 1 && hour <= 12 && minute <= 59) {
-      push(m, "time", `${pad(to24Hour(hour, m[3]))}:${pad(minute)}`);
-    }
+    if (overlapsInvalidRange(m)) continue;
+    const start = normalizeTime(m[1], m[2], m[3]);
+    if (start) push(m, "time", { start, end: null });
+  }
+
+  // Bare 24-hour clock time, "at" optional: "19:30", "at 19:30"
+  const bareTimeRe = /(?<![\w:])(?:at\s+)?(\d{1,2}):(\d{2})(?![\w:]|\s*(?:am|pm)\b)/gi;
+  while ((m = bareTimeRe.exec(text))) {
+    if (overlapsInvalidRange(m)) continue;
+    const start = normalizeTime(m[1], m[2], undefined);
+    if (start) push(m, "time", { start, end: null });
+  }
+
+  // An explicit "at" also anchors an hour-only number: "at 4", "at 16".
+  // Do not extract an hour from a longer or invalid clock token.
+  const hourTimeRe = /(?<![\w:])at\s+(\d{1,2})\b(?![\w:]|[./]\d|\s*(?:am|pm)\b)/gi;
+  while ((m = hourTimeRe.exec(text))) {
+    if (overlapsInvalidRange(m)) continue;
+    const start = normalizeTime(m[1], undefined, undefined);
+    if (start) push(m, "time", { start, end: null });
+  }
+
+  // A duration that isn't touching its time, e.g. "19:00 today for 1h" —
+  // timeForDurationRe above only catches "for" immediately after the time.
+  // Resolve against the accepted start after rejection and overlap handling.
+  // Where this overlaps timeForDurationRe's own match, resolveOverlaps drops
+  // it in favor of that longer, already-complete candidate.
+  const standaloneDurationRe = /\bfor\s+(\d+)\s*(min|mins|minutes|h|hr|hrs|hours)\b/gi;
+  while ((m = standaloneDurationRe.exec(text))) {
+    const n = parseInt(m[1], 10);
+    const minutes = m[2].toLowerCase().startsWith("h") ? n * 60 : n;
+    push(m, "time", { start: "", end: null, duration: minutes });
   }
 
   const namedRecurrenceRe = /\b(daily|weekly|monthly)\b/gi;
@@ -231,19 +321,33 @@ export function parseQuickAdd(
   options: ParseQuickAddOptions = {},
 ): ParseQuickAddResult {
   const isRejected = options.isRejected ?? (() => false);
-  const accepted = resolveOverlaps(collectCandidates(text, referenceDate)).filter(
+  let accepted = resolveOverlaps(collectCandidates(text, referenceDate)).filter(
     (c) => !isRejected({ start: c.start, end: c.end, kind: c.kind, text: text.slice(c.start, c.end) }),
   );
 
   const dateMatch = accepted.find((c) => c.kind === "date");
-  const timeMatch = accepted.find((c) => c.kind === "time");
   const recurrenceMatch = accepted.find((c) => c.kind === "recurrence");
+
+  // A time can be split across two matches — a standalone start ("19:00")
+  // and a detached duration ("for 1h") elsewhere in the title — so merge
+  // across every accepted "time" candidate rather than reading just the
+  // first. `accepted` is start-position sorted, so the first truthy value
+  // of each is the earliest-written one.
+  const timeValues = accepted.filter((c) => c.kind === "time").map((c) => c.value as TimeValue);
+  const startTime = timeValues.map((v) => v.start).find(Boolean) ?? null;
+  const endTime = timeValues
+    .map((v) => v.duration !== undefined && startTime ? addMinutesToTime(startTime, v.duration) : v.end)
+    .find(Boolean) ?? null;
+  if (!startTime) {
+    accepted = accepted.filter((c) => c.kind !== "time" || (c.value as TimeValue).duration === undefined);
+  }
 
   return {
     matches: accepted.map((c) => ({ start: c.start, end: c.end, kind: c.kind, text: text.slice(c.start, c.end) })),
     strippedTitle: stripMatches(text, accepted),
     dueDate: dateMatch ? (dateMatch.value as Date) : null,
-    startTime: timeMatch ? (timeMatch.value as string) : null,
+    startTime,
+    endTime,
     recurrence: recurrenceMatch ? (recurrenceMatch.value as Recurrence) : null,
   };
 }
@@ -258,7 +362,7 @@ export function parseQuickAddOrPlain(
   options: ParseQuickAddOptions = {},
 ): ParseQuickAddResult {
   if (!enabled) {
-    return { matches: [], strippedTitle: text.trim(), dueDate: null, startTime: null, recurrence: null };
+    return { matches: [], strippedTitle: text.trim(), dueDate: null, startTime: null, endTime: null, recurrence: null };
   }
   return parseQuickAdd(text, referenceDate, options);
 }

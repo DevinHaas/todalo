@@ -25,6 +25,7 @@ import {
   canonicalRecurrenceText,
   canonicalTimeText,
   initialSyncState,
+  quickAddTimeMatchText,
   spliceMatch,
   syncQuickAddFields,
 } from "@/lib/quick-add-sync";
@@ -36,7 +37,11 @@ const PARSE_DEBOUNCE_MS = 150;
 // Shared box model between the transparent input and the backdrop it sits
 // on, so highlighted spans in the backdrop line up exactly under the text
 // rendered by the input. See docs/adr/0002-quick-add-highlighting-technique.md.
-const TITLE_FIELD_CLASSES = "h-8 border-0 px-0 py-1 text-base font-medium whitespace-pre md:text-sm";
+// px-1 (rather than 0) leaves room for the highlight span's -mx-px halo below
+// so it doesn't get clipped when a match starts at the very first character.
+// The halo itself stays at 1px (not the more typical 4px) so two adjacent
+// matches separated by a single space don't visually merge into one pill.
+const TITLE_FIELD_CLASSES = "h-8 border-0 px-1 py-1 text-base font-medium whitespace-pre md:text-sm";
 
 const UNIT_OPTIONS: { value: Recurrence["unit"]; label: (n: number) => string }[] = [
   { value: "day", label: (n) => (n === 1 ? "day" : "days") },
@@ -244,16 +249,25 @@ function DatePicker({
   onChange,
   recurrence,
   onRecurrenceChange,
+  startTime,
+  endTime,
+  onStartTimeChange,
+  onEndTimeChange,
 }: {
   dueDate: Date | undefined;
   onChange: (date: Date | undefined) => void;
   recurrence: Recurrence | undefined;
   onRecurrenceChange: (recurrence: Recurrence | undefined) => void;
+  startTime: string;
+  endTime: string;
+  onStartTimeChange: (value: string) => void;
+  onEndTimeChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [everyNDays, setEveryNDays] = useState("1");
   const [customOpen, setCustomOpen] = useState(false);
   const anchor = dueDate ?? startOfToday();
+  const timeLabel = startTime && endTime ? `${startTime}-${endTime}` : startTime;
 
   return (
     <>
@@ -272,11 +286,14 @@ function DatePicker({
                 <CalendarIcon className="size-4" />
               )}
               {dueDateLabel(dueDate)}
+              {timeLabel && ` ${timeLabel}`}
               {dueDate && (
                 <X
                   className="size-3.5"
                   onClick={(e) => {
                     e.stopPropagation();
+                    // onChange cascades clearing time too — see
+                    // handleDueDateChange in TaskComposer.
                     onChange(undefined);
                   }}
                 />
@@ -284,7 +301,7 @@ function DatePicker({
             </Button>
           }
         />
-        <PopoverContent className="w-auto p-0">
+        <PopoverContent className="max-h-[calc(100dvh-1rem)] w-auto overflow-y-auto p-0">
           <div className="p-1">
             {quickDateOptions().map(({ label, day, date }) => (
               <button
@@ -319,6 +336,16 @@ function DatePicker({
               setOpen(false);
             }}
           />
+          {dueDate && (
+            <div className="border-t p-2">
+              <TimeRangeInputs
+                startTime={startTime}
+                endTime={endTime}
+                onStartTimeChange={onStartTimeChange}
+                onEndTimeChange={onEndTimeChange}
+              />
+            </div>
+          )}
           <div className="border-t p-1">
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Repeat</div>
             <button
@@ -436,12 +463,13 @@ export function TaskComposer({
       type: "seed",
       date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
       time: initialStartTime ?? "",
+      endTime: initialEndTime ?? "",
     }),
   );
-  const dueDate = syncState.date.value;
+  const dueDate = syncState.date.value ?? (syncState.time.value ? startOfToday() : undefined);
   const startTime = syncState.time.value;
+  const endTime = syncState.endTime.value;
   const recurrence = syncState.recurrence.value;
-  const [endTime, setEndTime] = useState(initialEndTime ?? "");
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -468,11 +496,20 @@ export function TaskComposer({
     dispatchSync({ type: "parse", parsed });
   }, [parsed]);
 
+  // Parsed live (not debounced) so the backdrop's offsets always match the
+  // title as-typed — separate from `parsed` above, which stays debounced to
+  // avoid re-firing the dueDate/time/recurrence sync on every keystroke.
+  const liveParsed = useMemo(
+    () => parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected }),
+    [title, smartDateRecognitionEnabled, isRejected],
+  );
+
   const segments = useMemo(() => {
-    // Only trust the debounced parse's offsets once the title has caught up
-    // to it — otherwise a highlight could momentarily land under the wrong
-    // word while the user is still mid-keystroke.
-    const matches = debouncedTitle === title ? parsed.matches : [];
+    // A match still touching the end of the title is the word currently
+    // being typed — its boundaries are still moving, so leave it plain
+    // until a following character (typically a space) closes it off.
+    // Otherwise it'd restyle on every keystroke, which reads as blinking.
+    const matches = liveParsed.matches.filter((m) => m.end < title.length);
     const result: { text: string; match: QuickAddMatch | null }[] = [];
     let cursor = 0;
     for (const match of matches) {
@@ -482,11 +519,17 @@ export function TaskComposer({
     }
     if (cursor < title.length) result.push({ text: title.slice(cursor), match: null });
     return result;
-  }, [title, debouncedTitle, parsed.matches]);
+  }, [title, liveParsed.matches]);
 
   function reject(match: QuickAddMatch) {
     setRejected((prev) => new Set(prev).add(match.text.toLowerCase()));
     dispatchSync({ type: "reject", kind: match.kind });
+    // Same date-clears-time cascade as handleDueDateChange — rejecting the
+    // date phrase shouldn't leave an orphaned, unclearable time behind.
+    // ("reject", kind: "time" already clears endTime too — see quick-add-sync.)
+    if (match.kind === "date") {
+      dispatchSync({ type: "reject", kind: "time" });
+    }
   }
 
   function syncScroll() {
@@ -519,11 +562,26 @@ export function TaskComposer({
   function handleDueDateChange(date: Date | undefined) {
     const matchText = applyManualPhrase("date", date ? canonicalDateText(date) : null);
     dispatchSync({ type: "manualDate", date, matchText });
+    // Time only makes sense attached to a date (see TimeRangeInputs) — clear
+    // it too, otherwise the badge is left showing an orphaned time range
+    // with no date and no way to edit it (the time editor only renders
+    // inside the DatePicker popover once a date is set).
+    if (!date) {
+      handleStartTimeChange("");
+      handleEndTimeChange("");
+    }
   }
 
   function handleStartTimeChange(time: string) {
     const matchText = applyManualPhrase("time", time ? canonicalTimeText(time) : null);
     dispatchSync({ type: "manualTime", time, matchText });
+  }
+
+  // endTime rides the same "time" match as startTime (a range/duration
+  // phrase covers both) but never rewrites the title — there's no canonical
+  // text for "just the end half" of a range.
+  function handleEndTimeChange(time: string) {
+    dispatchSync({ type: "manualEndTime", time, matchText: quickAddTimeMatchText(liveParsed.matches) });
   }
 
   function handleRecurrenceChange(nextRecurrence: Recurrence | undefined) {
@@ -543,8 +601,8 @@ export function TaskComposer({
       type: "seed",
       date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined),
       time: initialStartTime ?? "",
+      endTime: initialEndTime ?? "",
     });
-    setEndTime(initialEndTime ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlled, open]);
 
@@ -565,23 +623,27 @@ export function TaskComposer({
     // always clears start/end time — only dueDate reseeds from the initial
     // prop — matching this function's pre-sync behavior.
     dispatchSync({ type: "seed", date: initialDueDate ?? (defaultToToday ? startOfToday() : undefined), time: "" });
-    setEndTime("");
     setExpanded(false);
   }
 
   function submit() {
-    if (!title.trim()) return;
+    if (!title.trim() || isPending) return;
     const finalParsed = parseQuickAddOrPlain(title, smartDateRecognitionEnabled, undefined, { isRejected });
+    // Flush the latest title through the same manual-override rules before saving.
+    const finalState = syncQuickAddFields(syncState, { type: "parse", parsed: finalParsed });
     const finalTitle = finalParsed.strippedTitle || title.trim();
-    const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
-    const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;
+    const date = finalState.date.value ?? (finalState.time.value ? startOfToday() : undefined);
+    const finalDueDate = date && finalState.time.value ? combineDateAndTime(date, finalState.time.value) : date;
+    const dueDateEnd = date && finalState.time.value && finalState.endTime.value
+      ? combineDateAndTime(date, finalState.endTime.value)
+      : undefined;
     startTransition(async () => {
       await createTask({
         title: finalTitle,
         description: description || undefined,
         dueDate: finalDueDate,
         dueDateEnd,
-        recurrence,
+        recurrence: finalState.recurrence.value,
       });
       reset();
     });
@@ -605,7 +667,7 @@ export function TaskComposer({
                 role="button"
                 tabIndex={-1}
                 onClick={() => reject(segment.match!)}
-                className="relative z-10 cursor-pointer rounded bg-primary/20 pointer-events-auto"
+                className="relative z-10 inline-flex items-center cursor-pointer rounded px-px py-0.5 -mx-px bg-destructive/20 pointer-events-auto"
               >
                 {segment.text}
               </span>
@@ -619,6 +681,12 @@ export function TaskComposer({
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
           onScroll={syncScroll}
           placeholder="Task name"
           className={cn(
@@ -639,15 +707,11 @@ export function TaskComposer({
           onChange={handleDueDateChange}
           recurrence={recurrence}
           onRecurrenceChange={handleRecurrenceChange}
+          startTime={startTime}
+          endTime={endTime}
+          onStartTimeChange={handleStartTimeChange}
+          onEndTimeChange={handleEndTimeChange}
         />
-        {dueDate && (
-          <TimeRangeInputs
-            startTime={startTime}
-            endTime={endTime}
-            onStartTimeChange={handleStartTimeChange}
-            onEndTimeChange={setEndTime}
-          />
-        )}
         <StubPill icon={Flag} label="Priority" />
         <StubPill icon={AlarmClock} label="Reminders" />
         <StubPill icon={Paperclip} label="Attachment" />

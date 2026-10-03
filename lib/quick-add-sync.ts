@@ -24,12 +24,17 @@ export interface SyncField<T> {
 export interface QuickAddSyncState {
   date: SyncField<Date | undefined>;
   time: SyncField<string>;
+  // End time carries no title phrase of its own — it rides the same "time"
+  // match as `time` (a range/duration phrase covers both), so it never
+  // rewrites the title on a manual edit, unlike date/time/recurrence.
+  endTime: SyncField<string>;
   recurrence: SyncField<Recurrence | undefined>;
 }
 
 export const initialSyncState: QuickAddSyncState = {
   date: { value: undefined, overridden: false, locked: false, appliedMatchText: null },
   time: { value: "", overridden: false, locked: false, appliedMatchText: null },
+  endTime: { value: "", overridden: false, locked: false, appliedMatchText: null },
   recurrence: { value: undefined, overridden: false, locked: false, appliedMatchText: null },
 };
 
@@ -37,23 +42,29 @@ export type QuickAddSyncAction =
   | { type: "parse"; parsed: ParseQuickAddResult }
   | { type: "manualDate"; date: Date | undefined; matchText: string | null }
   | { type: "manualTime"; time: string; matchText: string | null }
+  | { type: "manualEndTime"; time: string; matchText: string | null }
   | { type: "manualRecurrence"; recurrence: Recurrence | undefined; matchText: string | null }
   | { type: "reject"; kind: QuickAddMatchKind }
   | { type: "reset" }
   // Seeds a baseline value (e.g. TaskComposer's `initialDueDate` prop) that
   // isn't a user override — unlike `manualDate`/`manualTime`, live parsing
   // stays free to take over the moment a phrase matches.
-  | { type: "seed"; date: Date | undefined; time: string };
+  | { type: "seed"; date: Date | undefined; time: string; endTime?: string };
 
 function findMatch(matches: QuickAddMatch[], kind: QuickAddMatchKind): QuickAddMatch | undefined {
   return matches.find((m) => m.kind === kind);
 }
 
-function applyParse<T>(field: SyncField<T>, match: QuickAddMatch | undefined, parsedValue: T): SyncField<T> {
+export function quickAddTimeMatchText(matches: QuickAddMatch[]): string | null {
+  return matches.filter((match) => match.kind === "time").map((match) => match.text).join(" ") || null;
+}
+
+function applyParse<T>(field: SyncField<T>, match: Pick<QuickAddMatch, "text"> | undefined, parsedValue: T): SyncField<T> {
   if (field.locked) return field;
+  // An untouched seed or manual value has no phrase for parsing to remove.
+  if (!match && field.appliedMatchText === null) return field;
   if (field.overridden) {
     if (match && match.text.toLowerCase() === field.appliedMatchText?.toLowerCase()) return field;
-    if (!match && field.appliedMatchText === null) return field;
     // The anchoring phrase changed or disappeared — resume live parsing.
   }
   return { value: parsedValue, overridden: false, locked: false, appliedMatchText: match?.text ?? null };
@@ -62,10 +73,13 @@ function applyParse<T>(field: SyncField<T>, match: QuickAddMatch | undefined, pa
 export function syncQuickAddFields(state: QuickAddSyncState, action: QuickAddSyncAction): QuickAddSyncState {
   switch (action.type) {
     case "parse": {
-      const { matches, dueDate, startTime, recurrence } = action.parsed;
+      const { matches, dueDate, startTime, endTime, recurrence } = action.parsed;
+      const timeMatch = findMatch(matches, "time");
+      const endTimeMatchText = quickAddTimeMatchText(matches);
       return {
         date: applyParse(state.date, findMatch(matches, "date"), dueDate ?? undefined),
-        time: applyParse(state.time, findMatch(matches, "time"), startTime ?? ""),
+        time: applyParse(state.time, timeMatch, startTime ?? ""),
+        endTime: applyParse(state.endTime, endTimeMatchText ? { text: endTimeMatchText } : undefined, endTime ?? ""),
         recurrence: applyParse(state.recurrence, findMatch(matches, "recurrence"), recurrence ?? undefined),
       };
     }
@@ -78,6 +92,11 @@ export function syncQuickAddFields(state: QuickAddSyncState, action: QuickAddSyn
       return {
         ...state,
         time: { value: action.time, overridden: true, locked: false, appliedMatchText: action.matchText },
+      };
+    case "manualEndTime":
+      return {
+        ...state,
+        endTime: { value: action.time, overridden: true, locked: false, appliedMatchText: action.matchText },
       };
     case "manualRecurrence":
       return {
@@ -96,7 +115,14 @@ export function syncQuickAddFields(state: QuickAddSyncState, action: QuickAddSyn
         return { ...state, date: { value: undefined, overridden: true, locked: true, appliedMatchText: null } };
       }
       if (action.kind === "time") {
-        return { ...state, time: { value: "", overridden: true, locked: true, appliedMatchText: null } };
+        // A range/duration phrase covers both times, so rejecting it clears
+        // and locks both — otherwise endTime would be left orphaned with no
+        // start and no way to clear it from the title.
+        return {
+          ...state,
+          time: { value: "", overridden: true, locked: true, appliedMatchText: null },
+          endTime: { value: "", overridden: true, locked: true, appliedMatchText: null },
+        };
       }
       return {
         ...state,
@@ -110,6 +136,7 @@ export function syncQuickAddFields(state: QuickAddSyncState, action: QuickAddSyn
         ...initialSyncState,
         date: { ...initialSyncState.date, value: action.date },
         time: { ...initialSyncState.time, value: action.time },
+        endTime: { ...initialSyncState.endTime, value: action.endTime ?? "" },
       };
   }
 }

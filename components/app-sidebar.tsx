@@ -35,8 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TaskQuickAdd } from "@/components/tasks/task-quick-add";
+import { TaskComposer } from "@/components/tasks/task-composer";
 import { authClient } from "@/lib/auth-client";
 
 // ponytail: Filters & Labels / Goals / Reporting / More have no backing
@@ -61,9 +60,9 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="gap-3">
-        <SidebarTrigger className="self-end" />
+        <SidebarTrigger className="self-end group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:self-start" />
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium hover:bg-sidebar-accent">
+          <DropdownMenuTrigger aria-label="Account menu" className="flex items-center gap-2 rounded-md px-1 py-1 text-sm font-medium hover:bg-sidebar-accent group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
             <Avatar className="size-6">
               <AvatarImage src={user.image ?? undefined} alt={user.name} />
               <AvatarFallback>{user.name.slice(0, 1).toUpperCase()}</AvatarFallback>
@@ -85,20 +84,16 @@ export function AppSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 px-1 text-sm font-medium text-brand hover:opacity-80"
-          >
-            <Plus className="size-4" />
-            <span className="group-data-[collapsible=icon]:hidden">Add task</span>
-          </button>
-          <DialogContent>
-            <DialogTitle>Add task</DialogTitle>
-            <TaskQuickAdd onCreated={() => setAddOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <button
+          type="button"
+          aria-label="Add task"
+          onClick={() => setAddOpen(true)}
+          className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-brand hover:opacity-80 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+        >
+          <Plus className="size-4" />
+          <span className="group-data-[collapsible=icon]:hidden">Add task</span>
+        </button>
+        <TaskComposer open={addOpen} onOpenChange={setAddOpen} />
       </SidebarHeader>
 
       <SidebarContent>
