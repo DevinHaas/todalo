@@ -142,6 +142,8 @@ export const tasks = pgTable(
     sectionId: text("section_id").references(() => sections.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     description: text("description"),
+    priority: integer("priority").default(4).notNull(),
+    deadline: timestamp("deadline"),
     status: taskStatus("status").default("todo").notNull(),
     dueDate: timestamp("due_date"),
     dueDateEnd: timestamp("due_date_end"),
@@ -176,6 +178,29 @@ export const taskAttachments = pgTable("task_attachments", {
 export const projectRelations = relations(projects, ({ many }) => ({
   tasks: many(tasks),
 }));
+
+export const labels = pgTable("labels", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("labels_userId_idx").on(table.userId)]);
+
+export const taskLabels = pgTable("task_labels", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  labelId: text("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
+}, table => [uniqueIndex("task_labels_task_label_idx").on(table.taskId, table.labelId), index("task_labels_userId_idx").on(table.userId)]);
+
+export const savedFilters = pgTable("saved_filters", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  definition: jsonb("definition").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("saved_filters_userId_idx").on(table.userId)]);
 
 export const taskRelations = relations(tasks, ({ one }) => ({
   project: one(projects, {
