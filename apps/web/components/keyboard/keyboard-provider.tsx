@@ -14,6 +14,7 @@ export interface KeyboardHandlerOptions {
   scope?: RefObject<HTMLElement | null>;
   allowInEditor?: boolean;
   allowInModal?: boolean;
+  capture?: boolean;
 }
 type Handler = (event?: KeyboardEvent) => void | boolean;
 type Registration = { handlers: Record<string, Handler>; options: KeyboardHandlerOptions };
@@ -36,11 +37,11 @@ export function useKeyboardCommands(handlers: Record<string, Handler>, options: 
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; }, [handlers]);
   const ids = Object.keys(handlers).sort().join("|");
-  const { enabled = true, scope, allowInEditor = false, allowInModal = false } = options;
+  const { enabled = true, scope, allowInEditor = false, allowInModal = false, capture = false } = options;
   useEffect(() => {
     const wrappers = Object.fromEntries(ids.split("|").filter(Boolean).map(id => [id, (event?: KeyboardEvent) => handlersRef.current[id]?.(event)]));
-    return register({ handlers: wrappers, options: { enabled, scope, allowInEditor, allowInModal } });
-  }, [register, ids, enabled, scope, allowInEditor, allowInModal]);
+    return register({ handlers: wrappers, options: { enabled, scope, allowInEditor, allowInModal, capture } });
+  }, [register, ids, enabled, scope, allowInEditor, allowInModal, capture]);
 }
 const spoken: Record<string, string> = { Meta: "Command", Ctrl: "Control", Alt: "Alt or Option", ArrowUp: "Up arrow", ArrowDown: "Down arrow", ArrowLeft: "Left arrow", ArrowRight: "Right arrow", Escape: "Escape", Backspace: "Backspace" };
 const display: Record<string, string> = { Meta: "⌘", Ctrl: "Ctrl", Alt: "⌥", Shift: "⇧", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Escape: "Esc", Backspace: "⌫", Space: "Space" };
@@ -73,14 +74,15 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
   const [helpOpen, setHelpOpen] = useState(false);
   const registrations = useRef(new Set<Registration>());
   const recording = useRef(false); const composing = useRef(false); const dispatcher = useRef(new KeyboardDispatcher());
+  const captureDispatcher = useRef(new KeyboardDispatcher());
   const closeRef = useRef<HTMLButtonElement>(null);
   const focusBeforeHelp = useRef<HTMLElement | null>(null);
-  const setRecording = useCallback((active: boolean) => { recording.current = active; dispatcher.current.reset(); }, []);
+  const setRecording = useCallback((active: boolean) => { recording.current = active; dispatcher.current.reset(); captureDispatcher.current.reset(); }, []);
   const resolved = useMemo(() => safePreferences(preferences, platform), [preferences, platform]);
   const bindings = useCallback((id: string) => effectiveBindings(id, resolved.preferences, platform), [resolved.preferences, platform]);
   const register = useCallback((registration: Registration) => {
-    registrations.current.add(registration); dispatcher.current.reset();
-    return () => { registrations.current.delete(registration); dispatcher.current.reset(); };
+    registrations.current.add(registration); dispatcher.current.reset(); captureDispatcher.current.reset();
+    return () => { registrations.current.delete(registration); dispatcher.current.reset(); captureDispatcher.current.reset(); };
   }, []);
   const openHelp = useCallback(() => {
     focusBeforeHelp.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -120,13 +122,15 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
         localStorage.setItem("todalo-theme", dark ? "dark" : "light");
       },
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (recording.current || composing.current || event.isComposing || event.defaultPrevented) { dispatcher.current.reset(); return; }
+    const onKey = (event: KeyboardEvent, capturePhase = false) => {
+      const activeDispatcher = capturePhase ? captureDispatcher.current : dispatcher.current;
+      if (recording.current || composing.current || event.isComposing || event.defaultPrevented) { activeDispatcher.reset(); return; }
       const editor = isEditor(event.target);
       const modal = Boolean(document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]'));
       const candidates: { command: KeyboardCommand; handler: Handler }[] = [];
       for (const registration of registrations.current) {
         const options = registration.options;
+        if (Boolean(options.capture) !== capturePhase) continue;
         if (options.enabled === false || (editor && !options.allowInEditor) || (modal && !options.allowInModal)) continue;
         if (options.scope?.current && !options.scope.current.contains(document.activeElement)) continue;
         for (const [id, handler] of Object.entries(registration.handlers)) {
@@ -134,20 +138,22 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
           if (command && command.availability === "available") candidates.push({ command, handler });
         }
       }
-      if (!editor && !modal) for (const [id, handler] of Object.entries(globalHandlers)) {
+      if (!capturePhase && !editor && !modal) for (const [id, handler] of Object.entries(globalHandlers)) {
         const command = keyboardCommands.find(item => item.id === id);
         if (command) candidates.push({ command, handler });
       }
       candidates.sort((a, b) => priority[b.command.context] - priority[a.command.context]);
+      if (capturePhase && !candidates.length) { activeDispatcher.reset(); return; }
       const context = `${pathname}:${editor}:${modal}:${candidates.map(item => item.command.id).join(",")}`;
-      const result = dispatcher.current.dispatch(event, candidates.map(({ command, handler }) => ({ id: command.id, bindings: bindings(command.id), repeat: command.repeat, handle: () => handler(event) })), context);
+      const result = activeDispatcher.dispatch(event, candidates.map(({ command, handler }) => ({ id: command.id, bindings: bindings(command.id), repeat: command.repeat, handle: () => handler(event) })), context);
       if (result.consumed) { event.preventDefault(); event.stopPropagation(); }
     };
-    const reset = () => dispatcher.current.reset();
+    const reset = () => { dispatcher.current.reset(); captureDispatcher.current.reset(); };
+    const onCapture = (event: KeyboardEvent) => onKey(event, true);
     const start = () => { composing.current = true; reset(); }; const end = () => { composing.current = false; reset(); };
-    window.addEventListener("keydown", onKey); window.addEventListener("blur", reset);
+    window.addEventListener("keydown", onKey); window.addEventListener("keydown", onCapture, true); window.addEventListener("blur", reset);
     document.addEventListener("focusin", reset); document.addEventListener("compositionstart", start); document.addEventListener("compositionend", end);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); document.removeEventListener("compositionstart", start); document.removeEventListener("compositionend", end); };
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keydown", onCapture, true); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); document.removeEventListener("compositionstart", start); document.removeEventListener("compositionend", end); };
   }, [bindings, pathname, router, openHelp, toggleSidebar, openRamble]);
   const displayedSyncError = syncError ?? (resolved.errors.length ? "Saved shortcuts conflict with updated defaults. Your previous effective bindings are retained. Resolve conflicts in Settings." : null);
   const value = useMemo(() => ({ preferences, platform, syncError: displayedSyncError, bindings, openHelp, save, reload, register, setRecording }), [preferences, platform, displayedSyncError, bindings, openHelp, save, reload, register, setRecording]);
@@ -156,7 +162,7 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
     {children}
     {displayedSyncError && <div role="status" className="fixed bottom-3 left-3 z-40 max-w-sm rounded border bg-background p-3 text-sm shadow">{displayedSyncError} <button className="underline" onClick={() => router.push("/settings#keyboard-shortcuts")}>Shortcut settings</button></div>}
     <Sheet open={helpOpen} onOpenChange={open => { setHelpOpen(open); if (!open) requestAnimationFrame(() => focusBeforeHelp.current?.isConnected && focusBeforeHelp.current.focus()); }}>
-      <SheetContent showCloseButton={false} initialFocus={closeRef} className="gap-0 data-[side=right]:w-full sm:max-w-lg motion-reduce:transition-none">
+      <SheetContent showCloseButton={false} initialFocus={closeRef} className="gap-0 font-sans data-[side=right]:w-full data-[side=right]:sm:max-w-lg sm:data-[side=right]:inset-y-4 sm:data-[side=right]:right-4 sm:data-[side=right]:h-auto sm:rounded-xl sm:border motion-reduce:transition-none motion-reduce:transform-none">
         <SheetHeader className="shrink-0 border-b">
           <div className="flex items-center justify-between gap-4"><SheetTitle>Keyboard Shortcuts</SheetTitle><SheetClose ref={closeRef} render={<Button variant="ghost" size="icon-sm" aria-label="Close keyboard shortcuts" />}>×</SheetClose></div>
           <SheetDescription><button className="underline" onClick={() => { setHelpOpen(false); router.push("/settings#keyboard-shortcuts"); }}>Customize shortcuts in Settings</button></SheetDescription>

@@ -1,5 +1,12 @@
 import { expect, it, vi } from "vitest";
-import { ProjectFilePasteController } from "./project-file-paste";
+import { ProjectFilePasteController, isProjectPasteTarget } from "./project-file-paste";
+it("allows default page focus and active project focus while excluding sidebar focus", () => {
+  const body = {}; const projectControl = {}; const sidebar = {};
+  const scope = { contains: (target: unknown) => target === projectControl };
+  expect(isProjectPasteTarget(body, scope, body)).toBe(true);
+  expect(isProjectPasteTarget(projectControl, scope, body)).toBe(true);
+  expect(isProjectPasteTarget(sidebar, scope, body)).toBe(false);
+});
 
 function fixture(bindings = ["Meta+v"]) {
   const upload = vi.fn(async (files: File[]) => { void files; }); const error = vi.fn();

@@ -695,10 +695,14 @@ export function TaskComposer({
     "editor.submit-below": () => document.activeElement?.tagName !== "INPUT" ? false : submit("below"),
     "editor.save-above": () => submit("above"),
     "general.dismiss": () => reset(),
+  }, { enabled: expanded, scope, allowInEditor: true, allowInModal: controlled });
+  // Dialog internals stop arrow propagation. Capture only these owned title
+  // commands; leave save/dismiss in bubbling phase for native popup behavior.
+  useKeyboardCommands({
     "quick-add.description": () => { if (document.activeElement !== inputRef.current) return false; setDescriptionOpen(true); requestAnimationFrame(() => descriptionRef.current?.focus()); },
     "quick-add.actions": () => { if (document.activeElement !== inputRef.current) return false; setMetadataFocus("priority"); setActionsOpen(true); },
     "quick-add.deadline": () => { if (document.activeElement !== inputRef.current) return false; setMetadataFocus("deadline"); setActionsOpen(true); },
-  }, { enabled: expanded, scope, allowInEditor: true, allowInModal: controlled });
+  }, { enabled: expanded, scope, allowInEditor: true, allowInModal: controlled, capture: true });
 
   const form = (
     <div ref={scope} className="space-y-2">

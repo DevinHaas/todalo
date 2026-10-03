@@ -3,33 +3,31 @@
 import { useRef, useState, useTransition } from "react";
 import { useTaskKeyboard } from "./task-keyboard-provider";
 import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
-import { bulkTaskMetadata } from "@/app/(app)/tasks/metadata-actions";
+import { bulkTaskMetadata, getTaskEditorData } from "@/app/(app)/tasks/metadata-actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { TaskMetadataFields, useMetadataOptions, dateInputValue, dateInputDate } from "./task-metadata-fields";
 import { copyTaskUrl } from "@/lib/task-url";
-import type { Task } from "@/lib/tasks";
 
-export function TaskMetadataActions({ tasks, toolbar = false }: { tasks: Task[]; toolbar?: boolean }) {
+export function TaskMetadataActions({ toolbar = false }: { toolbar?: boolean }) {
   const keyboard = useTaskKeyboard(); const scope = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<{ field: "priority" | "labels" | "deadline"; ids: string[] } | null>(null);
   const [priority, setPriority] = useState(4); const [deadline, setDeadline] = useState(""); const [labelIds, setLabelIds] = useState<string[]>([]);
   const [error, setError] = useState(""); const [message, setMessage] = useState(""); const [pending, startTransition] = useTransition();
   const loading = useMetadataOptions(Boolean(dialog));
-  function activeTask() {
-    const row = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>("[data-task-id]") : null;
-    return row && keyboard?.root.current?.contains(row) ? tasks.find(task => task.id === row.dataset.taskId) : undefined;
-  }
-  function targets() { return keyboard?.selectedIds.size ? [...keyboard.selectedIds] : activeTask() ? [activeTask()!.id] : []; }
+  function activeTask() { return keyboard?.resolveTargets().task; }
+  function targets() { return keyboard?.resolveTargets().ids ?? []; }
   function run(action: () => Promise<unknown>) { startTransition(async () => { try { setError(""); setMessage(""); await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Task metadata could not save"); } }); }
   function close() { setDialog(null); requestAnimationFrame(() => opener.current?.isConnected && opener.current.focus()); }
   function show(field: "priority" | "labels" | "deadline") {
     const ids = targets(); if (!ids.length) return false;
-    const task = tasks.find(task => task.id === ids[0])!;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setPriority(task.priority); setDeadline(dateInputValue(task.deadline)); setLabelIds(task.labelIds);
-    setError(""); setDialog({ field, ids });
+    run(async () => {
+      const task = await getTaskEditorData(ids[0]);
+      setPriority(task.priority); setDeadline(dateInputValue(task.deadline)); setLabelIds(task.labelIds);
+      setDialog({ field, ids });
+    });
   }
   useKeyboardCommands({
     ...Object.fromEntries([1, 2, 3, 4].map(value => [`task.priority-${value}`, () => { const ids = targets(); if (!ids.length) return false; run(() => bulkTaskMetadata({ ids, priority: value })); }])),

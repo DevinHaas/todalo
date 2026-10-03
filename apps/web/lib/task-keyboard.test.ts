@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { TaskFocusController, taskTreeOrder } from "./task-keyboard";
 
 describe("visible task keyboard focus and selection", () => {
+  it("declines remembered task focus on unrelated controls but retains selected toolbar targets", () => {
+    const controller = new TaskFocusController(); controller.setVisible(["first", "second"]); controller.focus("first");
+    expect(controller.resolveTargets(null)).toEqual([]);
+    expect(controller.resolveTargets("second")).toEqual(["second"]);
+    controller.toggleSelection();
+    expect(controller.resolveTargets(null)).toEqual([]);
+    expect(controller.resolveTargets(null, true)).toEqual(["first"]);
+  });
   it("navigates the visible collection, selects independently and restores nearest remaining focus", () => {
     const controller = new TaskFocusController();
     controller.setVisible(["first", "second", "third"]);

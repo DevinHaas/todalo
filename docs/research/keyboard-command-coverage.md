@@ -15,7 +15,7 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `general.dismiss` | Dismiss or cancel | editor | Escape | Escape | available / 1 |  |
 | `general.search` | Search | global | / or f | / or f | available / 2 |  |
 | `general.quick-find` | Quick Find | global | Meta+k | Ctrl+k | available / 2 |  |
-| `view.toggle-nested` | Toggle nested tasks and sections | view | Meta+Alt+0 | Ctrl+Alt+0 | available / 2 |  |
+| `view.toggle-nested` | Toggle nested tasks and sections | view | Meta+Alt+0 | Ctrl+Alt+0 | available / 2 | Declines while project sorting is active. |
 | `navigation.home` | Home | global | h or g then h | h or g then h | available / 2 |  |
 | `navigation.inbox` | Inbox | global | g then i | g then i | available / 2 |  |
 | `navigation.today` | Today | global | g then t | g then t | available / 1 |  |
@@ -61,7 +61,7 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `task.nest` | Nest task | task | Ctrl+] | Ctrl+] | available / 2 | Explicit Control on macOS; use a custom binding on layouts without dedicated brackets. |
 | `task.unnest` | Unnest task | task | Ctrl+[ | Ctrl+[ | available / 2 |  |
 | `task.toggle-children` | Toggle child tasks | task | Shift+e | Shift+e | available / 2 |  |
-| `view.layout` | Switch layout | view | Shift+v | Shift+v | planned / 4 |  |
+| `view.layout` | Switch layout | view | Shift+v | Shift+v | available / 4 |  |
 | `project.section` | Create section | project | s | s | available / 2 |  |
 | `project.sort-date` | Sort by date | project | d | d | available / 2 | Uses web project baseline D; macOS sorting subsection contradicts with Option+D. |
 | `project.sort-priority` | Sort by priority | project | p | p | available / 3 | Web project baseline; macOS Option+P entry is disputed. |
@@ -69,13 +69,13 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `project.menu` | Project action menu | project | w | w | available / 2 |  |
 | `view.first` | First task | view | Meta+ArrowUp | Ctrl+Home | available / 2 |  |
 | `view.last` | Last task | view | Meta+ArrowDown | Ctrl+End | available / 2 |  |
-| `upcoming.today` | Upcoming: go to today | upcoming | Alt+Shift+y | Home | planned / 4 |  |
-| `upcoming.next-week` | Upcoming: next week | upcoming | Shift+ArrowRight | Shift+ArrowRight | planned / 4 |  |
-| `upcoming.previous-week` | Upcoming: previous week | upcoming | Shift+ArrowLeft | Shift+ArrowLeft | planned / 4 |  |
-| `calendar.today` | Calendar: go to today | calendar | t or Alt+Shift+y | t | planned / 4 | Windows Option+Shift+Y is unresolved and not silently adapted. |
-| `calendar.next-week` | Calendar: next week | calendar | Shift+ArrowRight | Shift+ArrowRight | planned / 4 |  |
-| `calendar.previous-week` | Calendar: previous week | calendar | Shift+ArrowLeft | Shift+ArrowLeft | planned / 4 |  |
-| `task.paste-file` | Paste file as a task | project | Meta+v | Ctrl+v | planned / 4 |  |
+| `upcoming.today` | Upcoming: go to today | upcoming | Alt+Shift+y | Home | available / 4 |  |
+| `upcoming.next-week` | Upcoming: next week | upcoming | Shift+ArrowRight | Shift+ArrowRight | available / 4 |  |
+| `upcoming.previous-week` | Upcoming: previous week | upcoming | Shift+ArrowLeft | Shift+ArrowLeft | available / 4 |  |
+| `calendar.today` | Calendar: go to today | calendar | t or Alt+Shift+y | t | available / 4 | Windows Option+Shift+Y is unresolved and not silently adapted. |
+| `calendar.next-week` | Calendar: next week | calendar | Shift+ArrowRight | Shift+ArrowRight | available / 4 |  |
+| `calendar.previous-week` | Calendar: previous week | calendar | Shift+ArrowLeft | Shift+ArrowLeft | available / 4 |  |
+| `task.paste-file` | Paste file as a task | project | Meta+v | Ctrl+v | available / 4 | Native file paste in the active project/default page focus; custom bindings require Clipboard API permission and may expose only images without original filenames. |
 | `quick-add.description` | Reveal description | quick-add | ArrowDown | ArrowDown | available / 3 | Scoped to the composing task name input. |
 | `quick-add.actions` | Reveal additional actions | quick-add | Shift+ArrowDown | Shift+ArrowDown | available / 3 | Scoped to the composing task name input. |
 | `quick-add.deadline` | Choose deadline while composing | quick-add | { | { | available / 3 | Scoped command; existing text syntax parsing is unchanged. |

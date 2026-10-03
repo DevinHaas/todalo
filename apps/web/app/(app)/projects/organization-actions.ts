@@ -14,7 +14,7 @@ const destination = z.object({ projectId: z.string().min(1).nullable(), sectionI
 export async function getOrganizationDestinations() {
   const userId = await requireUserId();
   const [projects, sections] = await Promise.all([getProjectsForUser(userId), getSectionsForUser(userId)]);
-  return { projects, sections };
+  return { projects: projects.map(({ id, name }) => ({ id, name })), sections: sections.map(({ id, projectId, name }) => ({ id, projectId, name })) };
 }
 export async function createSection(projectId: string, name: string) {
   const userId = await requireUserId();
@@ -22,7 +22,7 @@ export async function createSection(projectId: string, name: string) {
   await assertTaskOrganization({ userId, projectId: parsed.projectId, sectionId: null });
   const [section] = await db.insert(sections).values({ userId, ...parsed }).returning();
   revalidatePath("/", "layout");
-  return section;
+  return { id: section.id, projectId: section.projectId, name: section.name };
 }
 export async function deleteSection(id: string) {
   const userId = await requireUserId();
