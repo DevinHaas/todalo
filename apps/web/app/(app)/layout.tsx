@@ -8,6 +8,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DisplaySettingsProvider, DisplayMenu, LayoutSwitcher } from "@/components/tasks/display-settings";
 import { SmartDateRecognitionProvider } from "@/components/settings/smart-date-recognition";
 import { CalendarSyncListener } from "@/components/calendar-sync-listener";
+import { RambleProvider } from "@/components/ramble/ramble-provider";
+import { getRambleProjects } from "@/lib/ramble-projects";
 
 export default async function AppLayout({
   children,
@@ -20,13 +22,15 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [todayCount, smartDateRecognitionEnabled] = await Promise.all([
+  const [todayCount, smartDateRecognitionEnabled, rambleProjects] = await Promise.all([
     getTodayTaskCount(session.user.id),
     getSmartDateRecognitionEnabled(session.user.id),
+    getRambleProjects(session.user.id),
   ]);
 
   return (
     <SmartDateRecognitionProvider initialEnabled={smartDateRecognitionEnabled}>
+      <RambleProvider projects={rambleProjects}>
       <SidebarProvider>
         <CalendarSyncListener />
         <AppSidebar user={session.user} todayCount={todayCount} />
@@ -40,6 +44,7 @@ export default async function AppLayout({
           </DisplaySettingsProvider>
         </SidebarInset>
       </SidebarProvider>
+      </RambleProvider>
     </SmartDateRecognitionProvider>
   );
 }

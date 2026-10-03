@@ -1,18 +1,14 @@
 "use client";
 
 import { useTransition } from "react";
-import { format } from "date-fns";
-import { Inbox, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import type { Task } from "@/lib/tasks";
-import { isOverdue, hasDueTime } from "@/lib/task-dates";
-
-function formatDueDate(dueDate: Date) {
-  return format(dueDate, hasDueTime(dueDate) ? "d MMM HH:mm" : "d MMM");
-}
+import { isOverdue } from "@/lib/task-dates";
+import { DatePill, ProjectPill } from "@/components/tasks/task-pills";
 
 export function TaskRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
@@ -37,19 +33,8 @@ export function TaskRow({ task }: { task: Task }) {
           {task.title}
         </button>
       </TaskEditDialog>
-      {dueDate && (
-        <span
-          className={
-            isOverdue(task) ? "text-xs font-medium text-destructive" : "text-xs text-muted-foreground"
-          }
-        >
-          {formatDueDate(dueDate)}
-        </span>
-      )}
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Inbox className="size-3.5" />
-        Inbox
-      </span>
+      {dueDate && <DatePill dueDate={dueDate} overdue={isOverdue(task)} />}
+      <ProjectPill />
       <Button
         variant="ghost"
         size="sm"
