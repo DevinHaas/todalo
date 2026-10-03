@@ -161,6 +161,18 @@ export const tasks = pgTable(
   ],
 );
 
+// Bounded attachments live separately so ordinary task reads never load content.
+export const taskAttachments = pgTable("task_attachments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  mediaType: text("media_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("task_attachments_taskId_idx").on(table.taskId)]);
+
 export const projectRelations = relations(projects, ({ many }) => ({
   tasks: many(tasks),
 }));
