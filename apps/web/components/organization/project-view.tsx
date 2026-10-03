@@ -24,7 +24,9 @@ export function ProjectView({ project, sections, tasks }: { project: { id: strin
   const [sectionOpen, setSectionOpen] = useState(false); const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState(""); const [projectName, setProjectName] = useState(project.name); const [error, setError] = useState(""); const [pending, startTransition] = useTransition();
   const sorted = tasks.filter(task => showCompleted || task.status !== "done").sort((a, b) => sort === "name" ? a.title.localeCompare(b.title) : sort === "date" ? (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity) : a.sortOrder - b.sortOrder);
-  useKeyboardCommands({ "project.section": () => setSectionOpen(true), "project.menu": () => setMenuOpen(true), "project.sort-date": () => setSort("date"), "project.sort-name": () => setSort("name") }, { scope });
+  // This route mounts a single project. Its commands also work before a task
+  // takes focus; focused-task commands retain dispatcher precedence.
+  useKeyboardCommands({ "project.section": () => setSectionOpen(true), "project.menu": () => setMenuOpen(true), "project.sort-date": () => setSort("date"), "project.sort-name": () => setSort("name") });
   function run(action: () => Promise<unknown>) { startTransition(async () => { try { setError(""); await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save changes"); } }); }
   const groups = [{ id: null, name: "Tasks" }, ...sections];
   return <div ref={scope} tabIndex={-1} className="space-y-5 outline-none" data-project-id={project.id}>

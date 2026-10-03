@@ -67,6 +67,10 @@ describe("authenticated organization actions", () => {
     await updateTask({ id: "other", parentId: "parent" });
     expect((await getTasksForUser("alice")).find(task => task.id === "other")).toMatchObject({ parentId: "parent", projectId: "work", sectionId: "todo" });
   });
+  it("carries children when an existing editor changes the parent's destination", async () => {
+    await updateTask({ id: "parent", projectId: null });
+    expect((await getTasksForUser("alice")).find(task => task.id === "child")).toMatchObject({ projectId: null, sectionId: null, parentId: "parent" });
+  });
   it("creates sections retrievable only from the signed-in account", async () => {
     await createSection("work", "Review");
     expect((await getOrganizationDestinations()).sections.map(section => section.name)).toEqual(["To do", "Review"]);

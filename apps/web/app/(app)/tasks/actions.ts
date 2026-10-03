@@ -93,6 +93,8 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
   const sectionId = data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId;
   await assertTaskOrganization({ userId, projectId, sectionId });
   if (data.projectId !== undefined) data.sectionId = sectionId;
+  const organizationChanged = projectId !== owned.projectId || sectionId !== owned.sectionId;
+  if (organizationChanged && owned.parentId && data.parentId === undefined) data.parentId = null;
   if (data.parentId !== undefined) {
     const [existing] = await db.select({ id: tasks.id }).from(tasks)
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
@@ -103,6 +105,7 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
     .update(tasks)
     .set(data)
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  if (organizationChanged) await db.update(tasks).set({ projectId, sectionId }).where(and(eq(tasks.parentId, id), eq(tasks.userId, userId)));
   if ("dueDate" in data) await syncToCalendar(userId, id);
   revalidatePath("/", "layout");
 }
