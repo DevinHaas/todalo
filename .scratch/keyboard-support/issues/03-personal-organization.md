@@ -1,7 +1,7 @@
 # 03: Inbox, projects, sections, search and task organization
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver Inbox/project/Home navigation, searchable Quick Find, project menus and 
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-

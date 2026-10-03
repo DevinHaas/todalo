@@ -1,7 +1,7 @@
 # 02: Focused task navigation, selection and editor actions
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 01
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver current-task keyboard support across active lists and boards: visible fo
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-

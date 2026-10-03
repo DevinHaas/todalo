@@ -1,7 +1,7 @@
 # 01: Customizable shortcuts, account persistence and help
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: None
 
 ## What to build
@@ -20,3 +20,9 @@ Deliver the shared platform-aware command registry, safe browser dispatcher, acc
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
+
+## Answer
+
+Implemented in `60f121c`, integrated by merge `a585293` on `codex/keyboard-support`. The shared registry, browser dispatcher, account-owned preference actions, settings recorder and validation, help panel, and current general commands are available. See [command coverage](../../../docs/research/keyboard-command-coverage.md) and [keyboard behavior tests](../../../apps/web/lib/keyboard.test.ts).
+
+Integration verification: 14 test files / 228 tests pass; web typecheck passes. The implementer also verified changed-file lint. Migration `drizzle/0006_keyboard_preferences.sql` and its journal/snapshot are committed but not executed against a live database. Browser UI checks and real platform/browser capture checks remain part of ticket 07; unresolved research distinctions remain explicit in coverage.
