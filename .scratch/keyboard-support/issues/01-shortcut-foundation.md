@@ -1,7 +1,7 @@
 # 01: Customizable shortcuts, account persistence and help
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: None
 
 ## What to build
@@ -20,4 +20,3 @@ Deliver the shared platform-aware command registry, safe browser dispatcher, acc
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
-
