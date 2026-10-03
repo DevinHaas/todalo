@@ -1,7 +1,7 @@
 # 02: Focused task navigation, selection and editor actions
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 01
 
 ## What to build
@@ -20,3 +20,9 @@ Deliver current-task keyboard support across active lists and boards: visible fo
 [Canonical specification](../spec.md). Original research and reference are linked there. The implementation request approves all four stages; no further start confirmation is required.
 
 ## Comments
+
+## Answer
+
+Implemented in `5afc7db`, integrated by merge `0cc26a7`. Visible task focus, list/board navigation, keyboard selection, focused/bulk completion and deletion, date commands, details/menu commands, composer placement, and editor-scoped actions share effective saved bindings. [Task keyboard tests](../../../apps/web/lib/task-keyboard.test.ts) cover focus/selection policy, nearest remaining task, and dispatch action targeting.
+
+Integration verification: 15 test files / 232 tests and web typecheck pass. Worker verified targeted lint; the three existing baseline lint errors persist. Organization integration must preserve null/bulk/placement task mutations and attach `OrganizationTaskActions` inside the task provider with Composer section identity. Browser interaction checks remain in ticket 07.
