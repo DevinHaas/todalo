@@ -11,6 +11,7 @@ import { TaskComposer } from "./task-composer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { OrganizationTaskActions } from "@/components/organization/organization-task-actions";
+import { TaskMetadataActions } from "./task-metadata-actions";
 
 type Edge = "top" | "bottom" | "above" | "below";
 type Mode = "details" | "inline" | "date" | "menu";
@@ -102,11 +103,13 @@ export function TaskKeyboardProvider({ tasks, children, projectId }: { tasks: Ta
   return <TaskKeyboardContext.Provider value={{ focusedId: state.focused, selectedIds: state.selected, focus, open, mutate, insert, root, collapsedIds, toggleChildren, toggleAllChildren, creationSlot }}>
     <div ref={root} tabIndex={-1} aria-label="Task collection" className="outline-none">
       <OrganizationTaskActions tasks={tasks} />
+      <TaskMetadataActions tasks={tasks} />
       {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       {state.selected.size > 0 && <div ref={toolbar} role="toolbar" aria-label="Selected task actions" className="mb-3 flex flex-wrap items-center gap-2 rounded border bg-muted p-2">
         <span className="text-sm">{state.selected.size} selected</span>
         <Button size="sm" disabled={pending} onClick={() => mutate("complete")}>Complete <ShortcutHint commandId="task.complete" /></Button>
         <Button size="sm" variant="outline" disabled={pending} onClick={() => mutate("delete")}>Delete <ShortcutHint commandId="task.delete" /></Button>
+        <TaskMetadataActions tasks={tasks} toolbar />
         <Button size="sm" variant="ghost" onClick={() => { state.selected.clear(); refresh(value => value + 1); focusElement(state.focused); }}>Clear selection</Button>
       </div>}
       {creation?.edge === "top" ? composer : null}

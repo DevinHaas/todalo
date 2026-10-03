@@ -10,6 +10,8 @@ import { nextOccurrenceOnCompletion, recurrenceSchema } from "@/lib/recurrence";
 import { pushTaskToCalendar, deleteTaskFromCalendar } from "@/lib/google-calendar";
 import { assertTaskParent } from "@todalo/db/task-parent";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
+import { assertOwnedLabels, replaceTaskLabels } from "@/lib/task-labels";
+import { taskMetadataSchema } from "@/lib/task-metadata";
 
 const taskInput = z.object({
   title: z.string().min(1),
@@ -21,12 +23,12 @@ const taskInput = z.object({
   dueDate: z.coerce.date().nullable().optional(),
   dueDateEnd: z.coerce.date().nullable().optional(),
   recurrence: recurrenceSchema.nullable().optional(),
-});
+}).extend(taskMetadataSchema.shape);
 
 async function syncToCalendar(userId: string, taskId: string) {
   const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId));
   if (!task) return;
-  const result = await pushTaskToCalendar(userId, task);
+  const result = await pushTaskToCalendar(userId, { ...task, labelIds: [] });
   if (result && result.googleCalendarEventId !== task.googleCalendarEventId) {
     await db
       .update(tasks)
@@ -38,7 +40,8 @@ async function syncToCalendar(userId: string, taskId: string) {
 const createTaskInput = taskInput.extend({ placement: z.object({ edge: z.enum(["top", "bottom", "above", "below"]), anchorId: z.string().optional() }).optional() });
 export async function createTask(input: z.infer<typeof createTaskInput>) {
   const userId = await requireUserId();
-  const { placement, ...data } = createTaskInput.parse(input);
+  const { placement, labelIds, ...data } = createTaskInput.parse(input);
+  if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
   await assertTaskOrganization({ userId, projectId: data.projectId ?? null, sectionId: data.sectionId ?? null });
   if (data.parentId) {
     await assertTaskParent({ userId, parentId: data.parentId });
@@ -55,6 +58,7 @@ export async function createTask(input: z.infer<typeof createTaskInput>) {
     if (anchor) await db.update(tasks).set({ sortOrder: sql`${tasks.sortOrder} + 1` }).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`, sql`${tasks.sortOrder} >= ${sortOrder}`));
   }
   const [task] = await db.insert(tasks).values({ userId, ...data, sortOrder }).returning();
+  if (labelIds !== undefined) await replaceTaskLabels(userId, task.id, labelIds);
   if (task.dueDate) await syncToCalendar(userId, task.id);
   revalidatePath("/", "layout");
   return task.id;
@@ -78,9 +82,10 @@ const updateTaskInput = taskInput.partial().extend({ id: z.string() });
 
 export async function updateTask(input: z.infer<typeof updateTaskInput>) {
   const userId = await requireUserId();
-  const { id, ...data } = updateTaskInput.parse(input);
+  const { id, labelIds, ...data } = updateTaskInput.parse(input);
   const [owned] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
   if (!owned) throw new Error("Task not found");
+  if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
   if (data.projectId !== undefined || data.sectionId !== undefined) {
     await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });
   }
@@ -105,6 +110,7 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
     .update(tasks)
     .set(data)
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  if (labelIds !== undefined) await replaceTaskLabels(userId, id, labelIds);
   if (organizationChanged) await db.update(tasks).set({ projectId, sectionId }).where(and(eq(tasks.parentId, id), eq(tasks.userId, userId)));
   if ("dueDate" in data) await syncToCalendar(userId, id);
   revalidatePath("/", "layout");

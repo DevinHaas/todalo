@@ -44,7 +44,6 @@ import { useKeyboard, ShortcutHint } from "@/components/keyboard/keyboard-provid
 // ponytail: Filters & Labels / Goals / Reporting / More have no backing
 // features yet — shown inert for visual parity, wire up when they exist.
 const INERT_NAV_ITEMS = [
-  { label: "Filters & Labels", icon: ListFilter },
   { label: "Goals", icon: Star, badge: "BETA" },
   { label: "Reporting", icon: LineChart },
 ];
@@ -152,6 +151,7 @@ export function AppSidebar({
                 />
               </SidebarMenuItem>
 
+              <SidebarMenuItem><SidebarMenuButton isActive={pathname.startsWith("/filters") || pathname.startsWith("/labels")} render={<Link href="/filters"><ListFilter /><span>Filters & Labels</span></Link>} /></SidebarMenuItem>
               {INERT_NAV_ITEMS.map(({ label, icon: Icon, badge }) => (
                 <SidebarMenuItem key={label}>
                   <SidebarMenuButton disabled>
