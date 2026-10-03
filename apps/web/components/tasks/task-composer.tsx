@@ -446,6 +446,7 @@ export function TaskComposer({
   initialEndTime,
   openInline = false,
   projectId,
+  sectionId,
   placement,
   onCreated,
 }: {
@@ -457,6 +458,7 @@ export function TaskComposer({
   initialEndTime?: string;
   openInline?: boolean;
   projectId?: string | null;
+  sectionId?: string | null;
   placement?: { edge: "top" | "bottom" | "above" | "below"; anchorId?: string };
   onCreated?: (id: string, direction?: "above" | "below") => void;
 }) {
@@ -662,6 +664,7 @@ export function TaskComposer({
         dueDateEnd,
         recurrence: finalState.recurrence.value,
         projectId: projectId ?? undefined,
+        sectionId: sectionId ?? undefined,
         placement: currentPlacement.current,
       });
       if (direction) {

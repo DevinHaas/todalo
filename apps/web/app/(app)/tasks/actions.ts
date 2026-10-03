@@ -9,11 +9,13 @@ import { requireUserId } from "@/lib/auth";
 import { nextOccurrenceOnCompletion, recurrenceSchema } from "@/lib/recurrence";
 import { pushTaskToCalendar, deleteTaskFromCalendar } from "@/lib/google-calendar";
 import { assertTaskParent } from "@todalo/db/task-parent";
+import { assertTaskOrganization } from "@todalo/db/task-organization";
 
 const taskInput = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
-  projectId: z.string().optional(),
+  projectId: z.string().min(1).nullable().optional(),
+  sectionId: z.string().min(1).nullable().optional(),
   parentId: z.string().min(1).nullable().optional(),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
   dueDate: z.coerce.date().nullable().optional(),
@@ -37,7 +39,13 @@ const createTaskInput = taskInput.extend({ placement: z.object({ edge: z.enum(["
 export async function createTask(input: z.infer<typeof createTaskInput>) {
   const userId = await requireUserId();
   const { placement, ...data } = createTaskInput.parse(input);
-  if (data.parentId) await assertTaskParent({ userId, parentId: data.parentId });
+  await assertTaskOrganization({ userId, projectId: data.projectId ?? null, sectionId: data.sectionId ?? null });
+  if (data.parentId) {
+    await assertTaskParent({ userId, parentId: data.parentId });
+    const [parent] = await db.select().from(tasks).where(and(eq(tasks.id, data.parentId), eq(tasks.userId, userId))).limit(1);
+    if (data.projectId !== undefined && data.projectId !== parent.projectId || data.sectionId !== undefined && data.sectionId !== parent.sectionId) throw new Error("A child task must use its parent's project and section");
+    data.projectId = parent.projectId; data.sectionId = parent.sectionId;
+  }
   let sortOrder = 0;
   if (placement) {
     const collection = await db.select({ id: tasks.id, sortOrder: tasks.sortOrder, projectId: tasks.projectId }).from(tasks).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`)).orderBy(asc(tasks.sortOrder));
@@ -48,7 +56,7 @@ export async function createTask(input: z.infer<typeof createTaskInput>) {
   }
   const [task] = await db.insert(tasks).values({ userId, ...data, sortOrder }).returning();
   if (task.dueDate) await syncToCalendar(userId, task.id);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return task.id;
 }
 
@@ -71,6 +79,22 @@ const updateTaskInput = taskInput.partial().extend({ id: z.string() });
 export async function updateTask(input: z.infer<typeof updateTaskInput>) {
   const userId = await requireUserId();
   const { id, ...data } = updateTaskInput.parse(input);
+  const [owned] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+  if (!owned) throw new Error("Task not found");
+  if (data.projectId !== undefined || data.sectionId !== undefined) {
+    await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });
+  }
+  if (data.parentId) {
+    await assertTaskParent({ userId, taskId: id, parentId: data.parentId });
+    const [parent] = await db.select().from(tasks).where(and(eq(tasks.id, data.parentId), eq(tasks.userId, userId))).limit(1);
+    data.projectId = parent.projectId; data.sectionId = parent.sectionId;
+  }
+  const projectId = data.projectId === undefined ? owned.projectId : data.projectId;
+  const sectionId = data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId;
+  await assertTaskOrganization({ userId, projectId, sectionId });
+  if (data.projectId !== undefined) data.sectionId = sectionId;
+  const organizationChanged = projectId !== owned.projectId || sectionId !== owned.sectionId;
+  if (organizationChanged && owned.parentId && data.parentId === undefined) data.parentId = null;
   if (data.parentId !== undefined) {
     const [existing] = await db.select({ id: tasks.id }).from(tasks)
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
@@ -81,8 +105,9 @@ export async function updateTask(input: z.infer<typeof updateTaskInput>) {
     .update(tasks)
     .set(data)
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  if (organizationChanged) await db.update(tasks).set({ projectId, sectionId }).where(and(eq(tasks.parentId, id), eq(tasks.userId, userId)));
   if ("dueDate" in data) await syncToCalendar(userId, id);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function deleteTask(id: string) {
@@ -95,7 +120,7 @@ export async function deleteTask(id: string) {
     await deleteTaskFromCalendar(userId, task.googleCalendarEventId);
   }
   await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function completeTask(id: string) {
@@ -119,7 +144,7 @@ export async function completeTask(id: string) {
   } else {
     await db.update(tasks).set({ completedAt: new Date(), status: "done" }).where(eq(tasks.id, id));
   }
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function reorderTask(id: string, status: "todo" | "in_progress" | "done", sortOrder: number) {
@@ -128,5 +153,5 @@ export async function reorderTask(id: string, status: "todo" | "in_progress" | "
     .update(tasks)
     .set({ status, sortOrder })
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }

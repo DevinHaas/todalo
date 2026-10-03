@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getTodayTaskCount } from "@/lib/tasks";
+import { getTodayTaskCount, getTasksForUser } from "@/lib/tasks";
+import { getSectionsForUser } from "@/lib/organization";
+import { OrganizationNavigation } from "@/components/organization/organization-navigation";
 import { getSmartDateRecognitionEnabled } from "@/lib/settings";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -31,6 +33,7 @@ export default async function AppLayout({
     getRambleProjects(session.user.id),
     loadKeyboardPreferences().catch(() => ({ preferences: defaultPreferences(), error: "Shortcuts could not load. Retry from Settings." })),
   ]);
+  const [findTasks, findSections] = await Promise.all([getTasksForUser(session.user.id), getSectionsForUser(session.user.id)]);
 
   return (
     <SmartDateRecognitionProvider initialEnabled={smartDateRecognitionEnabled}>
@@ -38,6 +41,11 @@ export default async function AppLayout({
       <SidebarProvider>
         <KeyboardProvider initialPreferences={keyboard.preferences} initialError={keyboard.error}>
         <CalendarSyncListener />
+        <OrganizationNavigation items={[
+          ...findTasks.map(task => ({ id: task.id, title: task.title, href: `${task.projectId ? `/projects/${task.projectId}` : "/inbox"}#task-${task.id}`, kind: "Task" as const })),
+          ...rambleProjects.map(project => ({ id: project.id, title: project.name, href: `/projects/${project.id}`, kind: "Project" as const })),
+          ...findSections.map(section => ({ id: section.id, title: section.name, href: `/projects/${section.projectId}#section-${section.id}`, kind: "Section" as const })),
+        ]} />
         <AppSidebar user={session.user} todayCount={todayCount} />
         <SidebarInset>
           <DisplaySettingsProvider>

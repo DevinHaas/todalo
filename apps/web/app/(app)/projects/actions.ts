@@ -8,7 +8,7 @@ import { projects } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
 
 const projectInput = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
   color: z.string().optional(),
 });
 
@@ -16,7 +16,7 @@ export async function createProject(input: z.infer<typeof projectInput>) {
   const userId = await requireUserId();
   const data = projectInput.parse(input);
   await db.insert(projects).values({ userId, ...data });
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function updateProject(id: string, input: z.infer<typeof projectInput>) {
@@ -26,11 +26,11 @@ export async function updateProject(id: string, input: z.infer<typeof projectInp
     .update(projects)
     .set(data)
     .where(and(eq(projects.id, id), eq(projects.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
 
 export async function deleteProject(id: string) {
   const userId = await requireUserId();
   await db.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
