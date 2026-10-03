@@ -10,6 +10,9 @@ import { SmartDateRecognitionProvider } from "@/components/settings/smart-date-r
 import { CalendarSyncListener } from "@/components/calendar-sync-listener";
 import { RambleProvider } from "@/components/ramble/ramble-provider";
 import { getRambleProjects } from "@/lib/ramble-projects";
+import { loadKeyboardPreferences } from "@/app/(app)/settings/keyboard-actions";
+import { KeyboardProvider } from "@/components/keyboard/keyboard-provider";
+import { defaultPreferences } from "@/lib/keyboard";
 
 export default async function AppLayout({
   children,
@@ -22,16 +25,18 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [todayCount, smartDateRecognitionEnabled, rambleProjects] = await Promise.all([
+  const [todayCount, smartDateRecognitionEnabled, rambleProjects, keyboard] = await Promise.all([
     getTodayTaskCount(session.user.id),
     getSmartDateRecognitionEnabled(session.user.id),
     getRambleProjects(session.user.id),
+    loadKeyboardPreferences().catch(() => ({ preferences: defaultPreferences(), error: "Shortcuts could not load. Retry from Settings." })),
   ]);
 
   return (
     <SmartDateRecognitionProvider initialEnabled={smartDateRecognitionEnabled}>
       <RambleProvider projects={rambleProjects}>
       <SidebarProvider>
+        <KeyboardProvider initialPreferences={keyboard.preferences} initialError={keyboard.error}>
         <CalendarSyncListener />
         <AppSidebar user={session.user} todayCount={todayCount} />
         <SidebarInset>
@@ -43,6 +48,7 @@ export default async function AppLayout({
             <main className="p-6">{children}</main>
           </DisplaySettingsProvider>
         </SidebarInset>
+        </KeyboardProvider>
       </SidebarProvider>
       </RambleProvider>
     </SmartDateRecognitionProvider>

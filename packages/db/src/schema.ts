@@ -258,6 +258,12 @@ export const userSettings = pgTable("user_settings", {
     .notNull(),
 });
 
+export const userKeyboardPreferences = pgTable("user_keyboard_preferences", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  preferences: jsonb("preferences").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(user, {
     fields: [userSettings.userId],
