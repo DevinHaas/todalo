@@ -10,6 +10,7 @@ import { hasDueTime } from "@/lib/task-dates";
 import { completeTask, deleteTask } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
+import { useTaskKeyboard } from "./task-keyboard-provider";
 
 export const HOUR_HEIGHT = 48; // px per hour
 export const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -64,6 +65,7 @@ function CurrentTimeLine({ days }: { days: Date[] }) {
 }
 
 export function TimedTaskBlock({ task }: { task: Task }) {
+  const keyboard = useTaskKeyboard();
   const start = new Date(task.dueDate!);
   const end = task.dueDateEnd
     ? new Date(task.dueDateEnd)
@@ -75,8 +77,10 @@ export function TimedTaskBlock({ task }: { task: Task }) {
     <TaskEditDialog task={task}>
       <button
         type="button"
+        data-task-id={task.id}
+        onFocus={() => keyboard?.focus(task.id)}
         onClick={(e) => e.stopPropagation()}
-        className="absolute inset-x-1 z-0 overflow-hidden rounded-md bg-accent px-2 py-1 text-left"
+        className="absolute inset-x-1 z-0 overflow-hidden rounded-md bg-accent px-2 py-1 text-left focus-visible:ring-2 focus-visible:ring-ring"
         style={{ top, height }}
       >
         <div className="truncate text-sm font-medium">{task.title}</div>
@@ -116,13 +120,15 @@ export function TimedEventBlock({ event }: { event: CalendarEvent }) {
 
 export function AllDayRow({ task }: { task: Task }) {
   const [isPending, startTransition] = useTransition();
+  const keyboard = useTaskKeyboard();
 
   return (
-    <div className="group flex items-center gap-1.5 rounded bg-muted/50 px-1.5 py-0.5">
+    <div data-task-id={task.id} tabIndex={0} aria-label={task.title} onFocus={() => keyboard?.focus(task.id)} className="group flex items-center gap-1.5 rounded bg-muted/50 px-1.5 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <Checkbox
         className="size-3.5 rounded-full"
         checked={task.status === "done"}
         disabled={isPending}
+        aria-label={`Complete ${task.title}`}
         onCheckedChange={() => startTransition(() => completeTask(task.id))}
       />
       <TaskEditDialog task={task}>

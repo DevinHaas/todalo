@@ -49,7 +49,7 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("task.nest", "Nest task", "Task actions", "task", ["Ctrl+]"], 2, { availability: "available", note: "Explicit Control on macOS; use a custom binding on layouts without dedicated brackets." }),
   command("task.unnest", "Unnest task", "Task actions", "task", ["Ctrl+["], 2, { availability: "available" }),
   command("task.toggle-children", "Toggle child tasks", "Task actions", "task", ["Shift+e"], 2, { availability: "available" }),
-  command("view.layout", "Switch layout", "Views", "view", ["Shift+v"], 4),
+  command("view.layout", "Switch layout", "Views", "view", ["Shift+v"], 4, { availability: "available" }),
   command("project.section", "Create section", "Projects", "project", ["s"], 2, { availability: "available" }),
   command("project.sort-date", "Sort by date", "Projects", "project", ["d"], 2, { availability: "available", note: "Uses web project baseline D; macOS sorting subsection contradicts with Option+D. Focused task deadline takes precedence; focus the project header to sort." }),
   command("project.sort-priority", "Sort by priority", "Projects", "project", ["p"], 3, { note: "Web project baseline; macOS Option+P entry is disputed." }),
@@ -57,12 +57,12 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("project.menu", "Project action menu", "Projects", "project", ["w"], 2, { availability: "available" }),
   command("view.first", "First task", "Navigation", "view", ["Ctrl+Home"], 2, { platformDefaults: { mac: ["Meta+ArrowUp"] } }),
   command("view.last", "Last task", "Navigation", "view", ["Ctrl+End"], 2, { platformDefaults: { mac: ["Meta+ArrowDown"] } }),
-  command("upcoming.today", "Upcoming: go to today", "Upcoming", "upcoming", ["Home"], 4, { platformDefaults: { mac: ["Alt+Shift+y"] } }),
-  command("upcoming.next-week", "Upcoming: next week", "Upcoming", "upcoming", ["Shift+ArrowRight"], 4),
-  command("upcoming.previous-week", "Upcoming: previous week", "Upcoming", "upcoming", ["Shift+ArrowLeft"], 4),
-  command("calendar.today", "Calendar: go to today", "Calendar", "calendar", ["t"], 4, { platformDefaults: { mac: ["t", "Alt+Shift+y"] }, note: "Windows Option+Shift+Y is unresolved and not silently adapted." }),
-  command("calendar.next-week", "Calendar: next week", "Calendar", "calendar", ["Shift+ArrowRight"], 4),
-  command("calendar.previous-week", "Calendar: previous week", "Calendar", "calendar", ["Shift+ArrowLeft"], 4),
+  command("upcoming.today", "Upcoming: go to today", "Upcoming", "upcoming", ["Home"], 4, { availability: "available", platformDefaults: { mac: ["Alt+Shift+y"] } }),
+  command("upcoming.next-week", "Upcoming: next week", "Upcoming", "upcoming", ["Shift+ArrowRight"], 4, { availability: "available" }),
+  command("upcoming.previous-week", "Upcoming: previous week", "Upcoming", "upcoming", ["Shift+ArrowLeft"], 4, { availability: "available" }),
+  command("calendar.today", "Calendar: go to today", "Calendar", "calendar", ["t"], 4, { availability: "available", platformDefaults: { mac: ["t", "Alt+Shift+y"] }, note: "Windows Option+Shift+Y is unresolved and not silently adapted." }),
+  command("calendar.next-week", "Calendar: next week", "Calendar", "calendar", ["Shift+ArrowRight"], 4, { availability: "available" }),
+  command("calendar.previous-week", "Calendar: previous week", "Calendar", "calendar", ["Shift+ArrowLeft"], 4, { availability: "available" }),
   command("task.paste-file", "Paste file as a task", "Quick Add", "project", ["Primary+v"], 4),
   command("quick-add.description", "Reveal description", "Quick Add", "quick-add", ["ArrowDown"], 3),
   command("quick-add.actions", "Reveal additional actions", "Quick Add", "quick-add", ["Shift+ArrowDown"], 3),
@@ -210,7 +210,7 @@ export function bindingFromEvent(event: KeyInput): string | null {
   const shift = event.shiftKey && (event.key.length > 1 || /[a-z]/i.test(event.key));
   return normalizeBinding([event.metaKey && "Meta", event.ctrlKey && "Ctrl", event.altKey && "Alt", shift && "Shift", event.key === " " ? "Space" : event.key].filter(Boolean).join("+"));
 }
-export interface DispatchCommand { id: string; bindings: string[]; repeat?: boolean; allowInEditor?: boolean; allowInModal?: boolean }
+export interface DispatchCommand { id: string; bindings: string[]; repeat?: boolean; allowInEditor?: boolean; allowInModal?: boolean; handle?: () => void | boolean }
 export class KeyboardDispatcher {
   private prefix: string[] = []; private expiresAt = 0; private context = "";
   reset() { this.prefix = []; this.expiresAt = 0; }
@@ -222,8 +222,14 @@ export class KeyboardDispatcher {
     const step = bindingFromEvent(event);
     if (!step) { this.reset(); return { consumed: false }; }
     const candidate = [...this.prefix, step].join(" then ");
-    const exact = commands.find(command => (!event.repeat || command.repeat) && command.bindings.some(binding => normalizeBinding(binding) === candidate));
-    if (exact) { this.reset(); return { consumed: true, commandId: exact.id }; }
+    const exact = commands.filter(command => (!event.repeat || command.repeat) && command.bindings.some(binding => normalizeBinding(binding) === candidate));
+    if (exact.length) {
+      this.reset();
+      for (const command of exact) {
+        if (command.handle?.() !== false) return { consumed: true, commandId: command.id };
+      }
+      return { consumed: false };
+    }
     if (!event.repeat && commands.some(command => command.bindings.some(binding => normalizeBinding(binding)?.startsWith(candidate + " then ")))) {
       this.prefix.push(step); this.expiresAt = now + 1000; return { consumed: true };
     }
