@@ -18,6 +18,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { reorderTask } from "@/app/(app)/tasks/actions";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import type { Task } from "@/lib/tasks";
+import { useTaskKeyboard } from "./task-keyboard-provider";
+import { taskTreeOrder } from "@/lib/task-keyboard";
 
 const COLUMNS = [
   { status: "todo", label: "To do" },
@@ -41,24 +43,34 @@ function BoardColumn({
 }
 
 function BoardCard({ task }: { task: Task }) {
+  const keyboard = useTaskKeyboard();
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: task.id,
   });
 
   return (
+    <>
+    {keyboard?.creationSlot(task.id, "above")}
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      data-task-id={task.id}
+      tabIndex={0}
+      aria-label={task.title}
+      hidden={Boolean(task.parentId && keyboard?.collapsedIds.has(task.parentId))}
+      onFocus={() => keyboard?.focus(task.id)}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="mb-2 cursor-grab rounded-md border bg-card p-3 text-sm shadow-sm active:cursor-grabbing"
+      className={`mb-2 cursor-grab rounded-md border bg-card p-3 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing ${keyboard?.selectedIds.has(task.id) ? "ring-2 ring-primary" : ""} ${task.parentId ? "ml-4" : ""}`}
     >
-      <TaskEditDialog task={task}>
+      {keyboard ? <button type="button" className="w-full text-left" onClick={() => keyboard.open(task)}>{task.title}</button> : <TaskEditDialog task={task}>
         <button type="button" className="w-full text-left">
           {task.title}
         </button>
-      </TaskEditDialog>
+      </TaskEditDialog>}
     </div>
+    {keyboard?.creationSlot(task.id, "below")}
+    </>
   );
 }
 
@@ -97,7 +109,7 @@ export function BoardView({ tasks }: { tasks: Task[] }) {
         {COLUMNS.map((column) => {
           const columnTasks = optimisticTasks.filter((t) => t.status === column.status);
           return (
-            <div key={column.status} className="rounded-lg border p-3">
+            <div key={column.status} data-task-column={column.status} className="rounded-lg border p-3">
               <h2 className="mb-3 text-sm font-medium text-muted-foreground">
                 {column.label}
               </h2>
@@ -106,7 +118,7 @@ export function BoardView({ tasks }: { tasks: Task[] }) {
                 strategy={verticalListSortingStrategy}
               >
                 <BoardColumn status={column.status}>
-                  {columnTasks.map((task) => (
+                  {taskTreeOrder(columnTasks).map((task) => (
                     <BoardCard key={task.id} task={task} />
                   ))}
                 </BoardColumn>

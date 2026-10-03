@@ -10,6 +10,7 @@ import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { isDueToday, isOverdue } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
+import { taskTreeOrder } from "@/lib/task-keyboard";
 
 function isToday(date: Date) {
   const now = new Date();
@@ -43,7 +44,7 @@ export function TodayView({ tasks, events = [] }: { tasks: Task[]; events?: Cale
             Overdue
             <span className="font-normal text-muted-foreground">{overdueTasks.length}</span>
           </button>
-          {overdueOpen && overdueTasks.map((task) => <TaskRow key={task.id} task={task} />)}
+          {overdueOpen && taskTreeOrder(overdueTasks).map((task) => <TaskRow key={task.id} task={task} />)}
         </section>
       )}
 
@@ -54,7 +55,7 @@ export function TodayView({ tasks, events = [] }: { tasks: Task[]; events?: Cale
         {todayEvents.map((event) => (
           <EventRow key={event.id} event={event} />
         ))}
-        {todayTasks.map((task) => (
+        {taskTreeOrder(todayTasks).map((task) => (
           <TaskRow key={task.id} task={task} />
         ))}
         <TaskComposer defaultToToday />

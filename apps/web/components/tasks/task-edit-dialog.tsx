@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useKeyboard, useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -45,11 +47,32 @@ function recurrenceOptionValue(recurrence: Recurrence | null | undefined): strin
 export function TaskEditDialog({
   task,
   children,
+  open: controlledOpen,
+  onOpenChange,
+  initialDateOpen = false,
+  onNavigate,
+  onInsert,
+  variant = "details",
 }: {
   task: Task;
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialDateOpen?: boolean;
+  onNavigate?: (direction: number) => void;
+  onInsert?: (edge: "above" | "below") => void;
+  variant?: "details" | "inline";
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  function setOpen(value: boolean) { setInternalOpen(value); onOpenChange?.(value); }
+  const scope = useRef<HTMLDivElement>(null);
+  const { platform } = useKeyboard();
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [dateOpen, setDateOpen] = useState(initialDateOpen);
+  const [error, setError] = useState<string | null>(null);
+  const saving = useRef(false);
   const [dueDate, setDueDate] = useState<Date | undefined>(
     task.dueDate ? new Date(task.dueDate) : undefined,
   );
@@ -64,34 +87,50 @@ export function TaskEditDialog({
   );
   const [isPending, startTransition] = useTransition();
 
-  function save() {
+  function save(after?: "above" | "below", direction?: number) {
+    if (saving.current || !title.trim()) return false;
+    saving.current = true; setError(null);
     const recurrence =
       RECURRENCE_OPTIONS.find((o) => o.value === recurrenceValue)?.recurrence ??
-      undefined;
+      null;
     const finalDueDate = dueDate && startTime ? combineDateAndTime(dueDate, startTime) : dueDate;
-    const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : undefined;
+    const dueDateEnd = dueDate && endTime ? combineDateAndTime(dueDate, endTime) : null;
     startTransition(async () => {
-      await updateTask({
+      try { await updateTask({
         id: task.id,
-        dueDate: finalDueDate,
+        title: title.trim(), description,
+        dueDate: finalDueDate ?? null,
         dueDateEnd,
-        recurrence: recurrence ?? undefined,
+        recurrence,
       });
-      setOpen(false);
+      if (direction !== undefined) onNavigate?.(direction);
+      else if (after) onInsert?.(after);
+      else setOpen(false);
+      } catch (reason) { setError(reason instanceof Error ? reason.message : "Task could not save. Please retry."); }
+      finally { saving.current = false; }
     });
   }
+  useKeyboardCommands({
+    "general.dismiss": () => { if (dateOpen) return false; setOpen(false); },
+    ...(variant === "details" || platform === "mac" ? { "editor.save": () => save() } : {}),
+    ...(variant === "inline" && onInsert ? { "editor.save-below": () => save("below"), "editor.save-above": () => save("above") } : {}),
+    ...(onNavigate ? { "editor.previous": () => save(undefined, -1), "editor.next": () => save(undefined, 1) } : {}),
+  }, { enabled: open, scope, allowInEditor: true, allowInModal: true });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={children as React.ReactElement} />
-      <DialogContent>
+      {children && <DialogTrigger render={children as React.ReactElement} />}
+      <DialogContent ref={scope}>
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {error && <p role="alert" className="text-destructive">{error}</p>}
+          <label className="block space-y-1">Task name<Input autoFocus value={title} onChange={event => setTitle(event.target.value)} /></label>
+          <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
           <div>
             <label className="mb-1 block text-sm font-medium">Due date</label>
-            <Popover>
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
               <PopoverTrigger
                 render={
                   <Button variant="outline">
@@ -100,7 +139,8 @@ export function TaskEditDialog({
                 }
               />
               <PopoverContent className="w-auto p-0">
-                <Calendar mode="single" selected={dueDate} onSelect={setDueDate} />
+                <Calendar mode="single" selected={dueDate} onSelect={date => { setDueDate(date); setDateOpen(false); }} />
+                <Button variant="ghost" onClick={() => { setDueDate(undefined); setStartTime(""); setEndTime(""); setDateOpen(false); }}>Clear date</Button>
               </PopoverContent>
             </Popover>
             {dueDate && (
@@ -131,8 +171,10 @@ export function TaskEditDialog({
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={save} disabled={isPending} className="w-full">
-            Save
+          {onNavigate && <div className="flex gap-2"><Button variant="outline" disabled={isPending} onClick={() => save(undefined, -1)}>Previous <ShortcutHint commandId="editor.previous" /></Button><Button variant="outline" disabled={isPending} onClick={() => save(undefined, 1)}>Next <ShortcutHint commandId="editor.next" /></Button></div>}
+          {variant === "inline" && onInsert && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={isPending} onClick={() => save("above")}>Save and add above <ShortcutHint commandId="editor.save-above" /></Button><Button variant="outline" disabled={isPending} onClick={() => save("below")}>Save and add below <ShortcutHint commandId="editor.save-below" /></Button></div>}
+          <Button onClick={() => save()} disabled={isPending || !title.trim()} className="w-full">
+            Save {(variant === "details" || platform === "mac") && <ShortcutHint commandId="editor.save" />}
           </Button>
         </div>
       </DialogContent>
