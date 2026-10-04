@@ -93,8 +93,19 @@ TODALO_API_BASE_URL=http://127.0.0.1:3009 bun tauri build --debug --bundles app 
 ```
 
 Artifact: `apps/client/src-tauri/target/debug/bundle/macos/todalo.app`, 39.14 MiB.
-It bundles the shared UI and targets the isolated QA service. Native app login,
-relaunch/logout and signed identity validation still require the device walkthrough.
+It bundles the shared UI and targets the isolated QA service. The parent exercised
+native login, full process quit/relaunch with restored identity, logout, and another
+full quit/relaunch that stayed signed out on Mac17,8 / macOS 26.6.2. See the
+[walkthrough and screenshot](tauri-migration-progress-2026-10-04.md). The executable
+has a linker ad hoc signature with no TeamIdentifier; Apple-team signing and
+installer/device identity validation remain open. The final client repair in
+`2b9d83d` was rebuilt into this bundle after the walkthrough.
+
+Final review repaired account-refresh recovery copy: exact known native messages
+are mapped to typed safe errors; unknown IPC payloads are sanitized. Thirteen
+focused tests pass. Parent final checks pass: 30 test files / 301 tests, all seven
+workspace typechecks, and legacy web/client/API production builds. Lint reports
+three pre-existing errors reproduced in the unchanged source checkout.
 
 Unsigned **iOS simulator archive** build succeeded:
 

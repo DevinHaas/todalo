@@ -4,7 +4,7 @@ Checked against Apple's documentation on 4 October 2026. Enrollment and payment 
 
 ## Choose the account owner
 
-The user wants **Bleat** as the publisher brand but currently has no registered company. Apple Organization enrollment requires a legal entity, so choose between establishing that entity first or Individual enrollment with the personal legal name as seller. Do not treat the brand as an existing organization or commit to a paid enrollment before this choice. App branding remains Todalo.
+The user selected **Individual enrollment using their legal name** on 4 October 2026. Bleat is a desired brand, not a registered legal entity. Apple's seller identity will be the individual's legal name. App branding remains Todalo unless separately changed.
 
 Use **Individual** for publication under your personal legal name. Use **Organization** for a registered legal entity; Apple requires authority to bind that entity, a D-U-N-S number, and business contact/domain details. The account owner's name determines the App Store seller identity. The program costs US$99 per year; enrollment displays the applicable local-currency price. [Apple's enrollment requirements](https://developer.apple.com/programs/enroll/)
 
