@@ -30,6 +30,33 @@ describe("account keyboard preferences", () => {
     expect(validatePreferences(defaultPreferences())).toEqual([]);
     expect(() => parsePreferences({ version: 9 })).toThrow(/version/);
   });
+  it("loads and saves legacy Home assignments without losing other account shortcuts", async () => {
+    const legacy = {
+      ...defaultPreferences(),
+      overrides: { "navigation.home": ["h"], "general.capture": [] },
+      platforms: Object.fromEntries(["mac", "windows", "linux"].map(platform => [platform, { "navigation.home": ["Alt+Shift+9"], "general.search": ["Alt+Shift+8"] }])),
+      lastEffective: { mac: { "navigation.home": ["h"], "general.capture": [] } },
+    };
+    let stored: unknown = legacy;
+    const api = keyboardAccountPreferences(async () => "alice", { read: async () => stored, write: async (_id, value) => { stored = value; } });
+    const loaded = await api.load();
+    expect(loaded.error).toBeUndefined();
+    expect(validatePreferences(loaded.preferences)).toEqual([]);
+    expect(loaded.preferences.overrides).toEqual({ "general.capture": [] });
+    expect(loaded.preferences.lastEffective?.mac).toEqual({ "general.capture": [] });
+    const saved = await api.save(legacy);
+    for (const platform of ["mac", "windows", "linux"] as const) {
+      expect(saved.platforms[platform]).toEqual({ "general.search": ["Alt+Shift+8"] });
+      expect(saved.lastEffective?.[platform]).not.toHaveProperty("navigation.home");
+      expect(effectiveBindings("general.capture", saved, platform)).toEqual([]);
+      expect(effectiveBindings("general.search", saved, platform)).toEqual(["Alt+Shift+8"]);
+      expect(effectiveBindings("navigation.home", saved, platform)).toEqual([]);
+    }
+  });
+  it("still rejects other unknown saved shortcut actions", () => {
+    const preferences = parsePreferences({ ...defaultPreferences(), overrides: { "navigation.unknown": ["Alt+Shift+9"] } });
+    expect(validatePreferences(preferences).some(error => error.commandId === "navigation.unknown" && /Unknown action/.test(error.message))).toBe(true);
+  });
   it("retains a previous effective configuration when new defaults conflict", () => {
     const registry = [{ id: "capture", label: "Capture", group: "General", context: "global" as const, availability: "available" as const, defaults: ["q"] }];
     const saved = snapshotPreferences(defaultPreferences(), registry);

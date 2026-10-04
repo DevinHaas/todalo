@@ -28,6 +28,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -39,7 +40,7 @@ import {
 import { TaskComposer } from "@/components/tasks/task-composer";
 import { authClient } from "@/lib/auth-client";
 import { useRamble } from "@/components/ramble/ramble-provider";
-import { useKeyboard, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboard } from "@/components/keyboard/keyboard-provider";
 
 // ponytail: Filters & Labels / Goals / Reporting / More have no backing
 // features yet — shown inert for visual parity, wire up when they exist.
@@ -60,6 +61,8 @@ export function AppSidebar({
   const [addOpen, setAddOpen] = useState(false);
   const openRamble = useRamble();
   const keyboard = useKeyboard();
+  const { setOpenMobile } = useSidebar();
+  const closeMobileSidebar = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
@@ -75,7 +78,7 @@ export function AppSidebar({
             <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem render={<Link href="/settings">Settings</Link>} />
+            <DropdownMenuItem render={<Link href="/settings" onNavigate={closeMobileSidebar}>Settings</Link>} />
             <DropdownMenuItem
               onSelect={() =>
                 authClient.signOut({
@@ -98,12 +101,11 @@ export function AppSidebar({
         >
           <Plus className="size-4" />
           <span className="group-data-[collapsible=icon]:hidden">Add task</span>
-          <span className="ml-auto group-data-[collapsible=icon]:hidden"><ShortcutHint commandId="general.capture" /></span>
         </button>
         <button
           type="button"
           aria-label="Open Ramble"
-          title={`Ramble ${keyboard.bindings("general.ramble").join(" or ")}`}
+          title="Open Ramble"
           onClick={() => openRamble()}
           className="flex size-8 shrink-0 items-center justify-center rounded-md text-brand hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring"
         >
@@ -124,13 +126,13 @@ export function AppSidebar({
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {[["Home", "/home"], ["Inbox", "/inbox"], ["Projects", "/projects"]].map(([label, href]) => <SidebarMenuItem key={href}><SidebarMenuButton isActive={pathname === href} render={<Link href={href}><Layers /><span>{label}</span></Link>} /></SidebarMenuItem>)}
+              {[["Inbox", "/inbox"], ["Projects", "/projects"]].map(([label, href]) => <SidebarMenuItem key={href}><SidebarMenuButton isActive={pathname === href} render={<Link href={href} onNavigate={closeMobileSidebar}><Layers /><span>{label}</span></Link>} /></SidebarMenuItem>)}
 
               <SidebarMenuItem>
                 <SidebarMenuButton
                   isActive={pathname === "/today"}
                   render={
-                    <Link href="/today">
+                    <Link href="/today" onNavigate={closeMobileSidebar}>
                       <CalendarClock />
                       <span>Today</span>
                     </Link>
@@ -143,7 +145,7 @@ export function AppSidebar({
                 <SidebarMenuButton
                   isActive={pathname === "/upcoming"}
                   render={
-                    <Link href="/upcoming">
+                    <Link href="/upcoming" onNavigate={closeMobileSidebar}>
                       <Layers />
                       <span>Upcoming</span>
                     </Link>
@@ -151,7 +153,7 @@ export function AppSidebar({
                 />
               </SidebarMenuItem>
 
-              <SidebarMenuItem><SidebarMenuButton isActive={pathname.startsWith("/filters") || pathname.startsWith("/labels")} render={<Link href="/filters"><ListFilter /><span>Filters & Labels</span></Link>} /></SidebarMenuItem>
+              <SidebarMenuItem><SidebarMenuButton isActive={pathname.startsWith("/filters") || pathname.startsWith("/labels")} render={<Link href="/filters" onNavigate={closeMobileSidebar}><ListFilter /><span>Filters & Labels</span></Link>} /></SidebarMenuItem>
               {INERT_NAV_ITEMS.map(({ label, icon: Icon, badge }) => (
                 <SidebarMenuItem key={label}>
                   <SidebarMenuButton disabled>

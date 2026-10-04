@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import { useRouter } from "next/navigation";
-import { useKeyboard, useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboard, useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { ProjectFilePasteController, isProjectPasteTarget } from "@/lib/project-file-paste";
 import { ATTACHMENT_LIMIT_HINT } from "@/lib/attachment-limits";
 
@@ -31,8 +31,8 @@ export function ProjectFilePaste({ projectId, scope }: { projectId: string; scop
     if (event?.key.toLowerCase() === "v" && !event.shiftKey && !event.altKey && (platform === "mac" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return false;
     void controller.read(navigator.clipboard?.read ? () => navigator.clipboard.read() : undefined);
   } });
-  return <div className="space-y-1 text-xs text-muted-foreground"><p>Paste files as tasks <ShortcutHint commandId="task.paste-file" />. {ATTACHMENT_LIMIT_HINT}</p>
-    <p>Custom shortcuts require browser clipboard permission; browsers may expose only images and omit original file names.</p>
+  return <div className="space-y-1 text-xs text-muted-foreground"><p>Paste files as tasks. {ATTACHMENT_LIMIT_HINT}</p>
+    <p>Browsers may expose only images and omit original file names.</p>
     {pending && <p role="status">Saving files…</p>}{status && <p role="status">{status}</p>}
     {error && <p role="alert" className="text-destructive">{error} {retryFiles && <><span> Check the project before retrying if the connection was interrupted.</span> <button type="button" disabled={pending} className="underline" onClick={() => void controller.upload(retryFiles)}>Retry file paste</button></>}</p>}
   </div>;

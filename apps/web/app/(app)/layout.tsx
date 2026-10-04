@@ -6,7 +6,7 @@ import { getSectionsForUser } from "@/lib/organization";
 import { OrganizationNavigation } from "@/components/organization/organization-navigation";
 import { getSmartDateRecognitionEnabled } from "@/lib/settings";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DisplaySettingsProvider, DisplayMenu, LayoutSwitcher } from "@/components/tasks/display-settings";
 import { SmartDateRecognitionProvider } from "@/components/settings/smart-date-recognition";
 import { CalendarSyncListener } from "@/components/calendar-sync-listener";
@@ -50,7 +50,10 @@ export default async function AppLayout({
         <SidebarInset>
           <DisplaySettingsProvider>
             <div className="flex items-center justify-between px-4 py-2">
-              <LayoutSwitcher />
+              <div className="flex min-w-0 items-center gap-1">
+                <SidebarTrigger className="size-11 md:hidden" />
+                <LayoutSwitcher />
+              </div>
               <DisplayMenu />
             </div>
             <main className="p-6">{children}</main>

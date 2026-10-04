@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import { ShortcutHint } from "@/components/keyboard/keyboard-provider";
 import { nextLayout } from "@/lib/view-navigation";
 import {
   LayoutGrid,
@@ -132,7 +131,7 @@ export function LayoutSwitcher() {
       <Button type="button" variant="ghost" size="icon" aria-label="Next layout" onClick={() => cycle(1)}>
         <ChevronRight className="size-4" />
       </Button>
-      <span className="text-xs text-muted-foreground">{LAYOUTS[index].label} <ShortcutHint commandId="view.layout" /></span>
+      <span className="text-xs text-muted-foreground">{LAYOUTS[index].label}</span>
     </div>
   );
 }

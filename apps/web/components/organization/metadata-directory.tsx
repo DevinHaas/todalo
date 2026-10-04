@@ -5,7 +5,6 @@ import { useState, useTransition } from "react";
 import { createLabel, updateLabel, deleteLabel, saveFilter, deleteFilter, type getMetadata } from "@/app/(app)/tasks/metadata-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ShortcutHint } from "@/components/keyboard/keyboard-provider";
 import { filterDefinitionSchema, type FilterDefinition } from "@/lib/task-metadata";
 
 type Metadata = Awaited<ReturnType<typeof getMetadata>>;
@@ -19,7 +18,7 @@ export function MetadataDirectory({ metadata, mode }: { metadata: Metadata; mode
   function resetFilter() { setFilterId(undefined); setFilterName(""); setDefinition(blankDefinition()); }
   return <div className="mx-auto max-w-3xl space-y-6">
     <h1 className="text-2xl font-semibold">{mode === "labels" ? "Labels" : "Filters & Labels"}</h1>
-    <nav className="flex gap-5 text-sm"><Link href="/labels" className="underline">Labels <ShortcutHint commandId="navigation.labels" /></Link><Link href="/filters" className="underline">Filters & Labels <ShortcutHint commandId="navigation.filters" /></Link></nav>
+    <nav className="flex gap-5 text-sm"><Link href="/labels" className="underline">Labels</Link><Link href="/filters" className="underline">Filters & Labels</Link></nav>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <section className="space-y-3"><h2 className="font-semibold">Labels</h2>
       {metadata.labels.length ? metadata.labels.map(label => <div key={label.id} className="flex items-center gap-3 border-b py-2"><span className="size-3 rounded-full" style={{ backgroundColor: label.color ?? "#808080" }} /><Link href={`/labels/${label.id}`} className="flex-1 underline">{label.name}</Link><Button variant="ghost" size="sm" disabled={pending} onClick={() => { setLabelId(label.id); setLabelName(label.name); setColor(label.color ?? "#808080"); }}>Edit {label.name}</Button><Button variant="ghost" size="sm" disabled={pending} onClick={() => { if (window.confirm(`Delete label ${label.name}? Tasks are kept.`)) run(() => deleteLabel(label.id)); }}>Delete {label.name}</Button></div>) : <p className="text-sm text-muted-foreground">No labels yet.</p>}

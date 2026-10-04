@@ -16,7 +16,7 @@ Bindings use the produced character. Primary means Command on macOS and Control 
 | `general.search` | Search | global | / or f | / or f | available / 2 |  |
 | `general.quick-find` | Quick Find | global | Meta+k | Ctrl+k | available / 2 |  |
 | `view.toggle-nested` | Toggle nested tasks and sections | view | Meta+Alt+0 | Ctrl+Alt+0 | available / 2 | Declines while project sorting is active. |
-| `navigation.home` | Home | global | h or g then h | h or g then h | available / 2 |  |
+| `navigation.home` | Home | global | h or g then h | h or g then h | removed | Removed at user request; absent from the registry, navigation, Help, and Settings. Old /home links redirect to Today. |
 | `navigation.inbox` | Inbox | global | g then i | g then i | available / 2 |  |
 | `navigation.today` | Today | global | g then t | g then t | available / 1 |  |
 | `navigation.upcoming` | Upcoming | global | g then u | g then u | available / 1 |  |

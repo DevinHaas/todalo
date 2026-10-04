@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useTaskKeyboard } from "./task-keyboard-provider";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { bulkTaskMetadata, getTaskEditorData } from "@/app/(app)/tasks/metadata-actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -43,11 +43,11 @@ export function TaskMetadataActions({ toolbar = false }: { toolbar?: boolean }) 
     run(async () => { await bulkTaskMetadata({ ids: dialog.ids, ...data }); close(); });
   }
   return <>
-    {toolbar && <><Button size="sm" variant="outline" disabled={pending} onClick={() => show("priority")}>Priority <ShortcutHint commandId="task.priority" /></Button><Button size="sm" variant="outline" disabled={pending} onClick={() => show("labels")}>Labels <ShortcutHint commandId="task.labels" /></Button><Button size="sm" variant="outline" disabled={pending} onClick={() => show("deadline")}>Deadline <ShortcutHint commandId="task.deadline" /></Button></>}
+    {toolbar && <><Button size="sm" variant="outline" disabled={pending} onClick={() => show("priority")}>Priority</Button><Button size="sm" variant="outline" disabled={pending} onClick={() => show("labels")}>Labels</Button><Button size="sm" variant="outline" disabled={pending} onClick={() => show("deadline")}>Deadline</Button></>}
     {error && !dialog && <p role="alert" className="text-sm text-destructive">{error}</p>}{message && <p role="status" className="text-sm">{message}</p>}
     <Dialog open={Boolean(dialog)} onOpenChange={open => { if (!open) close(); }}><DialogContent ref={scope}><DialogHeader><DialogTitle>{dialog?.field === "priority" ? "Choose priority" : dialog?.field === "labels" ? "Edit labels" : "Choose deadline"}{dialog && dialog.ids.length > 1 ? ` for ${dialog.ids.length} tasks` : ""}</DialogTitle></DialogHeader>
       {(error || loading.error) && <p role="alert" className="text-destructive">{error || loading.error} {loading.error && <button type="button" className="underline" onClick={loading.reload}>Retry</button>}</p>}
-      {loading.options ? <form className="space-y-4" onSubmit={event => { event.preventDefault(); save(); }}><TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={loading.options.labels} focusField={dialog?.field} onlyField={dialog?.field} disabled={pending} />{dialog?.field === "labels" && dialog.ids.length > 1 && <p className="text-sm text-muted-foreground">These labels replace the labels on every selected task.</p>}<Button type="submit" disabled={pending || Boolean(loading.error)}>Save <ShortcutHint commandId="editor.save" /></Button></form> : <p role="status">Loading labels…</p>}
+      {loading.options ? <form className="space-y-4" onSubmit={event => { event.preventDefault(); save(); }}><TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={loading.options.labels} focusField={dialog?.field} onlyField={dialog?.field} disabled={pending} />{dialog?.field === "labels" && dialog.ids.length > 1 && <p className="text-sm text-muted-foreground">These labels replace the labels on every selected task.</p>}<Button type="submit" disabled={pending || Boolean(loading.error)}>Save</Button></form> : <p role="status">Loading labels…</p>}
     </DialogContent></Dialog>
   </>;
 }

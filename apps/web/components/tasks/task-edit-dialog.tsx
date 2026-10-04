@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useKeyboard, useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboard, useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -155,7 +155,7 @@ export function TaskEditDialog({
           <label className="block space-y-1">Description<textarea className="min-h-20 w-full rounded border p-2" value={description} onChange={event => setDescription(event.target.value)} /></label>
           {metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}
           <TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} disabled={isPending} />
-          <div className="flex flex-wrap gap-3 text-sm"><a href={`/tasks/${encodeURIComponent(task.id)}`} className="underline">Task link</a><button type="button" className="underline" onClick={() => startTransition(async () => { try { await copyTaskUrl(task.id); setCopied(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not copy task link"); } })}>Copy link <ShortcutHint commandId="task.copy-url" /></button>{copied && <span role="status">Task link copied.</span>}</div>
+          <div className="flex flex-wrap gap-3 text-sm"><a href={`/tasks/${encodeURIComponent(task.id)}`} className="underline">Task link</a><button type="button" className="underline" onClick={() => startTransition(async () => { try { await copyTaskUrl(task.id); setCopied(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not copy task link"); } })}>Copy link</button>{copied && <span role="status">Task link copied.</span>}</div>
           {variant === "details" && <TaskAttachments key={task.id} taskId={task.id} />}
           <div>
             <label className="mb-1 block text-sm font-medium">Due date</label>
@@ -200,10 +200,10 @@ export function TaskEditDialog({
               </SelectContent>
             </Select>
           </div>
-          {onNavigate && <div className="flex gap-2"><Button variant="outline" disabled={isPending} onClick={() => save(undefined, -1)}>Previous <ShortcutHint commandId="editor.previous" /></Button><Button variant="outline" disabled={isPending} onClick={() => save(undefined, 1)}>Next <ShortcutHint commandId="editor.next" /></Button></div>}
-          {variant === "inline" && onInsert && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={isPending} onClick={() => save("above")}>Save and add above <ShortcutHint commandId="editor.save-above" /></Button><Button variant="outline" disabled={isPending} onClick={() => save("below")}>Save and add below <ShortcutHint commandId="editor.save-below" /></Button></div>}
+          {onNavigate && <div className="flex gap-2"><Button variant="outline" disabled={isPending} onClick={() => save(undefined, -1)}>Previous</Button><Button variant="outline" disabled={isPending} onClick={() => save(undefined, 1)}>Next</Button></div>}
+          {variant === "inline" && onInsert && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={isPending} onClick={() => save("above")}>Save and add above</Button><Button variant="outline" disabled={isPending} onClick={() => save("below")}>Save and add below</Button></div>}
           <Button onClick={() => save()} disabled={isPending || !title.trim()} className="w-full">
-            Save {(variant === "details" || platform === "mac") && <ShortcutHint commandId="editor.save" />}
+            Save
           </Button>
         </fieldset>}
       </DialogContent>

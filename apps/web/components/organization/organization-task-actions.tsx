@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTaskKeyboard } from "@/components/tasks/task-keyboard-provider";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { getOrganizationDestinations, moveTasks, setTaskParent } from "@/app/(app)/projects/organization-actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ export function OrganizationTaskActions({ tasks }: { tasks: Task[] }) {
   useKeyboardCommands({ "view.toggle-nested": () => { if (!keyboard?.nestedAllowed) return false; keyboard.toggleAllChildren(); window.dispatchEvent(new Event("todalo:toggle-sections")); } }, { scope: keyboard?.root, enabled: Boolean(keyboard) });
   return <>
     {error && <p role="alert" className="rounded border p-2 text-sm text-destructive">{error}</p>}
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>Move task <ShortcutHint commandId="task.move" /></DialogTitle></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>Move task</DialogTitle></DialogHeader>
       {error && <div role="alert" className="text-destructive">{error} {!destinations && <button type="button" className="underline" onClick={() => run(async () => { setDestinations(await getOrganizationDestinations()); })}>Retry</button>}</div>}
       {!destinations ? <p role="status">{pending ? "Loading destinations…" : "Choose Retry to reload destinations."}</p> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!movingIds.length) return; run(async () => { await moveTasks(movingIds, { projectId: projectId || null, sectionId: sectionId || null }); setOpen(false); }); }}>
         <label className="block space-y-1"><span>Project</span><select aria-label="Move to project" className="w-full rounded border bg-background p-2" value={projectId} onChange={event => { setProjectId(event.target.value); setSectionId(""); }}><option value="">Inbox</option>{destinations.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>

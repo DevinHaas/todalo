@@ -10,7 +10,6 @@ import { useDisplaySettings } from "@/components/tasks/display-settings";
 import { hasDueTime } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
-import { ShortcutHint } from "@/components/keyboard/keyboard-provider";
 import type { ViewDateAction } from "@/lib/view-navigation";
 
 export function WeekScheduleView({ tasks, events = [], anchor, onNavigate, projectId }: { tasks: Task[]; events?: CalendarEvent[]; anchor: Date; onNavigate: (action: ViewDateAction) => void; projectId?: string }) {
@@ -38,13 +37,13 @@ export function WeekScheduleView({ tasks, events = [], anchor, onNavigate, proje
     <div>
       <div className="mb-4 flex items-center justify-between">
         <Button variant="outline" size="sm" onClick={() => onNavigate("previous-week")}>
-          Prev <ShortcutHint commandId="calendar.previous-week" />
+          Prev
         </Button>
         <div className="text-center"><h2 className="text-lg font-medium" aria-live="polite">
           {format(weekStart, "MMM d")} – {format(addDays(weekStart, 6), "MMM d, yyyy")}
-        </h2><Button variant="ghost" size="sm" onClick={() => onNavigate("today")}>Today <ShortcutHint commandId="calendar.today" /></Button></div>
+        </h2><Button variant="ghost" size="sm" onClick={() => onNavigate("today")}>Today</Button></div>
         <Button variant="outline" size="sm" onClick={() => onNavigate("next-week")}>
-          Next <ShortcutHint commandId="calendar.next-week" />
+          Next
         </Button>
       </div>
 

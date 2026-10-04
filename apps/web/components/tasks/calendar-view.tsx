@@ -20,7 +20,7 @@ import { EventChip } from "@/components/tasks/event-item";
 import { useDisplaySettings } from "@/components/tasks/display-settings";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { navigateViewDate, type ViewDateAction } from "@/lib/view-navigation";
 import { useTaskKeyboard } from "./task-keyboard-provider";
 
@@ -83,9 +83,9 @@ function MonthView({ tasks, events, month, setMonth, onNavigate }: { tasks: Task
         </Button>
       </div>
       <div className="mb-4 flex flex-wrap justify-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("previous-week")}>Previous week <ShortcutHint commandId="calendar.previous-week" /></Button>
-        <Button variant="outline" size="sm" onClick={() => onNavigate("today")}>Today <ShortcutHint commandId="calendar.today" /></Button>
-        <Button variant="ghost" size="sm" onClick={() => onNavigate("next-week")}>Next week <ShortcutHint commandId="calendar.next-week" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onNavigate("previous-week")}>Previous week</Button>
+        <Button variant="outline" size="sm" onClick={() => onNavigate("today")}>Today</Button>
+        <Button variant="ghost" size="sm" onClick={() => onNavigate("next-week")}>Next week</Button>
       </div>
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border bg-border text-sm">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (

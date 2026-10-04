@@ -21,7 +21,7 @@ import { isOverdue } from "@/lib/task-dates";
 import type { Task } from "@/lib/tasks";
 import type { CalendarEvent } from "@/lib/calendar-events";
 import { taskTreeOrder } from "@/lib/task-keyboard";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { navigateViewDate, type ViewDateAction } from "@/lib/view-navigation";
 import { Button } from "@/components/ui/button";
 
@@ -112,9 +112,9 @@ export function UpcomingListView({ tasks, events = [] }: { tasks: Task[]; events
   return (
     <div>
       <div className="mx-auto mb-2 flex max-w-2xl flex-wrap items-center justify-between gap-2">
-        <Button size="sm" variant="ghost" onClick={() => navigate("previous-week")}>Previous week <ShortcutHint commandId="upcoming.previous-week" /></Button>
-        <Button size="sm" variant="outline" onClick={() => navigate("today")}>Today <ShortcutHint commandId="upcoming.today" /></Button>
-        <Button size="sm" variant="ghost" onClick={() => navigate("next-week")}>Next week <ShortcutHint commandId="upcoming.next-week" /></Button>
+        <Button size="sm" variant="ghost" onClick={() => navigate("previous-week")}>Previous week</Button>
+        <Button size="sm" variant="outline" onClick={() => navigate("today")}>Today</Button>
+        <Button size="sm" variant="ghost" onClick={() => navigate("next-week")}>Next week</Button>
       </div>
       <div className="mx-auto mb-4 flex max-w-2xl gap-1 border-b pb-2">
         {weekDays.map((day) => (

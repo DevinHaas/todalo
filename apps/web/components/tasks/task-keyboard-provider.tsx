@@ -4,7 +4,7 @@ import { createContext, useContext, useRef, useState, useTransition, type RefObj
 import { usePathname } from "next/navigation";
 import { TaskFocusController } from "@/lib/task-keyboard";
 import type { Task } from "@/lib/tasks";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { bulkTaskAction } from "@/app/(app)/tasks/actions";
 import { TaskEditDialog } from "./task-edit-dialog";
 import { TaskComposer } from "./task-composer";
@@ -110,8 +110,8 @@ export function TaskKeyboardProvider({ tasks, children, projectId, nestedAllowed
       {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       {state.selected.size > 0 && <div ref={toolbar} role="toolbar" aria-label="Selected task actions" className="mb-3 flex flex-wrap items-center gap-2 rounded border bg-muted p-2">
         <span className="text-sm">{state.selected.size} selected</span>
-        <Button size="sm" disabled={pending} onClick={() => mutate("complete")}>Complete <ShortcutHint commandId="task.complete" /></Button>
-        <Button size="sm" variant="outline" disabled={pending} onClick={() => mutate("delete")}>Delete <ShortcutHint commandId="task.delete" /></Button>
+        <Button size="sm" disabled={pending} onClick={() => mutate("complete")}>Complete</Button>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => mutate("delete")}>Delete</Button>
         <TaskMetadataActions toolbar />
         <Button size="sm" variant="ghost" onClick={() => { state.selected.clear(); refresh(value => value + 1); focusElement(state.focused); }}>Clear selection</Button>
       </div>}
@@ -122,11 +122,11 @@ export function TaskKeyboardProvider({ tasks, children, projectId, nestedAllowed
     {editor && editor.mode !== "menu" && <TaskEditDialog key={editor.task.id} task={editor.task} variant={editor.mode === "inline" ? "inline" : "details"} open onOpenChange={open => { if (!open) { setEditor(null); restore(); } }} initialDateOpen={editor.mode === "date"} onNavigate={navigateEditor} onInsert={edge => { const task = editor.task; setEditor(null); insert(edge, task); }} />}
     <Dialog open={editor?.mode === "menu"} onOpenChange={open => { if (!open) { setEditor(null); restore(); } }}>
       <DialogContent><DialogHeader><DialogTitle>Task actions</DialogTitle></DialogHeader>
-        <Button variant="outline" onClick={() => setEditor(editor && { ...editor, mode: "inline" })}>Edit <ShortcutHint commandId="task.edit" /></Button>
-        <Button variant="outline" onClick={() => setEditor(editor && { ...editor, mode: "date" })}>Choose date <ShortcutHint commandId="task.date" /></Button>
-        <Button variant="outline" onClick={() => { if (editor) mutate("clear-date", [editor.task.id]); setEditor(null); restore(); }}>Clear date <ShortcutHint commandId="task.clear-date" /></Button>
-        <Button variant="outline" onClick={() => { if (editor) mutate("complete", [editor.task.id]); setEditor(null); }}>Complete <ShortcutHint commandId="task.complete" /></Button>
-        <Button variant="outline" onClick={() => { if (editor) mutate("delete", [editor.task.id]); setEditor(null); }}>Delete <ShortcutHint commandId="task.delete" /></Button>
+        <Button variant="outline" onClick={() => setEditor(editor && { ...editor, mode: "inline" })}>Edit</Button>
+        <Button variant="outline" onClick={() => setEditor(editor && { ...editor, mode: "date" })}>Choose date</Button>
+        <Button variant="outline" onClick={() => { if (editor) mutate("clear-date", [editor.task.id]); setEditor(null); restore(); }}>Clear date</Button>
+        <Button variant="outline" onClick={() => { if (editor) mutate("complete", [editor.task.id]); setEditor(null); }}>Complete</Button>
+        <Button variant="outline" onClick={() => { if (editor) mutate("delete", [editor.task.id]); setEditor(null); }}>Delete</Button>
       </DialogContent>
     </Dialog>
   </TaskKeyboardContext.Provider>;

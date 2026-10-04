@@ -18,7 +18,7 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("general.search", "Search", "General", "global", ["/", "f"], 2, { availability: "available" }),
   command("general.quick-find", "Quick Find", "General", "global", ["Primary+k"], 2, { availability: "available" }),
   command("view.toggle-nested", "Toggle nested tasks and sections", "Task actions", "view", ["Primary+Alt+0"], 2, { availability: "available" }),
-...[["home", "Home", ["h", "g then h"], 2], ["inbox", "Inbox", ["g then i"], 2], ["today", "Today", ["g then t"], 1], ["upcoming", "Upcoming", ["g then u"], 1], ["labels", "Labels", ["g then l"], 3], ["projects", "Projects", ["g then p"], 2], ["sections", "Navigate sections", ["g then /"], 2], ["filters", "Filters & Labels", ["g then v"], 3], ["settings", "Settings", ["o then s"], 1], ["help", "Help & resources", ["o then h"], 1], ["account", "Account menu", ["o then u"], 1], ["theme", "Toggle theme", ["o then t"], 1]].map(([id, label, keys, stage]) => command(`navigation.${id}`, label as string, "Navigation", "global", keys as string[], stage as number, { availability: ["home", "inbox", "projects", "sections", "today", "upcoming", "settings", "help", "account", "theme"].includes(id as string) ? "available" : "planned" })),
+...[["inbox", "Inbox", ["g then i"], 2], ["today", "Today", ["g then t"], 1], ["upcoming", "Upcoming", ["g then u"], 1], ["labels", "Labels", ["g then l"], 3], ["projects", "Projects", ["g then p"], 2], ["sections", "Navigate sections", ["g then /"], 2], ["filters", "Filters & Labels", ["g then v"], 3], ["settings", "Settings", ["o then s"], 1], ["help", "Help & resources", ["o then h"], 1], ["account", "Account menu", ["o then u"], 1], ["theme", "Toggle theme", ["o then t"], 1]].map(([id, label, keys, stage]) => command(`navigation.${id}`, label as string, "Navigation", "global", keys as string[], stage as number, { availability: ["inbox", "projects", "sections", "today", "upcoming", "settings", "help", "account", "theme"].includes(id as string) ? "available" : "planned" })),
   command("task.previous", "Previous task", "Navigation", "view", ["k", "ArrowUp"], 1, { repeat: true }),
   command("task.next", "Next task", "Navigation", "view", ["j", "ArrowDown"], 1, { repeat: true }),
   command("task.left", "Move focus left", "Navigation", "view", ["ArrowLeft"], 1, { repeat: true }),
@@ -163,6 +163,8 @@ export function parsePreferences(value: unknown): KeyboardPreferences {
     const result: Record<string, string[]> = {};
     for (const [id, bindings] of Object.entries(map)) {
       if (!Array.isArray(bindings) || bindings.length > 8 || bindings.some(binding => typeof binding !== "string" || binding.length > 100)) throw new Error("Invalid binding set.");
+      // Retired Home assignments must not invalidate other saved shortcuts.
+      if (id === "navigation.home") continue;
       result[id] = bindings as string[];
     }
     return result;

@@ -6,6 +6,9 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { useRamble } from "@/components/ramble/ramble-provider";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
+import { matchesShortcut } from "@/lib/keyboard-search";
 import { loadKeyboardPreferences, saveKeyboardPreferences } from "@/app/(app)/settings/keyboard-actions";
 import { KeyboardDispatcher, keyboardCommands, effectiveBindings, safePreferences, type KeyboardPreferences, type Platform, type KeyboardCommand } from "@/lib/keyboard";
 
@@ -47,18 +50,14 @@ const spoken: Record<string, string> = { Meta: "Command", Ctrl: "Control", Alt: 
 const display: Record<string, string> = { Meta: "⌘", Ctrl: "Ctrl", Alt: "⌥", Shift: "⇧", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Escape: "Esc", Backspace: "⌫", Space: "Space" };
 export function ShortcutKeys({ bindings, className = "" }: { bindings: string[]; className?: string }) {
   return <span className={`inline-flex flex-wrap items-center justify-end gap-1 ${className}`}>
-    {bindings.map((binding, index) => <span key={`${binding}-${index}`} className="inline-flex items-center gap-1" aria-label={binding.split(" then ").map(step => step.split("+").map(key => spoken[key] ?? key).join(" plus ")).join(" then ")}>
+    {bindings.map((binding, index) => <span key={`${binding}-${index}`} className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1" aria-label={binding.split(" then ").map(step => step.split("+").map(key => spoken[key] ?? key).join(" plus ")).join(" then ")}>
       {index > 0 && <span className="text-xs text-muted-foreground" aria-hidden>or</span>}
-      {binding.split(" then ").map((step, stepIndex) => <span key={stepIndex} className="inline-flex items-center gap-0.5" aria-hidden>
+      {binding.split(" then ").map((step, stepIndex) => <span key={stepIndex} className="inline-flex max-w-full flex-wrap items-center gap-0.5" aria-hidden>
         {stepIndex > 0 && <span className="px-1 text-xs text-muted-foreground">then</span>}
         {step.split("+").map((key, keyIndex) => <kbd key={keyIndex} className="min-w-5 rounded border bg-muted px-1 py-0.5 text-center font-sans text-xs leading-none shadow-xs">{display[key] ?? (key.length === 1 ? key.toUpperCase() : key)}</kbd>)}
       </span>)}
     </span>)}
   </span>;
-}
-export function ShortcutHint({ commandId }: { commandId: string }) {
-  const { bindings } = useKeyboard();
-  return <ShortcutKeys bindings={bindings(commandId)} />;
 }
 function isEditor(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest('input,textarea,select,[contenteditable=""],[contenteditable="true"],[role="textbox"]'));
@@ -72,10 +71,11 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
   const platform = useSyncExternalStore(subscribePlatform, detectPlatform, () => "windows" as Platform);
   const [syncError, setSyncError] = useState<string | null>(initialError ?? null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpQuery, setHelpQuery] = useState("");
   const registrations = useRef(new Set<Registration>());
   const recording = useRef(false); const composing = useRef(false); const dispatcher = useRef(new KeyboardDispatcher());
   const captureDispatcher = useRef(new KeyboardDispatcher());
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const focusBeforeHelp = useRef<HTMLElement | null>(null);
   const setRecording = useCallback((active: boolean) => { recording.current = active; dispatcher.current.reset(); captureDispatcher.current.reset(); }, []);
   const resolved = useMemo(() => safePreferences(preferences, platform), [preferences, platform]);
@@ -86,6 +86,7 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
   }, []);
   const openHelp = useCallback(() => {
     focusBeforeHelp.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setHelpQuery("");
     setHelpOpen(true);
   }, []);
   const reload = useCallback(async () => {
@@ -157,17 +158,19 @@ export function KeyboardProvider({ children, initialPreferences, initialError }:
   }, [bindings, pathname, router, openHelp, toggleSidebar, openRamble]);
   const displayedSyncError = syncError ?? (resolved.errors.length ? "Saved shortcuts conflict with updated defaults. Your previous effective bindings are retained. Resolve conflicts in Settings." : null);
   const value = useMemo(() => ({ preferences, platform, syncError: displayedSyncError, bindings, openHelp, save, reload, register, setRecording }), [preferences, platform, displayedSyncError, bindings, openHelp, save, reload, register, setRecording]);
-  const available = keyboardCommands.filter(command => command.availability === "available" && bindings(command.id).length);
+  const available = keyboardCommands.filter(command => command.availability === "available" && bindings(command.id).length && matchesShortcut(command, bindings(command.id), helpQuery));
   return <KeyboardContext.Provider value={value}>
     {children}
     {displayedSyncError && <div role="status" className="fixed bottom-3 left-3 z-40 max-w-sm rounded border bg-background p-3 text-sm shadow">{displayedSyncError} <button className="underline" onClick={() => router.push("/settings#keyboard-shortcuts")}>Shortcut settings</button></div>}
     <Sheet open={helpOpen} onOpenChange={open => { setHelpOpen(open); if (!open) requestAnimationFrame(() => focusBeforeHelp.current?.isConnected && focusBeforeHelp.current.focus()); }}>
-      <SheetContent showCloseButton={false} initialFocus={closeRef} className="gap-0 font-sans data-[side=right]:w-full data-[side=right]:sm:max-w-lg sm:data-[side=right]:inset-y-4 sm:data-[side=right]:right-4 sm:data-[side=right]:h-auto sm:rounded-xl sm:border motion-reduce:transition-none motion-reduce:transform-none">
+      <SheetContent showCloseButton={false} initialFocus={searchRef} className="gap-0 font-sans data-[side=right]:w-full data-[side=right]:sm:max-w-lg sm:data-[side=right]:inset-y-4 sm:data-[side=right]:right-4 sm:data-[side=right]:h-auto sm:rounded-xl sm:border motion-reduce:transition-none motion-reduce:transform-none">
         <SheetHeader className="shrink-0 border-b">
-          <div className="flex items-center justify-between gap-4"><SheetTitle>Keyboard Shortcuts</SheetTitle><SheetClose ref={closeRef} render={<Button variant="ghost" size="icon-sm" aria-label="Close keyboard shortcuts" />}>×</SheetClose></div>
+          <div className="flex items-center justify-between gap-4"><SheetTitle>Keyboard Shortcuts</SheetTitle><SheetClose render={<Button variant="ghost" size="icon-sm" aria-label="Close keyboard shortcuts" />}>×</SheetClose></div>
           <SheetDescription><button className="underline" onClick={() => { setHelpOpen(false); router.push("/settings#keyboard-shortcuts"); }}>Customize shortcuts in Settings</button></SheetDescription>
+          <div className="relative mt-2"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input ref={searchRef} aria-label="Search keyboard shortcuts help" placeholder="Search shortcuts…" className="pl-9" value={helpQuery} onChange={event => setHelpQuery(event.target.value)} /></div>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+          {!available.length && <p role="status" className="py-8 text-center text-sm text-muted-foreground">No shortcuts match your search.</p>}
           {[...new Set(available.map(command => command.group))].map(group => <section key={group} className="pt-5">
             <h2 className="mb-2 border-b pb-2 font-semibold">{group}</h2>
             {available.filter(command => command.group === group).map(command => <div key={command.id} className="flex items-center justify-between gap-4 py-2.5"><span className="min-w-0 flex-1">{command.label}</span><ShortcutKeys className="max-w-[55%] shrink-0" bindings={bindings(command.id)} /></div>)}

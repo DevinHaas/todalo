@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ViewSwitcher } from "@/components/tasks/view-switcher";
 import { TaskRow } from "@/components/tasks/task-row";
 import { TaskComposer } from "@/components/tasks/task-composer";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { createSection, deleteSection } from "@/app/(app)/projects/organization-actions";
 import { updateProject, deleteProject } from "@/app/(app)/projects/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,8 +33,8 @@ export function ProjectView({ project, sections, tasks, events = [] }: { project
   const groups = [{ id: null, name: "Tasks" }, ...sections];
   return <div ref={scope} tabIndex={-1} className="space-y-5 outline-none" data-project-id={project.id}>
     <ProjectFilePaste projectId={project.id} scope={scope} />
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{project.name}</h1><div className="flex gap-2"><Button variant="outline" onClick={() => setSectionOpen(true)}>Add section <ShortcutHint commandId="project.section" /></Button><Button variant="outline" onClick={() => setMenuOpen(true)}>Project menu <ShortcutHint commandId="project.menu" /></Button></div></div>
-    <div className="flex flex-wrap items-center gap-3"><label className="text-sm">Sort <select aria-label="Project sort" className="ml-2 rounded border p-1" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="manual">Manual</option><option value="date">Date</option><option value="name">Name</option><option value="priority">Priority</option></select></label><span className="text-xs text-muted-foreground">Date <ShortcutHint commandId="project.sort-date" /> · Name <ShortcutHint commandId="project.sort-name" /> · Priority <ShortcutHint commandId="project.sort-priority" /></span></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{project.name}</h1><div className="flex gap-2"><Button variant="outline" onClick={() => setSectionOpen(true)}>Add section</Button><Button variant="outline" onClick={() => setMenuOpen(true)}>Project menu</Button></div></div>
+    <div className="flex flex-wrap items-center gap-3"><label className="text-sm">Sort <select aria-label="Project sort" className="ml-2 rounded border p-1" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="manual">Manual</option><option value="date">Date</option><option value="name">Name</option><option value="priority">Priority</option></select></label></div>
     {error && <p role="alert" className="text-destructive">{error}</p>}
     <ViewSwitcher nestedAllowed={sort === "manual"} projectId={project.id} tasks={sorted} events={events} listView={<div className="space-y-6">{groups.map(group => {
       const groupTasks = sorted.filter(task => task.sectionId === group.id);

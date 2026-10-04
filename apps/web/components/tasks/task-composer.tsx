@@ -32,7 +32,7 @@ import {
 } from "@/lib/quick-add-sync";
 import { cn } from "@/lib/utils";
 import type { Recurrence } from "@/lib/recurrence";
-import { useKeyboardCommands, ShortcutHint } from "@/components/keyboard/keyboard-provider";
+import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { TaskMetadataFields, useMetadataOptions, dateInputDate } from "./task-metadata-fields";
 
 const PARSE_DEBOUNCE_MS = 150;
@@ -754,7 +754,7 @@ export function TaskComposer({
         placeholder="Description"
         className="border-0 px-0 text-sm focus-visible:ring-0"
       />}
-      {!descriptionOpen && <button type="button" className="text-sm text-muted-foreground" onClick={() => { setDescriptionOpen(true); requestAnimationFrame(() => descriptionRef.current?.focus()); }}>Add description <ShortcutHint commandId="quick-add.description" /></button>}
+      {!descriptionOpen && <button type="button" className="text-sm text-muted-foreground" onClick={() => { setDescriptionOpen(true); requestAnimationFrame(() => descriptionRef.current?.focus()); }}>Add description</button>}
       <div className="flex flex-wrap items-center gap-2">
         <DatePicker
           dueDate={dueDate}
@@ -773,7 +773,7 @@ export function TaskComposer({
           <MoreHorizontal className="size-4" />
         </Button>
       </div>
-      {actionsOpen && <div className="rounded border p-3"><p className="mb-2 text-sm">Additional actions <ShortcutHint commandId="quick-add.actions" /> · Deadline <ShortcutHint commandId="quick-add.deadline" /></p>{metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}<TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} focusField={metadataFocus} disabled={isPending} /></div>}
+      {actionsOpen && <div className="rounded border p-3"><p className="mb-2 text-sm">Additional actions</p>{metadata.error && <p role="alert" className="text-destructive">{metadata.error} <button type="button" className="underline" onClick={metadata.reload}>Retry</button></p>}<TaskMetadataFields priority={priority} onPriority={setPriority} deadline={deadline} onDeadline={setDeadline} labelIds={labelIds} onLabels={setLabelIds} labels={metadata.options?.labels ?? []} focusField={metadataFocus} disabled={isPending} /></div>}
       <div className="flex items-center justify-between border-t pt-3">
         <Button type="button" variant="outline" size="sm" disabled>
           <Inbox className="size-4" />
@@ -791,7 +791,7 @@ export function TaskComposer({
             Cancel
           </Button>
           <Button type="button" onClick={() => submit()} disabled={!title.trim() || isPending}>
-            Add task <ShortcutHint commandId="editor.submit-below" />
+            Add task
           </Button>
         </div>
       </div>
