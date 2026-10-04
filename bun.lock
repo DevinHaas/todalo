@@ -70,6 +70,7 @@
         "@todalo/auth": "*",
         "@todalo/db": "*",
         "@todalo/ramble": "*",
+        "@todalo/server": "*",
         "better-auth": "^1.6.23",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -123,6 +124,14 @@
       "devDependencies": {
         "typescript": "^5",
         "vitest": "^4.1.10",
+      },
+    },
+    "packages/server": {
+      "name": "@todalo/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@todalo/db": "*",
+        "drizzle-orm": "^0.45.2",
       },
     },
   },
@@ -518,6 +527,8 @@
     "@todalo/db": ["@todalo/db@workspace:packages/db"],
 
     "@todalo/ramble": ["@todalo/ramble@workspace:packages/ramble"],
+
+    "@todalo/server": ["@todalo/server@workspace:packages/server"],
 
     "@todalo/web": ["@todalo/web@workspace:apps/web"],
 

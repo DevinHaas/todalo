@@ -1,0 +1,8 @@
+{
+  "name": "@todalo/server",
+  "version": "0.1.0",
+  "private": true,
+  "exports": { "./today": "./src/today.ts" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run --root ../.. packages/server" },
+  "dependencies": { "@todalo/db": "*", "drizzle-orm": "^0.45.2" }
+}
