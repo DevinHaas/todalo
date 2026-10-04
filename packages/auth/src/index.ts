@@ -1,10 +1,10 @@
-import { betterAuth } from "better-auth";
+import { createSessionAuth, configuredOrigins } from "./config";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@todalo/db";
 
-export const auth = betterAuth({
+export const auth = createSessionAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
-  emailAndPassword: { enabled: true },
+  trustedOrigins: configuredOrigins(process.env.AUTH_TRUSTED_ORIGINS),
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -15,13 +15,6 @@ export const auth = betterAuth({
         "https://www.googleapis.com/auth/calendar.events",
         "https://www.googleapis.com/auth/calendar.readonly",
       ],
-    },
-  },
-  account: {
-    accountLinking: {
-      enabled: true,
-      trustedProviders: ["google"],
-      allowDifferentEmails: true,
     },
   },
 });

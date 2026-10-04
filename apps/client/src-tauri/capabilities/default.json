@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Local account screen can only use the four native authentication commands",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-account", "allow-sign-in", "allow-sign-up", "allow-sign-out"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "dev": { "env": ["CLIENT_API_PROXY_TARGET", "TAURI_DEV_HOST"] },
+    "build": { "env": ["TAURI_ENV_*"], "outputs": ["dist/**"] }
+  }
+}
