@@ -21,11 +21,15 @@ export async function getTasksForUser(userId: string, projectId?: string) {
  * Date counting intentionally uses the server's local day, as the legacy query
  * does; it is not UTC truncation or a new account-timezone interpretation.
  */
-export async function getTodayTasksForUser(userId: string, now = new Date()) {
+export async function getTodayTasksForUser(userId: string, now?: Date) {
   const tasks = await getTasksForUser(userId);
+  return { tasks, openCount: countTodayTasks(tasks, now) };
+}
+
+/** Call after all parallel page reads finish to preserve legacy count timing. */
+export function countTodayTasks(tasks: readonly { status: string; dueDate: Date | string | null }[], now = new Date()) {
   const tomorrow = new Date(now);
   tomorrow.setHours(24, 0, 0, 0);
-  const openCount = tasks.filter(task => task.status !== "done" && task.dueDate !== null
+  return tasks.filter(task => task.status !== "done" && task.dueDate !== null
     && new Date(task.dueDate) < tomorrow).length;
-  return { tasks, openCount };
 }

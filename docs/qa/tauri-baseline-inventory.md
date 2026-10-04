@@ -11,7 +11,7 @@ their owning feature, not only at the final gate.
 | Route | Existing read/navigation boundary | Delivery / validation owner |
 | --- | --- | --- |
 | `/`, `/home` | Root/home redirects; authenticated session/layout | 2, 3; refresh fallback 18, 25 |
-| `/login`, `/api/auth/[...all]` | Better Auth email/password, Google sign-in/linking, session and logout | 2; Google/native return 4 |
+| `/login`, `/api/auth/[...all]` | Better Auth email/password login and new-account registration (`authClient.signUp.email`), Google sign-in/linking, session and logout | 2 owns registration delivery/validation alongside login; Google/native return 4 |
 | App layout | Session, Today count, smart dates, Ramble projects, shortcut preferences, owned tasks/sections for navigation | 1 (Today count), 3 (bootstrap); 8, 12, 13, 19 |
 | `/today` | All owned tasks/labels + open due/overdue count; provider events; list/board/schedule | 1 query; 3 screen; 16 schedule; 17 board; 20 events |
 | `/inbox` | All owned tasks filtered by absent project; list/board/calendar | 5; 16, 17 layouts |
@@ -65,7 +65,7 @@ their owning feature, not only at the final gate.
 | Ramble protocol/session | Connect/context/audio/messages, transcription, errors/close, auth and origin | 6 |
 | Ramble staging/semantic processing | Review/remove/undo/revise staged todos, project/parent/date/recurrence context, semantic providers | 21 |
 | `commitRambleTodos`, `prepareTaskRows` | Commit through server, date/timezone mapping, organization, deduplication and errors | 21 |
-| Session/cache lifecycle | Cookies/bearer current-user/logout/revoke, protected credential restart persistence; clear user caches | 2; recovery 22 |
+| Session/cache lifecycle | Email new-account registration, cookies/bearer current-user/logout/revoke, protected credential restart persistence; clear user caches | 2 owns registration creation/error/session checks; recovery 22 |
 | Native external URL/deep-link transport | System authorization browser, state/verifier handoff and exact origins | 4 auth; 18 task links |
 | Native feedback | Optional completion haptics; failure/no-op and reduced-motion behavior | 7 |
 | Connection and app lifecycle | Resume/refocus/refetch, realtime reconnect, draft preservation/stale edits, background stop; no offline writes | 22 |
@@ -75,7 +75,7 @@ their owning feature, not only at the final gate.
 | Ticket | Inventory validation responsibility |
 | --- | --- |
 | 1 | Preserve Today query behavior, original test state, deterministic screenshots and this inventory |
-| 2 | Bundled Vite/Tauri shells, login/session/credential feasibility, browser coexistence |
+| 2 | Bundled Vite/Tauri shells, email registration/login/session/credential feasibility, browser coexistence; preserve new-account registration before legacy retirement |
 | 3 | Shared Today/bootstrap read endpoint and original responsive shell |
 | 4 | Google/linking and auth callbacks/deep links |
 | 5 | Basic task create/complete/delete and effect deduplication |
@@ -101,7 +101,7 @@ their owning feature, not only at the final gate.
 | 25 | Staging/browser refresh fallback, API and callback routing, compatibility window/rollback |
 | 26 | Every inventory row, baseline comparison, physical-device lifecycle/VoiceOver/reduced motion and bundle/secret audit |
 | 27 | Authorized pilot/distribution/browser cutover and monitoring; preserve old deployment |
-| 28 | Audit legacy consumers, retire Next wrappers/build assets after rollback window, keep callback/API compatibility |
+| 28 | Audit legacy consumers including registration, require ticket 2 new-account signup validation, retire Next wrappers/build assets after rollback window, keep callback/API compatibility |
 
 No inventoried product operation is deferred to an unspecified ticket. Native
 behavior not yet present in the legacy product is explicitly owned above. This

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { tasks, taskLabels } from "@/db/schema";
 import { getTasksForUser as queryTasks, getTodayTasksForUser } from "@todalo/server/today";
 
-export { getTodayTasksForUser };
+export { getTodayTasksForUser, countTodayTasks } from "@todalo/server/today";
 
 export async function getTasksForUser(userId: string, projectId?: string) {
   return queryTasks(userId, projectId);

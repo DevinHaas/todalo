@@ -1,5 +1,5 @@
 import { requireUserId } from "@/lib/auth";
-import { getTodayTasksForUser } from "@/lib/tasks";
+import { getTodayTasksForUser, countTodayTasks } from "@/lib/tasks";
 import { getCalendarEventsForUser } from "@/lib/calendar-events";
 import { ViewSwitcher } from "@/components/tasks/view-switcher";
 import { TodayView } from "@/components/tasks/today-view";
@@ -7,10 +7,12 @@ import { TodayScheduleView } from "@/components/tasks/today-schedule-view";
 
 export default async function TodayPage() {
   const userId = await requireUserId();
-  const [{ tasks: allTasks, openCount }, events] = await Promise.all([
+  const [{ tasks: allTasks }, events] = await Promise.all([
     getTodayTasksForUser(userId),
     getCalendarEventsForUser(userId),
   ]);
+  // Events can finish after midnight even if the task read finished before it.
+  const openCount = countTodayTasks(allTasks);
 
   return (
     <div>

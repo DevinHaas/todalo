@@ -69,6 +69,11 @@ heading `4 Oct · Today · Sunday` before accepting a screenshot.
   local-day midnight/end boundaries, future/completed/undated tasks retained for
   layout switching, both Zurich DST transitions, and optional project scoping.
 - `bun run --filter @todalo/server typecheck` and legacy web typecheck pass.
+- Review follow-up: a pending DB read crossing local midnight reproduced an
+  incorrect zero count before the clock fix. Seven focused regressions now pass:
+  the default clock resolves after task reads, and the exported count helper lets
+  the Today page recalculate after its parallel calendar read also finishes.
+  Explicit caller-supplied dates remain available for deterministic query calls.
 - Final full-suite/production-build integration evidence is owned by the parent
   migration run and recorded in its progress report.
 
@@ -77,7 +82,10 @@ responsibility for resolving the session. It does not import Next headers, cache
 or navigation. `getOwnedTask` and all mutations retain their legacy implementation.
 Date semantics remain the server's local calendar day, including later-today
 tasks, rather than introducing a new timezone or UTC date cutoff. Client list
-filtering is unchanged. The original DB sort-order clause remains in the shared read.
+filtering is unchanged. Today computes its displayed count after both task and
+event reads resolve, as before extraction. The original DB sort-order clause
+remains in the shared read. The operation inventory explicitly maps existing
+email registration to ticket 2 and makes its preservation a retirement check.
 
 Ownership tests use the existing relational database boundary, not a real
 PostgreSQL server. They execute real Drizzle predicates; its helper does not model

@@ -22,3 +22,11 @@ horizontal overflow. Temporary app routes removed and cleanup verified. Screensh
 evidence uses the whole legacy layout/component fixture, not live account data or
 Apple-device evidence. No acceptance blockers remain for ticket 1; later transport
 and physical-device gates remain with their owners.
+
+Review fixes completed 2026-10-04: preserved email registration explicitly maps
+to ticket 2 delivery/validation and ticket 28 retirement checks. A RED regression
+showed a DB read crossing local midnight incorrectly counted zero tasks; the
+query now resolves its default clock after the read, and Today recounts after
+parallel calendar loading. Seven focused regressions and server/web typechecks
+pass. Stale generated dev-route type references from the removed capture fixture
+were cleared before the web check. Committed screenshots remain unchanged.
