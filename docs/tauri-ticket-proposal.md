@@ -1,9 +1,9 @@
 # Tauri migration: proposed ticket breakdown
 
 Source: [migration specification](tauri-migration-spec.md).
-Status: draft for review; no implementation tickets published yet.
+Status: implementation started on 4 October 2026 on `codex/tauri-migration`; tickets are published in [the local tracker](../.scratch/tauri-migration/issues/).
 
-Publish approved tickets to the configured local Markdown tracker, one file per ticket, using `ready-for-agent` from the invoked skill. The tracker configuration references a triage vocabulary file that is absent; the skill supplies the status needed here. A ready ticket is eligible for implementation only when all its blockers are complete.
+The local Markdown tracker has one file per ticket, initially marked `ready-for-agent`. A ready ticket is eligible for implementation only when all its blockers are complete. Ticket status and evidence are recorded in those files; hardware requirements remain acceptance gates.
 
 Each feature ticket includes its required API/contracts, shared server operations, shared React interface, platform adaptations and behavioral validation. Extract just the server operations needed for that feature before adding the new caller; retain legacy wrappers until retirement. Do not create separate “all APIs” and “all screens” tickets. Existing ADR decisions on recurrence, Ramble staging/commit and semantic processing remain in force.
 

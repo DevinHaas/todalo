@@ -1,6 +1,6 @@
 # Todalo migration to Tauri 2
 
-Status: proposed implementation specification. Technology choice: Tauri 2.
+Status: implementation specification; work started on `codex/tauri-migration`. Technology choice: Tauri 2.
 Date: 4 October 2026.
 
 ## 1. Outcome and constraints
