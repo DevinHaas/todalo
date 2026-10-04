@@ -8,7 +8,7 @@ The source checkout remains on its existing branch. Its untracked research files
 
 ## Execution
 
-Each implementation ticket has its own agent. Ticket 1 owns the shared Today query, regression coverage, deterministic visual baseline and capability inventory. Ticket 2 has a separate agent for the Vite/Tauri shell, account flow and native authentication preparation. It waits for ticket 1 acceptance before implementation. Later tickets remain subject to their recorded blockers; signed hardware validation and the native feasibility gate are required before broad migration.
+Each implementation ticket has its own agent. Ticket 1 is complete in commit `bcaf034`: shared Today query, five regression tests, reproducible desktop/mobile captures and the operation inventory mapped across all 28 tickets. See [baseline evidence](tauri-baseline.md) and [inventory](tauri-baseline-inventory.md). Ticket 2's separate agent has started the Vite/Tauri shell, account flow and native authentication implementation. Later tickets remain subject to their recorded blockers; signed hardware validation and the native feasibility gate are required before broad migration.
 
 ## Initial validation
 
@@ -24,6 +24,6 @@ Each implementation ticket has its own agent. Ticket 1 owns the shared Today que
 - Rust: cargo 1.99.0; installed target `aarch64-apple-darwin`.
 - `security find-identity -v -p codesigning`: zero valid signing identities.
 - `xcrun devicectl list devices`: timed out initializing CoreDeviceService; no physical-device availability is established.
-- The user confirmed that no Apple Developer membership exists yet and requested enrollment/subscription guidance. Follow [the enrollment guide](apple-developer-enrollment.md); entity type, team, final bundle identifier and physical iPhone availability remain open. Do not infer successful hardware validation from an unsigned build or simulator.
+- The user has no Apple Developer membership or registered company and wants Bleat as the publisher brand. Follow [the enrollment guide](apple-developer-enrollment.md); the choice of establishing a legal entity first versus Individual enrollment remains open, as do team, final bundle identifier and physical iPhone availability. App branding remains Todalo. Do not infer successful hardware validation from an unsigned build or simulator.
 
 The migration cannot be declared release-ready until the specified signing, physical-device, lifecycle and parity checks are evidenced. Production routing and external publication remain separate release actions.

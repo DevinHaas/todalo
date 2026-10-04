@@ -18,8 +18,8 @@ Ticket 1 is a bounded prefactor and baseline exception. Tickets 10, 26, 27 and 2
 
 2. **Sign into an installed Todalo app and keep the session**
    **Blocked by:** 1.
-   **What it delivers:** A user signs in with an existing email/password account in the shared browser, iPhone and Mac client, sees their account identity, relaunches successfully and signs out.
-   **Acceptance:** Introduce the minimum shared Vite/Tauri shell and account screen; prove native credential storage, session expiry/revocation and cache clearing; preserve browser cookie auth and legacy sessions; verify origin/CSRF behavior. Install development builds on physical iPhone and Mac and record Apple identity/toolchain/support-matrix decisions. No provider OAuth yet.
+   **What it delivers:** A user signs in with an existing email/password account or creates an account using the existing name/email/password registration flow in the shared browser, iPhone and Mac client, sees their account identity, relaunches successfully and signs out.
+   **Acceptance:** Introduce the minimum shared Vite/Tauri shell and account screen; preserve email registration and validate registration failures; prove native credential storage, session expiry/revocation and cache clearing; preserve browser cookie auth and legacy sessions; verify origin/CSRF behavior. Install development builds on physical iPhone and Mac and record Apple identity/toolchain/support-matrix decisions. No provider OAuth yet.
 
 3. **Read Today and open a task across all three clients**
    **Blocked by:** 2.
