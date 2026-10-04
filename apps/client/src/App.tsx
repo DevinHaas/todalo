@@ -34,7 +34,7 @@ export default function App() {
 
   return <main><section className="account-panel" aria-busy={pending || state.status === "loading"}>
     {state.status === "loading" ? <p role="status">Loading your account…</p> : state.status === "error" ? <>
-      <h1>Connection unavailable</h1><p role="alert">{state.error}</p>
+      <h1>Account unavailable</h1><p role="alert">{state.error}</p>
       <button onClick={() => void session.refresh()}>Try again</button>
     </> : state.account ? <>
       <header><h1>Your account</h1><p>Signed in to todalo.</p></header>

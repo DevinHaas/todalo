@@ -1,3 +1,5 @@
+import { AccountTransportError } from "./errors";
+
 export interface Account {
   user: { id: string; name: string; email: string; image: string | null; emailVerified: boolean };
   expiresAt: string;
@@ -46,10 +48,10 @@ export class SessionController {
       if (generation !== this.generation) return;
       if (account?.user.id !== this.state.account?.user.id || !account) this.clearUserCache();
       this.update({ status: account ? "signed-in" : "signed-out", account, error: null });
-    } catch {
+    } catch (error) {
       if (generation === this.generation) {
         this.clearUserCache();
-        this.update({ status: "error", account: null, error: "Cannot reach todalo. Check your connection and try again." });
+        this.update({ status: "error", account: null, error: error instanceof AccountTransportError ? error.message : "Cannot reach todalo. Check your connection and try again." });
       }
     }
   }
@@ -62,7 +64,7 @@ export class SessionController {
       const account = await (mode === "signIn" ? this.transport.signIn(credentials) : this.transport.signUp(credentials));
       if (generation === this.generation) this.update({ status: "signed-in", account, error: null });
     } catch (error) {
-      if (generation === this.generation) this.update({ status: "signed-out", account: null, error: error instanceof Error ? error.message : "Sign-in failed. Try again." });
+      if (generation === this.generation) this.update({ status: "signed-out", account: null, error: error instanceof AccountTransportError ? error.message : "Sign-in failed. Try again." });
     } finally {
       this.mutationCount--;
     }
@@ -75,8 +77,8 @@ export class SessionController {
     try {
       await this.transport.signOut();
       if (generation === this.generation) this.update({ status: "signed-out", account: null, error: null });
-    } catch {
-      if (generation === this.generation) this.update({ ...this.state, error: "Sign-out could not reach the server. Try again to revoke this session." });
+    } catch (error) {
+      if (generation === this.generation) this.update({ ...this.state, error: error instanceof AccountTransportError ? error.message : "Sign-out could not reach the server. Try again to revoke this session." });
     } finally {
       this.mutationCount--;
     }

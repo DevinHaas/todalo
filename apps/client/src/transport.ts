@@ -1,11 +1,12 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Account, AccountTransport, Credentials } from "./session";
+import { AccountTransportError, nativeAccountError } from "./errors";
 
 export function browserTransport(fetcher: typeof fetch = fetch): AccountTransport {
   async function account(): Promise<Account | null> {
     const response = await fetcher("/api/v1/account", { credentials: "same-origin", cache: "no-store" });
     if (response.status === 401) return null;
-    if (!response.ok) throw new Error("Cannot load your account. Try again.");
+    if (!response.ok) throw new AccountTransportError("ACCOUNT_UNAVAILABLE");
     return response.json();
   }
   async function authenticate(path: string, credentials: Credentials & { name?: string }) {
@@ -13,10 +14,10 @@ export function browserTransport(fetcher: typeof fetch = fetch): AccountTranspor
       method: "POST", credentials: "same-origin",
       headers: { "content-type": "application/json" }, body: JSON.stringify(credentials),
     });
-    if (!response.ok) throw new Error(path === "sign-in" ? "Could not sign in. Check your email and password." : "Could not create your account. Check your details or sign in if you already have an account.");
+    if (!response.ok) throw new AccountTransportError(path === "sign-in" ? "SIGN_IN_FAILED" : "REGISTRATION_FAILED");
     // The browser relies on HttpOnly cookies; never retain the response token.
     const identity = await account();
-    if (!identity) throw new Error("Your session could not be loaded. Try signing in again.");
+    if (!identity) throw new AccountTransportError("SESSION_UNAVAILABLE");
     return identity;
   }
   return {
@@ -25,7 +26,7 @@ export function browserTransport(fetcher: typeof fetch = fetch): AccountTranspor
     signUp: (credentials) => authenticate("sign-up", credentials),
     signOut: async () => {
       const response = await fetcher("/api/auth/sign-out", { method: "POST", credentials: "same-origin" });
-      if (!response.ok) throw new Error("Sign-out failed.");
+      if (!response.ok) throw new AccountTransportError("LOGOUT_UNCONFIRMED");
     },
   };
 }
@@ -34,7 +35,7 @@ export function accountTransport(): AccountTransport {
   if (!isTauri()) return browserTransport();
   const command = async <T,>(name: string, args?: Record<string, unknown>): Promise<T> => {
     try { return await invoke<T>(name, args); }
-    catch (error) { throw new Error(typeof error === "string" ? error : "The native account operation could not finish. Try again."); }
+    catch (error) { throw nativeAccountError(error); }
   };
   // No credential getter and no general-purpose authenticated HTTP command.
   return {
