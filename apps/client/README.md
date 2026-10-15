@@ -123,6 +123,16 @@ The resulting app lives under `src-tauri/target/debug/bundle/macos/todalo.app`.
 It uses bundled assets. This is a local unsigned development artifact; no release
 has been signed, notarized or published.
 
+## Ramble recording
+
+Signed-in users open Ramble from the sidebar (`/ramble`) to record and see live
+transcription; saving tasks is ticket 21. Browsers connect same-origin (Vite
+proxies `/api` WebSockets) with cookies and an exact Origin. Native shells call
+`ramble_socket`: Rust mints a 30-second single-use ticket with the Keychain
+bearer and returns only the ticketed socket URL. The disposable QA service runs
+Ramble with a fake transcription provider; `scripts/ramble-smoke.ts` checks
+both paths. `QA_API_PORT` moves it off 3009. Evidence: [ticket 6](../../docs/qa/tauri-ramble.md).
+
 ## Apple project and verification
 
 The provisional identifier `app.todalo.development` is only for development;

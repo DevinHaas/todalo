@@ -5,6 +5,10 @@ import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
+import { createApi } from "../../api/src/app";
+import { connectSpeech } from "../../api/src/speech";
+import type { SpeechCallbacks, SpeechConnection } from "../../api/src/elevenlabs";
+import { fixtureSemanticProcessor } from "../../api/test-fixtures/semantic";
 
 const auth = createSessionAuth({
   database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
@@ -44,5 +48,40 @@ const app = createAuthRoutes(auth).use(createTaskRoutes({
   },
   task: async (userId, id) => tasks.find(item => item.userId === userId && item.id === id) ?? null,
 }));
-Bun.serve({ hostname: "127.0.0.1", port: 3009, fetch: withFakeGoogleConsent((request) => app.handle(request)) });
-console.log("Isolated account QA API listening on 127.0.0.1:3009");
+// Fake transcription (no provider credentials): reports what actually arrived,
+// so a capture proves PCM16 conversion and ordered transport end to end. The
+// client's Stop sends 1.5 s of digital silence, which finalizes the phrase.
+// Set RAMBLE_STT_PROVIDER=local (plus a loopback RAMBLE_STT_URL) for real speech.
+function fakeSpeech(callbacks: SpeechCallbacks): SpeechConnection {
+  let closed = false; let bytes = 0; let frames = 0; let peak = 0; let reported = 0;
+  queueMicrotask(() => { if (!closed) callbacks.ready(); });
+  const text = () => `QA transcription: ${(bytes / 32000).toFixed(1)} s of 16 kHz PCM16 in ${frames} frames, peak ${Math.round(peak / 327.67)}%`;
+  return {
+    audio(chunk) {
+      if (closed) return;
+      const samples = new Int16Array(chunk.slice().buffer);
+      if (chunk.byteLength === 48_000 && samples.every((sample) => sample === 0)) {
+        if (frames) callbacks.transcript(text(), true);
+        bytes = 0; frames = 0; peak = 0; reported = 0;
+        return;
+      }
+      frames += 1; bytes += chunk.byteLength;
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+      if (bytes - reported >= 32000) { reported = bytes; callbacks.transcript(text(), false); }
+    },
+    async finish() {},
+    close() { closed = true; },
+  };
+}
+const ramble = createApi({
+  allowedOrigins: new Set(["http://localhost:5173"]),
+  verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
+  preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [] }),
+  speech: process.env.RAMBLE_STT_PROVIDER ? connectSpeech : fakeSpeech,
+  semantic: fixtureSemanticProcessor,
+  commit: async () => { throw new Error("Saving Ramble tasks is ticket 21."); },
+});
+// Elysia owns the listener so /api/ramble/ws can upgrade; everything else
+// falls through to the auth/task routes and the fake Google consent page.
+ramble.mount(withFakeGoogleConsent((request) => app.handle(request))).listen({ hostname: "127.0.0.1", port: Number(process.env.QA_API_PORT ?? 3009) });
+console.log(`Isolated account QA API listening on 127.0.0.1:${process.env.QA_API_PORT ?? 3009}`);

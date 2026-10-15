@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./semantic": "./src/semantic.ts",
     "./quick-add": "./src/quick-add.ts",
-    "./recurrence": "./src/recurrence.ts"
+    "./recurrence": "./src/recurrence.ts",
+    "./audio": "./src/audio.ts"
   },
   "scripts": {
     "test": "vitest run --root ../.. packages/ramble",

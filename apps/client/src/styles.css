@@ -88,6 +88,11 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .task-detail p { margin: 0; }
 .task-detail .description { white-space: pre-wrap; }
 .sidebar-backdrop { display: none; }
+.ramble-capture { max-width: 42rem; margin: 0 auto; display: grid; gap: 1rem; }
+.ramble-capture header p, .ramble-status { margin: 0; color: var(--muted-foreground); font-size: .875rem; }
+.ramble-status[data-status="listening"] { color: var(--foreground); font-weight: 500; }
+.ramble-transcript { margin: 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
+.ramble-transcript .partial { color: var(--muted-foreground); }
 .app-shell [aria-disabled="true"] { cursor: default; }
 
 @media (max-width: 767px) {

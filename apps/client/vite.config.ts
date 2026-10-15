@@ -18,7 +18,7 @@ export default defineConfig({
     watch: { ignored: ["**/src-tauri/**"] },
     // Keep browser authentication same-origin. Production hosting must proxy
     // these same paths to Elysia; no credentials are bundled into this client.
-    proxy: { "/api": { target: process.env.CLIENT_API_PROXY_TARGET ?? "http://127.0.0.1:3001", changeOrigin: false } },
+    proxy: { "/api": { target: process.env.CLIENT_API_PROXY_TARGET ?? "http://127.0.0.1:3001", changeOrigin: false, ws: true } },
   },
   build: { target: "safari15.4" },
 });

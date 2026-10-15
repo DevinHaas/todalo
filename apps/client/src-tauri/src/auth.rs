@@ -215,4 +215,34 @@ impl NativeAuth {
             _ => Err("Your tasks could not be loaded. Try again."),
         }
     }
+
+    /// Bearer POST minting a one-use Ramble socket ticket (see ramble.rs). Only
+    /// the API base and the short-lived ticket leave; the bearer stays in Rust.
+    pub async fn ramble_ticket(&self) -> Result<(Url, String), &'static str> {
+        #[derive(Deserialize)]
+        struct Ticket {
+            ticket: String,
+        }
+        let origin = self.origin()?;
+        let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
+        let response = self
+            .client
+            .post(self.url("/api/ramble/ticket")?)
+            .bearer_auth(&*token)
+            .send()
+            .await
+            .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => Err("Please sign in again."),
+            status if status.is_success() => {
+                let base = self.base.clone()?;
+                let body: Ticket = response
+                    .json()
+                    .await
+                    .map_err(|_| "The server returned an invalid response.")?;
+                Ok((base, body.ticket))
+            }
+            _ => Err("Cannot reach todalo. Check your connection and try again."),
+        }
+    }
 }

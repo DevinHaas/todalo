@@ -1,4 +1,5 @@
-import { createApi, productionDependencies } from "./app";
+import { createApi } from "./app";
+import { productionDependencies } from "./production";
 import { auth } from "@todalo/auth";
 import { getOwnedTask, getTodayTasksForUser } from "@todalo/server/today";
 import { createAuthRoutes } from "./auth-routes";

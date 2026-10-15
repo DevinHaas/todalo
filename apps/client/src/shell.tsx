@@ -39,7 +39,7 @@ export function Shell({ account }: { account: Account }) {
       </Link>
       <div className="add-row">
         <span className="add-task" aria-disabled="true"><Plus /><span>Add task</span></span>
-        <span className="icon-button brand" aria-disabled="true" aria-label="Open Ramble"><AudioLines /></span>
+        <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       <nav><ul className="nav">
         <Inert icon={<Search />} label="Search" />

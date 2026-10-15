@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { session } from "./runtime";
 import { GoogleButton } from "./google";
 import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
+import { RambleScreen } from "./ramble-screen";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/today" element={<TodayScreen account={account} />} />
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
         <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
+        <Route path="/ramble" element={<RambleScreen />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
     </Routes></BrowserRouter>;

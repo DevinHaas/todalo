@@ -9,7 +9,8 @@ import { db } from "@todalo/db";
 import { projects, tasks } from "@todalo/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { RambleSessionState } from "@todalo/ramble";
-import { createApi, productionDependencies } from "../src/app";
+import { createApi } from "../src/app";
+import { productionDependencies } from "../src/production";
 import { connectClipSpeech } from "../src/clip-speech";
 
 interface Message { type: string; state?: RambleSessionState; text?: string; final?: boolean; count?: number; code?: string; message?: string }

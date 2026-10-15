@@ -58,6 +58,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.1.0
         CFBundleVersion: "0.1.0"
+        NSMicrophoneUsageDescription: todalo uses the microphone only while you record a Ramble, to transcribe the tasks you speak.
     entitlements:
       path: todalo-client_iOS/todalo-client_iOS.entitlements
     scheme:
