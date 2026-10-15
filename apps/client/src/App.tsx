@@ -4,6 +4,7 @@ import { session } from "./runtime";
 import { GoogleButton } from "./google";
 import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 import { RambleScreen } from "./ramble-screen";
+import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
     return <BrowserRouter><Routes>
       <Route element={<Shell account={account} />}>
         <Route path="/today" element={<TodayScreen account={account} />} />
+        <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
         <Route path="/projects" element={<ProjectsScreen account={account} />} />
         <Route path="/projects/:id" element={<ProjectScreen account={account} />} />

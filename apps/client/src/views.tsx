@@ -19,7 +19,7 @@ export function Failure({ error, onRetry }: { error: Error | null; onRetry: () =
 export interface RowActions { complete(task: TaskDto): void; remove(task: TaskDto): void }
 
 export function TaskRow({ task, now, projectName, actions }: { task: TaskDto; now: Date; projectName?: string; actions?: RowActions }) {
-  return <div className={task.parentId ? "task-row child" : "task-row"}>
+  return <div className={task.parentId ? "task-row child" : "task-row"} data-done={task.status === "done" || undefined}>
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" onClick={() => actions.complete(task)} />
       : <span className="checkbox" aria-hidden="true" />}
@@ -39,9 +39,13 @@ export function TaskRow({ task, now, projectName, actions }: { task: TaskDto; no
  * the draft is unchanged, so resubmitting after an unclear failure cannot
  * create a second copy of a task that was in fact saved.
  */
-export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
+export function Composer({ dueDate, dueDateEnd, destination: chip, onCreate, onCancel, startOpen = false }: {
   /** Due date for the new task at submit time; null files it in the Inbox. */
   dueDate: () => string | null;
+  /** End of a schedule slot (ticket 16). */
+  dueDateEnd?: () => string | null;
+  /** Date chip text when it is not Today (Upcoming days, schedule slots). */
+  destination?: string;
   onCreate: (task: NewTask) => Promise<unknown>;
   onCancel?: () => void;
   startOpen?: boolean;
@@ -52,7 +56,7 @@ export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef<{ key: string; id: string } | null>(null);
-  const destination = dueDate() ? "Today" : "Inbox";
+  const destination = dueDate() ? chip ?? "Today" : "Inbox";
   const close = () => { setOpen(false); setTitle(""); setDescription(""); setError(null); operation.current = null; onCancel?.(); };
   if (!open) return <button type="button" className="composer" onClick={() => setOpen(true)}><Plus />Add task</button>;
 
@@ -60,7 +64,7 @@ export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
     event.preventDefault();
     const name = title.trim();
     if (!name || pending) return;
-    const task = { title: name, ...(description.trim() && { description: description.trim() }), dueDate: dueDate() };
+    const task = { title: name, ...(description.trim() && { description: description.trim() }), dueDate: dueDate(), ...(dueDateEnd?.() && { dueDateEnd: dueDateEnd() }) };
     const key = JSON.stringify(task);
     if (operation.current?.key !== key) operation.current = { key, id: operationId() };
     setPending(true); setError(null);
@@ -76,7 +80,7 @@ export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
     <input autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" value={title} onChange={(event) => setTitle(event.target.value)} />
     <input aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
     <div className="composer-footer">
-      <span className="pill project">{destination === "Today" ? <CalendarClock /> : <Inbox />}{destination}</span>
+      <span className="pill project">{destination === "Inbox" ? <Inbox /> : <CalendarClock />}{destination}</span>
       <div className="composer-actions">
         <button type="button" className="button outline" onClick={close}>Cancel</button>
         <button type="submit" className="button" disabled={!title.trim() || pending}>{pending ? "Adding…" : "Add task"}</button>
@@ -85,15 +89,18 @@ export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
   </form>;
 }
 
-export function TodayView({ state, onRetry, now = new Date(), projectNames = {}, actions, composer, writeError }: {
+export function TodayView({ state, onRetry, now = new Date(), projectNames = {}, actions, composer, writeError, showCompleted = false, calendar }: {
   state: ReadState<TodayDto>; onRetry: () => void; now?: Date; projectNames?: Record<string, string>;
   actions?: RowActions; composer?: ReactNode; writeError?: string | null;
+  /** Display settings (ticket 16): completed tasks, and the Calendar layout in place of the list. */
+  showCompleted?: boolean; calendar?: (tasks: TaskDto[]) => ReactNode;
 }) {
   const [overdueOpen, setOverdueOpen] = useState(true);
   const header = <><h1 className="page-title">Today</h1><p className="page-count">{state.data ? `${state.data.openCount} tasks` : " "}</p></>;
   if (state.status === "pending") return <div>{header}<p className="state" role="status">Loading tasks…</p></div>;
   if (!state.data) return <div>{header}<Failure error={state.error} onRetry={onRetry} /></div>;
-  const { overdue, today } = todaySections(state.data.tasks, now);
+  if (calendar) return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{calendar(state.data.tasks)}</div>;
+  const { overdue, today } = todaySections(state.data.tasks, now, showCompleted);
   // A failed refetch keeps the last list (and an open composer's draft) on screen.
   return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{writeError && <p role="alert" className="form-error">{writeError}</p>}<div className="sections">
     {overdue.length > 0 && <section>

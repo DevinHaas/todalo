@@ -18,6 +18,8 @@ export interface NewTask {
   title: string;
   description?: string;
   dueDate: string | null;
+  /** End of a schedule slot (ticket 16) or quick add's detected end time (ticket 12). */
+  dueDateEnd?: string | null;
 }
 
 export interface TaskTransport {
@@ -207,9 +209,9 @@ export function treeOrder<T extends { id: string; parentId: string | null }>(tas
   return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(task => [task, ...tasks.filter(child => child.parentId === task.id)]);
 }
 
-/** Today list groups with completed tasks hidden (legacy display default). */
-export function todaySections(tasks: TaskDto[], now = new Date()) {
-  const open = tasks.filter(task => task.status !== "done");
+/** Today list groups; completed tasks are hidden unless Display shows them (legacy default off). */
+export function todaySections(tasks: TaskDto[], now = new Date(), showCompleted = false) {
+  const open = showCompleted ? tasks : tasks.filter(task => task.status !== "done");
   return { overdue: treeOrder(open.filter(task => isOverdue(task, now))), today: treeOrder(open.filter(task => isDueToday(task, now))) };
 }
 

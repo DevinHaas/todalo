@@ -1,34 +1,26 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  AudioLines, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Layers,
-  LineChart, List, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
+  AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
+  LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { projectReads, reads, session, tasks } from "./runtime";
-import { operationId, taskMutations, type TaskDto } from "./tasks";
+import { projectReads, reads, session } from "./runtime";
+import type { TaskDto } from "./tasks";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
-import { haptics, hapticsSupported, nativeFeedback } from "./feedback";
+import { haptics, hapticsSupported } from "./feedback";
+import { useTaskWrites } from "./task-writes";
+import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
+import { TodayCalendar } from "./schedule-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 
 // ponytail: controls without a migrated backend (search, inbox,
-// upcoming, filters, display) keep their legacy appearance but are inert
-// (aria-disabled). Their tickets wire them: 12, 14, 16, 18.
+// filters) keep their legacy appearance but are inert
+// (aria-disabled). Their tickets wire them: 12, 14, 18.
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
-}
-
-function useTaskWrites(userId: string) {
-  const cache = useQueryClient();
-  const writes = useMemo(() => taskMutations(tasks, cache, userId, nativeFeedback), [cache, userId]);
-  const create = useMutation(writes.create);
-  const complete = useMutation(writes.complete);
-  const remove = useMutation(writes.remove);
-  const update = useMutation(writes.update);
-  const actions: RowActions = { complete: (task) => complete.mutate({ task, operationId: operationId() }), remove: (task) => remove.mutate(task) };
-  return { create, complete, remove, update, actions, error: (complete.error ?? remove.error)?.message ?? null };
 }
 
 const startOfToday = () => { const day = new Date(); day.setHours(0, 0, 0, 0); return day.toISOString(); };
@@ -58,7 +50,7 @@ export function Shell({ account }: { account: Account }) {
   }, [mobileOpen]);
   const count = today.data?.openCount ?? 0;
 
-  return <div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
+  return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
     <aside className="sidebar" aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
       <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" onClick={() => { setCollapsed(true); setMobileOpen(false); }}><PanelLeft /></button>
@@ -75,7 +67,7 @@ export function Shell({ account }: { account: Account }) {
         <Inert icon={<Layers />} label="Inbox" />
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
-        <Inert icon={<Layers />} label="Upcoming" />
+        <li><NavLink to="/upcoming" className="nav-item"><Layers /><span>Upcoming</span></NavLink></li>
         <Inert icon={<ListFilter />} label="Filters & Labels" />
         <Inert icon={<Star />} label="Goals" badge="BETA" muted />
         <Inert icon={<LineChart />} label="Reporting" muted />
@@ -87,16 +79,14 @@ export function Shell({ account }: { account: Account }) {
       <div className="toolbar">
         <div className="toolbar-start">
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
-          <span className="icon-button" aria-disabled="true"><ChevronLeft /></span>
-          <span className="icon-button" aria-disabled="true"><ChevronRight /></span>
-          <span className="layout-label">List</span>
+          <LayoutSwitcher />
         </div>
-        <span className="display-button" aria-disabled="true"><List /><span>Display</span></span>
+        <DisplayMenu />
       </div>
       <main className="content"><Outlet /></main>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
-  </div>;
+  </div></DisplayProvider>;
 }
 
 export function TodayScreen({ account }: { account: Account }) {
@@ -105,7 +95,9 @@ export function TodayScreen({ account }: { account: Account }) {
   const projects = useQuery(projectReads.list(account.user.id));
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
   const writes = useTaskWrites(account.user.id);
+  const display = useDisplay();
   return <TodayView state={query} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error}
+    showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} /> : undefined}
     composer={<Composer dueDate={startOfToday} onCreate={(task) => writes.create.mutateAsync(task)} />} />;
 }
 

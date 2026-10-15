@@ -164,6 +164,91 @@ button.composer:hover { color: var(--foreground); }
 .time-range input { width: auto; flex: 1; }
 .task-editor .composer-actions { justify-content: flex-end; }
 
+/* Display settings, Upcoming and calendar/schedule layouts (ticket 16): legacy
+   display-settings, upcoming-list-view, calendar-view and schedule-grid. */
+button.display-button { border: 0; border-radius: .375rem; background: none; color: inherit; font: inherit; font-size: .75rem; font-weight: 500; cursor: pointer; }
+button.display-button:hover, button.layout-label:hover { background: var(--accent); }
+.display-dialog { max-width: 28rem; gap: 1rem; padding: 1rem; }
+.display-heading { display: flex; align-items: center; gap: .5rem; }
+.display-heading .dialog-title { flex: 1; }
+.display-heading > svg { color: var(--muted-foreground); }
+.segmented { display: flex; gap: .25rem; padding: .25rem; border: 1px solid var(--border); border-radius: .375rem; }
+.segmented button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .25rem; min-height: 1.75rem; border: 0; border-radius: .375rem; background: none; color: inherit; font: inherit; font-size: .8rem; font-weight: 500; cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: var(--accent); }
+.segmented button[aria-disabled="true"] { opacity: .5; cursor: default; }
+.display-switch { display: flex; align-items: center; justify-content: space-between; font-weight: 400; }
+.display-switch input { -webkit-appearance: none; appearance: none; position: relative; width: 2rem; min-height: 0; height: 1.15rem; padding: 0; border: 0; border-radius: 999px; background: var(--input); box-shadow: none; cursor: pointer; }
+.display-switch input::after { content: ""; position: absolute; top: .1rem; left: .1rem; width: .95rem; height: .95rem; border-radius: 999px; background: var(--background); transition: transform .15s; }
+.display-switch input:checked { background: var(--primary); }
+.display-switch input:checked::after { transform: translateX(.85rem); }
+.display-stubs { display: grid; gap: .75rem; }
+.display-section { display: flex; align-items: center; justify-content: space-between; padding-top: .75rem; border-top: 1px solid var(--border); font-weight: 600; }
+.display-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.display-select { display: inline-flex; align-items: center; justify-content: space-between; width: 10rem; height: 2rem; padding: 0 .625rem; border: 1px solid var(--input); border-radius: .375rem; }
+.display-select svg { color: var(--muted-foreground); }
+.button.small { min-height: 1.75rem; padding: 0 .625rem; font-size: .8rem; }
+.button.ghost { background: none; color: inherit; }
+.button.ghost:hover, .button.outline:hover { background: var(--accent); }
+.task-row[data-done] .task-title { color: var(--muted-foreground); text-decoration: line-through; }
+.section-heading.muted { color: var(--muted-foreground); }
+.page-title.upcoming-title { margin-bottom: 1rem; }
+.week-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; max-width: 42rem; margin: 0 auto .5rem; }
+.calendar .week-nav { justify-content: center; max-width: none; margin-bottom: 1rem; }
+.week-strip { display: flex; gap: .25rem; max-width: 42rem; margin: 0 auto 1rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.week-strip a { flex: 1; display: flex; flex-direction: column; align-items: center; padding: .25rem .75rem; border-radius: .375rem; color: var(--muted-foreground); font-size: .75rem; text-decoration: none; }
+.week-strip a:hover { background: var(--accent); }
+.week-strip a[aria-current] { background: var(--primary); color: oklch(.985 0 0); font-weight: 600; }
+.upcoming-scroll { display: grid; align-content: start; gap: 1.5rem; max-width: 42rem; height: calc(100svh - 14rem); margin: 0 auto; overflow-y: auto; outline: none; }
+.calendar-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.calendar-title { display: grid; justify-items: center; text-align: center; }
+.calendar-title h2 { margin: 0; font-size: 1.125rem; line-height: 1.75rem; font-weight: 500; }
+.week-of { font-size: .75rem; color: var(--muted-foreground); }
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--border); }
+.month-weekday { padding: .5rem; background: var(--accent); text-align: center; font-weight: 500; color: var(--muted-foreground); }
+.month-day { min-height: 6rem; min-width: 0; padding: .25rem; background: var(--background); }
+.month-day.outside { opacity: .4; }
+.month-day.current-week { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent); }
+.month-date { margin-bottom: .25rem; font-size: .75rem; }
+.month-date.today { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; background: var(--primary); color: oklch(.985 0 0); }
+.task-chip { display: block; width: 100%; margin-bottom: .25rem; padding: .125rem .25rem; overflow: hidden; border: 0; border-radius: .25rem; background: var(--accent); color: inherit; font: inherit; font-size: .75rem; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+/* The schedule's sticky header (z 20) must stay under the mobile sidebar and its backdrop. */
+.inset { isolation: isolate; }
+.schedule { position: relative; overflow-y: auto; }
+.schedule-head { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--border); background: var(--background); }
+.week-days { display: grid; padding-top: .5rem; text-align: center; color: var(--muted-foreground); }
+.week-days > div + div, .all-day:not(.single) > .all-day-cell { border-left: 1px solid var(--border); }
+.week-days .today { font-weight: 600; color: var(--primary); }
+.all-day { display: grid; padding: .25rem 0 .5rem; }
+.all-day.single { display: flex; gap: .5rem; padding: .5rem 0; }
+.all-day.single .all-day-label { width: 3rem; flex-shrink: 0; }
+.all-day-label { padding-top: .125rem; font-size: .75rem; color: var(--muted-foreground); }
+.all-day-cell { display: grid; align-content: start; gap: .125rem; min-width: 0; padding: 0 .25rem; }
+.all-day.single .all-day-cell { flex: 1; padding: 0; }
+.all-day-row { display: flex; align-items: center; gap: .375rem; padding: .125rem .375rem; border-radius: .25rem; background: color-mix(in oklch, var(--accent) 50%, transparent); }
+.all-day-row .round-check { position: relative; width: .875rem; height: .875rem; flex-shrink: 0; padding: 0; border: 1px solid var(--input); border-radius: 999px; background: var(--background); cursor: pointer; }
+.all-day-row .round-check[aria-checked="true"] { background: var(--primary); border-color: var(--primary); }
+.all-day-row .round-check::after { content: ""; position: absolute; inset: -8px; }
+.all-day-title { flex: 1; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: .75rem; font-weight: 500; text-align: left; cursor: pointer; }
+.all-day-title.done { color: var(--muted-foreground); text-decoration: line-through; }
+.all-day-row .row-delete { width: 1.25rem; height: 1.25rem; }
+.all-day-row:hover .row-delete, .all-day-row:focus-within .row-delete { opacity: 1; }
+.app-shell .all-day-row svg { width: .75rem; height: .75rem; }
+.schedule-body { position: relative; }
+.hour-line, .now-line { position: absolute; inset-inline: 0; display: grid; align-items: center; }
+.hour-line > span:first-child { padding-right: .25rem; text-align: right; font-size: .75rem; color: var(--muted-foreground); }
+.hour-line .rule { height: 1px; background: var(--border); }
+.schedule-columns { position: absolute; inset: 0; display: grid; }
+.schedule-column { position: relative; border-left: 1px solid var(--border); cursor: pointer; }
+.timed-block { position: absolute; inset-inline: .25rem; z-index: 0; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; padding: .25rem .5rem; border: 0; border-radius: .375rem; background: var(--accent); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.timed-title, .timed-range { display: block; flex-shrink: 0; }
+.timed-title { overflow: hidden; font-size: .875rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.timed-range { font-size: .75rem; color: var(--muted-foreground); }
+.now-line { z-index: 10; pointer-events: none; }
+.now-label { padding-right: .25rem; text-align: right; white-space: nowrap; font-size: .75rem; font-weight: 500; color: var(--destructive); }
+.now-mark { position: relative; height: 1px; background: color-mix(in oklch, var(--destructive) 40%, transparent); }
+.now-mark.today { height: 3px; background: var(--destructive); }
+.now-mark.today::before { content: ""; position: absolute; left: -2px; top: -1.5px; width: 6px; height: 6px; border-radius: 999px; background: var(--destructive); }
+
 /* Software keyboard (gate finding 2): --keyboard-inset comes from software-keyboard.ts.
    The page gets room to scroll a focused field above the keyboard, dialogs end
    above it and scroll inside, and an opaque strip keeps scrolled content from

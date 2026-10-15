@@ -225,6 +225,26 @@ removed after an account response returns 401.
   `src/attachment-views.tsx` (picker label, paste outside text fields, drop, retry
   only for interrupted saves), runtime glue in `src/attachment-screens.tsx`.
 
+## Upcoming, calendar and schedule (ticket 16 conventions)
+
+- **One read:** `/upcoming`, the month/week calendar and Today's schedule all use
+  `reads.today` (the full owned-task collection, legacy `getTasksForUser`). Do not
+  add a parallel task read for a date view; any write that settles Today refreshes
+  them. Rescheduling from a view opens `TaskEditor` and saves via `taskMutations.update`.
+- **Dates:** `src/schedule.ts` holds the legacy date-fns rules (local `dayKey`,
+  Monday weeks, Sunday month grid, `blockFor`, `slotAt`, `upcomingSections`).
+  Group anything dated by `dayKey(new Date(iso))` in the viewer's zone, never the
+  UTC date; format per call (a cached `Intl.DateTimeFormat` pins its zone).
+- **Display settings:** `DisplayProvider`/`useDisplay` (`src/schedule-views.tsx`)
+  wrap the shell; in memory like legacy. Ticket 17 adds `board` to `nextLayout`
+  and activates the inert Board option.
+- **Ticket 20 (provider events):** add an events read (its own key under
+  `["user", id]`, invalidated by the live stream) and render events where the views
+  mark "Ticket 20": first in each Upcoming day and month cell, all-day events in the
+  all-day rows, timed events with `blockFor(start, end)` before task blocks. Events
+  stay read-only links (legacy `EventRow`/`EventChip`/`TimedEventBlock`); the echo
+  and visibility filters belong in the server query.
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:
