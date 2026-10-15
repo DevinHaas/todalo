@@ -24,6 +24,7 @@ const messages = {
   LOGOUT_UNCONFIRMED: "Sign-out was not confirmed by the server. Try again.",
   UNAUTHENTICATED: "Please sign in again.",
   TASKS_UNAVAILABLE: "Your tasks could not be loaded. Try again.",
+  SETTINGS_UNAVAILABLE: "Your preferences could not be loaded. Try again.",
   INVALID_RESPONSE: "The server returned an invalid response.",
   INVALID_INPUT: "Check your entry and try again.",
   SAVE_FAILED: "Your changes could not be saved. Try again.",

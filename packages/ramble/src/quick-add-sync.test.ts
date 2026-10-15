@@ -3,12 +3,13 @@ import {
   canonicalDateText,
   canonicalRecurrenceText,
   canonicalTimeText,
+  highlightSegments,
   initialSyncState,
   quickAddTimeMatchText,
   syncQuickAddFields,
   type QuickAddSyncState,
 } from "./quick-add-sync";
-import { parseQuickAdd } from "./parse-quick-add";
+import { parseQuickAdd } from "./quick-add";
 
 const REFERENCE = new Date(2026, 0, 14); // Wednesday
 
@@ -202,5 +203,16 @@ describe("syncQuickAddFields", () => {
   it("reset returns to the initial state", () => {
     const state = syncQuickAddFields(initialSyncState, parseAction("call mom tomorrow"));
     expect(syncQuickAddFields(state, { type: "reset" })).toEqual(initialSyncState);
+  });
+});
+
+describe("highlightSegments", () => {
+  it("highlights closed matches and leaves the word being typed plain", () => {
+    const title = "call mom tomorrow at 4pm";
+    const { matches } = parseQuickAdd(title, REFERENCE);
+    expect(highlightSegments(title, matches).map((s) => [s.text, s.match?.kind ?? null])).toEqual([
+      ["call mom ", null], ["tomorrow", "date"], [" at 4pm", null],
+    ]);
+    expect(highlightSegments(`${title} `, matches).filter((s) => s.match).map((s) => s.text)).toEqual(["tomorrow", "at 4pm"]);
   });
 });

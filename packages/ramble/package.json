@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./semantic": "./src/semantic.ts",
     "./quick-add": "./src/quick-add.ts",
+    "./quick-add-sync": "./src/quick-add-sync.ts",
     "./recurrence": "./src/recurrence.ts",
     "./audio": "./src/audio.ts"
   },

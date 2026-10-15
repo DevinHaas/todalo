@@ -18,6 +18,11 @@ pub struct NewTask {
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
     due_date: Option<String>,
+    /// Quick add's detected end time and repeat (ticket 12); omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    due_date_end: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recurrence: Option<Recurrence>,
 }
 
 fn valid_operation_id(id: &str) -> bool {
@@ -29,7 +34,10 @@ fn valid_operation_id(id: &str) -> bool {
 }
 
 fn task_body(task: &NewTask) -> Result<Value, &'static str> {
-    if !valid_operation_id(&task.id) || task.title.trim().is_empty() {
+    if !valid_operation_id(&task.id)
+        || task.title.trim().is_empty()
+        || task.recurrence.as_ref().is_some_and(invalid_recurrence)
+    {
         return Err(INVALID);
     }
     serde_json::to_value(task).map_err(|_| INVALID)
@@ -120,16 +128,17 @@ pub struct TaskDetails {
     recurrence: Option<Recurrence>,
 }
 
+fn invalid_recurrence(recurrence: &Recurrence) -> bool {
+    !(1..=1000).contains(&recurrence.n)
+}
+
 fn details_body(details: &TaskDetails) -> Result<Value, &'static str> {
     let title = details.title.trim();
     if title.is_empty()
         || title.chars().count() > 500
         || details.description.chars().count() > 10_000
         || !(1..=4).contains(&details.priority)
-        || details
-            .recurrence
-            .as_ref()
-            .is_some_and(|recurrence| !(1..=1000).contains(&recurrence.n))
+        || details.recurrence.as_ref().is_some_and(invalid_recurrence)
     {
         return Err(INVALID);
     }
@@ -175,7 +184,34 @@ mod tests {
             title: title.into(),
             description: None,
             due_date: Some("2026-10-15T00:00:00.000Z".into()),
+            due_date_end: None,
+            recurrence: None,
         }
+    }
+
+    #[test]
+    fn quick_add_bodies_carry_the_detected_end_time_and_repeat() {
+        let id = "6f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11";
+        let input = json!({
+            "id": id, "title": "Standup", "dueDate": "2026-10-15T09:00:00.000Z",
+            "dueDateEnd": "2026-10-15T09:30:00.000Z",
+            "recurrence": { "n": 2, "unit": "week", "basedOn": "scheduled", "until": null, "userId": "bob" }
+        });
+        let parsed: NewTask = serde_json::from_value(input).unwrap();
+        assert_eq!(
+            task_body(&parsed).unwrap(),
+            json!({
+                "id": id, "title": "Standup", "dueDate": "2026-10-15T09:00:00.000Z",
+                "dueDateEnd": "2026-10-15T09:30:00.000Z",
+                "recurrence": { "n": 2, "unit": "week", "basedOn": "scheduled", "until": null }
+            })
+        );
+        let zero: NewTask = serde_json::from_value(json!({
+            "id": id, "title": "Standup", "dueDate": null,
+            "recurrence": { "n": 0, "unit": "day", "basedOn": "scheduled", "until": null }
+        }))
+        .unwrap();
+        assert_eq!(task_body(&zero), Err("Check your entry and try again."));
     }
 
     #[test]

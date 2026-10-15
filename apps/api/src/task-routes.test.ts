@@ -26,7 +26,7 @@ const app = createTaskRoutes({
   create: async (userId, input) => {
     const existing = rows.find(task => task.id === input.id);
     if (existing) return existing.userId === userId ? { task: existing, created: false } : null;
-    const task = row(input.id, userId, { title: input.title, description: input.description ?? null, dueDate: input.dueDate ?? null, labelIds: [] });
+    const task = row(input.id, userId, { title: input.title, description: input.description ?? null, dueDate: input.dueDate ?? null, dueDateEnd: input.dueDateEnd ?? null, recurrence: input.recurrence ?? null, labelIds: [] });
     rows.push(task);
     return { task, created: true };
   },
@@ -118,8 +118,23 @@ describe("task write API", () => {
     expect(rows.find(item => item.id === ID)).toMatchObject({ userId: "bob", title: "Bob's" });
   });
 
+  it("creates a quick-add task with its detected end time and repeat (ticket 12)", async () => {
+    const body = { id: ID, title: "Standup", dueDate: "2026-10-15T09:00:00.000Z", dueDateEnd: "2026-10-15T09:30:00.000Z", recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: "2026-12-31T00:00:00.000Z" } };
+    const created = await send("POST", "/api/v1/tasks", { user: "alice", body });
+    expect(created.status).toBe(201);
+    expect(((await created.json()) as { task: unknown }).task).toMatchObject({
+      dueDate: "2026-10-15T09:00:00.000Z", dueDateEnd: "2026-10-15T09:30:00.000Z", recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: "2026-12-31T00:00:00.000Z" },
+    });
+  });
+
   it("validates the basic task body", async () => {
-    for (const body of [{ id: ID, title: "" }, { title: "No operation ID" }, { id: "../x", title: "Plan" }, { id: ID, title: "Plan", dueDate: "tomorrow" }, "not json"]) {
+    const repeat = { n: 1, unit: "day", basedOn: "scheduled", until: null };
+    for (const body of [
+      { id: ID, title: "" }, { title: "No operation ID" }, { id: "../x", title: "Plan" }, { id: ID, title: "Plan", dueDate: "tomorrow" }, "not json",
+      { id: ID, title: "Plan", dueDate: null, dueDateEnd: "2026-10-15T09:30:00.000Z" }, { id: ID, title: "Plan", dueDateEnd: "2026-10-15T09:30:00.000Z" },
+      { id: ID, title: "Plan", recurrence: { ...repeat, n: 0 } }, { id: ID, title: "Plan", recurrence: { ...repeat, unit: "fortnight" } },
+      { id: ID, title: "Plan", recurrence: { ...repeat, userId: "bob" } }, { id: ID, title: "Plan", recurrence: { ...repeat, until: "soon" } },
+    ]) {
       const response = await send("POST", "/api/v1/tasks", { user: "alice", body });
       expect(response.status, JSON.stringify(body)).toBe(400);
       expect(await response.json()).toEqual({ code: "INVALID_INPUT", message: "Check your entry and try again." });

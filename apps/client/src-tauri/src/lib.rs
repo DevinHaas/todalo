@@ -8,6 +8,7 @@ mod organization;
 mod projects;
 mod ramble;
 mod reads;
+mod settings;
 mod writes;
 use auth::{Account, Credentials, NativeAuth};
 
@@ -102,7 +103,9 @@ pub fn run() {
             oauth::google_finish,
             oauth::google_cancel,
             ramble::ramble_socket,
-            feedback::feedback
+            feedback::feedback,
+            settings::settings,
+            settings::update_settings
         ])
         .run(tauri::generate_context!())
         .expect("Cannot launch todalo");

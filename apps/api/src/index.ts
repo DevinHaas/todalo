@@ -10,6 +10,8 @@ import { createTaskRoutes } from "./task-routes";
 import { taskOperations } from "./task-operations";
 import { createProjectRoutes } from "./project-routes";
 import { createAttachmentRoutes } from "./attachment-routes";
+import { createSettingsRoutes } from "./settings-routes";
+import * as settings from "@todalo/server/settings";
 import * as attachments from "@todalo/server/attachments";
 
 const dependencies = productionDependencies();
@@ -41,6 +43,11 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   createFileTasks: attachments.createFileTasks,
   list: attachments.listTaskAttachments,
   read: attachments.readAttachment,
+})).use(createSettingsRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  get: settings.getSettings,
+  setSmartDateRecognition: settings.setSmartDateRecognition,
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",

@@ -4,6 +4,7 @@ import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
+import { createSettingsRoutes } from "../../api/src/settings-routes";
 import { qaAttachmentRoutes, qaOrganize, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { editConflicts, planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
@@ -67,7 +68,20 @@ const attachments = [
 ];
 
 const verifySession = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
-const app = createAuthRoutes(auth).use(qaProjectRoutes({
+// Account settings (ticket 12): per-user memory rows, defaulting smart dates on.
+// QA_SETTINGS_SAVE_FAILS=1 answers every settings save with a 500 (rollback QA).
+const settings = new Map<string, boolean>();
+const app = createAuthRoutes(auth).use(createSettingsRoutes({
+  verify: verifySession,
+  allowedOrigins: new Set([clientOrigin]),
+  get: async (userId) => ({ smartDateRecognition: settings.get(userId) ?? true }),
+  setSmartDateRecognition: async (userId, enabled) => {
+    if (process.env.QA_SETTINGS_SAVE_FAILS) throw new Error("QA: settings save failed");
+    settings.set(userId, enabled);
+    return { smartDateRecognition: enabled };
+  },
+})).use(qaProjectRoutes({
+
   verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
   projects,
@@ -88,7 +102,10 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
   create: async (userId, input) => {
     const existing = tasks.find(item => item.id === input.id);
     if (existing) return existing.userId === userId ? { task: existing, created: false } : null;
-    const created = task(input.id, userId, input.title, { description: input.description ?? null, dueDate: input.dueDate ? new Date(input.dueDate) : null });
+    const created = task(input.id, userId, input.title, {
+      description: input.description ?? null, dueDate: input.dueDate ? new Date(input.dueDate) : null, dueDateEnd: input.dueDateEnd ? new Date(input.dueDateEnd) : null,
+      recurrence: input.recurrence ? { ...input.recurrence, until: input.recurrence.until ? new Date(input.recurrence.until) : null } : null,
+    });
     tasks.push(created);
     ambiguous(`create:${input.id}`);
     return { task: created, created: true };

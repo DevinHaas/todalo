@@ -64,6 +64,8 @@ fn main() {
             "google_cancel",
             "ramble_socket",
             "feedback",
+            "settings",
+            "update_settings",
         ]));
     tauri_build::try_build(attributes).expect("Cannot configure native command permissions");
 }

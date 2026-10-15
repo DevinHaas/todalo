@@ -13,10 +13,13 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
   }
   function builder(kind: string, table?: Parameters<typeof getTableName>[0], fields?: Record<string, { name: string }>) {
     let predicate: SQL | undefined; let values: Record<string, unknown>[] = []; let limit = Infinity; let skipConflicts = false;
+    let upsert: { key: string; set: Record<string, unknown> } | undefined;
     const chain = {
       from(value: typeof table) { table = value; return chain; }, where(value: SQL) { predicate = value; return chain; },
       orderBy() { return chain; }, limit(value: number) { limit = value; return chain; }, returning() { return chain; },
       onConflictDoNothing() { skipConflicts = true; return chain; },
+      // Models a single-column unique target (e.g. user_settings.user_id).
+      onConflictDoUpdate({ target, set }: { target: { name: string }; set: Record<string, unknown> }) { upsert = { key: target.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), set }; return chain; },
       set(value: Record<string, unknown>) { values = [value]; return chain; }, values(value: Record<string, unknown> | Record<string, unknown>[]) { values = Array.isArray(value) ? value : [value]; return chain; },
       then(resolve: (rows: Record<string, unknown>[]) => unknown, reject: (error: unknown) => unknown) {
         try {
@@ -26,7 +29,10 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
             result = values.map((value, index) => ({ id: `new-${rows.length + index}`, priority: 4, ...value }));
             // onConflictDoNothing models a primary-key (id) conflict only.
             if (skipConflicts) result = result.filter(row => !rows.some(existing => existing.id === row.id));
-            rows.push(...result);
+            if (upsert) {
+              const { key, set } = upsert;
+              result = result.map(row => { const existing = rows.find(item => item[key] === row[key]); return existing ? Object.assign(existing, set) : (rows.push(row), row); });
+            } else rows.push(...result);
           }
           if (kind === "update") result.forEach(row => Object.assign(row, values[0]));
           if (kind === "delete") boundary.rows[key] = rows.filter(row => !result.includes(row));

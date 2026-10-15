@@ -129,6 +129,38 @@ button.composer:hover { color: var(--foreground); }
 .composer-form input[aria-label="Task name"] { font-weight: 500; }
 .composer-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: .75rem; border-top: 1px solid var(--border); }
 .composer-actions, .task-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* Smart quick add (ticket 12, ADR 0002): a transparent input over a backdrop that
+   mirrors its text with highlighted phrases; both share one box model. */
+.quick-add-title { position: relative; height: 2rem; min-width: 0; }
+.quick-add-backdrop, .composer-form .quick-add-title input { position: absolute; inset: 0; width: 100%; height: 2rem; min-height: 0; margin: 0; padding: 0 .25rem; border: 0; font: inherit; font-size: 1rem; font-weight: 500; line-height: 2rem; letter-spacing: normal; white-space: pre; }
+.quick-add-backdrop { overflow: hidden; color: transparent; pointer-events: none; }
+.composer-form .quick-add-title input { background: transparent; -webkit-appearance: none; appearance: none; }
+/* 1px halo (not more) so two matches one space apart do not merge into one pill. */
+.quick-add-match { position: relative; z-index: 1; margin: 0 -1px; padding: .125rem 1px; border-radius: .25rem; background: color-mix(in oklch, var(--destructive) 20%, transparent); pointer-events: auto; cursor: pointer; }
+.composer-pills { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.button.small { min-height: 2rem; gap: .375rem; padding: 0 .625rem; font-size: .8125rem; }
+.button.small svg { width: 1rem; height: 1rem; }
+.button.outline.set { color: var(--primary); }
+.icon-button.small svg { width: .875rem; height: .875rem; }
+.schedule-panel, .custom-repeat form { display: grid; gap: .5rem; font-size: .875rem; }
+.schedule-panel { padding: .5rem; border: 1px solid var(--border); border-radius: .5rem; }
+.composer-form .schedule-panel input, .custom-repeat input { min-height: 2.25rem; padding: .25rem .5rem; border: 1px solid var(--border); -webkit-appearance: none; appearance: none; }
+.panel-list { display: grid; }
+.panel-list > button { display: flex; justify-content: space-between; min-height: 2.25rem; align-items: center; padding: 0 .5rem; border: 0; border-radius: .375rem; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.panel-list > button:hover { background: var(--accent); }
+.panel-list > button[aria-pressed="true"] { color: var(--primary); font-weight: 500; }
+.panel-list > button span { color: var(--muted-foreground); }
+.panel-heading { margin: 0; padding: .25rem .5rem 0; font-size: .75rem; font-weight: 500; color: var(--muted-foreground); }
+.custom-repeat .panel-heading { padding: 0; }
+.every-n { display: flex; align-items: center; gap: .375rem; padding: 0 .5rem; }
+.every-n input { width: 4rem; flex: none; }
+.every-n select { width: auto; min-height: 2.25rem; }
+.every-n .button { margin-left: auto; }
+.custom-repeat .every-n { padding: 0; }
+.custom-repeat .composer-actions { justify-content: flex-end; padding-top: .75rem; border-top: 1px solid var(--border); }
+.segmented { display: flex; flex-wrap: wrap; gap: .375rem; }
+.setting-title { display: block; }
+.setting-hint { display: block; color: var(--muted-foreground); font-size: .875rem; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: max(4rem, env(safe-area-inset-top)) 1rem 1rem; background: #0000004d; }
 .dialog { width: 100%; max-width: 34rem; display: grid; gap: .5rem; padding: .5rem; border-radius: .75rem; background: var(--background); box-shadow: 0 10px 30px #00000026; font-size: .875rem; }
 .dialog svg { width: 1rem; height: 1rem; }

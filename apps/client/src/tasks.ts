@@ -20,6 +20,8 @@ export interface NewTask {
   dueDate: string | null;
   /** End of a schedule slot (ticket 16) or quick add's detected end time (ticket 12). */
   dueDateEnd?: string | null;
+  /** Quick add's detected or picked repeat (ticket 12, ADR 0001). */
+  recurrence?: RecurrenceDto | null;
 }
 
 export interface TaskTransport {

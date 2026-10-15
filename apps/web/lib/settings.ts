@@ -1,13 +1,7 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { userSettings } from "@/db/schema";
+import { getSettings } from "@todalo/server/settings";
 
 // No row yet means the default, unconfigured state — smart date recognition
-// on by default, per .scratch/smart-quick-add/spec.md.
+// on by default, per .scratch/smart-quick-add/spec.md (packages/server/src/settings.ts).
 export async function getSmartDateRecognitionEnabled(userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ smartDateRecognitionEnabled: userSettings.smartDateRecognitionEnabled })
-    .from(userSettings)
-    .where(eq(userSettings.userId, userId));
-  return row?.smartDateRecognitionEnabled ?? true;
+  return (await getSettings(userId)).smartDateRecognition;
 }

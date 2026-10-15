@@ -8,6 +8,7 @@ import type { TaskWrites } from "./task-routes";
 export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
   async create(userId, input) {
     try {
+      // createTaskInput coerces the ISO strings (dueDateEnd, recurrence.until) to dates.
       const { id, created } = await createTask(userId, { ...input, dueDate: input.dueDate ?? undefined });
       const task = await getOwnedTask(userId, id);
       if (!task) throw new Error("Created task could not be read");

@@ -28,12 +28,26 @@ export const createTaskInput = taskInput.extend({
 });
 export type CreateTaskInput = z.input<typeof createTaskInput>;
 
-/** The basic task the shared client can create (ticket 5): Today or Inbox, no rich fields. */
+/** ADR 0001 recurrence as the shared client sends it (`until` ISO or null). */
+const recurrenceInput = z.object({
+  n: z.number().int().positive().max(1000),
+  unit: z.enum(["day", "week", "month", "year"]),
+  basedOn: z.enum(["scheduled", "completed"]),
+  until: z.iso.datetime({ offset: true }).nullable().optional(),
+}).strict();
+
+/**
+ * The task the shared client can create: Today or Inbox (ticket 5), plus the
+ * end time and repeat smart quick add detects (ticket 12). An end time without
+ * a due date is refused by the route.
+ */
 export const basicTaskInput = z.object({
   id: z.uuid(),
   title: z.string().min(1),
   description: z.string().optional(),
   dueDate: z.iso.datetime({ offset: true }).nullable().optional(),
+  dueDateEnd: z.iso.datetime({ offset: true }).nullable().optional(),
+  recurrence: recurrenceInput.nullable().optional(),
 });
 export type BasicTaskInput = z.infer<typeof basicTaskInput>;
 
@@ -56,12 +70,7 @@ export const taskDetailsInput = z.object({
   deadline: isoDate.nullable(),
   dueDate: isoDate.nullable(),
   dueDateEnd: isoDate.nullable(),
-  recurrence: z.object({
-    n: z.number().int().positive().max(1000),
-    unit: z.enum(["day", "week", "month", "year"]),
-    basedOn: z.enum(["scheduled", "completed"]),
-    until: isoDate.nullable().optional(),
-  }).strict().nullable(),
+  recurrence: recurrenceInput.nullable(),
 }).strict().refine(details => details.dueDate !== null || details.dueDateEnd === null, { path: ["dueDateEnd"], message: "An end time needs a due date" });
 export type TaskDetailsInput = z.infer<typeof taskDetailsInput>;
 

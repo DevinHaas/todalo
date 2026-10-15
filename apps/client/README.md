@@ -282,6 +282,34 @@ removed after an account response returns 401.
   stay read-only links (legacy `EventRow`/`EventChip`/`TimedEventBlock`); the echo
   and visibility filters belong in the server query.
 
+## Smart quick add and settings (ticket 12 conventions)
+
+- **Shared parsing:** the composer uses the legacy modules unchanged:
+  `@todalo/ramble/quick-add` (parser), `@todalo/ramble/quick-add-sync` (last-touch-wins
+  field sync and `highlightSegments`, moved from `apps/web/lib`, which re-exports it).
+  `src/quick-add.ts` only adapts them to ISO DTOs (`parseTitle`, `quickAddTask`).
+  Anything that turns typed text into a task (keyboard commands, ticket 19; Ramble
+  staging, ticket 21) should call these rather than parse again.
+- **Composer:** `src/composer.tsx` (re-exported from `views.tsx`) is the legacy
+  TaskComposer: transparent input over a highlight backdrop (ADR 0002), click/tap a
+  highlight to reject it for the draft, date pill panel (quick dates, date, time range,
+  Repeat, legacy Custom repeat dialog). A manual pick rewrites the phrase to its
+  canonical text. Props: `dueDate`/`dueDateEnd` seed the date and time range,
+  `destination` labels the pill while the seed is kept.
+- **Create API:** `POST /api/v1/tasks` also takes `dueDateEnd` and `recurrence` (ADR 0001,
+  `until` ISO or null); an end time without a due date is `400`. `NewTask` and the native
+  `create_task` carry both (omitted when unset).
+- **Setting:** `GET /api/v1/settings` → `{ settings: { smartDateRecognition } }` (on when
+  the account has no row); `PATCH /api/v1/settings` `{ smartDateRecognition }` (strict;
+  `writeUser` guard). Shared logic: `packages/server/src/settings.ts` (legacy
+  `lib/settings.ts` and the Server Action wrap it); schema/DTO in `settings-input.ts`.
+  Native: `settings` and `update_settings` in `src-tauri/src/settings.rs`.
+- **Client:** `settingsKeys.settings(userId)` = `["user", userId, "settings"]`;
+  `settingsMutations.update` flips optimistically, retries ambiguous failures and rolls
+  back. `SmartDatesProvider` (in `App.tsx`) feeds the `SmartDates` context every
+  composer reads — it is **off until the setting has loaded**, so an opted-out user never
+  gets a date from a draft typed during startup. The switch is on the Account screen.
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:
@@ -299,6 +327,7 @@ second user's project (`/projects/qa-other`). Attachments: `/tasks/undated` carr
 on a port other than 5173 (it is the trusted auth origin and the allowed write origin). `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
 `QA_AMBIGUOUS_WRITES=1` applies each first create/completion and then answers
 500, to watch the client retry without duplicating it.
+`QA_SETTINGS_SAVE_FAILS=1` answers every settings save with a 500 (switch rollback).
 All these records disappear on service restart. It imports no production DB or
 auth singleton. Registration can create additional disposable QA accounts.
 Google is faked (`apps/api/src/fake-google.ts`): authorization redirects go to a

@@ -249,7 +249,8 @@ describe("task write controls", () => {
   });
 
   it("opens the composer with title and description inputs filed to Today or the Inbox", () => {
-    const todayForm = render(createElement(Composer, { startOpen: true, dueDate: () => local(4), onCreate: async () => {} }));
+    const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+    const todayForm = render(createElement(Composer, { startOpen: true, dueDate: () => midnight.toISOString(), onCreate: async () => {} }));
     expect(todayForm).toContain('aria-label="Task name"');
     expect(todayForm).toContain('aria-label="Description"');
     expect(todayForm).toContain("Today");

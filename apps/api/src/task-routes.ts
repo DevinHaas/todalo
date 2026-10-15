@@ -65,7 +65,7 @@ export function createTaskRoutes(deps: TaskReads & TaskWrites) {
       if (userId === "forbidden") return status(403, FORBIDDEN_ORIGIN);
       if (!userId) return status(401, UNAUTHENTICATED);
       const input = basicTaskInput.safeParse(body);
-      if (!input.success) return status(400, INVALID);
+      if (!input.success || input.data.dueDateEnd && !input.data.dueDate) return status(400, INVALID);
       const result = await deps.create(userId, input.data);
       if (!result) return status(409, TASK_CONFLICT);
       // 200 for a replayed operation ID: the original task, no second copy.

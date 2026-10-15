@@ -16,6 +16,7 @@ import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./sche
 import { TodayCalendar } from "./schedule-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
+import { SmartDatesSettingScreen } from "./settings-screen";
 
 // ponytail: controls without a migrated backend (search, inbox,
 // filters) keep their legacy appearance but are inert
@@ -128,6 +129,7 @@ export function AccountScreen({ account, error }: { account: Account; error: str
     <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
     <dl><dt>Name</dt><dd>{account.user.name}</dd><dt>Email</dt><dd>{account.user.email}</dd></dl>
     {error && <p className="error" role="alert">{error}</p>}
+    <SmartDatesSettingScreen userId={account.user.id} />
     {hapticsSupported && <label className="setting">
       <input type="checkbox" checked={feel} onChange={(event) => { haptics.set(event.target.checked); setFeel(event.target.checked); }} />
       <span>Haptic feedback when completing a task</span>
