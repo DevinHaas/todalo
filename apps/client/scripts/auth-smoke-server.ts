@@ -9,6 +9,7 @@ import { qaAttachmentRoutes, qaOrganize, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { editConflicts, planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
 import { createApi } from "../../api/src/app";
+import { prepareTaskRows, RambleCommitError } from "../../api/src/commit-rows";
 import { connectSpeech } from "../../api/src/speech";
 import type { SpeechCallbacks, SpeechConnection } from "../../api/src/elevenlabs";
 import { fixtureSemanticProcessor } from "../../api/test-fixtures/semantic";
@@ -206,10 +207,26 @@ function fakeSpeech(callbacks: SpeechCallbacks): SpeechConnection {
 const ramble = createApi({
   allowedOrigins: new Set([clientOrigin]),
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
-  preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [] }),
+  // The account's smart-date setting and owned projects, as production.ts reads them.
+  preferences: async (userId) => {
+    const owned = projects.filter((project) => project.userId === userId).map(({ id, name }) => ({ id, name }));
+    return { smartRecognition: settings.get(userId) ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned };
+  },
   speech: process.env.RAMBLE_STT_PROVIDER ? connectSpeech : fakeSpeech,
   semantic: fixtureSemanticProcessor,
-  commit: async () => { throw new Error("Saving Ramble tasks is ticket 21."); },
+  // Memory copy of commit.ts: the same derived (operation-ID) task IDs and
+  // owned-project check, inserting only rows a previous attempt didn't write.
+  // QA_AMBIGUOUS_WRITES drops the first answer of each Ramble commit too.
+  commit: async (userId, todos, timeZone, operationId) => {
+    const rows = prepareTaskRows(todos, userId, timeZone, operationId);
+    if (rows.some((row) => row.projectId && !projects.some((project) => project.userId === userId && project.id === row.projectId))) throw new RambleCommitError("missing");
+    for (const row of rows) {
+      if (tasks.some((item) => item.id === row.id)) continue;
+      tasks.push(task(row.id, userId, row.title, { parentId: row.parentId, projectId: row.projectId, dueDate: row.dueDate, dueDateEnd: row.dueDateEnd, recurrence: row.recurrence }));
+    }
+    ambiguous(`ramble:${operationId}`);
+    return rows.length;
+  },
 });
 // Elysia owns the listener so /api/ramble/ws can upgrade; everything else
 // falls through to the auth/task routes and the fake Google consent page.

@@ -106,7 +106,7 @@ enum BasedOn {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Recurrence {
+pub(crate) struct Recurrence {
     n: u32,
     unit: Unit,
     based_on: BasedOn,

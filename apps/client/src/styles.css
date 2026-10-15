@@ -164,11 +164,44 @@ button.composer:hover { color: var(--foreground); }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: max(4rem, env(safe-area-inset-top)) 1rem 1rem; background: #0000004d; }
 .dialog { width: 100%; max-width: 34rem; display: grid; gap: .5rem; padding: .5rem; border-radius: .75rem; background: var(--background); box-shadow: 0 10px 30px #00000026; font-size: .875rem; }
 .dialog svg { width: 1rem; height: 1rem; }
-.ramble-capture { max-width: 42rem; margin: 0 auto; display: grid; gap: 1rem; }
-.ramble-capture header p, .ramble-status { margin: 0; color: var(--muted-foreground); font-size: .875rem; }
-.ramble-status[data-status="listening"] { color: var(--foreground); font-weight: 500; }
-.ramble-transcript { margin: 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
-.ramble-transcript .partial { color: var(--muted-foreground); }
+/* Ramble (tickets 6, 21): the legacy modal's layout, wave and staged cards. */
+.ramble-capture { max-width: 42rem; margin: 0 auto; display: grid; gap: 0; }
+.ramble-capture header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.ramble-capture h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.ramble-capture svg { width: 1.25rem; height: 1.25rem; }
+.ramble-capture .icon-button { width: 2.25rem; height: 2.25rem; }
+.ramble-capture .icon-button:disabled { opacity: .5; cursor: default; }
+.ramble-controls { display: flex; align-items: center; gap: .25rem; }
+.ramble-wave { display: flex; align-items: center; gap: .125rem; height: 1.5rem; margin-right: .5rem; color: var(--brand); }
+.ramble-wave span { width: 2px; height: 20px; border-radius: 999px; background: currentColor; transform: scaleY(.2); opacity: .3; }
+.ramble-wave[data-active="true"] span { animation: ramble-wave ease-in-out infinite alternate; opacity: .8; }
+@keyframes ramble-wave { from { transform: scaleY(.2); } to { transform: scaleY(.85); } }
+@media (prefers-reduced-motion: reduce) { .ramble-wave[data-active="true"] span { animation: none; transform: scaleY(.5); } }
+.ramble-capture .spin { animation: ramble-spin 1s linear infinite; }
+@keyframes ramble-spin { to { transform: rotate(360deg); } }
+.ramble-capture .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ramble-error { margin-top: 1rem; display: grid; justify-items: start; gap: .5rem; color: var(--destructive); font-size: .875rem; }
+.ramble-error p, .ramble-mode { margin: 0; }
+.ramble-mode { margin-top: .75rem; color: var(--muted-foreground); font-size: .75rem; }
+.ramble-staged { margin: 1.5rem 0; min-height: 12rem; max-height: 40vh; overflow-y: auto; }
+.ramble-staged ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .5rem; }
+.ramble-card { padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); }
+.ramble-card.nested { margin-left: 1.5rem; }
+.ramble-card-title { display: flex; align-items: flex-start; gap: .5rem; }
+.ramble-card-title p { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; font-weight: 500; }
+.ramble-card .icon-button { width: 1.75rem; height: 1.75rem; }
+.ramble-card .icon-button svg { width: .875rem; height: .875rem; }
+.ramble-card .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: .5rem; }
+.ramble-card .pill.project { margin-right: 0; }
+.pill.repeat { display: inline-flex; align-items: center; gap: .25rem; }
+.pill.repeat svg, .ramble-card .pill.project svg { width: .875rem; height: .875rem; }
+.ramble-empty { min-height: 12rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .75rem; padding: 0 .75rem; text-align: center; color: var(--brand); }
+.ramble-empty p { margin: 0; font-size: .875rem; }
+.ramble-empty p + p { max-width: 28rem; font-size: 1.125rem; font-weight: 500; }
+.ramble-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.ramble-footer p { margin: 0; color: var(--muted-foreground); font-size: .75rem; }
+.ramble-footer div { display: flex; align-items: center; gap: .5rem; }
+.ramble-capture .ramble-add { background: var(--brand); color: #fff; }
 /* Attachments (ticket 9): file tasks in a project, downloads on the task. */
 .project-files { display: grid; gap: .25rem; margin: 0 -.5rem 1rem; padding: .5rem; border: 1px dashed transparent; border-radius: .5rem; }
 .project-files.dragging { border-color: var(--brand); background: var(--accent); }

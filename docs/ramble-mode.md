@@ -14,8 +14,13 @@ and deletions. Capture-mode and save commands must occupy a whole spoken segment
 Cards show the recognized date, time, recurrence and selected project. Removing a
 parent card also removes its staged children. **Add tasks** saves the entire batch;
 **Discard**, Escape, or closing before save abandons it. In-progress captures live
-only in the socket's memory and are lost if the connection drops. No task is
-written before an explicit save. A failed save keeps cards available to retry.
+only in the socket's memory. No task is written before an explicit save. A failed
+save keeps cards available to retry. Each session's save is one operation: task
+IDs derive from the user, a client operation ID and the staged ID, so a retried
+or replayed save never duplicates tasks. The shared client (ticket 21) keeps the
+last published cards if the connection drops and saves them, or replays an
+unanswered save, through `POST /api/v1/ramble/commit`; speech still being
+understood at that moment is lost and the client says so.
 
 The modal shows staged tasks rather than the speech transcript. Its listening
 indicator uses a smooth CSS animation, with a static reduced-motion alternative.

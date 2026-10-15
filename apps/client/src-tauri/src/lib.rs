@@ -114,6 +114,7 @@ pub fn run() {
             oauth::google_finish,
             oauth::google_cancel,
             ramble::ramble_socket,
+            ramble::ramble_commit,
             feedback::feedback,
             settings::settings,
             settings::update_settings,

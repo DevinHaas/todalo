@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { CalendarIcon, Inbox, Plus, Sun, X } from "lucide-react";
+import { AudioLines, CalendarIcon, Inbox, Plus, Sun, X } from "lucide-react";
+import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
   canonicalDateText, canonicalRecurrenceText, canonicalTimeText, highlightSegments, initialSyncState, quickAddTimeMatchText,
@@ -52,6 +53,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   smartDates?: boolean;
 }) {
   const account = useContext(SmartDates);
+  const routed = useInRouterContext();
   const smartDates = override ?? account;
   const seed = () => seedState(dueDate(), dueDateEnd?.() ?? null);
   const [open, setOpen] = useState(startOpen);
@@ -155,6 +157,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       <div className="composer-footer">
         <span className="pill project"><Inbox />Inbox</span>
         <div className="composer-actions">
+          {/* Legacy composer waveform: Ramble with this draft's date as the default (ticket 21). */}
+          {routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className="icon-button" aria-label="Open Ramble" onClick={close}><AudioLines /></Link>}
           <button type="button" className="button outline" onClick={close}>Cancel</button>
           <button type="submit" className="button" disabled={!title.trim() || pending}>{pending ? "Adding…" : "Add task"}</button>
         </div>

@@ -9,7 +9,8 @@
     "./quick-add": "./src/quick-add.ts",
     "./quick-add-sync": "./src/quick-add-sync.ts",
     "./recurrence": "./src/recurrence.ts",
-    "./audio": "./src/audio.ts"
+    "./audio": "./src/audio.ts",
+    "./commit": "./src/commit.ts"
   },
   "scripts": {
     "test": "vitest run --root ../.. packages/ramble",

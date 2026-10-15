@@ -4,6 +4,15 @@ import type { commitRambleTodos } from "./commit";
 import { RambleConnection } from "./ramble-session";
 import { createSocketTickets, type SocketTickets } from "./socket-tickets";
 import type { SemanticProcessor, SemanticProject } from "@todalo/ramble/semantic";
+import { rambleCommitInput } from "@todalo/ramble/commit";
+import { RambleCommitError } from "./commit-rows";
+import { writeUser } from "./project-routes";
+
+const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
+const FORBIDDEN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sent by todalo." } as const;
+const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try again." } as const;
+const NOT_FOUND = { code: "NOT_FOUND", message: "This project does not exist or you do not have access to it." } as const;
+const SAVE_FAILED = { code: "SAVE_FAILED", message: "Your changes could not be saved. Try again." } as const;
 
 export interface ApiDependencies {
   verify(headers: Headers): Promise<string | null>;
@@ -36,6 +45,24 @@ export function createApi(dependencies: ApiDependencies) {
       const userId = await dependencies.verify(new Headers({ authorization }));
       return userId ? tickets.issue(userId) : status(401, { error: "Not authenticated" });
     })
+    // Ticket 21: saves a staged batch the client still holds after its socket
+    // was lost (or a socket save's answer never arrived). The operation ID the
+    // client sent with `start` makes this a replay of the same commit, never a
+    // second copy. Same rules as the socket save: owned projects, valid parents.
+    .post("/api/v1/ramble/commit", async ({ request, body, status, set }) => {
+      set.headers["cache-control"] = "no-store";
+      const userId = await writeUser(dependencies, request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = rambleCommitInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      try {
+        return { count: await dependencies.commit(userId, input.data.todos, input.data.timeZone, input.data.operationId) };
+      } catch (error) {
+        if (error instanceof RambleCommitError) return error.reason === "missing" ? status(404, NOT_FOUND) : status(400, INVALID);
+        return status(500, SAVE_FAILED);
+      }
+    })
     .ws("/api/ramble/ws", {
       async beforeHandle({ request, status }) {
         const ticket = new URL(request.url).searchParams.get("ticket");
@@ -62,7 +89,7 @@ export function createApi(dependencies: ApiDependencies) {
           send: (message) => { ws.send(JSON.stringify(message)); },
           speech: dependencies.speech,
           semantic: dependencies.semantic,
-          commit: (todos, zone) => dependencies.commit(context.userId, todos, zone),
+          commit: (todos, zone, operationId) => dependencies.commit(context.userId, todos, zone, operationId),
           smartRecognition: context.smartRecognition,
           projectIds: context.projectIds,
           projects: context.projects,

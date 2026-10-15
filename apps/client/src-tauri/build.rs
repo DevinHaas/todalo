@@ -72,6 +72,7 @@ fn main() {
             "google_finish",
             "google_cancel",
             "ramble_socket",
+            "ramble_commit",
             "feedback",
             "settings",
             "update_settings",

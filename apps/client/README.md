@@ -431,13 +431,37 @@ has been signed, notarized or published.
 
 ## Ramble recording
 
-Signed-in users open Ramble from the sidebar (`/ramble`) to record and see live
-transcription; saving tasks is ticket 21. Browsers connect same-origin (Vite
+Signed-in users open Ramble from the sidebar or a composer's waveform
+(`/ramble?date=YYYY-MM-DD` seeds the legacy default due date). The screen is the
+legacy modal: the microphone starts with the session, pauses and resumes, staged
+cards can be removed, and **Add tasks** (or a spoken "done") saves the batch;
+Discard, Escape or leaving the screen abandons it. Browsers connect same-origin (Vite
 proxies `/api` WebSockets) with cookies and an exact Origin. Native shells call
 `ramble_socket`: Rust mints a 30-second single-use ticket with the Keychain
 bearer and returns only the ticketed socket URL. The disposable QA service runs
 Ramble with a fake transcription provider; `scripts/ramble-smoke.ts` checks
 both paths. `QA_API_PORT` moves it off 3009. Evidence: [ticket 6](../../docs/qa/tauri-ramble.md).
+
+### Committing a session (ticket 21 conventions)
+
+- One session = one socket + one client-generated `operationId` (UUID), sent in
+  the `start` options. The server derives every task ID as
+  `sha256(userId, operationId, stagedId)` (`apps/api/src/commit-rows.ts`) and
+  inserts only missing rows, so any replay of a commit — over the socket after
+  `save_failed`, or over HTTP — writes each task at most once.
+- The socket holds the staged batch (ADR 0005). If it closes during a save, the
+  client replays the last published batch with `POST /api/v1/ramble/commit`
+  (`{ operationId, timeZone, todos }`, strict `rambleCommitInput` from
+  `@todalo/ramble/commit`; native `ramble_commit`). If it closes earlier, the
+  cards stay, marked unsaved, and Add tasks uses the same HTTP save. Success is
+  shown only after `committed` or a 200; ambiguous failures say the save could
+  not be confirmed and keep the cards.
+- Destinations come from the batch: projects must be the user's (404 otherwise),
+  parents must be in the batch and one level deep (400). Smart dates are the
+  account setting the server reads; the client also sends `smartRecognition`.
+- After a save the client invalidates every `["user", id]` query.
+- Interruptions (backgrounding, microphone loss) stop capture and keep the
+  socket and cards; **Resume** continues the same session.
 
 ## Apple project and verification
 
