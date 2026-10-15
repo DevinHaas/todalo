@@ -46,11 +46,9 @@ struct User {
 
 impl NativeAuth {
     pub fn new() -> Self {
-        let configured = option_env!("TODALO_API_BASE_URL").unwrap_or(if cfg!(debug_assertions) {
-            "http://127.0.0.1:3001"
-        } else {
-            ""
-        });
+        // Resolved by build.rs from TODALO_API_BASE_URL or the iOS-forwarded
+        // TAURI_TODALO_API_BASE_URL (loopback default in debug, empty in release).
+        let configured = env!("TODALO_RESOLVED_API_BASE_URL");
         Self {
             client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())

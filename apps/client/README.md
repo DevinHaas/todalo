@@ -21,6 +21,12 @@ owns deployment/cutover. Vite is a development server, not the production API.
 For Mac development, add `$HOME/.cargo/bin` to PATH and run `bun tauri dev`.
 `TODALO_API_BASE_URL` is a compile-time public native API origin. Debug builds
 default to `http://127.0.0.1:3001`; debug HTTP is accepted only for loopback.
+**iOS builds must use `TAURI_TODALO_API_BASE_URL` instead**: `tauri ios build|dev`
+compiles Rust from an Xcode phase that only receives the Tauri CLI's forwarded
+`TAURI*`/`WRY*`/`CARGO_*`/`RUST_*` variables (a `.cargo/config.toml` `[env]` entry
+is not picked up there either). `build.rs` accepts either name, rejects empty or
+conflicting values, and the iOS `beforeBuildCommand` fails if only the
+unforwarded name is set. Check a build with `strings <app>/todalo | grep 127.0.0.1:30`.
 Release builds require an explicit HTTPS origin and fail authentication closed
 when none is configured. No native request follows redirects. Physical iPhone
 development requires a reachable HTTPS API; loopback refers to the phone itself.
@@ -49,6 +55,8 @@ To build a local Mac app against that service:
 
 ```sh
 TODALO_API_BASE_URL=http://127.0.0.1:3009 bun tauri build --debug --bundles app --ci
+# iOS simulator: note the TAURI_ prefix
+TAURI_TODALO_API_BASE_URL=http://127.0.0.1:3009 bun tauri ios build --debug --target aarch64-sim --ci
 ```
 
 The resulting app lives under `src-tauri/target/debug/bundle/macos/todalo.app`.

@@ -119,6 +119,16 @@ a Mach-O arm64 executable. It was compiled/archived, not installed or exercised
 on a physical phone. Generated project sources are checked in; build products
 and static libraries are ignored. No Apple development team is committed.
 
+**Correction (2026-10-15):** that archive did *not* target 3009. The Xcode
+"Build Rust Code" phase only receives Tauri-forwarded `TAURI*`/`WRY*`/`CARGO_*`/
+`RUST_*` variables, so `TODALO_API_BASE_URL` was dropped and the binary kept the
+`http://127.0.0.1:3001` default (reproduced: a build-script probe saw the variable
+`NotPresent`, and a `src-tauri/.cargo/config.toml` `[env]` entry was not seen either).
+iOS builds now use `TAURI_TODALO_API_BASE_URL`; the iOS `beforeBuildCommand` fails
+when only the unforwarded name is set. Verified with
+`strings todalo.app/todalo | grep 127.0.0.1:30`: forwarded name → only `:3009`;
+nothing set → only `:3001`; unforwarded name alone → build exits 1.
+
 ## Decisions and open acceptance
 
 App identity stays **Todalo**. `app.todalo.development` is an explicit provisional
