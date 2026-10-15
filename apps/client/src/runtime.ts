@@ -14,6 +14,7 @@ export const queries = new QueryClient({
   defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 });
 export const session = new SessionController(accountTransport(), () => queries.clear(), googleTransport());
-export const reads = taskQueries(taskTransport());
+export const tasks = taskTransport();
+export const reads = taskQueries(tasks);
 export const projects = projectTransport();
 export const projectReads = projectQueries(projects);

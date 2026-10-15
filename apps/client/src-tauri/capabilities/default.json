@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Local account screen can only use the four native authentication commands, the two fixed task reads, the five fixed project commands (list, open, create, rename, delete), the three Google sign-in commands (start, await, cancel), and Ramble socket tickets",
+  "description": "Local account screen can only use the four native authentication commands, the two fixed task reads, the three fixed task writes (create, complete, delete), the five fixed project commands (list, open, create, rename, delete), the three Google sign-in commands (start, await, cancel), and Ramble socket tickets",
   "windows": [
     "main"
   ],
   "permissions": [
     "allow-account", "allow-sign-in", "allow-sign-up", "allow-sign-out", "allow-today", "allow-task",
+    "allow-create-task", "allow-complete-task", "allow-delete-task",
     "allow-projects", "allow-project", "allow-create-project", "allow-rename-project", "allow-delete-project",
     "allow-google-start", "allow-google-finish", "allow-google-cancel", "allow-ramble-socket"
   ]

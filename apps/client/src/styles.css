@@ -88,11 +88,6 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .task-detail p { margin: 0; }
 .task-detail .description { white-space: pre-wrap; }
 .sidebar-backdrop { display: none; }
-.ramble-capture { max-width: 42rem; margin: 0 auto; display: grid; gap: 1rem; }
-.ramble-capture header p, .ramble-status { margin: 0; color: var(--muted-foreground); font-size: .875rem; }
-.ramble-status[data-status="listening"] { color: var(--foreground); font-weight: 500; }
-.ramble-transcript { margin: 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
-.ramble-transcript .partial { color: var(--muted-foreground); }
 .app-shell [aria-disabled="true"] { cursor: default; }
 .directory { max-width: 48rem; display: grid; gap: 1.5rem; }
 .directory .page-title { margin: 0; }
@@ -111,6 +106,30 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .project-actions { display: flex; gap: .5rem; }
 .project-menu { display: grid; gap: .75rem; justify-items: start; max-width: 32rem; margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; }
 .project-menu .inline-form { width: 100%; }
+/* Task writes (ticket 5): legacy checkbox, hover delete, composer and quick add. */
+button.checkbox { position: relative; padding: 0; background: var(--background); cursor: pointer; }
+/* 44px-tall touch target around the 16px legacy box, short of the title link. */
+button.checkbox::after { content: ""; position: absolute; inset: -14px -10px; }
+button.checkbox:hover { border-color: var(--muted-foreground); }
+.row-delete { opacity: 0; color: var(--muted-foreground); }
+.task-row:hover .row-delete, .task-row:focus-within .row-delete { opacity: 1; }
+@media (hover: none) { .row-delete { opacity: 1; } }
+button.add-task, button.composer { border: 0; background: none; font: inherit; cursor: pointer; }
+button.composer { width: 100%; }
+button.composer:hover { color: var(--foreground); }
+.composer-form { gap: .5rem; padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; }
+.composer-form input { min-height: 2rem; border: 0; box-shadow: none; padding: 0; outline: none; }
+.composer-form input[aria-label="Task name"] { font-weight: 500; }
+.composer-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: .75rem; border-top: 1px solid var(--border); }
+.composer-actions, .task-actions { display: flex; gap: .5rem; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: max(4rem, env(safe-area-inset-top)) 1rem 1rem; background: #0000004d; }
+.dialog { width: 100%; max-width: 34rem; display: grid; gap: .5rem; padding: .5rem; border-radius: .75rem; background: var(--background); box-shadow: 0 10px 30px #00000026; font-size: .875rem; }
+.dialog svg { width: 1rem; height: 1rem; }
+.ramble-capture { max-width: 42rem; margin: 0 auto; display: grid; gap: 1rem; }
+.ramble-capture header p, .ramble-status { margin: 0; color: var(--muted-foreground); font-size: .875rem; }
+.ramble-status[data-status="listening"] { color: var(--foreground); font-weight: 500; }
+.ramble-transcript { margin: 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
+.ramble-transcript .partial { color: var(--muted-foreground); }
 
 @media (max-width: 767px) {
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 18rem; display: none; }

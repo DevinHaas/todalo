@@ -92,6 +92,32 @@ removed after an account response returns 401.
 - **Routes:** React Router `/today`, `/tasks/:id`, `/account`; unknown paths go to
   `/today`. Signed-out screens keep the URL so the route opens after sign-in.
 
+## Task writes (ticket 5 conventions)
+
+- **Shared operations:** `createTask`, `completeTask`, `deleteTask` (and the
+  calendar writes they trigger) live in `packages/server/src/tasks.ts`; the
+  legacy Server Actions are thin wrappers that add `revalidatePath`. Schemas are
+  in `packages/server/src/task-input.ts` (zod only, client-safe).
+- **API:** `POST /api/v1/tasks` `{ id, title, description?, dueDate }` → `201 { task }`
+  (`200` for a replay); `POST /api/v1/tasks/:id/complete` `{ occurrence }` →
+  `{ task }`; `DELETE /api/v1/tasks/:id` → `{ id }`. Missing/foreign IDs are 404,
+  bad bodies `400 INVALID_INPUT`, another user's operation ID `409 TASK_CONFLICT`.
+  Bearer requests ignore cookies; cookie writes need an `Origin` in
+  `allowedOrigins` (`RAMBLE_ALLOWED_ORIGINS` in production, so add
+  `http://localhost:5173` there for browser development), otherwise `403`.
+- **Retries:** the client-generated task `id` is the create operation ID (the
+  primary key stores it; a replay repeats no side effect). Completion sends the
+  due date the client saw as `occurrence`, so a replay cannot advance a recurring
+  task twice; a done task stays unchanged; a repeated delete finds the task gone.
+  Only `CONNECTION_FAILED`/`SAVE_FAILED` are retried (twice). The composer keeps
+  its draft and operation ID until the server confirms.
+- **Native:** `create_task`, `complete_task`, `delete_task` in
+  `src-tauri/src/writes.rs`, using `NativeAuth::write`; bodies are rebuilt from
+  typed fields and IDs validated in Rust.
+- **Cache:** `taskMutations` (`src/tasks.ts`) applies completion and deletion
+  optimistically to Today and its count, rolls back on failure, then invalidates
+  `taskKeys.today` and `taskKeys.task`. Later write tickets should reuse it.
+
 ## Projects and writes (ticket 8 conventions)
 
 - **API:** `apps/api/src/project-routes.ts` — `GET /api/v1/projects` →
@@ -134,6 +160,8 @@ fixture Today tasks and a second user's private task (`/tasks/other-private`) fo
 cross-user checks. Projects: `Work` (three fixture tasks), `Errands` (empty) and a
 second user's project (`/projects/qa-other`). Set `QA_CLIENT_ORIGIN` when Vite runs
 on a port other than 5173 (it is the trusted auth origin and the allowed write origin). `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
+`QA_AMBIGUOUS_WRITES=1` applies each first create/completion and then answers
+500, to watch the client retry without duplicating it.
 All these records disappear on service restart. It imports no production DB or
 auth singleton. Registration can create additional disposable QA accounts.
 Google is faked (`apps/api/src/fake-google.ts`): authorization redirects go to a

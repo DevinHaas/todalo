@@ -5,6 +5,7 @@ mod oauth;
 mod projects;
 mod ramble;
 mod reads;
+mod writes;
 use auth::{Account, Credentials, NativeAuth};
 
 #[tauri::command]
@@ -76,6 +77,9 @@ pub fn run() {
             sign_out,
             reads::today,
             reads::task,
+            writes::create_task,
+            writes::complete_task,
+            writes::delete_task,
             projects::projects,
             projects::project,
             projects::create_project,

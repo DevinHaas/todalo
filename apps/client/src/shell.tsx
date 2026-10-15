@@ -1,24 +1,50 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Layers,
   LineChart, List, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { projectReads, reads, session } from "./runtime";
+import { projectReads, reads, session, tasks } from "./runtime";
+import { taskMutations, type TaskDto } from "./tasks";
+import { Composer, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
-import { TaskView, TodayView } from "./views";
 
-// ponytail: controls without a migrated backend (search, add task, inbox,
+// ponytail: controls without a migrated backend (search, inbox,
 // upcoming, filters, display) keep their legacy appearance but are inert
-// (aria-disabled). Their tickets wire them: 5, 12, 14, 16, 18.
+// (aria-disabled). Their tickets wire them: 12, 14, 16, 18.
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
 }
 
+function useTaskWrites(userId: string) {
+  const cache = useQueryClient();
+  const writes = useMemo(() => taskMutations(tasks, cache, userId), [cache, userId]);
+  const create = useMutation(writes.create);
+  const complete = useMutation(writes.complete);
+  const remove = useMutation(writes.remove);
+  const actions: RowActions = { complete: (task) => complete.mutate(task), remove: (task) => remove.mutate(task) };
+  return { create, complete, remove, actions, error: (complete.error ?? remove.error)?.message ?? null };
+}
+
+const startOfToday = () => { const day = new Date(); day.setHours(0, 0, 0, 0); return day.toISOString(); };
+
+/** Legacy sidebar quick add: an undated task goes to the Inbox. */
+function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const { create } = useTaskWrites(userId);
+  const [added, setAdded] = useState<TaskDto | null>(null);
+  return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog">
+      <Composer startOpen dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
+      {added && <p role="status" className="state">Added “{added.title}” to Inbox. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
+    </div>
+  </div>;
+}
+
 export function Shell({ account }: { account: Account }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const today = useQuery(reads.today(account.user.id));
   useEffect(() => {
@@ -38,7 +64,7 @@ export function Shell({ account }: { account: Account }) {
         <span>{account.user.name}</span><ChevronDown className="chevron" />
       </Link>
       <div className="add-row">
-        <span className="add-task" aria-disabled="true"><Plus /><span>Add task</span></span>
+        <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       <nav><ul className="nav">
@@ -66,6 +92,7 @@ export function Shell({ account }: { account: Account }) {
       </div>
       <main className="content"><Outlet /></main>
     </div>
+    {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
   </div>;
 }
 
@@ -74,13 +101,21 @@ export function TodayScreen({ account }: { account: Account }) {
   // Row project pills; Today still renders if the project list fails.
   const projects = useQuery(projectReads.list(account.user.id));
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
-  return <TodayView state={query} onRetry={() => void query.refetch()} projectNames={projectNames} />;
+  const writes = useTaskWrites(account.user.id);
+  return <TodayView state={query} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error}
+    composer={<Composer dueDate={startOfToday} onCreate={(task) => writes.create.mutateAsync(task)} />} />;
 }
 
 export function TaskScreen({ account }: { account: Account }) {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const query = useQuery(reads.task(account.user.id, id));
-  return <TaskView state={query} onRetry={() => void query.refetch()} />;
+  const writes = useTaskWrites(account.user.id);
+  const actions: RowActions = {
+    complete: writes.actions.complete,
+    remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
+  };
+  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error} />;
 }
 
 export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
