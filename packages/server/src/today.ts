@@ -17,6 +17,14 @@ export async function getTasksForUser(userId: string, projectId?: string) {
   }));
 }
 
+/** Returns null for missing and other users' tasks alike, so callers cannot probe IDs. */
+export async function getOwnedTask(userId: string, id: string) {
+  const [task] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+  if (!task) return null;
+  const associations = await db.select().from(taskLabels).where(and(eq(taskLabels.userId, userId), eq(taskLabels.taskId, id)));
+  return { ...task, labelIds: associations.map(link => link.labelId) };
+}
+
 /** Retain the full collection for Today list, board, calendar and completion toggle.
  * Date counting intentionally uses the server's local day, as the legacy query
  * does; it is not UTC truncation or a new account-timezone interpretation.

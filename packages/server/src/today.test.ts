@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { countTodayTasks, getTasksForUser, getTodayTasksForUser } from "./today";
+import { countTodayTasks, getOwnedTask, getTasksForUser, getTodayTasksForUser } from "./today";
 
 const boundary = vi.hoisted(() => ({
   rows: {} as Record<string, Record<string, unknown>[]>,
@@ -96,6 +96,12 @@ describe("Today server query", () => {
       ]);
     },
   );
+
+  it("opens only an owned task, treating foreign and missing IDs alike", async () => {
+    expect(await getOwnedTask("alice", "alice-task")).toMatchObject({ id: "alice-task", labelIds: ["alice-label"] });
+    expect(await getOwnedTask("bob", "alice-task")).toBeNull();
+    expect(await getOwnedTask("alice", "missing")).toBeNull();
+  });
 
   it("retains the optional project constraint used by legacy read callers", async () => {
     Object.assign(boundary.rows.tasks[0], { projectId: "work" });
