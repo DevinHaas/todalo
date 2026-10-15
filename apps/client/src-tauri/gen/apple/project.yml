@@ -1,6 +1,6 @@
 name: todalo-client
 options:
-  bundleIdPrefix: app.todalo.development
+  bundleIdPrefix: app.todalo.client
   deploymentTarget:
     iOS: 15.4
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: todalo
-      PRODUCT_BUNDLE_IDENTIFIER: app.todalo.development
+      PRODUCT_BUNDLE_IDENTIFIER: app.todalo.client
 targetTemplates:
   app:
     type: application
