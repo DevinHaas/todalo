@@ -12,6 +12,9 @@ import { createApi } from "../../api/src/app";
 import { connectSpeech } from "../../api/src/speech";
 import type { SpeechCallbacks, SpeechConnection } from "../../api/src/elevenlabs";
 import { fixtureSemanticProcessor } from "../../api/test-fixtures/semantic";
+import { createMetadataRoutes } from "../../api/src/metadata-routes";
+import { memoryMetadataStore } from "../../api/test-fixtures/metadata-store";
+import { MissingReferenceError } from "../../../packages/server/src/metadata-input";
 
 // Set QA_CLIENT_ORIGIN when the Vite client runs on another port.
 const clientOrigin = process.env.QA_CLIENT_ORIGIN ?? "http://localhost:5173";
@@ -67,6 +70,21 @@ const attachments = [
   stored("qa-other-file", other.id, "other-private", "Private notes.txt", "Another user's attachment.\n"),
 ];
 
+// Labels and saved filters (ticket 14). Filter definitions are stored as the
+// legacy directory wrote them; "Old design label" names a label deleted since.
+const labels = [
+  { id: "design", userId: user.id, name: "Design", color: "#2563eb" },
+  { id: "urgent", userId: user.id, name: "Urgent", color: "#dc2626" },
+  { id: "qa-other-label", userId: other.id, name: "Other user's label", color: null },
+];
+const filters = [
+  { id: "qa-design-open", userId: user.id, name: "Design work", definition: { labelId: "design", priority: null, projectId: null, status: "open", due: "any" } },
+  { id: "qa-overdue", userId: user.id, name: "Overdue anything", definition: { status: "any", due: "overdue" } },
+  { id: "qa-work-bare", userId: user.id, name: "Work (old row)", definition: { projectId: "qa-work" } },
+  { id: "qa-stale-label", userId: user.id, name: "Old design label", definition: { labelId: "qa-deleted-label", status: "open", due: "any" } },
+  { id: "qa-other-filter", userId: other.id, name: "Other user's filter", definition: { status: "any", due: "any" } },
+];
+
 const verifySession = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
 // Account settings (ticket 12): per-user memory rows, defaulting smart dates on.
 // QA_SETTINGS_SAVE_FAILS=1 answers every settings save with a 500 (rollback QA).
@@ -81,13 +99,14 @@ const app = createAuthRoutes(auth).use(createSettingsRoutes({
     return { smartDateRecognition: enabled };
   },
 })).use(qaProjectRoutes({
-
   verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
   projects,
   sections,
   tasks,
-})).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
+})).use(createMetadataRoutes(memoryMetadataStore({
+  verify: verifySession, allowedOrigins: new Set([clientOrigin]), labels, filters, projects, tasks,
+}))).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   // ponytail: inline copy of countTodayTasks; importing @todalo/server/today would pull in the production DB client.
   today: async (userId) => {
@@ -126,11 +145,14 @@ const app = createAuthRoutes(auth).use(createSettingsRoutes({
     const owned = tasks.find(item => item.userId === userId && item.id === id);
     if (!owned) return null;
     const date = (value: string | null | undefined) => value ? new Date(value) : null;
+    // Labels as @todalo/server updateTask: a sorted set in the stale check, owned IDs only.
+    const labelIds = details.labelIds && [...new Set(details.labelIds)].sort();
     const changes = {
-      ...details, deadline: date(details.deadline), dueDate: date(details.dueDate), dueDateEnd: date(details.dueDateEnd),
+      ...details, ...(labelIds && { labelIds }), deadline: date(details.deadline), dueDate: date(details.dueDate), dueDateEnd: date(details.dueDateEnd),
       recurrence: details.recurrence && { ...details.recurrence, until: date(details.recurrence.until) },
     };
-    if (editConflicts(owned, changes, new Date(updatedAt))) return "changed";
+    if (editConflicts({ ...owned, labelIds: [...owned.labelIds].sort() }, changes, new Date(updatedAt))) return "changed";
+    if (labelIds?.some(label => !labels.some(row => row.userId === userId && row.id === label))) throw new MissingReferenceError();
     Object.assign(owned, changes, { updatedAt: new Date() });
     ambiguous(`update:${id}`);
     return owned;

@@ -13,8 +13,11 @@ import { createAttachmentRoutes } from "./attachment-routes";
 import { createSettingsRoutes } from "./settings-routes";
 import * as settings from "@todalo/server/settings";
 import * as attachments from "@todalo/server/attachments";
+import * as metadata from "@todalo/server/metadata";
+import { createMetadataRoutes } from "./metadata-routes";
 
 const dependencies = productionDependencies();
+const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };
 const verify = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
 const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRoutes({
   verify,
@@ -48,6 +51,20 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   allowedOrigins: dependencies.allowedOrigins,
   get: settings.getSettings,
   setSmartDateRecognition: settings.setSmartDateRecognition,
+})).use(createMetadataRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  metadata: metadata.getMetadataForUser,
+  label: metadata.getOwnedLabel,
+  filter: metadata.getOwnedFilter,
+  tasks: (userId) => getTasksForUser(userId),
+  // Another user's create ID is the route's 409.
+  createLabel: (userId, input) => metadata.createLabel(userId, input).catch(idConflict),
+  updateLabel: metadata.updateLabel,
+  removeLabel: metadata.deleteLabel,
+  createFilter: (userId, input) => metadata.createFilter(userId, input).catch(idConflict),
+  updateFilter: metadata.updateFilter,
+  removeFilter: metadata.deleteFilter,
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",

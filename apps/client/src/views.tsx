@@ -98,21 +98,26 @@ export function TaskView({ state, onRetry, actions, writeError, attachments, onE
   return <article className="task-detail">{body}<Link className="text-action" to="/today">Back to Today</Link></article>;
 }
 
-type Draft = { title: string; description: string; priority: number; deadline: string; date: string; start: string; end: string; recurrence: RecurrenceDto | null };
+type Draft = { title: string; description: string; priority: number; deadline: string; date: string; start: string; end: string; recurrence: RecurrenceDto | null; labelIds: string[] };
 const draftOf = (task: TaskDto): Draft => ({
   title: task.title, description: task.description ?? "", priority: task.priority, deadline: dateInputValue(task.deadline),
   date: dateInputValue(task.dueDate), start: timeInputValue(task.dueDate), end: timeInputValue(task.dueDateEnd, false), recurrence: task.recurrence,
+  labelIds: task.labelIds,
 });
 const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Does not repeat", daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
 
 /**
- * The legacy task edit dialog (ticket 11; labels are ticket 14). It saves every
+ * The legacy task edit dialog (ticket 11, labels ticket 14). It saves every
  * field with the version it was opened from. A pristine form follows newer
  * copies of the task; a draft is never replaced silently — if another device
  * changed the task, saving fails with TASK_CHANGED and the user loads the
  * current details. A custom repeat (from quick add) is kept unless replaced.
+ * With `labels` (the user's list) it shows the label checkboxes and sends the
+ * checked set, limited to labels that still exist; without it labels are kept.
  */
-export function TaskEditor({ task, onSave, onClose }: { task: TaskDto; onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void }) {
+export function TaskEditor({ task, labels, onSave, onClose }: {
+  task: TaskDto; labels?: { id: string; name: string }[]; onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
+}) {
   const [base, setBase] = useState(task);
   const [draft, setDraft] = useState(() => draftOf(task));
   const [dirty, setDirty] = useState(false);
@@ -135,6 +140,7 @@ export function TaskEditor({ task, onSave, onClose }: { task: TaskDto; onSave: (
         dueDate: draft.date ? localInstant(draft.date, draft.start) : null,
         dueDateEnd: draft.date && draft.end ? localInstant(draft.date, draft.end) : null,
         recurrence: draft.recurrence,
+        ...(labels && { labelIds: draft.labelIds.filter(id => labels.some(label => label.id === id)) }),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error("Your changes could not be saved. Try again."));
@@ -156,6 +162,12 @@ export function TaskEditor({ task, onSave, onClose }: { task: TaskDto; onSave: (
             <label>Deadline<input type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.deadline} onClick={() => edit({ deadline: "" })}>Clear deadline</button>
           </div>
+          {labels && <fieldset className="label-choices"><legend>Labels</legend>
+            {labels.length > 0 && <div className="label-options">{labels.map(label => <label key={label.id} className="label-option">
+              <input type="checkbox" checked={draft.labelIds.includes(label.id)} onChange={(event) => edit({ labelIds: event.target.checked ? [...draft.labelIds, label.id] : draft.labelIds.filter(id => id !== label.id) })} />{label.name}
+            </label>)}</div>}
+            {!labels.length && <p className="state">Create labels in <Link to="/labels" onClick={onClose}>Labels</Link>.</p>}
+          </fieldset>}
           <div className="field-row">
             <label>Due date<input type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.date} onClick={() => edit({ date: "", start: "", end: "" })}>Clear date</button>

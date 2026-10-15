@@ -25,7 +25,7 @@ pub struct NewTask {
     recurrence: Option<Recurrence>,
 }
 
-fn valid_operation_id(id: &str) -> bool {
+pub(crate) fn valid_operation_id(id: &str) -> bool {
     id.len() == 36
         && id.bytes().enumerate().all(|(index, byte)| match index {
             8 | 13 | 18 | 23 => byte == b'-',
@@ -126,6 +126,13 @@ pub struct TaskDetails {
     due_date: Option<String>,
     due_date_end: Option<String>,
     recurrence: Option<Recurrence>,
+    /// The dialog's full label set (ticket 14); omitted keeps the task's labels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label_ids: Option<Vec<String>>,
+}
+
+fn invalid_labels(ids: &[String]) -> bool {
+    ids.len() > 50 || !ids.iter().all(|id| valid_id(id))
 }
 
 fn invalid_recurrence(recurrence: &Recurrence) -> bool {
@@ -139,6 +146,7 @@ fn details_body(details: &TaskDetails) -> Result<Value, &'static str> {
         || details.description.chars().count() > 10_000
         || !(1..=4).contains(&details.priority)
         || details.recurrence.as_ref().is_some_and(invalid_recurrence)
+        || details.label_ids.as_deref().is_some_and(invalid_labels)
     {
         return Err(INVALID);
     }
@@ -292,5 +300,35 @@ mod tests {
             "updatedAt": "x", "title": "Plan", "description": "", "priority": 4, "deadline": null,
             "dueDate": null, "dueDateEnd": null, "recurrence": { "n": 1, "unit": "fortnight", "basedOn": "scheduled", "until": null }
         })).is_err());
+    }
+
+    #[test]
+    fn edit_bodies_carry_a_bounded_set_of_label_ids_only_when_sent() {
+        let base = json!({
+            "updatedAt": "2026-10-15T08:00:00.000Z", "title": "Plan", "description": "", "priority": 4,
+            "deadline": null, "dueDate": null, "dueDateEnd": null, "recurrence": null
+        });
+        let without: TaskDetails = serde_json::from_value(base.clone()).unwrap();
+        assert!(details_body(&without).unwrap().get("labelIds").is_none());
+        let mut labeled = base.clone();
+        labeled["labelIds"] = json!(["urgent", "home"]);
+        let parsed: TaskDetails = serde_json::from_value(labeled).unwrap();
+        assert_eq!(
+            details_body(&parsed).unwrap()["labelIds"],
+            json!(["urgent", "home"])
+        );
+        for ids in [
+            json!(["../labels"]),
+            json!([""]),
+            json!((0..51).map(|index| format!("l{index}")).collect::<Vec<_>>()),
+        ] {
+            let mut value = base.clone();
+            value["labelIds"] = ids;
+            let parsed: TaskDetails = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                details_body(&parsed),
+                Err("Check your entry and try again.")
+            );
+        }
     }
 }

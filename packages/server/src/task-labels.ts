@@ -1,12 +1,15 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { labels, taskLabels } from "@todalo/db/schema";
+import { MissingReferenceError } from "./metadata-input";
 
+export { MissingReferenceError };
+/** Throws MissingReferenceError ("Label not found") for deleted or foreign labels. */
 export async function assertOwnedLabels(userId: string, ids: string[]) {
   const unique = [...new Set(ids)];
   if (!unique.length) return;
   const owned = await db.select({ id: labels.id }).from(labels).where(and(eq(labels.userId, userId), inArray(labels.id, unique)));
-  if (owned.length !== unique.length) throw new Error("Label not found");
+  if (owned.length !== unique.length) throw new MissingReferenceError();
 }
 // Call only after task and label ownership have both been checked.
 export async function replaceTaskLabels(userId: string, taskId: string, ids: string[]) {

@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Local account screen can only use the four native authentication commands, the two fixed task reads, the four fixed task writes (create, complete, edit details, delete), the five fixed project commands (list, open, create, rename, delete), the four fixed organization commands (move destinations, create and delete a section, move or nest one task), the three attachment commands (list a task's attachments, upload files to a project, save an attachment), the three Google sign-in commands (start, await, cancel), Ramble socket tickets, semantic completion feedback (standard haptics), and the account settings read and write",
+  "description": "Local account screen can only use the four native authentication commands, the two fixed task reads, the four fixed task writes (create, complete, edit details, delete), the nine fixed label and saved-filter commands (list, open, create, edit, delete), the five fixed project commands (list, open, create, rename, delete), the four fixed organization commands (move destinations, create and delete a section, move or nest one task), the three attachment commands (list a task's attachments, upload files to a project, save an attachment), the three Google sign-in commands (start, await, cancel), Ramble socket tickets, semantic completion feedback (standard haptics), and the account settings read and write",
   "windows": [
     "main"
   ],
   "permissions": [
     "allow-account", "allow-sign-in", "allow-sign-up", "allow-sign-out", "allow-today", "allow-task",
     "allow-create-task", "allow-complete-task", "allow-update-task", "allow-delete-task",
+    "allow-metadata", "allow-label", "allow-create-label", "allow-update-label", "allow-delete-label", "allow-saved-filter", "allow-create-filter", "allow-update-filter", "allow-delete-filter",
     "allow-projects", "allow-project", "allow-create-project", "allow-rename-project", "allow-delete-project", "allow-destinations", "allow-create-section", "allow-delete-section", "allow-organize-task", "allow-attachments", "allow-upload-files", "allow-save-attachment",
     "allow-google-start", "allow-google-finish", "allow-google-cancel", "allow-ramble-socket", "allow-feedback", "allow-settings", "allow-update-settings"
   ]

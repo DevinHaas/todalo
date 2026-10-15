@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { projectReads, reads, session } from "./runtime";
+import { metadataReads, projectReads, reads, session } from "./runtime";
 import type { TaskDto } from "./tasks";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
@@ -18,9 +18,9 @@ import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
 
-// ponytail: controls without a migrated backend (search, inbox,
-// filters) keep their legacy appearance but are inert
-// (aria-disabled). Their tickets wire them: 12, 14, 18.
+// ponytail: controls without a migrated backend (search, inbox)
+// keep their legacy appearance but are inert
+// (aria-disabled). Their tickets wire them: 12, 18.
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
 }
@@ -51,6 +51,7 @@ export function Shell({ account }: { account: Account }) {
     return () => window.removeEventListener("keydown", close);
   }, [mobileOpen]);
   const count = today.data?.openCount ?? 0;
+  const { pathname } = useLocation();
 
   return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
@@ -70,7 +71,7 @@ export function Shell({ account }: { account: Account }) {
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
         <li><NavLink to="/upcoming" className="nav-item"><Layers /><span>Upcoming</span></NavLink></li>
-        <Inert icon={<ListFilter />} label="Filters & Labels" />
+        <li><NavLink to="/filters" className={({ isActive }) => isActive || pathname.startsWith("/labels") ? "nav-item active" : "nav-item"}><ListFilter /><span>Filters & Labels</span></NavLink></li>
         <Inert icon={<Star />} label="Goals" badge="BETA" muted />
         <Inert icon={<LineChart />} label="Reporting" muted />
         <Inert icon={<MoreHorizontal />} label="More" muted />
@@ -114,7 +115,9 @@ export function TaskScreen({ account }: { account: Account }) {
     complete: writes.actions.complete,
     remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
   };
-  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} onClose={() => setClosedFor(id)}
+  // The editor's label checkboxes; without the list it keeps the task's labels.
+  const labels = useQuery(metadataReads.list(account.user.id));
+  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} onClose={() => setClosedFor(id)}
     onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
     onEdit={() => setClosedFor(null)} editor={editor}

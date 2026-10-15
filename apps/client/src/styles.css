@@ -201,6 +201,32 @@ button.composer:hover { color: var(--foreground); }
 .time-range input { width: auto; flex: 1; }
 .task-editor .composer-actions { justify-content: flex-end; }
 
+/* Labels and saved filters (ticket 14): legacy MetadataDirectory, label/filter pages and the dialog's label checkboxes. */
+.metadata-nav { display: flex; gap: 1.25rem; font-size: .875rem; }
+.metadata-nav a, .metadata-list a { color: inherit; text-underline-offset: 4px; }
+.metadata-section { display: grid; gap: .75rem; }
+.metadata-section .section-heading { margin: 0; font-size: 1rem; }
+.metadata-section .state { margin: 0; }
+.metadata-list { list-style: none; margin: 0; padding: 0; }
+/* Names keep at least 10rem; on a phone the Edit/Delete buttons wrap below them. */
+.metadata-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+.metadata-list a { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; text-decoration: underline; }
+.metadata-actions { display: flex; gap: .25rem; margin-left: auto; }
+.label-dot { flex: none; width: .75rem; height: .75rem; border-radius: 999px; }
+.metadata-form { display: grid; gap: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .25rem; }
+.label-form { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.label-form .grow { flex: 1 1 12rem; }
+.label-form input[type="color"] { width: 3rem; padding: .25rem; }
+.filter-grid { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.collection { display: grid; gap: 1rem; justify-items: start; }
+.collection > * { justify-self: stretch; }
+.collection .page-title, .collection .text-action { justify-self: start; margin: 0; }
+.label-choices { gap: .5rem !important; }
+.label-choices legend { padding: 0; margin-bottom: .5rem; font-size: .875rem; font-weight: 500; }
+.label-options { display: flex; flex-wrap: wrap; gap: .75rem; }
+.label-option { display: flex; align-items: center; gap: .25rem; font-weight: 400; }
+.label-option input { width: auto; min-height: 0; box-shadow: none; }
+
 /* Display settings, Upcoming and calendar/schedule layouts (ticket 16): legacy
    display-settings, upcoming-list-view, calendar-view and schedule-grid. */
 button.display-button { border: 0; border-radius: .375rem; background: none; color: inherit; font: inherit; font-size: .75rem; font-weight: 500; cursor: pointer; }

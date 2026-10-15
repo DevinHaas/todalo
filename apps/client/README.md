@@ -310,6 +310,42 @@ removed after an account response returns 401.
   composer reads — it is **off until the setting has loaded**, so an opted-out user never
   gets a date from a draft typed during startup. The switch is on the Account screen.
 
+## Labels and saved filters (ticket 14 conventions)
+
+- **Server logic:** `packages/server/src/metadata.ts` (owner-scoped label and
+  saved-filter CRUD, shared with the legacy metadata actions, which only add
+  `revalidatePath` and keep their error messages) and the client-safe
+  `metadata-input.ts` (`filterDefinitionSchema`, `matchesSavedFilter`, input
+  schemas, DTOs, `MissingReferenceError`). Stored `saved_filters.definition` rows
+  are only ever *parsed* (legacy rows omit `status`/`due`); they are never rewritten.
+- **API:** `apps/api/src/metadata-routes.ts` — `GET /api/v1/metadata` →
+  `{ labels, filters }` (sorted by name; projects come from `/projects`);
+  `GET /labels/:id` → `{ label, tasks }`; `GET /filters/:id` → `{ filter, tasks }`
+  (evaluated on the server in its zone, as the legacy page; every matching task,
+  completed included); `POST /labels` `{ id, name, color? }` and `POST /filters`
+  `{ id, name, definition }` (client UUID: `201`, a replay `200`, another user's ID
+  `409`); `PATCH`/`DELETE` by ID. One `404 NOT_FOUND` for missing and foreign IDs.
+  A filter naming a deleted or foreign label/project is `400 INVALID_INPUT`.
+  Deleting a label cascades it off tasks; filters naming it stay and match nothing.
+- **Label assignment:** `taskDetailsInput.labelIds` (optional full set, `[]` clears)
+  through `PATCH /api/v1/tasks/:id` and `updateTask`. Labels join the stale-edit
+  check as a sorted set. A deleted/foreign label throws `MissingReferenceError`,
+  which task and metadata routes map to `400 INVALID_INPUT` — bulk metadata
+  (ticket 15) should reuse `assertOwnedLabels`/`replaceTaskLabels` and that mapping.
+- **Native:** `metadata`, `label`, `saved_filter`, `create_label`, `update_label`,
+  `delete_label`, `create_filter`, `update_filter`, `delete_filter` in
+  `src-tauri/src/metadata.rs` (typed bodies, names 1–100, `#rrggbb`, IDs via
+  `valid_id`, create IDs via `valid_operation_id`); `update_task` takes `labelIds`.
+- **Client:** `src/metadata.ts` (`metadataKeys` under `["user", id, "metadata"]`;
+  `metadataMutations` refresh that prefix, and deleting a label refreshes every
+  user key). Task writes also invalidate the metadata prefix, so label/filter
+  task lists and counts follow. Views in `metadata-views.tsx`, screens in
+  `metadata-screens.tsx`; routes `/labels`, `/labels/:id`, `/filters`,
+  `/filters/:id`. `TaskEditor` takes `labels` and sends only labels still in the list.
+- **QA fixtures:** labels `Design`/`Urgent`, legacy-shaped filters (including one
+  naming a deleted label) and another user's label/filter
+  (`/labels/qa-other-label`, `/filters/qa-other-filter`).
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:

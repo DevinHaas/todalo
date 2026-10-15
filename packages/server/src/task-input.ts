@@ -71,6 +71,9 @@ export const taskDetailsInput = z.object({
   dueDate: isoDate.nullable(),
   dueDateEnd: isoDate.nullable(),
   recurrence: recurrenceInput.nullable(),
+  // Ticket 14: the dialog's label checkboxes (the full set; [] clears). Optional
+  // so older clients keep labels; deleted or foreign IDs answer 400.
+  labelIds: z.array(z.string().min(1).max(200)).max(50).optional(),
 }).strict().refine(details => details.dueDate !== null || details.dueDateEnd === null, { path: ["dueDateEnd"], message: "An end time needs a due date" });
 export type TaskDetailsInput = z.infer<typeof taskDetailsInput>;
 

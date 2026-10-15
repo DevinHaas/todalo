@@ -1,23 +1,3 @@
-import { z } from "zod";
-import { startOfDay, isSameDay } from "date-fns";
-
+// Moved to @todalo/server so the API evaluates saved filters with the same rules.
 export { taskMetadataSchema } from "@todalo/server/task-input";
-export const filterDefinitionSchema = z.object({
-  priority: z.number().int().min(1).max(4).nullable().optional(),
-  labelId: z.string().min(1).nullable().optional(),
-  projectId: z.string().min(1).nullable().optional(),
-  status: z.enum(["any", "open", "done"]).default("open"),
-  due: z.enum(["any", "today", "overdue", "undated"]).default("any"),
-}).strict();
-export type FilterDefinition = z.infer<typeof filterDefinitionSchema>;
-export function matchesSavedFilter(task: { priority: number; labelIds?: string[]; projectId: string | null; status: string; dueDate: Date | string | null }, filter: FilterDefinition, now = new Date()) {
-  if (filter.priority && task.priority !== filter.priority) return false;
-  if (filter.labelId && !task.labelIds?.includes(filter.labelId)) return false;
-  if (filter.projectId && task.projectId !== filter.projectId) return false;
-  if (filter.status === "open" && task.status === "done" || filter.status === "done" && task.status !== "done") return false;
-  const date = task.dueDate ? new Date(task.dueDate) : null;
-  if (filter.due === "today" && (!date || !isSameDay(date, now))) return false;
-  if (filter.due === "overdue" && (!date || date >= startOfDay(now))) return false;
-  if (filter.due === "undated" && date) return false;
-  return true;
-}
+export { filterDefinitionSchema, matchesSavedFilter, type FilterDefinition } from "@todalo/server/metadata-input";

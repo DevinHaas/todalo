@@ -149,6 +149,22 @@ describe("updateTask", () => {
     expect(task("bob-task")).toMatchObject({ title: "Private" });
     expect(boundary.calendar).toEqual([]);
   });
+
+  it("assigns labels (ticket 14): owned only, a replay is recognised and another device's label change is not overwritten", async () => {
+    boundary.rows.labels = [{ id: "urgent", userId: "alice" }, { id: "home", userId: "alice" }, { id: "bob-label", userId: "bob" }];
+    boundary.rows.task_labels = [];
+    const links = () => boundary.rows.task_labels.filter(link => link.taskId === "alice-task").map(link => link.labelId).sort();
+    expect(await updateTask("alice", { ...details, labelIds: ["urgent", "home"] }, { seenUpdatedAt: seen })).toBe("updated");
+    expect(links()).toEqual(["home", "urgent"]);
+    expect(await updateTask("alice", { ...details, labelIds: ["home", "urgent"] }, { seenUpdatedAt: seen })).toBe("updated");
+    expect(await updateTask("alice", { ...details, labelIds: ["urgent"] }, { seenUpdatedAt: seen })).toBe("changed");
+    expect(links()).toEqual(["home", "urgent"]);
+    const fresh = task("alice-task")!.updatedAt as Date;
+    for (const foreign of [["bob-label"], ["deleted"]]) await expect(updateTask("alice", { ...details, labelIds: foreign }, { seenUpdatedAt: fresh })).rejects.toThrow("Label not found");
+    expect(links()).toEqual(["home", "urgent"]);
+    expect(await updateTask("alice", { ...details, labelIds: [] }, { seenUpdatedAt: fresh })).toBe("updated");
+    expect(links()).toEqual([]);
+  });
 });
 
 describe("deleteTask", () => {

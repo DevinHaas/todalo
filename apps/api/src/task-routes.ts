@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { toTaskDto, type TaskDto, type TaskRecord, type TodayDto } from "@todalo/server/task-dto";
 import { basicTaskInput, completionInput, taskDetailsInput, type BasicTaskInput, type TaskDetailsInput } from "@todalo/server/task-input";
 import { taskOrganizationInput, type TaskOrganizationInput } from "@todalo/server/organization-input";
+import { MissingReferenceError } from "@todalo/server/metadata-input";
 import { writeUser } from "./project-routes";
 
 export interface TaskReads {
@@ -46,7 +47,8 @@ export function createTaskRoutes(deps: TaskReads & TaskWrites) {
   return new Elysia({ prefix: "/api/v1" })
     .onBeforeHandle(({ set }) => { set.headers["cache-control"] = "no-store"; })
     // Malformed JSON gets the same envelope as a schema failure.
-    .onError(({ code, status }) => code === "PARSE" ? status(400, INVALID) : undefined)
+    // So does a deleted or foreign label ID in an edit (ticket 14).
+    .onError(({ code, error, status }) => code === "PARSE" || error instanceof MissingReferenceError ? status(400, INVALID) : undefined)
     .get("/today", async ({ request, status }) => {
       const userId = await deps.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);

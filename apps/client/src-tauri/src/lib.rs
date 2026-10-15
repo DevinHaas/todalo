@@ -3,6 +3,7 @@ mod auth;
 mod credentials;
 mod endpoint;
 mod feedback;
+mod metadata;
 mod oauth;
 mod organization;
 mod projects;
@@ -87,6 +88,15 @@ pub fn run() {
             writes::complete_task,
             writes::update_task,
             writes::delete_task,
+            metadata::metadata,
+            metadata::label,
+            metadata::create_label,
+            metadata::update_label,
+            metadata::delete_label,
+            metadata::saved_filter,
+            metadata::create_filter,
+            metadata::update_filter,
+            metadata::delete_filter,
             projects::projects,
             projects::project,
             projects::create_project,

@@ -3,7 +3,7 @@
 // request context or Next caches (callers revalidate their own views).
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { tasks } from "@todalo/db/schema";
+import { taskLabels, tasks } from "@todalo/db/schema";
 import { assertTaskParent } from "@todalo/db/task-parent";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
 import { deleteTaskFromCalendar, pushTaskToCalendar } from "./calendar";
@@ -125,7 +125,13 @@ export async function updateTask(userId: string, input: UpdateTaskInput, options
   if (!owned) return "missing";
   // ponytail: the check and the write are separate statements (no neon-http
   // transactions); a write landing in between is last-write-wins, as before.
-  if (editConflicts(owned, data, options.seenUpdatedAt)) return "changed";
+  // Labels take part in the stale check as a sorted set, so a replay is still
+  // recognised and another device's label change is not silently overwritten.
+  const labelSet = (ids: string[]) => [...new Set(ids)].sort();
+  const current = labelIds !== undefined && options.seenUpdatedAt
+    ? labelSet((await db.select({ labelId: taskLabels.labelId }).from(taskLabels).where(and(eq(taskLabels.userId, userId), eq(taskLabels.taskId, id)))).map(link => link.labelId))
+    : undefined;
+  if (editConflicts(current ? { ...owned, labelIds: current } : owned, current ? { ...data, labelIds: labelSet(labelIds!) } : data, options.seenUpdatedAt)) return "changed";
   if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
   if (data.projectId !== undefined || data.sectionId !== undefined) {
     await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });

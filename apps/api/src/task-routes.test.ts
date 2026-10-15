@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TaskRecord } from "@todalo/server/task-dto";
+import { MissingReferenceError } from "@todalo/server/metadata-input";
 import { createTaskRoutes } from "./task-routes";
 
 type Row = TaskRecord & { userId: string };
@@ -40,6 +41,7 @@ const app = createTaskRoutes({
   // Stale-edit semantics of @todalo/server/tasks updateTask (covered there).
   update: async (userId, id, details) => {
     edits.push(details);
+    if (details.labelIds?.includes("deleted")) throw new MissingReferenceError();
     const task = owned(userId, id);
     if (task && new Date(details.updatedAt).getTime() !== new Date(task.updatedAt!).getTime()) return "changed";
     if (task) Object.assign(task, { ...details, updatedAt: new Date("2026-10-04T09:00:00.000Z") });
@@ -227,5 +229,16 @@ describe("task edit API", () => {
     expect((await send("PATCH", "/api/v1/tasks/alice-task", { body: details, origin: ORIGIN })).status).toBe(401);
     expect((await send("PATCH", "/api/v1/tasks/alice-task", { cookie: "alice", origin: "https://evil.example", body: details })).status).toBe(403);
     expect((await send("PATCH", "/api/v1/tasks/alice-task", { cookie: "alice", origin: ORIGIN, body: details })).status).toBe(200);
+  });
+
+  it("passes the dialog's label set through; a deleted or foreign label is invalid input (ticket 14)", async () => {
+    const labeled = await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body: { ...details, labelIds: ["home"] } });
+    expect(await labeled.json()).toMatchObject({ task: { labelIds: ["home"] } });
+    const deleted = await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body: { ...details, updatedAt: "2026-10-04T09:00:00.000Z", labelIds: ["deleted"] } });
+    expect(deleted.status).toBe(400);
+    expect(await deleted.json()).toEqual({ code: "INVALID_INPUT", message: "Check your entry and try again." });
+    for (const labelIds of [[""], "home", Array.from({ length: 51 }, (_, index) => `l${index}`)]) {
+      expect((await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body: { ...details, labelIds } })).status).toBe(400);
+    }
   });
 });

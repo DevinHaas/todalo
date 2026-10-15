@@ -6,6 +6,7 @@ import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
+import { FilterScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { SmartDatesProvider } from "./settings-screen";
 
 export default function App() {
@@ -50,6 +51,10 @@ export default function App() {
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
         <Route path="/projects" element={<ProjectsScreen account={account} />} />
         <Route path="/projects/:id" element={<ProjectScreen account={account} />} />
+        <Route path="/labels" element={<MetadataScreen account={account} mode="labels" />} />
+        <Route path="/labels/:id" element={<LabelScreen account={account} />} />
+        <Route path="/filters" element={<MetadataScreen account={account} mode="filters" />} />
+        <Route path="/filters/:id" element={<FilterScreen account={account} />} />
         <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
         <Route path="/ramble" element={<RambleScreen />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
