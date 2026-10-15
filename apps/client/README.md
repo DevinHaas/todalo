@@ -68,7 +68,8 @@ removed after an account response returns 401.
   password and links Google from the account screen instead.
 - **Deep links:** only the `app.todalo.client` scheme for `oauth/callback` is
   registered (`plugins.deep-link` in `tauri.conf.json`; CFBundleURLTypes in the
-  generated iOS Info.plist). No task routes.
+  generated iOS Info.plist). Ticket 18 added task links on the same scheme
+  (`app.todalo.client://tasks/<id>`); see "Search and task links".
 
 ## Authenticated reads (ticket 3 conventions)
 
@@ -345,6 +346,51 @@ removed after an account response returns 401.
 - **QA fixtures:** labels `Design`/`Urgent`, legacy-shaped filters (including one
   naming a deleted label) and another user's label/filter
   (`/labels/qa-other-label`, `/filters/qa-other-filter`).
+
+## Search and task links (ticket 18 conventions)
+
+- **Shared rules:** `packages/server/src/search.ts` (pure, no DB) is the legacy
+  behavior and is used by the legacy Next page/dialog, the API and the QA server:
+  `searchTasks` (/search page: case-insensitive substring of `"title description"`,
+  sortOrder, empty query = all tasks; `searchQuery` cuts `q` to 200), `findItems`
+  (Quick Find candidates: tasks, projects by name, sections; legacy hrefs including
+  `/projects/<p>#section-<s>`) and `matchFindItems` (title-only, max 40, optional
+  sections-only "Navigate sections" mode). No ranking exists in legacy; none added.
+  Saved filters are a separate path (`matchesSavedFilter`) and are not involved.
+- **API (read-only, owner-scoped, `no-store`):** `GET /api/v1/search?q=` →
+  `{ query, tasks: TaskDto[] }`; `GET /api/v1/find` → `{ items: FindItem[] }`
+  (`apps/api/src/search-routes.ts`). Only the session user's rows reach them.
+- **Native:** `search_tasks { query }` (Rust URL-encodes `q`, ≤ 200 chars) and
+  `quick_find` in `src-tauri/src/search.rs`.
+- **Client:** `src/search.ts` (`searchKeys` under `["user", id, "search"]`; task
+  writes invalidate it), `search-views.tsx`, `search-screens.tsx`. The sidebar
+  **Search** button opens Quick Find (`data-quick-find`, the legacy hook — keyboard
+  shortcuts `/`, `f`, `Primary+k` and "Navigate sections" in ticket 19 should open
+  the same dialog, e.g. by clicking `[data-quick-find]` or lifting Shell's
+  `finding` state; `QuickFindDialog` already takes `sectionsOnly`). Route
+  `/search?q=` keeps the query in the URL. Search results use the list layout only.
+- **Task links:** `/tasks/:id` (legacy URL, `encodeURIComponent(id)`). Signed-out
+  screens keep the URL, so a link opens after sign-in; unknown or another user's
+  IDs show "Task not found" (404). `TaskEditor` takes `shareUrl` and shows the
+  legacy "Task link · Copy link" row: the browser copies `location.origin` +
+  path; native gets `task_link { id }` → `<API origin>/tasks/<id>` (https in
+  release; never the custom scheme). The URL is resolved before the tap because
+  WebKit drops the clipboard gesture across an await.
+- **Native deep links:** `src-tauri/src/links.rs` accepts only
+  `app.todalo.client://tasks/<id>` and `https://<API origin>/tasks/<id>` (exact
+  origin; for future universal links) with a `valid_id` ID and no query, fragment,
+  credentials or port. Rust keeps the latest accepted route; the webview awaits it
+  with `next_link` (`followNativeLinks` in `src/links.ts`, started in `main.tsx`)
+  and pushes it into history — navigation only, never a write. Cold launch works
+  where the plugin delivers the URL (macOS); **iOS cold launch drops it** (tao
+  0.37.1, as with OAuth) and the user taps the link again. To add another route,
+  extend the Rust allow-list and `LINK_ROUTE` together.
+- **Production (release items):** serve the browser client's routes at the API
+  origin (shared https links point there) with an HTML fallback for
+  `/tasks/*`, `/search` etc. that never swallows `/api/*` or assets; for universal
+  links add `plugins.deep-link.mobile` `{ scheme: ["https"], host, pathPrefix:
+  ["/tasks"], appLink: true }`, the Associated Domains entitlement
+  `applinks:<host>` (paid team) and `/.well-known/apple-app-site-association`.
 
 ## Isolated manual QA
 

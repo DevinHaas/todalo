@@ -7,6 +7,7 @@ import {
 } from "./tasks";
 import { AccountTransportError } from "./errors";
 import { releaseFocus } from "./software-keyboard";
+import { copyText, taskPath } from "./links";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -115,14 +116,18 @@ const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Do
  * With `labels` (the user's list) it shows the label checkboxes and sends the
  * checked set, limited to labels that still exist; without it labels are kept.
  */
-export function TaskEditor({ task, labels, onSave, onClose }: {
-  task: TaskDto; labels?: { id: string; name: string }[]; onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
+export function TaskEditor({ task, labels, shareUrl, onSave, onClose }: {
+  task: TaskDto; labels?: { id: string; name: string }[];
+  /** The resolved https task link (ticket 18); the legacy "Task link · Copy link" row shows once known. */
+  shareUrl?: string;
+  onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
 }) {
   const [base, setBase] = useState(task);
   const [draft, setDraft] = useState(() => draftOf(task));
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [copied, setCopied] = useState(false);
   const load = (copy: TaskDto) => { setBase(copy); setDraft(draftOf(copy)); setDirty(false); setError(null); };
   useEffect(() => { if (!dirty && task.updatedAt !== base.updatedAt) load(task); }, [task, dirty, base.updatedAt]);
   const edit = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setDirty(true); };
@@ -168,6 +173,11 @@ export function TaskEditor({ task, labels, onSave, onClose }: {
             </label>)}</div>}
             {!labels.length && <p className="state">Create labels in <Link to="/labels" onClick={onClose}>Labels</Link>.</p>}
           </fieldset>}
+          {shareUrl && <div className="task-links">
+            <Link to={taskPath(base.id)} className="text-action" onClick={onClose}>Task link</Link>
+            <button type="button" className="text-action" onClick={() => copyText(shareUrl).then(() => setCopied(true), (reason: Error) => setError(reason))}>Copy link</button>
+            {copied && <span role="status">Task link copied.</span>}
+          </div>}
           <div className="field-row">
             <label>Due date<input type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.date} onClick={() => edit({ date: "", start: "", end: "" })}>Clear date</button>

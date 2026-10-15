@@ -150,6 +150,8 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "project"] }),
     // Label and saved-filter task lists (metadataKeys.all, ticket 14).
     cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "metadata"] }),
+    // Search results and Quick Find items (searchKeys.all, ticket 18).
+    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "search"] }),
   ]);
   async function optimistic(task: TaskDto, change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
     await cache.cancelQueries({ queryKey: today });

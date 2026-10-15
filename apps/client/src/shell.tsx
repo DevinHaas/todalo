@@ -17,10 +17,11 @@ import { TodayCalendar } from "./schedule-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
+import { QuickFind } from "./search-screens";
+import { taskUrl } from "./links";
 
-// ponytail: controls without a migrated backend (search, inbox)
-// keep their legacy appearance but are inert
-// (aria-disabled). Their tickets wire them: 12, 18.
+// ponytail: controls without a migrated backend (inbox)
+// keep their legacy appearance but are inert (aria-disabled).
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
 }
@@ -43,6 +44,7 @@ export function Shell({ account }: { account: Account }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [finding, setFinding] = useState(false);
   const today = useQuery(reads.today(account.user.id));
   useEffect(() => {
     if (!mobileOpen) return;
@@ -66,7 +68,8 @@ export function Shell({ account }: { account: Account }) {
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       <nav><ul className="nav">
-        <Inert icon={<Search />} label="Search" />
+        {/* data-quick-find: the legacy hook keyboard commands click (ticket 19). */}
+        <li><button type="button" className="nav-item" data-quick-find onClick={() => { setFinding(true); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <Inert icon={<Layers />} label="Inbox" />
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
@@ -89,6 +92,7 @@ export function Shell({ account }: { account: Account }) {
       <main className="content"><Outlet /></main>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
+    {finding && <QuickFind userId={account.user.id} onClose={() => setFinding(false)} />}
   </div></DisplayProvider>;
 }
 
@@ -117,7 +121,9 @@ export function TaskScreen({ account }: { account: Account }) {
   };
   // The editor's label checkboxes; without the list it keeps the task's labels.
   const labels = useQuery(metadataReads.list(account.user.id));
-  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} onClose={() => setClosedFor(id)}
+  // Resolved before the tap: WebKit only allows clipboard writes inside the gesture.
+  const link = useQuery({ queryKey: ["user", account.user.id, "task-link", id], queryFn: () => taskUrl(id), staleTime: Infinity });
+  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} shareUrl={link.data} onClose={() => setClosedFor(id)}
     onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
     onEdit={() => setClosedFor(null)} editor={editor}

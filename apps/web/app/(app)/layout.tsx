@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTodayTaskCount, getTasksForUser } from "@/lib/tasks";
 import { getSectionsForUser } from "@/lib/organization";
 import { OrganizationNavigation } from "@/components/organization/organization-navigation";
+import { findItems } from "@todalo/server/search";
 import { getSmartDateRecognitionEnabled } from "@/lib/settings";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -41,11 +42,7 @@ export default async function AppLayout({
       <SidebarProvider>
         <KeyboardProvider initialPreferences={keyboard.preferences} initialError={keyboard.error}>
         <CalendarSyncListener />
-        <OrganizationNavigation items={[
-          ...findTasks.map(task => ({ id: task.id, title: task.title, href: `/tasks/${encodeURIComponent(task.id)}`, kind: "Task" as const })),
-          ...rambleProjects.map(project => ({ id: project.id, title: project.name, href: `/projects/${project.id}`, kind: "Project" as const })),
-          ...findSections.map(section => ({ id: section.id, title: section.name, href: `/projects/${section.projectId}#section-${section.id}`, kind: "Section" as const })),
-        ]} />
+        <OrganizationNavigation items={findItems(findTasks, rambleProjects, findSections)} />
         <AppSidebar user={session.user} todayCount={todayCount} />
         <SidebarInset>
           <DisplaySettingsProvider>

@@ -15,6 +15,7 @@ import { fixtureSemanticProcessor } from "../../api/test-fixtures/semantic";
 import { createMetadataRoutes } from "../../api/src/metadata-routes";
 import { memoryMetadataStore } from "../../api/test-fixtures/metadata-store";
 import { MissingReferenceError } from "../../../packages/server/src/metadata-input";
+import { createSearchRoutes } from "../../api/src/search-routes";
 
 // Set QA_CLIENT_ORIGIN when the Vite client runs on another port.
 const clientOrigin = process.env.QA_CLIENT_ORIGIN ?? "http://localhost:5173";
@@ -106,7 +107,13 @@ const app = createAuthRoutes(auth).use(createSettingsRoutes({
   tasks,
 })).use(createMetadataRoutes(memoryMetadataStore({
   verify: verifySession, allowedOrigins: new Set([clientOrigin]), labels, filters, projects, tasks,
-}))).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
+}))).use(createSearchRoutes({
+  // Ticket 18: the same shared search rules over this user's memory rows.
+  verify: verifySession,
+  tasks: async (userId) => tasks.filter(item => item.userId === userId),
+  projects: async (userId) => projects.filter(item => item.userId === userId).sort((a, b) => a.name.localeCompare(b.name)),
+  sections: async (userId) => sections.filter(item => item.userId === userId).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+})).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   // ponytail: inline copy of countTodayTasks; importing @todalo/server/today would pull in the production DB client.
   today: async (userId) => {

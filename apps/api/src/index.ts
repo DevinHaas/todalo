@@ -15,6 +15,7 @@ import * as settings from "@todalo/server/settings";
 import * as attachments from "@todalo/server/attachments";
 import * as metadata from "@todalo/server/metadata";
 import { createMetadataRoutes } from "./metadata-routes";
+import { createSearchRoutes } from "./search-routes";
 
 const dependencies = productionDependencies();
 const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };
@@ -65,6 +66,11 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   createFilter: (userId, input) => metadata.createFilter(userId, input).catch(idConflict),
   updateFilter: metadata.updateFilter,
   removeFilter: metadata.deleteFilter,
+})).use(createSearchRoutes({
+  verify,
+  tasks: (userId) => getTasksForUser(userId),
+  projects: projects.getProjectsForUser,
+  sections: (userId) => organization.getSectionsForUser(userId),
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",

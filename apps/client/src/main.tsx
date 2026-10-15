@@ -5,8 +5,12 @@ import { queries } from "./runtime";
 import "@fontsource-variable/geist";
 import "./styles.css";
 import { trackSoftwareKeyboard } from "./software-keyboard";
+import { isTauri } from "@tauri-apps/api/core";
+import { followNativeLinks } from "./links";
 
 trackSoftwareKeyboard();
+// Task deep links Rust accepted (cold or warm launch); before render so none waits.
+if (isTauri()) void followNativeLinks();
 const root = createRoot(document.getElementById("root")!);
 root.render(<QueryClientProvider client={queries}><App /></QueryClientProvider>);
 if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());

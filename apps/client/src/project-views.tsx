@@ -86,7 +86,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     {adding && sectionActions && <SectionComposer pending={write.pending} onCreate={sectionActions.create} onClose={() => setAdding(false)} />}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
     {files}
-    <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"}>
+    <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>
       {section
         ? <SectionHeader section={section} collapsed={collapsed.has(section.id)} onToggle={() => toggle(section.id)} pending={write.pending} onDelete={() => sectionActions?.remove(section)} />
         : <h2 className="section-heading">Tasks</h2>}

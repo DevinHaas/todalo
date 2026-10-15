@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-next-link"
+description = "Enables the next_link command without any pre-configured scope."
+commands.allow = ["next_link"]
+
+[[permission]]
+identifier = "deny-next-link"
+description = "Denies the next_link command without any pre-configured scope."
+commands.deny = ["next_link"]

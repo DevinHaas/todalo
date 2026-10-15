@@ -3,12 +3,14 @@ mod auth;
 mod credentials;
 mod endpoint;
 mod feedback;
+mod links;
 mod metadata;
 mod oauth;
 mod organization;
 mod projects;
 mod ramble;
 mod reads;
+mod search;
 mod settings;
 mod writes;
 use auth::{Account, Credentials, NativeAuth};
@@ -59,21 +61,20 @@ pub fn run() {
         .plugin(tauri_plugin_haptics::init())
         .manage(NativeAuth::new())
         .manage(oauth::GoogleFlow::default())
+        .manage(links::LinkInbox::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
-                oauth::handle(
-                    &handle,
-                    event.urls().iter().map(|url| url.to_string()).collect(),
-                );
+                let urls: Vec<String> = event.urls().iter().map(|url| url.to_string()).collect();
+                links::handle(&handle, &urls);
+                oauth::handle(&handle, urls);
             });
-            // Cold launch by the returning link.
+            // Cold launch by the returning link (or a task link; not on iOS, see links.rs).
             if let Some(urls) = app.deep_link().get_current()? {
-                oauth::handle(
-                    app.handle(),
-                    urls.iter().map(|url| url.to_string()).collect(),
-                );
+                let urls: Vec<String> = urls.iter().map(|url| url.to_string()).collect();
+                links::handle(app.handle(), &urls);
+                oauth::handle(app.handle(), urls);
             }
             Ok(())
         })
@@ -115,7 +116,11 @@ pub fn run() {
             ramble::ramble_socket,
             feedback::feedback,
             settings::settings,
-            settings::update_settings
+            settings::update_settings,
+            links::next_link,
+            links::task_link,
+            search::search_tasks,
+            search::quick_find
         ])
         .run(tauri::generate_context!())
         .expect("Cannot launch todalo");

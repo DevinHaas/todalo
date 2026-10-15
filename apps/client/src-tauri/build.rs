@@ -75,6 +75,10 @@ fn main() {
             "feedback",
             "settings",
             "update_settings",
+            "next_link",
+            "task_link",
+            "search_tasks",
+            "quick_find",
         ]));
     tauri_build::try_build(attributes).expect("Cannot configure native command permissions");
 }

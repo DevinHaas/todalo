@@ -8,6 +8,7 @@ import { attachmentQueries, attachmentTransport } from "./attachments";
 import { settingsQueries, settingsTransport } from "./settings";
 import { metadataQueries, metadataTransport } from "./metadata";
 import { organizationQueries, organizationTransport } from "./organization";
+import { searchQueries, searchTransport } from "./search";
 
 // A read or write that finds the session revoked re-checks the account, which
 // signs the UI out (and clears every user-scoped query) when the server agrees.
@@ -30,3 +31,4 @@ export const metadata = metadataTransport();
 export const metadataReads = metadataQueries(metadata);
 export const organization = organizationTransport();
 export const organizationReads = organizationQueries(organization);
+export const searchReads = searchQueries(searchTransport());

@@ -8,6 +8,7 @@ import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
 import { FilterScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { SmartDatesProvider } from "./settings-screen";
+import { SearchScreen } from "./search-screens";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/filters/:id" element={<FilterScreen account={account} />} />
         <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
         <Route path="/ramble" element={<RambleScreen />} />
+        <Route path="/search" element={<SearchScreen account={account} />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
     </Routes></SmartDatesProvider></BrowserRouter>;
