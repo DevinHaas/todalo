@@ -5,6 +5,7 @@ import { getOwnedTask, getTasksForUser, getTodayTasksForUser } from "@todalo/ser
 import * as projects from "@todalo/server/projects";
 import { createAuthRoutes } from "./auth-routes";
 import { createTaskRoutes } from "./task-routes";
+import { taskOperations } from "./task-operations";
 import { createProjectRoutes } from "./project-routes";
 
 const dependencies = productionDependencies();
@@ -13,6 +14,8 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   verify,
   today: (userId) => getTodayTasksForUser(userId),
   task: getOwnedTask,
+  allowedOrigins: dependencies.allowedOrigins,
+  ...taskOperations,
 })).use(createProjectRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

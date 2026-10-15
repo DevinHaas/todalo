@@ -1,11 +1,7 @@
 import { z } from "zod";
 import { startOfDay, isSameDay } from "date-fns";
 
-export const taskMetadataSchema = z.object({
-  priority: z.number().int().min(1).max(4).optional(),
-  deadline: z.coerce.date().nullable().optional(),
-  labelIds: z.array(z.string().min(1)).max(50).optional(),
-}).strict();
+export { taskMetadataSchema } from "@todalo/server/task-input";
 export const filterDefinitionSchema = z.object({
   priority: z.number().int().min(1).max(4).nullable().optional(),
   labelId: z.string().min(1).nullable().optional(),

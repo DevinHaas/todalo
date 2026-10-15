@@ -59,7 +59,40 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
     return { tasks: owned, openCount: owned.filter(item => item.status !== "done" && item.dueDate && item.dueDate < tomorrow).length };
   },
   task: async (userId, id) => tasks.find(item => item.userId === userId && item.id === id) ?? null,
+  allowedOrigins: new Set([clientOrigin]),
+  // Memory copy of @todalo/server/tasks operation-ID rules (no calendar). With
+  // QA_AMBIGUOUS_WRITES set, each first create/complete is applied and then
+  // answered with a 500, so QA can watch the client retry without duplicates.
+  create: async (userId, input) => {
+    const existing = tasks.find(item => item.id === input.id);
+    if (existing) return existing.userId === userId ? { task: existing, created: false } : null;
+    const created = task(input.id, userId, input.title, { description: input.description ?? null, dueDate: input.dueDate ? new Date(input.dueDate) : null });
+    tasks.push(created);
+    ambiguous(`create:${input.id}`);
+    return { task: created, created: true };
+  },
+  complete: async (userId, id, occurrence) => {
+    const owned = tasks.find(item => item.userId === userId && item.id === id);
+    if (!owned) return null;
+    if (owned.status !== "done" && (occurrence === undefined || (owned.dueDate?.getTime() ?? null) === (occurrence?.getTime() ?? null))) {
+      Object.assign(owned, { status: "done", completedAt: new Date() });
+      ambiguous(`complete:${id}`);
+    }
+    return owned;
+  },
+  remove: async (userId, id) => {
+    const index = tasks.findIndex(item => item.userId === userId && item.id === id);
+    if (index >= 0) tasks.splice(index, 1);
+    return index >= 0;
+  },
 }));
+const answered = new Set<string>();
+function ambiguous(operation: string) {
+  if (!process.env.QA_AMBIGUOUS_WRITES || answered.has(operation)) return;
+  answered.add(operation);
+  throw new Error(`QA: ${operation} applied, response dropped`);
+}
+
 // Fake transcription (no provider credentials): reports what actually arrived,
 // so a capture proves PCM16 conversion and ordered transport end to end. The
 // client's Stop sends 1.5 s of digital silence, which finalizes the phrase.

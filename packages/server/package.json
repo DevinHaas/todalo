@@ -2,7 +2,7 @@
   "name": "@todalo/server",
   "version": "0.1.0",
   "private": true,
-  "exports": { "./today": "./src/today.ts", "./task-dto": "./src/task-dto.ts", "./projects": "./src/projects.ts", "./project-dto": "./src/project-dto.ts" },
+  "exports": { "./today": "./src/today.ts", "./task-dto": "./src/task-dto.ts", "./projects": "./src/projects.ts", "./project-dto": "./src/project-dto.ts", "./tasks": "./src/tasks.ts", "./task-input": "./src/task-input.ts", "./task-labels": "./src/task-labels.ts", "./calendar": "./src/calendar.ts" },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run --root ../.. packages/server" },
-  "dependencies": { "@todalo/db": "*", "drizzle-orm": "^0.45.2" }
+  "dependencies": { "@todalo/auth": "*", "@todalo/db": "*", "@todalo/ramble": "*", "date-fns": "^4.4.0", "drizzle-orm": "^0.45.2", "googleapis": "^173.0.0", "zod": "^4.4.3" }
 }
