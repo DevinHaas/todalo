@@ -16,6 +16,9 @@ const messages = {
   CONNECTION_FAILED: "Cannot reach todalo. Check your connection and try again.",
   LOGOUT_CONNECTION_FAILED: "Cannot reach todalo. Try again to revoke this session.",
   LOGOUT_UNCONFIRMED: "Sign-out was not confirmed by the server. Try again.",
+  UNAUTHENTICATED: "Please sign in again.",
+  TASKS_UNAVAILABLE: "Your tasks could not be loaded. Try again.",
+  INVALID_RESPONSE: "The server returned an invalid response.",
   UNKNOWN_NATIVE_ERROR: "The native account operation could not finish. Try again.",
 } as const;
 

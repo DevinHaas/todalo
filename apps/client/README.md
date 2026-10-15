@@ -1,7 +1,7 @@
 # Shared Todalo client — account development slice
 
-The browser, Mac and iOS shells share this React account screen. Today and other
-product screens follow after ticket 2's physical-device acceptance. Email sign-in
+The browser, Mac and iOS shells share this React client: account screens, the app
+sidebar shell, a read-only Today list and task detail (ticket 3). Email sign-in
 and registration use the existing Better Auth account/session tables. No provider
 OAuth has been added to this client.
 
@@ -38,6 +38,28 @@ general HTTP command. A failed server sign-out keeps the credential for retry;
 user query caches are cleared when sign-out starts. Expired/revoked sessions are
 removed after an account response returns 401.
 
+## Authenticated reads (ticket 3 conventions)
+
+- **API:** `GET /api/v1/today` → `{ tasks: TaskDto[], openCount }` and
+  `GET /api/v1/tasks/:id` → `{ task: TaskDto }` (`apps/api/src/task-routes.ts`).
+  The user is always the session's (cookie or bearer); missing and other users'
+  IDs both return `404 { code: "NOT_FOUND", message }`; no session is
+  `401 { code: "UNAUTHENTICATED", message }`. Responses are `no-store`.
+- **DTOs:** `packages/server/src/task-dto.ts` allow-lists fields; every date is an
+  ISO-8601 UTC string or `null`, rendered in the viewer's local zone (legacy
+  semantics). The client imports only its types.
+- **Native:** each read is one fixed IPC command (`today`, `task { id }` in
+  `src-tauri/src/reads.rs`) calling `NativeAuth::read(path)`. Add a new command
+  per new read; never a path-taking or general HTTP command. IDs are validated
+  in Rust before URL construction. Rust error strings must match `src/errors.ts`.
+- **Query cache:** keys start with `["user", userId]` (`taskKeys` in
+  `src/tasks.ts`); logout/account change clears the cache. Any `UNAUTHENTICATED`
+  query error triggers `session.refresh()`, which signs out when the server agrees.
+  Mutations (ticket 5) must invalidate `taskKeys.today(userId)` (it also feeds the
+  sidebar count) and the affected `taskKeys.task(userId, id)`.
+- **Routes:** React Router `/today`, `/tasks/:id`, `/account`; unknown paths go to
+  `/today`. Signed-out screens keep the URL so the route opens after sign-in.
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:
@@ -47,7 +69,9 @@ bun --no-env-file scripts/auth-smoke-server.ts
 CLIENT_API_PROXY_TARGET=http://127.0.0.1:3009 bun run dev
 ```
 
-The in-memory service seeds `existing@example.test` with `dev-password-123`.
+The in-memory service seeds `existing@example.test` with `dev-password-123`, plus
+fixture Today tasks and a second user's private task (`/tasks/other-private`) for
+cross-user checks. `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
 All these records disappear on service restart. It imports no production DB or
 auth singleton. Registration can create additional disposable QA accounts.
 

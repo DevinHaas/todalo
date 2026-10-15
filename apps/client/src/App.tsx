@@ -1,5 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { session } from "./runtime";
+import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -32,15 +34,23 @@ export default function App() {
     setPending(false);
   }
 
-  return <main><section className="account-panel" aria-busy={pending || state.status === "loading"}>
+  // Signed-out screens leave the URL untouched, so a requested route opens after sign-in.
+  if (state.status === "signed-in" && state.account) {
+    const account = state.account;
+    return <BrowserRouter><Routes>
+      <Route element={<Shell account={account} />}>
+        <Route path="/today" element={<TodayScreen account={account} />} />
+        <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
+        <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
+        <Route path="*" element={<Navigate to="/today" replace />} />
+      </Route>
+    </Routes></BrowserRouter>;
+  }
+
+  return <main className="centered"><section className="account-panel" aria-busy={pending || state.status === "loading"}>
     {state.status === "loading" ? <p role="status">Loading your account…</p> : state.status === "error" ? <>
       <h1>Account unavailable</h1><p role="alert">{state.error}</p>
       <button onClick={() => void session.refresh()}>Try again</button>
-    </> : state.account ? <>
-      <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
-      <dl><dt>Name</dt><dd>{state.account.user.name}</dd><dt>Email</dt><dd>{state.account.user.email}</dd></dl>
-      {state.error && <p className="error" role="alert">{state.error}</p>}
-      <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
     </> : <>
       <header><h1>{mode === "signIn" ? "Sign in" : "Create an account"}</h1><p>{mode === "signIn" ? "Welcome back to todalo." : "Start organizing your tasks with todalo."}</p></header>
       <form onSubmit={submit}>

@@ -36,7 +36,7 @@ fn main() {
     println!("cargo:rustc-env=TODALO_RESOLVED_API_BASE_URL={resolved}");
 
     let attributes = tauri_build::Attributes::new().app_manifest(
-        tauri_build::AppManifest::new().commands(&["account", "sign_in", "sign_up", "sign_out"]),
+        tauri_build::AppManifest::new().commands(&["account", "sign_in", "sign_up", "sign_out", "today", "task"]),
     );
     tauri_build::try_build(attributes).expect("Cannot configure native command permissions");
 }

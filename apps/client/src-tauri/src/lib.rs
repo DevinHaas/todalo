@@ -1,6 +1,7 @@
 mod auth;
 mod credentials;
 mod endpoint;
+mod reads;
 use auth::{Account, Credentials, NativeAuth};
 
 #[tauri::command]
@@ -44,7 +45,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(NativeAuth::new())
         .invoke_handler(tauri::generate_handler![
-            account, sign_in, sign_up, sign_out
+            account, sign_in, sign_up, sign_out, reads::today, reads::task
         ])
         .run(tauri::generate_context!())
         .expect("Cannot launch todalo");

@@ -190,4 +190,29 @@ impl NativeAuth {
         }
         credentials::clear(&origin)
     }
+
+    /// Bearer GET for a fixed read path chosen in reads.rs (never by the webview).
+    /// 404 is Ok(None); a 401 asks the webview to refresh the account, which
+    /// removes the revoked credential through `account`.
+    pub async fn read(&self, path: &str) -> Result<Option<serde_json::Value>, &'static str> {
+        let origin = self.origin()?;
+        let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
+        let response = self
+            .client
+            .get(self.url(path)?)
+            .bearer_auth(&*token)
+            .send()
+            .await
+            .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => Err("Please sign in again."),
+            StatusCode::NOT_FOUND => Ok(None),
+            status if status.is_success() => response
+                .json()
+                .await
+                .map(Some)
+                .map_err(|_| "The server returned an invalid response."),
+            _ => Err("Your tasks could not be loaded. Try again."),
+        }
+    }
 }
