@@ -94,6 +94,23 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .ramble-transcript { margin: 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
 .ramble-transcript .partial { color: var(--muted-foreground); }
 .app-shell [aria-disabled="true"] { cursor: default; }
+.directory { max-width: 48rem; display: grid; gap: 1.5rem; }
+.directory .page-title { margin: 0; }
+.inline-form { display: flex; gap: .5rem; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.25rem; padding: 0 .75rem; border: 1px solid transparent; border-radius: .375rem; background: var(--primary); color: oklch(.985 0 0); font: inherit; font-size: .875rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.button.outline { border-color: var(--border); background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px #0000000d; }
+.button.destructive { background: color-mix(in oklch, var(--destructive) 10%, transparent); color: var(--destructive); }
+.button:disabled, .button[aria-disabled="true"] { opacity: .5; }
+.form-error { margin: 0; color: var(--destructive); }
+.project-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: .25rem; }
+.project-list li + li { border-top: 1px solid var(--border); }
+.project-list a { display: block; padding: 1rem; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.project-list a:hover { background: var(--accent); }
+.project-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.project-header .page-title { margin: 0; }
+.project-actions { display: flex; gap: .5rem; }
+.project-menu { display: grid; gap: .75rem; justify-items: start; max-width: 32rem; margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; }
+.project-menu .inline-form { width: 100%; }
 
 @media (max-width: 767px) {
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 18rem; display: none; }
@@ -105,4 +122,5 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
   .content { padding-left: max(1.5rem, env(safe-area-inset-left)); }
   .nav-item { height: 2.75rem; }
   .pill.project { margin-right: 0; }
+  .button { min-height: 2.75rem; }
 }

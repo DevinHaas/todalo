@@ -2,7 +2,7 @@
   "name": "@todalo/server",
   "version": "0.1.0",
   "private": true,
-  "exports": { "./today": "./src/today.ts", "./task-dto": "./src/task-dto.ts" },
+  "exports": { "./today": "./src/today.ts", "./task-dto": "./src/task-dto.ts", "./projects": "./src/projects.ts", "./project-dto": "./src/project-dto.ts" },
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run --root ../.. packages/server" },
   "dependencies": { "@todalo/db": "*", "drizzle-orm": "^0.45.2" }
 }

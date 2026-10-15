@@ -2,6 +2,7 @@ mod auth;
 mod credentials;
 mod endpoint;
 mod oauth;
+mod projects;
 mod ramble;
 mod reads;
 use auth::{Account, Credentials, NativeAuth};
@@ -75,6 +76,11 @@ pub fn run() {
             sign_out,
             reads::today,
             reads::task,
+            projects::projects,
+            projects::project,
+            projects::create_project,
+            projects::rename_project,
+            projects::delete_project,
             oauth::google_start,
             oauth::google_finish,
             oauth::google_cancel,

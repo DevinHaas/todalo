@@ -1,16 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { ChevronDown, Inbox, Plus } from "lucide-react";
+import { ChevronDown, Hash, Inbox, Plus } from "lucide-react";
 import { deadlineLabel, dueLabel, isOverdue, todayHeading, todaySections, type TaskDto, type TodayDto } from "./tasks";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
-type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
+export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
-function Failure({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
+export function Failure({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
   return <div className="state"><p role="alert">{error?.message ?? "Your tasks could not be loaded. Try again."}</p><button type="button" className="text-action" onClick={onRetry}>Try again</button></div>;
 }
 
-function TaskRow({ task, now }: { task: TaskDto; now: Date }) {
+export function TaskRow({ task, now, projectName }: { task: TaskDto; now: Date; projectName?: string }) {
   return <div className={task.parentId ? "task-row child" : "task-row"}>
     <span className="checkbox" aria-hidden="true" />
     <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="task-title">{task.title}</Link>
@@ -18,11 +18,11 @@ function TaskRow({ task, now }: { task: TaskDto; now: Date }) {
     {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}>P{task.priority}</span>}
     {task.deadline && <span className="pill">Deadline {deadlineLabel(task.deadline)}</span>}
     {task.labelIds.length > 0 && <span className="pill">{task.labelIds.length} label{task.labelIds.length > 1 ? "s" : ""}</span>}
-    <span className="pill project"><Inbox />Inbox</span>
+    <span className="pill project">{projectName ? <Hash /> : <Inbox />}{projectName ?? "Inbox"}</span>
   </div>;
 }
 
-export function TodayView({ state, onRetry, now = new Date() }: { state: ReadState<TodayDto>; onRetry: () => void; now?: Date }) {
+export function TodayView({ state, onRetry, now = new Date(), projectNames = {} }: { state: ReadState<TodayDto>; onRetry: () => void; now?: Date; projectNames?: Record<string, string> }) {
   const [overdueOpen, setOverdueOpen] = useState(true);
   const header = <><h1 className="page-title">Today</h1><p className="page-count">{state.data ? `${state.data.openCount} tasks` : " "}</p></>;
   if (state.status === "pending") return <div>{header}<p className="state" role="status">Loading tasks…</p></div>;
@@ -33,11 +33,11 @@ export function TodayView({ state, onRetry, now = new Date() }: { state: ReadSta
       <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
         <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>
       </button>
-      {overdueOpen && overdue.map(task => <TaskRow key={task.id} task={task} now={now} />)}
+      {overdueOpen && overdue.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} />)}
     </section>}
     <section>
       <h2 className="section-heading">{todayHeading(now)}</h2>
-      {today.map(task => <TaskRow key={task.id} task={task} now={now} />)}
+      {today.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} />)}
       {today.length === 0 && overdue.length === 0 && <p className="state">Nothing is due today.</p>}
       <span className="composer" aria-disabled="true"><Plus />Add task</span>
     </section>

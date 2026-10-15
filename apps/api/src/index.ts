@@ -1,14 +1,27 @@
 import { createApi } from "./app";
 import { productionDependencies } from "./production";
 import { auth } from "@todalo/auth";
-import { getOwnedTask, getTodayTasksForUser } from "@todalo/server/today";
+import { getOwnedTask, getTasksForUser, getTodayTasksForUser } from "@todalo/server/today";
+import * as projects from "@todalo/server/projects";
 import { createAuthRoutes } from "./auth-routes";
 import { createTaskRoutes } from "./task-routes";
+import { createProjectRoutes } from "./project-routes";
 
-const app = createApi(productionDependencies()).use(createAuthRoutes(auth)).use(createTaskRoutes({
-  verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
+const dependencies = productionDependencies();
+const verify = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
+const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRoutes({
+  verify,
   today: (userId) => getTodayTasksForUser(userId),
   task: getOwnedTask,
+})).use(createProjectRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  list: projects.getProjectsForUser,
+  get: projects.getOwnedProject,
+  tasks: getTasksForUser,
+  create: (userId, name) => projects.createProject(userId, { name }),
+  rename: (userId, id, name) => projects.updateProject(userId, id, { name }),
+  remove: projects.deleteProject,
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",

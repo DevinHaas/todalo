@@ -4,6 +4,7 @@ import { session } from "./runtime";
 import { GoogleButton } from "./google";
 import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 import { RambleScreen } from "./ramble-screen";
+import { ProjectScreen, ProjectsScreen } from "./project-screens";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -44,6 +45,8 @@ export default function App() {
       <Route element={<Shell account={account} />}>
         <Route path="/today" element={<TodayScreen account={account} />} />
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
+        <Route path="/projects" element={<ProjectsScreen account={account} />} />
+        <Route path="/projects/:id" element={<ProjectScreen account={account} />} />
         <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
         <Route path="/ramble" element={<RambleScreen />} />
         <Route path="*" element={<Navigate to="/today" replace />} />

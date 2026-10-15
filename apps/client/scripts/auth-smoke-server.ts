@@ -4,17 +4,20 @@ import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
+import { qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { createApi } from "../../api/src/app";
 import { connectSpeech } from "../../api/src/speech";
 import type { SpeechCallbacks, SpeechConnection } from "../../api/src/elevenlabs";
 import { fixtureSemanticProcessor } from "../../api/test-fixtures/semantic";
 
+// Set QA_CLIENT_ORIGIN when the Vite client runs on another port.
+const clientOrigin = process.env.QA_CLIENT_ORIGIN ?? "http://localhost:5173";
 const auth = createSessionAuth({
   database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
-  baseURL: "http://localhost:5173",
+  baseURL: clientOrigin,
   secret: "local-smoke-test-only-secret-32-characters",
-  trustedOrigins: ["http://localhost:5173"],
+  trustedOrigins: [clientOrigin],
   // Fake Google: consent at /api/fake-google/authorize, token endpoint stubbed below.
   socialProviders: { google: { clientId: "qa-fake-google-client", clientSecret: "qa-fake-google-secret" } },
 });
@@ -30,16 +33,25 @@ const task = (id: string, userId: string, title: string, extra: Partial<TaskReco
 });
 const tasks = [
   task("overdue-review", user.id, "Review the migration checklist", { dueDate: day(-1, 12), priority: 2, description: "Walk through every inventory row before the cutover." }),
-  task("shared-screen", user.id, "Plan the first shared screen", { dueDate: day(0, 14, 30), labelIds: ["design"], deadline: day(3) }),
-  task("future", user.id, "Future fixture task", { dueDate: day(2) }),
-  task("undated", user.id, "Undated fixture task"),
+  task("shared-screen", user.id, "Plan the first shared screen", { dueDate: day(0, 14, 30), labelIds: ["design"], deadline: day(3), projectId: "qa-work" }),
+  task("future", user.id, "Future fixture task", { dueDate: day(2), projectId: "qa-work" }),
+  task("undated", user.id, "Undated fixture task", { projectId: "qa-work" }),
   task("completed", user.id, "Completed fixture task", { dueDate: day(0, 9), status: "done", completedAt: day(0, 9) }),
-  task("other-private", other.id, "Another user's private task", { dueDate: day(0, 10) }),
+  task("other-private", other.id, "Another user's private task", { dueDate: day(0, 10), projectId: "qa-other" }),
 ];
 if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 5);
 const tomorrow = day(1);
 
-const app = createAuthRoutes(auth).use(createTaskRoutes({
+const app = createAuthRoutes(auth).use(qaProjectRoutes({
+  verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
+  allowedOrigins: new Set([clientOrigin]),
+  projects: [
+    { id: "qa-work", userId: user.id, name: "Work", color: null },
+    { id: "qa-errands", userId: user.id, name: "Errands", color: null },
+    { id: "qa-other", userId: other.id, name: "Other user's project", color: null },
+  ],
+  tasks,
+})).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   // ponytail: inline copy of countTodayTasks; importing @todalo/server/today would pull in the production DB client.
   today: async (userId) => {
@@ -74,7 +86,7 @@ function fakeSpeech(callbacks: SpeechCallbacks): SpeechConnection {
   };
 }
 const ramble = createApi({
-  allowedOrigins: new Set(["http://localhost:5173"]),
+  allowedOrigins: new Set([clientOrigin]),
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [] }),
   speech: process.env.RAMBLE_STT_PROVIDER ? connectSpeech : fakeSpeech,

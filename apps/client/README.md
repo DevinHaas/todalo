@@ -92,6 +92,34 @@ removed after an account response returns 401.
 - **Routes:** React Router `/today`, `/tasks/:id`, `/account`; unknown paths go to
   `/today`. Signed-out screens keep the URL so the route opens after sign-in.
 
+## Projects and writes (ticket 8 conventions)
+
+- **API:** `apps/api/src/project-routes.ts` — `GET /api/v1/projects` →
+  `{ projects: ProjectDto[] }`; `GET /api/v1/projects/:id` →
+  `{ project, tasks: TaskDto[] }` (all member tasks; the client hides completed);
+  `POST /api/v1/projects` `{ name }` → `201 { project }`; `PATCH /api/v1/projects/:id`
+  `{ name }` → `{ project }`; `DELETE /api/v1/projects/:id` → `{ id }`. Same 401/404
+  envelope and `no-store` as reads. Invalid input is `400 { code: "INVALID_INPUT" }`.
+  Deleting keeps member tasks (schema `SET NULL`: they move to Inbox) and cascades sections.
+- **Write auth (CSRF):** a `Bearer` header authenticates on its own (cookies ignored);
+  a cookie session must send an `Origin` in the allowed set (`RAMBLE_ALLOWED_ORIGINS`
+  or the `BETTER_AUTH_URL` origin), else `403 { code: "FORBIDDEN_ORIGIN" }`.
+  Non-JSON bodies fail validation, so form/`text/plain` posts cannot write.
+- **Server logic:** `packages/server/src/projects.ts` (owner-scoped CRUD, shared with
+  the legacy Next actions) and `project-dto.ts` (allow-listed DTO, `parseProjectName`).
+- **Native:** fixed commands `projects`, `project { id }`, `create_project { name }`,
+  `rename_project { id, name }`, `delete_project { id }` in `src-tauri/src/projects.rs`.
+  Writes go through `NativeAuth::write(method, path, body)`; IDs use
+  `reads::valid_id`, names are trimmed and bounded in Rust before a body is built.
+- **Cache:** `projectKeys` in `src/projects.ts` (`["user", userId, "projects"]`,
+  `["user", userId, "project", id]`); `projectMutations` invalidates the list on
+  create/rename (plus the detail on rename) and, on delete, removes the detail and
+  invalidates every `["user", userId]` key. `UNAUTHENTICATED` from a mutation also
+  triggers `session.refresh()` (the `MutationCache` in `src/runtime.ts`).
+- **Routes:** `/projects` (directory and create) and `/projects/:id` (tasks, rename,
+  delete with in-page confirmation, since native `confirm()` is unreliable in iOS
+  WKWebView). Deletion returns to `/projects` until Inbox (ticket 12) exists.
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:
@@ -103,7 +131,9 @@ CLIENT_API_PROXY_TARGET=http://127.0.0.1:3009 bun run dev
 
 The in-memory service seeds `existing@example.test` with `dev-password-123`, plus
 fixture Today tasks and a second user's private task (`/tasks/other-private`) for
-cross-user checks. `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
+cross-user checks. Projects: `Work` (three fixture tasks), `Errands` (empty) and a
+second user's project (`/projects/qa-other`). Set `QA_CLIENT_ORIGIN` when Vite runs
+on a port other than 5173 (it is the trusted auth origin and the allowed write origin). `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
 All these records disappear on service restart. It imports no production DB or
 auth singleton. Registration can create additional disposable QA accounts.
 Google is faked (`apps/api/src/fake-google.ts`): authorization redirects go to a

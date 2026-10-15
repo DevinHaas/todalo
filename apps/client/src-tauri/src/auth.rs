@@ -216,6 +216,41 @@ impl NativeAuth {
         }
     }
 
+    /// Bearer write for a fixed method/path chosen by a narrow command module
+    /// (never by the webview), with an optional JSON body. Same 401/404 mapping
+    /// as `read`; 400 is the shared invalid-input message.
+    pub async fn write(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Option<serde_json::Value>, &'static str> {
+        let origin = self.origin()?;
+        let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
+        let mut request = self
+            .client
+            .request(method, self.url(path)?)
+            .bearer_auth(&*token);
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => Err("Please sign in again."),
+            StatusCode::NOT_FOUND => Ok(None),
+            StatusCode::BAD_REQUEST => Err("Check your entry and try again."),
+            status if status.is_success() => response
+                .json()
+                .await
+                .map(Some)
+                .map_err(|_| "The server returned an invalid response."),
+            _ => Err("Your changes could not be saved. Try again."),
+        }
+    }
+
     /// Bearer POST minting a one-use Ramble socket ticket (see ramble.rs). Only
     /// the API base and the short-lived ticket leave; the bearer stays in Rust.
     pub async fn ramble_ticket(&self) -> Result<(Url, String), &'static str> {

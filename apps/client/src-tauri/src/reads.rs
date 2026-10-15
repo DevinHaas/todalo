@@ -22,7 +22,7 @@ pub async fn task(
     Ok(state.read(&format!("/api/v1/tasks/{id}")).await?)
 }
 
-fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
         && id

@@ -6,13 +6,13 @@ import {
   LineChart, List, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { reads, session } from "./runtime";
+import { projectReads, reads, session } from "./runtime";
 import { GoogleButton } from "./google";
 import { TaskView, TodayView } from "./views";
 
 // ponytail: controls without a migrated backend (search, add task, inbox,
-// projects, upcoming, filters, display) keep their legacy appearance but are inert
-// (aria-disabled). Their tickets wire them: 5, 8, 12, 14, 16, 18.
+// upcoming, filters, display) keep their legacy appearance but are inert
+// (aria-disabled). Their tickets wire them: 5, 12, 14, 16, 18.
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
 }
@@ -44,7 +44,7 @@ export function Shell({ account }: { account: Account }) {
       <nav><ul className="nav">
         <Inert icon={<Search />} label="Search" />
         <Inert icon={<Layers />} label="Inbox" />
-        <Inert icon={<Layers />} label="Projects" />
+        <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
         <Inert icon={<Layers />} label="Upcoming" />
         <Inert icon={<ListFilter />} label="Filters & Labels" />
@@ -71,7 +71,10 @@ export function Shell({ account }: { account: Account }) {
 
 export function TodayScreen({ account }: { account: Account }) {
   const query = useQuery(reads.today(account.user.id));
-  return <TodayView state={query} onRetry={() => void query.refetch()} />;
+  // Row project pills; Today still renders if the project list fails.
+  const projects = useQuery(projectReads.list(account.user.id));
+  const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
+  return <TodayView state={query} onRetry={() => void query.refetch()} projectNames={projectNames} />;
 }
 
 export function TaskScreen({ account }: { account: Account }) {

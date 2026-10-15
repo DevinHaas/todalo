@@ -69,7 +69,7 @@ export const isOverdue = (task: Pick<TaskDto, "dueDate">, now = new Date()) =>
   task.dueDate !== null && new Date(task.dueDate) < startOfDay(now) && !isDueToday(task, now);
 
 // Copy of apps/web/lib/task-keyboard.ts taskTreeOrder: children follow their visible parent.
-function treeOrder<T extends { id: string; parentId: string | null }>(tasks: T[]): T[] {
+export function treeOrder<T extends { id: string; parentId: string | null }>(tasks: T[]): T[] {
   const ids = new Set(tasks.map(task => task.id));
   return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(task => [task, ...tasks.filter(child => child.parentId === task.id)]);
 }

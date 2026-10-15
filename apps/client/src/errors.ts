@@ -25,6 +25,8 @@ const messages = {
   UNAUTHENTICATED: "Please sign in again.",
   TASKS_UNAVAILABLE: "Your tasks could not be loaded. Try again.",
   INVALID_RESPONSE: "The server returned an invalid response.",
+  INVALID_INPUT: "Check your entry and try again.",
+  SAVE_FAILED: "Your changes could not be saved. Try again.",
   UNKNOWN_NATIVE_ERROR: "The native account operation could not finish. Try again.",
 } as const;
 
