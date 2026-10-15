@@ -1,14 +1,17 @@
 // Server-only query boundary. Transports authenticate before supplying userId.
 // Do not import this package into client components except through type imports.
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks, taskLabels } from "@todalo/db/schema";
+
+/** Manual order (ticket 15 reorders renumber it); ties broken so every read and the reorder planner agree. */
+export const manualOrder = [asc(tasks.sortOrder), asc(tasks.createdAt), asc(tasks.id)] as const;
 
 export async function getTasksForUser(userId: string, projectId?: string) {
   const [rows, associations] = await Promise.all([
     db.select().from(tasks).where(projectId
       ? and(eq(tasks.userId, userId), eq(tasks.projectId, projectId))
-      : eq(tasks.userId, userId)).orderBy(tasks.sortOrder),
+      : eq(tasks.userId, userId)).orderBy(...manualOrder),
     db.select().from(taskLabels).where(eq(taskLabels.userId, userId)),
   ]);
   return rows.map(task => ({

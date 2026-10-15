@@ -5,7 +5,7 @@ import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
 import { createSettingsRoutes } from "../../api/src/settings-routes";
-import { qaAttachmentRoutes, qaOrganize, qaProjectRoutes } from "./qa-projects";
+import { qaAttachmentRoutes, qaBulkRoutes, qaOrganize, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { editConflicts, planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
 import { createApi } from "../../api/src/app";
@@ -107,7 +107,7 @@ const app = createAuthRoutes(auth).use(qaCalendarRoutes({ verify: verifySession,
   projects,
   sections,
   tasks,
-})).use(createMetadataRoutes(memoryMetadataStore({
+})).use(qaBulkRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, sections, labels, tasks })).use(createMetadataRoutes(memoryMetadataStore({
   verify: verifySession, allowedOrigins: new Set([clientOrigin]), labels, filters, projects, tasks,
 }))).use(createSearchRoutes({
   // Ticket 18: the same shared search rules over this user's memory rows.

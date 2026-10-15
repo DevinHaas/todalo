@@ -42,6 +42,12 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
       },
     }; return chain;
   }
-  return { db: { select: (fields?: Record<string, { name: string }>) => builder("select", undefined, fields), insert: (table: Parameters<typeof getTableName>[0]) => builder("insert", table), update: (table: Parameters<typeof getTableName>[0]) => builder("update", table), delete: (table: Parameters<typeof getTableName>[0]) => builder("delete", table) } };
+  // neon-http batch: one transaction, so a failing statement leaves every table as it was.
+  async function batch(queries: PromiseLike<unknown>[]) {
+    const snapshot = structuredClone(boundary.rows);
+    try { const results = []; for (const query of queries) results.push(await query); return results; }
+    catch (error) { boundary.rows = snapshot; throw error; }
+  }
+  return { db: { batch, select: (fields?: Record<string, { name: string }>) => builder("select", undefined, fields), insert: (table: Parameters<typeof getTableName>[0]) => builder("insert", table), update: (table: Parameters<typeof getTableName>[0]) => builder("update", table), delete: (table: Parameters<typeof getTableName>[0]) => builder("delete", table) } };
 
 }

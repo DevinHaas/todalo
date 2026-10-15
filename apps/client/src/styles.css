@@ -413,3 +413,19 @@ button.nav-item { width: 100%; border: 0; background: none; font: inherit; text-
 .search-form { display: flex; gap: .75rem; max-width: 32rem; }
 .search-form input { flex: 1; min-width: 0; }
 .task-links { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; font-size: .875rem; }
+
+/* Ticket 15: selection toolbar (legacy "Selected task actions": muted, bordered, wrapping) and manual reorder. */
+.selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0 0 .75rem; padding: .5rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--accent); }
+.selection-count { font-size: .875rem; margin-right: .25rem; }
+.selection-hint { margin: 0 0 .75rem; font-size: .875rem; color: var(--muted-foreground); }
+.select-box { width: 1.125rem; height: 1.125rem; min-height: 0; margin: 0; padding: 0; flex-shrink: 0; box-shadow: none; accent-color: var(--primary); }
+.task-row[data-selected] { outline: 2px solid var(--primary); border-radius: .375rem; }
+.sortable-row { position: relative; display: flex; align-items: center; margin-left: -1.75rem; background: var(--background); }
+.sortable-row > .task-row { flex: 1; min-width: 0; }
+.sortable-row[data-dragging] { z-index: 1; box-shadow: 0 4px 12px #0000001f; }
+.drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 2.75rem; flex-shrink: 0; padding: 0; border: 0; border-radius: .375rem; background: none; color: var(--muted-foreground); cursor: grab; touch-action: none; opacity: 0; }
+.drag-handle svg { width: 1rem; height: 1rem; }
+.sortable-row:hover .drag-handle, .sortable-row:focus-within .drag-handle, .drag-handle:focus-visible, .sortable-row[data-dragging] .drag-handle { opacity: 1; }
+.sortable-row[data-dragging] .drag-handle { cursor: grabbing; }
+/* Touch has no hover: the handle stays visible and inside the page gutter. */
+@media (pointer: coarse) { .sortable-row { margin-left: -.5rem; } .drag-handle { opacity: .7; } }

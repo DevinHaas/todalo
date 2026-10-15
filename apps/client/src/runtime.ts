@@ -8,6 +8,7 @@ import { attachmentQueries, attachmentTransport } from "./attachments";
 import { settingsQueries, settingsTransport } from "./settings";
 import { metadataQueries, metadataTransport } from "./metadata";
 import { organizationQueries, organizationTransport } from "./organization";
+import { bulkTransport } from "./bulk";
 import { calendarQueries, calendarTransport, liveTransport } from "./calendar";
 import { searchQueries, searchTransport } from "./search";
 
@@ -32,6 +33,7 @@ export const metadata = metadataTransport();
 export const metadataReads = metadataQueries(metadata);
 export const organization = organizationTransport();
 export const organizationReads = organizationQueries(organization);
+export const bulk = bulkTransport();
 export const searchReads = searchQueries(searchTransport());
 export const calendar = calendarTransport();
 export const calendarReads = calendarQueries(calendar);

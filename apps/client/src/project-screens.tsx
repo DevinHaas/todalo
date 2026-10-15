@@ -7,6 +7,8 @@ import { projectMutations } from "./projects";
 import { ProjectsView, ProjectView } from "./project-views";
 import { ProjectFilesScreen } from "./attachment-screens";
 import { useOrganizationMutations } from "./organization-screens";
+import { useBulkSelection, useReorder } from "./bulk-screens";
+import { treeOrder } from "./tasks";
 
 
 function useProjectMutations(userId: string) {
@@ -31,6 +33,8 @@ export function ProjectScreen({ account }: { account: Account }) {
   const remove = useMutation({ mutationFn: () => writes.remove(id), onSuccess: () => navigate("/projects", { replace: true }) });
   const createSection = useMutation(organization.createSection);
   const removeSection = useMutation(organization.removeSection);
+  const selection = useBulkSelection(account.user.id, query.data ? treeOrder(query.data.tasks.filter(task => task.status !== "done")) : []);
+  const order = useReorder(account.user.id);
   const pending = rename.isPending || remove.isPending || createSection.isPending || removeSection.isPending;
   return <ProjectView
     key={id}
@@ -40,7 +44,9 @@ export function ProjectScreen({ account }: { account: Account }) {
     // The Inbox route is ticket 12, so deletion returns to Projects.
     onDelete={() => remove.mutate()}
     sections={{ create: (name) => createSection.mutateAsync({ projectId: id, name }), remove: (section) => removeSection.mutate(section) }}
-    write={{ pending, error: (rename.error ?? remove.error ?? createSection.error ?? removeSection.error)?.message ?? null }}
+    write={{ pending, error: (rename.error ?? remove.error ?? createSection.error ?? removeSection.error)?.message ?? order.error }}
+    selection={selection}
+    reorder={order.reorder}
     files={<ProjectFilesScreen userId={account.user.id} projectId={id} />}
   />;
 }

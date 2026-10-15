@@ -435,6 +435,57 @@ removed after an account response returns 401.
   ["/tasks"], appLink: true }`, the Associated Domains entitlement
   `applinks:<host>` (paid team) and `/.well-known/apple-app-site-association`.
 
+## Reorder and bulk actions (ticket 15 conventions)
+
+- **Server logic:** `packages/server/src/bulk.ts` (`completeTasks`, `deleteTasks`,
+  `clearTaskDates`, `updateTasksMetadata`, `reorderTask`) and `organization.moveTasks`;
+  the legacy `bulkTaskAction`/`bulkTaskMetadata` actions only add `revalidatePath`.
+  Schemas and the pure `planReorder` live in the client-safe `bulk-input.ts`. Every bulk
+  operation loads the whole selection owner-scoped first and writes nothing unless every
+  ID is the user's. Multi-row writes go through `atomically` (`db.batch`, one neon-http
+  transaction): metadata (fields + label replacement), move (move, detach, order) and
+  reorder. Complete/clear-date/delete keep legacy per-task calendar effects.
+- **Order:** every task read sorts by `manualOrder` (`sortOrder`, `createdAt`, `id`,
+  `today.ts`). `reorderTask(id, anchorId, "before" | "after")` places a task next to
+  another of the same project (or Inbox) *relative to the current server order* and
+  renumbers that whole collection 0…n−1 in one batch: a retry rewrites the same numbers,
+  concurrent reorders leave one complete order, and only `sortOrder` changes (no
+  `updatedAt`, so open editors stay valid). Bulk moves append the selection to the end
+  of the destination in its current order. `TaskDto` still carries no `sortOrder`: the
+  client keeps the server's array order.
+- **API:** `apps/api/src/bulk-routes.ts` — `POST /api/v1/bulk/complete`
+  `{ operationId, tasks: [{ id, occurrence }] }` → `{ completed, changed }`;
+  `POST /bulk/delete` and `/bulk/clear-date` `{ ids }`; `/bulk/metadata`
+  `{ ids, priority? | deadline? | labelIds? }`; `/bulk/move` `{ ids, projectId, sectionId }`
+  → `{ ids }`; `POST /tasks/:id/reorder` `{ anchorId, position }` → `{ id }`. 1–200 IDs,
+  strict bodies. A missing/foreign task or destination anywhere in the selection is one
+  `404` with nothing written; a deleted/foreign label or a cross-collection anchor `400`.
+  Write auth as every task write.
+- **Native:** `bulk_complete`, `bulk_delete`, `bulk_clear_date`, `bulk_metadata`
+  (`change` must set exactly one field), `bulk_move`, `reorder_task` in
+  `src-tauri/src/bulk.rs`.
+- **Client:** `src/bulk.ts` (`bulkMutations`, `reorderAnchor`, `reorderTasks`). Complete,
+  delete and clear-date are optimistic on Today and every open project list with
+  rollback; metadata and move wait (legacy dialogs). All settle Today, every
+  `["user", id, "task"]`, `["user", id, "project"]` and `["user", id, "metadata"]` key.
+  Retries as task writes (one `operationId` per bulk completion tap; a retried delete
+  answered 404 counts as applied). Views in `bulk-views.tsx`; screen glue in
+  `bulk-screens.tsx` (`useBulkSelection(userId, visibleTasks)` → `SelectionSlots`,
+  `useReorder`). Today and project pages take `selection`; the project page takes
+  `reorder` (drag within a section; a sub-task stays with its parent).
+- **For ticket 19 (keyboard):** selection is `useSelection(visibleIds)` (`toggle(id)`,
+  `start`, `stop`, `drop`; IDs that leave the view drop out like legacy `setVisible`).
+  Bind X to `toggle(focusedId)` and `,` to focusing `[role="toolbar"][aria-label="Selected
+  task actions"]`; reuse `BulkActions`/`bulkMutations` for task.complete/delete/clear-date,
+  priority 1–4, deadline and labels on a selection, and `moveTasks` (`bulk.move`) for V.
+- **For ticket 17 (boards):** `SortableTasks` (`ids`, `label`, `onReorder(id, overId,
+  position)`) and `SortableRow` (grip handle; pointer with a 5 px threshold, so touch
+  and WKWebView work via pointer events with `touch-action: none`; keyboard Space/arrows
+  with titled announcements) wrap any vertical list. Reorder within a column with
+  `bulk.reorder`; moving across columns stays `organize`/`bulk.move` (sections) — a
+  status board needs a status field on the reorder command (legacy `reorderTask` set
+  `status` and appended to the column).
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:

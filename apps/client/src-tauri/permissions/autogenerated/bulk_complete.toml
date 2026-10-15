@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bulk-complete"
+description = "Enables the bulk_complete command without any pre-configured scope."
+commands.allow = ["bulk_complete"]
+
+[[permission]]
+identifier = "deny-bulk-complete"
+description = "Denies the bulk_complete command without any pre-configured scope."
+commands.deny = ["bulk_complete"]

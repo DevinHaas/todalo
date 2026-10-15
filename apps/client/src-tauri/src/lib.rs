@@ -1,5 +1,6 @@
 mod attachments;
 mod auth;
+mod bulk;
 mod calendar;
 mod credentials;
 mod endpoint;
@@ -62,8 +63,8 @@ pub fn run() {
         .plugin(tauri_plugin_haptics::init())
         .manage(NativeAuth::new())
         .manage(oauth::GoogleFlow::default())
-        .manage(calendar::LiveStream::default())
         .manage(links::LinkInbox::default())
+        .manage(calendar::LiveStream::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
             let handle = app.handle().clone();
@@ -91,6 +92,12 @@ pub fn run() {
             writes::complete_task,
             writes::update_task,
             writes::delete_task,
+            bulk::bulk_complete,
+            bulk::bulk_delete,
+            bulk::bulk_clear_date,
+            bulk::bulk_metadata,
+            bulk::bulk_move,
+            bulk::reorder_task,
             metadata::metadata,
             metadata::label,
             metadata::create_label,

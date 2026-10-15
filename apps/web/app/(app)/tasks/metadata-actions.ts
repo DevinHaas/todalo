@@ -1,14 +1,14 @@
 "use server";
 
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { projects, tasks } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
-import { assertOwnedLabels, replaceTaskLabels } from "@/lib/task-labels";
 import { taskMetadataSchema } from "@/lib/task-metadata";
 import * as shared from "@todalo/server/metadata";
+import { updateTasksMetadata } from "@todalo/server/bulk";
 import { taskLabels } from "@/db/schema";
 
 export async function getTaskEditorData(id: string) {
@@ -59,12 +59,7 @@ export async function deleteFilter(id: string) {
 }
 export async function bulkTaskMetadata(input: z.infer<typeof taskMetadataSchema> & { ids: string[] }) {
   const userId = await requireUserId();
-  const { ids, labelIds, ...data } = taskMetadataSchema.extend({ ids: z.array(z.string().min(1)).min(1).max(200) }).parse(input);
-  const unique = [...new Set(ids)];
-  const owned = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, unique)));
-  if (owned.length !== unique.length) throw new Error("Task not found");
-  if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
-  if (Object.keys(data).length) await db.update(tasks).set(data).where(and(eq(tasks.userId, userId), inArray(tasks.id, unique)));
-  if (labelIds !== undefined) for (const id of unique) await replaceTaskLabels(userId, id, labelIds);
+  const { ids, ...change } = taskMetadataSchema.extend({ ids: z.array(z.string().min(1)).min(1).max(200) }).parse(input);
+  if (!await updateTasksMetadata(userId, ids, change)) throw new Error("Task not found");
   revalidatePath("/", "layout");
 }

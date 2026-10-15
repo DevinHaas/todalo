@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
@@ -10,6 +10,7 @@ import type { CreateTaskInput, UpdateTaskInput } from "@todalo/server/task-input
 import {
   completeTask as completeTaskOperation, createTask as createTaskOperation, deleteTask as deleteTaskOperation, updateTask as updateTaskOperation,
 } from "@todalo/server/tasks";
+import * as bulk from "@todalo/server/bulk";
 
 export async function createTask(input: CreateTaskInput) {
   const userId = await requireUserId();
@@ -18,18 +19,14 @@ export async function createTask(input: CreateTaskInput) {
   return id;
 }
 
-/** Authorize the entire selection before running any per-task side effects. */
+/** Authorize the entire selection before running any per-task side effects (@todalo/server/bulk). */
 export async function bulkTaskAction(input: { ids: string[]; action: "complete" | "delete" | "clear-date" }) {
   const userId = await requireUserId();
   const { ids, action } = z.object({ ids: z.array(z.string().min(1)).min(1).max(200), action: z.enum(["complete", "delete", "clear-date"]) }).parse(input);
-  const unique = [...new Set(ids)];
-  const owned = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, unique)));
-  if (owned.length !== unique.length) throw new Error("Task not found");
-  for (const id of unique) {
-    if (action === "complete") await completeTask(id);
-    else if (action === "delete") await deleteTask(id);
-    else await updateTask({ id, dueDate: null, dueDateEnd: null });
-  }
+  const done = action === "complete" ? await bulk.completeTasks(userId, ids.map(id => ({ id }))) !== "missing"
+    : action === "delete" ? await bulk.deleteTasks(userId, ids) : await bulk.clearTaskDates(userId, ids);
+  if (!done) throw new Error("Task not found");
+  revalidatePath("/", "layout");
 }
 
 export async function updateTask(input: UpdateTaskInput) {

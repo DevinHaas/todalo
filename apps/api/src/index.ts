@@ -5,9 +5,11 @@ import { getOwnedTask, getTasksForUser, getTodayTasksForUser } from "@todalo/ser
 import * as projects from "@todalo/server/projects";
 import * as organization from "@todalo/server/organization";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
+import * as bulk from "@todalo/server/bulk";
 import { createAuthRoutes } from "./auth-routes";
 import { createTaskRoutes } from "./task-routes";
 import { taskOperations } from "./task-operations";
+import { createBulkRoutes } from "./bulk-routes";
 import { createProjectRoutes } from "./project-routes";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createSettingsRoutes } from "./settings-routes";
@@ -15,11 +17,11 @@ import * as settings from "@todalo/server/settings";
 import * as attachments from "@todalo/server/attachments";
 import * as metadata from "@todalo/server/metadata";
 import { createMetadataRoutes } from "./metadata-routes";
+import { createSearchRoutes } from "./search-routes";
 import { createCalendarRoutes } from "./calendar-routes";
 import * as calendar from "@todalo/server/calendar-connections";
 import { handleCalendarWebhook } from "@todalo/server/calendar-sync";
 import * as live from "@todalo/server/live";
-import { createSearchRoutes } from "./search-routes";
 
 const dependencies = productionDependencies();
 const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };
@@ -30,6 +32,17 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   task: getOwnedTask,
   allowedOrigins: dependencies.allowedOrigins,
   ...taskOperations,
+})).use(createBulkRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  complete: async (userId, items, operationId) => { const result = await bulk.completeTasks(userId, items, operationId); return result === "missing" ? null : result; },
+  remove: bulk.deleteTasks,
+  clearDates: bulk.clearTaskDates,
+  metadata: bulk.updateTasksMetadata,
+  // A missing or foreign task or destination is the route's 404.
+  move: (userId, ids, destination) => organization.moveTasks(userId, ids, destination)
+    .then(() => true, (error: unknown) => { if (error instanceof TaskOrganizationError) return false; throw error; }),
+  reorder: async (userId, id, anchorId, position) => { const result = await bulk.reorderTask(userId, id, anchorId, position); return result === "invalid" ? result : result === "reordered"; },
 })).use(createProjectRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

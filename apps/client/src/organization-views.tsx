@@ -52,8 +52,9 @@ function Dialog({ title, pending, onClose, children }: { title: string; pending:
   </div>;
 }
 
-function MoveDialog({ task, destinations, onRetry, pending, error, onSubmit, onClose }: {
-  task: TaskDto; destinations: ReadState<DestinationsDto>; onRetry: () => void; pending: boolean; error: string | null; onSubmit: Submit; onClose: () => void;
+/** Legacy "Move task" dialog; ticket 15's bulk move opens it from the first selected task with `count`. */
+export function MoveDialog({ task, destinations, onRetry, pending, error, onSubmit, onClose, count = 1 }: {
+  task: TaskDto; destinations: ReadState<DestinationsDto>; onRetry: () => void; pending: boolean; error: string | null; onSubmit: Submit; onClose: () => void; count?: number;
 }) {
   const [projectId, setProjectId] = useState(task.projectId ?? "");
   const [sectionId, setSectionId] = useState(task.sectionId ?? "");
@@ -74,7 +75,7 @@ function MoveDialog({ task, destinations, onRetry, pending, error, onSubmit, onC
         </select></label>}
         <div className="composer-actions">
           <button type="button" className="button outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button">{pending ? "Moving…" : "Move task"}</button>
+          <button type="submit" className="button">{pending ? "Moving…" : `Move task${count > 1 ? "s" : ""}`}</button>
         </div>
       </fieldset></form>}
   </Dialog>;

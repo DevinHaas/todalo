@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import type { Account } from "./session";
 import { metadataReads, projectReads, reads, session } from "./runtime";
-import type { TaskDto } from "./tasks";
+import { todaySections, type TaskDto } from "./tasks";
+import { useBulkSelection } from "./bulk-screens";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { haptics, hapticsSupported } from "./feedback";
 import { useTaskWrites } from "./task-writes";
@@ -105,7 +106,9 @@ export function TodayScreen({ account }: { account: Account }) {
   const writes = useTaskWrites(account.user.id);
   const display = useDisplay();
   const events = useCalendarEvents(account.user.id);
-  return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error}
+  const { overdue, today } = todaySections(query.data?.tasks ?? [], new Date(), display.showCompleted);
+  const selection = useBulkSelection(account.user.id, [...overdue, ...today]);
+  return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error} selection={selection}
     showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} /> : undefined}
     composer={<Composer dueDate={startOfToday} onCreate={(task) => writes.create.mutateAsync(task)} />} />;
 }

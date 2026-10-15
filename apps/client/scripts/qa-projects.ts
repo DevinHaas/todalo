@@ -9,6 +9,10 @@ import { editConflicts } from "../../../packages/server/src/task-rules";
 import { TaskOrganizationError, validateTaskOrganization } from "../../../packages/db/src/task-organization-validation";
 import { validateTaskParent } from "../../../packages/db/src/task-parent-validation";
 import type { TaskWrites } from "../../api/src/task-routes";
+import { createBulkRoutes } from "../../api/src/bulk-routes";
+import { planReorder } from "../../../packages/server/src/bulk-input";
+import { planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
+import { MissingReferenceError } from "../../../packages/server/src/metadata-input";
 
 type OwnedTask = TaskRecord & { userId: string };
 type Project = { id: string; userId: string; name: string; color: string | null };
@@ -132,6 +136,86 @@ export function qaAttachmentRoutes(options: {
       if (!attachment) throw new AttachmentError("Attachment not found.", 404);
       ownedTask(userId, attachment.taskId);
       return attachment;
+    },
+  });
+}
+
+type BulkTask = OwnedTask & { updatedAt: Date; recurrence: CompletionTarget["recurrence"]; lastCompletionId: string | null };
+
+/**
+ * Memory twin of @todalo/server/bulk and organization.moveTasks (ticket 15):
+ * every selected task must be the user's before anything changes; the array
+ * order is the manual order (reorder renumbers a collection, a move appends).
+ * QA_BULK_FAILS=1 answers every bulk write with a 500 after applying nothing.
+ */
+export function qaBulkRoutes(options: {
+  verify: (headers: Headers) => Promise<string | null>;
+  allowedOrigins: Set<string>;
+  projects: Project[];
+  sections: QaSection[];
+  labels: { id: string; userId: string }[];
+  tasks: BulkTask[];
+}) {
+  const { projects, sections, labels, tasks } = options;
+  const owned = (userId: string, ids: string[]) => {
+    if (process.env.QA_BULK_FAILS) throw new Error("QA: bulk write failed");
+    const rows = [...new Set(ids)].map(id => tasks.find(task => task.userId === userId && task.id === id));
+    return rows.every(Boolean) ? rows as BulkTask[] : null;
+  };
+  const touch = (task: BulkTask, change: Partial<BulkTask>) => Object.assign(task, change, { updatedAt: new Date() });
+  // Rewrites the array slots a collection occupies in the given order.
+  const arrange = (members: BulkTask[], order: string[]) => {
+    const slots = members.map(task => tasks.indexOf(task));
+    order.forEach((id, index) => { tasks[slots[index]] = members.find(task => task.id === id)!; });
+  };
+  return createBulkRoutes({
+    verify: options.verify,
+    allowedOrigins: options.allowedOrigins,
+    complete: async (userId, items, operationId) => {
+      if (!owned(userId, items.map(item => item.id))) return null;
+      const result = { completed: [] as string[], changed: [] as string[] };
+      for (const item of items) {
+        const task = tasks.find(row => row.id === item.id)!;
+        const plan = planCompletion({ ...task, dueDate: task.dueDate ? new Date(task.dueDate) : null }, { occurrence: item.occurrence, operationId });
+        if (plan.kind === "write") touch(task, plan.patch);
+        (plan.kind === "changed" ? result.changed : result.completed).push(item.id);
+      }
+      return result;
+    },
+    remove: async (userId, ids) => {
+      const rows = owned(userId, ids);
+      for (const row of rows ?? []) tasks.splice(tasks.indexOf(row), 1);
+      return Boolean(rows);
+    },
+    clearDates: async (userId, ids) => {
+      const rows = owned(userId, ids);
+      for (const row of rows ?? []) touch(row, { dueDate: null, dueDateEnd: null });
+      return Boolean(rows);
+    },
+    metadata: async (userId, ids, { labelIds, ...fields }) => {
+      const rows = owned(userId, ids);
+      if (!rows) return false;
+      if (labelIds?.some(id => !labels.some(label => label.userId === userId && label.id === id))) throw new MissingReferenceError();
+      for (const row of rows) touch(row, { ...fields, ...(labelIds && { labelIds: [...new Set(labelIds)] }) });
+      return true;
+    },
+    move: async (userId, ids, destination) => {
+      const rows = owned(userId, ids);
+      try { validateTaskOrganization({ userId, ...destination }, projects.find(project => project.id === destination.projectId), sections.find(section => section.id === destination.sectionId)); }
+      catch (error) { if (error instanceof TaskOrganizationError) return false; throw error; }
+      if (!rows) return false;
+      for (const row of tasks.filter(task => task.userId === userId && (ids.includes(task.id) || (task.parentId && ids.includes(task.parentId))))) touch(row, destination);
+      for (const row of rows) if (row.parentId && !ids.includes(row.parentId)) row.parentId = null;
+      for (const row of rows) { tasks.splice(tasks.indexOf(row), 1); tasks.push(row); }
+      return true;
+    },
+    reorder: async (userId, id, anchorId, position) => {
+      const [task, anchor] = owned(userId, [id, anchorId]) ?? [];
+      if (!task) return false;
+      if (!anchor || task.projectId !== anchor.projectId) return "invalid";
+      const members = tasks.filter(row => row.userId === userId && row.projectId === task.projectId);
+      arrange(members, planReorder(members.map(row => row.id), id, anchorId, position)!);
+      return true;
     },
   });
 }

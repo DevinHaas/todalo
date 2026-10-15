@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bulk-metadata"
+description = "Enables the bulk_metadata command without any pre-configured scope."
+commands.allow = ["bulk_metadata"]
+
+[[permission]]
+identifier = "deny-bulk-metadata"
+description = "Denies the bulk_metadata command without any pre-configured scope."
+commands.deny = ["bulk_metadata"]
