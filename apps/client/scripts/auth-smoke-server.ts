@@ -17,6 +17,7 @@ import { createMetadataRoutes } from "../../api/src/metadata-routes";
 import { memoryMetadataStore } from "../../api/test-fixtures/metadata-store";
 import { MissingReferenceError } from "../../../packages/server/src/metadata-input";
 import { createSearchRoutes } from "../../api/src/search-routes";
+import { qaCalendarRoutes } from "./qa-calendar";
 
 // Set QA_CLIENT_ORIGIN when the Vite client runs on another port.
 const clientOrigin = process.env.QA_CLIENT_ORIGIN ?? "http://localhost:5173";
@@ -91,7 +92,7 @@ const verifySession = async (headers: Headers) => (await auth.api.getSession({ h
 // Account settings (ticket 12): per-user memory rows, defaulting smart dates on.
 // QA_SETTINGS_SAVE_FAILS=1 answers every settings save with a 500 (rollback QA).
 const settings = new Map<string, boolean>();
-const app = createAuthRoutes(auth).use(createSettingsRoutes({
+const app = createAuthRoutes(auth).use(qaCalendarRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), userId: user.id, otherId: other.id, day })).use(createSettingsRoutes({
   verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
   get: async (userId) => ({ smartDateRecognition: settings.get(userId) ?? true }),

@@ -1,5 +1,6 @@
 mod attachments;
 mod auth;
+mod calendar;
 mod credentials;
 mod endpoint;
 mod feedback;
@@ -61,6 +62,7 @@ pub fn run() {
         .plugin(tauri_plugin_haptics::init())
         .manage(NativeAuth::new())
         .manage(oauth::GoogleFlow::default())
+        .manage(calendar::LiveStream::default())
         .manage(links::LinkInbox::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
@@ -110,6 +112,15 @@ pub fn run() {
             attachments::attachments,
             attachments::upload_files,
             attachments::save_attachment,
+            calendar::calendar_events,
+            calendar::calendar_accounts,
+            calendar::show_calendar_account_events,
+            calendar::set_calendar_visibility,
+            calendar::resync_calendar_account,
+            calendar::disconnect_calendar_account,
+            calendar::live_stream,
+            calendar::stop_live_stream,
+            calendar::open_calendar_event,
             oauth::google_start,
             oauth::google_finish,
             oauth::google_cancel,

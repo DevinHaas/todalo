@@ -9,7 +9,6 @@ import type { Account } from "./session";
 import { metadataReads, projectReads, reads, session } from "./runtime";
 import type { TaskDto } from "./tasks";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
-import { GoogleButton } from "./google";
 import { haptics, hapticsSupported } from "./feedback";
 import { useTaskWrites } from "./task-writes";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
@@ -17,6 +16,7 @@ import { TodayCalendar } from "./schedule-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
+import { CalendarSettingsScreen, LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { taskUrl } from "./links";
 
@@ -92,6 +92,7 @@ export function Shell({ account }: { account: Account }) {
       <main className="content"><Outlet /></main>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
+    <LiveUpdates userId={account.user.id} />
     {finding && <QuickFind userId={account.user.id} onClose={() => setFinding(false)} />}
   </div></DisplayProvider>;
 }
@@ -103,7 +104,8 @@ export function TodayScreen({ account }: { account: Account }) {
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
   const writes = useTaskWrites(account.user.id);
   const display = useDisplay();
-  return <TodayView state={query} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error}
+  const events = useCalendarEvents(account.user.id);
+  return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error}
     showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} /> : undefined}
     composer={<Composer dueDate={startOfToday} onCreate={(task) => writes.create.mutateAsync(task)} />} />;
 }
@@ -143,7 +145,7 @@ export function AccountScreen({ account, error }: { account: Account; error: str
       <input type="checkbox" checked={feel} onChange={(event) => { haptics.set(event.target.checked); setFeel(event.target.checked); }} />
       <span>Haptic feedback when completing a task</span>
     </label>}
-    <GoogleButton intent="link" disabled={pending} />
+    <CalendarSettingsScreen userId={account.user.id} />
     <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
   </section>;
 }

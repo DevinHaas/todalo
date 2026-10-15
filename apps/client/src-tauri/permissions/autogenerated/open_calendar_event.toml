@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-calendar-event"
+description = "Enables the open_calendar_event command without any pre-configured scope."
+commands.allow = ["open_calendar_event"]
+
+[[permission]]
+identifier = "deny-open-calendar-event"
+description = "Denies the open_calendar_event command without any pre-configured scope."
+commands.deny = ["open_calendar_event"]

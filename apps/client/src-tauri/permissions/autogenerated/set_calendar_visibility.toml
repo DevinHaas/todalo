@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-calendar-visibility"
+description = "Enables the set_calendar_visibility command without any pre-configured scope."
+commands.allow = ["set_calendar_visibility"]
+
+[[permission]]
+identifier = "deny-set-calendar-visibility"
+description = "Denies the set_calendar_visibility command without any pre-configured scope."
+commands.deny = ["set_calendar_visibility"]

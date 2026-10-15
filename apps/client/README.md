@@ -276,12 +276,55 @@ removed after an account response returns 401.
 - **Display settings:** `DisplayProvider`/`useDisplay` (`src/schedule-views.tsx`)
   wrap the shell; in memory like legacy. Ticket 17 adds `board` to `nextLayout`
   and activates the inert Board option.
-- **Ticket 20 (provider events):** add an events read (its own key under
-  `["user", id]`, invalidated by the live stream) and render events where the views
-  mark "Ticket 20": first in each Upcoming day and month cell, all-day events in the
-  all-day rows, timed events with `blockFor(start, end)` before task blocks. Events
-  stay read-only links (legacy `EventRow`/`EventChip`/`TimedEventBlock`); the echo
-  and visibility filters belong in the server query.
+- **Provider events:** done in ticket 20; see the next section.
+
+## Connected calendars and the live stream (ticket 20 conventions)
+
+- **Events read:** `calendarReads.events` (`["user", id, "calendar", "events"]`,
+  `GET /api/v1/calendar/events`, `useCalendarEvents`). Never a second task read.
+  Screens pass `events` to `TodayView`, `UpcomingList`, `CalendarView` and
+  `TodaySchedule`; events render first, as read-only links (`EventRow`,
+  `EventChip`, `EventBlock` in `src/calendar-views.tsx`). Group with
+  `eventDayKey`: timed events by the local day of the start instant, all-day
+  events by the calendar date Google gave (stored as UTC midnight; this fixes
+  legacy showing them a day early west of UTC). Natively, `openEvent` opens the
+  link in the system browser through `open_calendar_event`, which accepts only
+  `https://www.google.com` / `calendar.google.com`.
+- **Server:** `packages/server/src/calendar-connections.ts` (events with the
+  visibility and echo filters, account list, show/hide, resync, disconnect) and
+  `calendar-sync.ts` (Google sync, watch channels, `handleCalendarWebhook`).
+  Legacy Server Actions, the settings page and both webhook routes are wrappers.
+  Provider tokens stay in Better Auth's account store; log provider errors only
+  through `logSafe` (gaxios errors carry the bearer header).
+- **Settings:** the Calendars section of the Account screen
+  (`CalendarSettingsScreen`) under `["user", id, "calendar", "accounts"]`; toggles
+  are optimistic with rollback; every write invalidates `["user", id, "calendar"]`
+  and publishes `calendar` to the user's other devices. Linking uses the ticket 4
+  `GoogleButton intent="link"` (system browser natively); Better Auth's Google
+  provider requests the Calendar scopes, so a link grants calendar access.
+- **Live stream contract (ticket 22 extends it):** `GET /api/v1/stream`,
+  `text/event-stream`, authenticated by the browser cookie (same origin; no CORS
+  headers, so other sites cannot read it) or the bearer that Rust attaches. Frames:
+  `event: ready` with `data: {}` once per connection, then
+  `event: change` with `data: {"topic":"<topic>"}`, plus `: heartbeat` comments
+  every 25 s. Server side, call `publish(userId, topic)` from
+  `@todalo/server/live`; add the topic to `LiveTopic` (`calendar-input.ts`).
+  Client side, map the topic to query keys in `liveTopicKeys` (`src/calendar.ts`);
+  unknown topics are ignored, so deploy the server first. `startLiveUpdates`
+  (mounted once by `LiveUpdates` in the shell) refetches every topic on `ready`
+  (connect and reconnect) and when the app becomes visible again, and reconnects
+  on resume because iOS may have dropped the socket silently. It retries with
+  backoff (1, 2, 5, 15, 30 s); `UNAUTHENTICATED` re-checks the session instead.
+- **Native stream:** a WebView `EventSource` cannot carry the Keychain bearer, so
+  `live_stream` (Rust) opens the stream itself and forwards only parsed
+  `ready`/`change`/`closed` messages over a Tauri `Channel`. There is one stream
+  per app: opening another or `stop_live_stream` aborts the last. No ticket and
+  no CSP change are needed, because the token never leaves Rust.
+- **One process:** the bus in `live.ts` is process-local, so the Google webhook and
+  the streams must run in the same API process (`GOOGLE_WEBHOOK_BASE_URL` +
+  `/api/calendar/webhook` must reach the API). Add shared pub/sub before running
+  more than one API instance. The legacy Next webhook path still works and
+  notifies legacy browsers in its own process.
 
 ## Smart quick add and settings (ticket 12 conventions)
 
@@ -407,6 +450,10 @@ cross-user checks. Projects: `Work` (three fixture tasks), `Errands` (empty) and
 second user's project (`/projects/qa-other`). Attachments: `/tasks/undated` carries a legacy-format
 `Legacy brief.txt`; the other user's `qa-other-file` checks download ownership. Set `QA_CLIENT_ORIGIN` when Vite runs
 on a port other than 5173 (it is the trusted auth origin and the allowed write origin). `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
+Calendars (ticket 20, `scripts/qa-calendar.ts`): a stub Google gives the seeded user a linked account
+(Personal and Work shown, Birthdays hidden), an account without calendar access and an echo of a pushed task
+(filtered); `POST /api/qa/calendar/provider-change` adds a Work event and delivers Google's webhook, so open
+screens update through the live stream.
 `QA_AMBIGUOUS_WRITES=1` applies each first create/completion and then answers
 500, to watch the client retry without duplicating it.
 `QA_SETTINGS_SAVE_FAILS=1` answers every settings save with a 500 (switch rollback).

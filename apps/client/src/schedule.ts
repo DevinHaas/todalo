@@ -3,8 +3,8 @@
 // calendar-view, week-schedule-view, schedule-grid, lib/view-navigation).
 // Every task date is an ISO instant read in the viewer's local zone, as the
 // legacy client did, so grouping follows local midnights through DST changes.
-// Ticket 20: provider events group by the same `dayKey` and position with
-// `blockFor` (start/end instants), next to tasks in each view.
+// Provider events (ticket 20) group with `eventDayKey` (calendar.ts) and timed
+// ones position with `blockFor` (start/end instants), next to tasks in each view.
 import type { TaskDto } from "./tasks";
 import { isOverdue, treeOrder } from "./tasks";
 

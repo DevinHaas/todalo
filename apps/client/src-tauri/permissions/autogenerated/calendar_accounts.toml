@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-calendar-accounts"
+description = "Enables the calendar_accounts command without any pre-configured scope."
+commands.allow = ["calendar_accounts"]
+
+[[permission]]
+identifier = "deny-calendar-accounts"
+description = "Denies the calendar_accounts command without any pre-configured scope."
+commands.deny = ["calendar_accounts"]

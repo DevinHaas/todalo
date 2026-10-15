@@ -1,7 +1,7 @@
 // Upcoming list, month/week calendar and daily schedule (ticket 16): the legacy
 // UpcomingListView, CalendarView, WeekScheduleView, TodayScheduleView and
 // ScheduleGrid. Pure views (no runtime imports): screens pass rows, composers
-// and handlers. Ticket 20 adds provider events beside tasks at each "events" note.
+// and handlers. Provider events (ticket 20) render first in each day, as legacy.
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, LayoutGrid, List, X } from "lucide-react";
 import { isDueToday, isOverdue, type TaskDto } from "./tasks";
@@ -10,6 +10,8 @@ import {
   nextLayout, offsetFor, parseDayKey, sameDay, slotAt, startOfDay, startOfWeek, tasksByDay, upcomingSections, upcomingWindow, weekOf,
   type DisplaySettings, type ViewDateAction,
 } from "./schedule";
+import { eventsByDay, type CalendarEventDto } from "./calendar";
+import { EventBlock, EventChip, EventRow } from "./calendar-views";
 
 type Display = DisplaySettings & { set(change: Partial<DisplaySettings>): void };
 const DisplayContext = createContext<Display>({ ...defaultDisplay, set() {} });
@@ -73,13 +75,14 @@ export interface ScheduleSlots {
 }
 
 /** Legacy UpcomingListView: week strip, scroll-spy and one section per day for a year. */
-export function UpcomingList({ tasks, slots, composer, now = new Date() }: { tasks: TaskDto[]; slots: ScheduleSlots; composer: (day: Date) => ReactNode; now?: Date }) {
+export function UpcomingList({ tasks, events = [], slots, composer, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; composer: (day: Date) => ReactNode; now?: Date }) {
   const { showCompleted } = useDisplay();
   const [overdueOpen, setOverdueOpen] = useState(true);
   const [activeDay, setActiveDay] = useState(() => dayKey(now));
   const [range, setRange] = useState(() => upcomingWindow(now));
   const list = useRef<HTMLDivElement>(null);
   const { overdue, days, later } = upcomingSections(tasks, range, showCompleted, now);
+  const eventDays = eventsByDay(events);
   const active = parseDayKey(activeDay);
 
   const scrollTo = (key: string, container = list.current) => {
@@ -131,9 +134,9 @@ export function UpcomingList({ tasks, slots, composer, now = new Date() }: { tas
         </button>
         {overdueOpen && overdue.map(slots.row)}
       </section>}
-      {/* Ticket 20: the day's provider events render first in each section. */}
       {days.map(({ day, key, tasks: dayTasks }) => <section key={key} id={key}>
         <h2 className="section-heading muted">{labels.day(day, now)}</h2>
+        {eventDays.get(key)?.map(event => <EventRow key={event.id} event={event} />)}
         {dayTasks.map(slots.row)}
         {composer(day)}
       </section>)}
@@ -169,7 +172,7 @@ function CurrentTimeLine({ days, template }: { days: Date[]; template: string })
 const gridTemplate = (days: Date[]) => `3rem repeat(${days.length}, minmax(0, 1fr))`;
 
 /** Legacy ScheduleGrid: 48px hours, timed blocks, click-to-add slots, now line. */
-function ScheduleGrid({ days, byDay, slots, header }: { days: Date[]; byDay: Map<string, TaskDto[]>; slots: ScheduleSlots; header: ReactNode }) {
+function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[]; byDay: Map<string, TaskDto[]>; eventDays: Map<string, CalendarEventDto[]>; slots: ScheduleSlots; header: ReactNode }) {
   const scroll = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(600);
@@ -204,7 +207,7 @@ function ScheduleGrid({ days, byDay, slots, header }: { days: Date[]; byDay: Map
       <div className="schedule-columns" style={{ gridTemplateColumns: template }}>
         <div />
         {days.map(day => <div key={dayKey(day)} className="schedule-column" data-day={dayKey(day)} onClick={(event) => click(day, event)}>
-          {/* Ticket 20: timed provider events (blockFor(start, end)) render before tasks. */}
+          {(eventDays.get(dayKey(day)) ?? []).filter(event => !event.allDay).map(event => <EventBlock key={event.id} event={event} />)}
           {(byDay.get(dayKey(day)) ?? []).filter(isTimed).map(task => {
             const block = blockFor(task.dueDate!, task.dueDateEnd);
             return <button key={task.id} type="button" className="timed-block" style={{ top: block.top, height: block.height }}
@@ -220,23 +223,25 @@ function ScheduleGrid({ days, byDay, slots, header }: { days: Date[]; byDay: Map
 }
 
 /** Today's calendar layout (legacy TodayScheduleView): overdue and all-day tasks above the hours. */
-export function TodaySchedule({ tasks, slots, now = new Date() }: { tasks: TaskDto[]; slots: ScheduleSlots; now?: Date }) {
+export function TodaySchedule({ tasks, events = [], slots, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; now?: Date }) {
   const { showCompleted } = useDisplay();
   const shown = showCompleted ? tasks : tasks.filter(task => task.status !== "done");
   const today = shown.filter(task => isDueToday(task, now));
   const allDay = [...shown.filter(task => isOverdue(task, now)), ...today.filter(task => !isTimed(task))];
-  return <ScheduleGrid days={[startOfDay(now)]} byDay={new Map([[dayKey(now), today]])} slots={slots} header={
+  const todayEvents = eventsByDay(events).get(dayKey(now)) ?? [];
+  return <ScheduleGrid days={[startOfDay(now)]} byDay={new Map([[dayKey(now), today]])} eventDays={new Map([[dayKey(now), todayEvents]])} slots={slots} header={
     <div className="all-day single"><span className="all-day-label">All day</span><div className="all-day-cell">
-      {/* Ticket 20: all-day provider events first. */}
+      {todayEvents.filter(event => event.allDay).map(event => <EventRow key={event.id} event={event} />)}
       {allDay.map(task => <AllDayRow key={task.id} task={task} slots={slots} />)}
     </div></div>
   } />;
 }
 
-function WeekSchedule({ tasks, anchor, onNavigate, slots, now }: { tasks: TaskDto[]; anchor: Date; onNavigate: (action: ViewDateAction) => void; slots: ScheduleSlots; now: Date }) {
+function WeekSchedule({ tasks, events, anchor, onNavigate, slots, now }: { tasks: TaskDto[]; events: CalendarEventDto[]; anchor: Date; onNavigate: (action: ViewDateAction) => void; slots: ScheduleSlots; now: Date }) {
   const { showCompleted } = useDisplay();
   const days = weekOf(anchor);
   const byDay = tasksByDay(tasks, showCompleted);
+  const eventDays = eventsByDay(events);
   const template = gridTemplate(days);
   return <div>
     <div className="calendar-nav">
@@ -244,12 +249,13 @@ function WeekSchedule({ tasks, anchor, onNavigate, slots, now }: { tasks: TaskDt
       <div className="calendar-title"><h2 aria-live="polite">{labels.week(days[0])}</h2><button type="button" className="button ghost small" onClick={() => onNavigate("today")}>Today</button></div>
       <button type="button" className="button outline small" onClick={() => onNavigate("next-week")}>Next</button>
     </div>
-    <ScheduleGrid days={days} byDay={byDay} slots={slots} header={<>
+    <ScheduleGrid days={days} byDay={byDay} eventDays={eventDays} slots={slots} header={<>
       <div className="week-days" style={{ gridTemplateColumns: template }}><div />
         {days.map(day => <div key={dayKey(day)} className={sameDay(day, now) ? "today" : undefined}>{labels.weekday(day)} {day.getDate()}</div>)}
       </div>
       <div className="all-day" style={{ gridTemplateColumns: template }}><span className="all-day-label">All day</span>
         {days.map(day => <div key={dayKey(day)} className="all-day-cell">
+          {(eventDays.get(dayKey(day)) ?? []).filter(event => event.allDay).map(event => <EventRow key={event.id} event={event} />)}
           {(byDay.get(dayKey(day)) ?? []).filter(task => !isTimed(task)).map(task => <AllDayRow key={task.id} task={task} slots={slots} />)}
         </div>)}
       </div>
@@ -257,9 +263,10 @@ function WeekSchedule({ tasks, anchor, onNavigate, slots, now }: { tasks: TaskDt
   </div>;
 }
 
-function MonthGrid({ tasks, month, setMonth, onNavigate, slots, now }: { tasks: TaskDto[]; month: Date; setMonth: (month: Date) => void; onNavigate: (action: ViewDateAction) => void; slots: ScheduleSlots; now: Date }) {
+function MonthGrid({ tasks, events, month, setMonth, onNavigate, slots, now }: { tasks: TaskDto[]; events: CalendarEventDto[]; month: Date; setMonth: (month: Date) => void; onNavigate: (action: ViewDateAction) => void; slots: ScheduleSlots; now: Date }) {
   const { showCompleted } = useDisplay();
   const byDay = tasksByDay(tasks, showCompleted);
+  const eventDays = eventsByDay(events);
   const weekStart = startOfWeek(month, 1);
   const weekEnd = addDays(weekStart, 6);
   return <div>
@@ -279,7 +286,7 @@ function MonthGrid({ tasks, month, setMonth, onNavigate, slots, now }: { tasks: 
         const classes = ["month-day", day.getMonth() === month.getMonth() ? "" : "outside", day >= weekStart && day <= weekEnd ? "current-week" : ""].filter(Boolean).join(" ");
         return <div key={dayKey(day)} className={classes}>
           <div className={sameDay(day, now) ? "month-date today" : "month-date"}>{day.getDate()}</div>
-          {/* Ticket 20: event chips first. */}
+          {eventDays.get(dayKey(day))?.map(event => <EventChip key={event.id} event={event} />)}
           {(byDay.get(dayKey(day)) ?? []).map(task => <TaskChip key={task.id} task={task} slots={slots} />)}
         </div>;
       })}
@@ -288,12 +295,12 @@ function MonthGrid({ tasks, month, setMonth, onNavigate, slots, now }: { tasks: 
 }
 
 /** Legacy CalendarView: one anchor date shared by month and week, Week/Month from Display. */
-export function CalendarView({ tasks, slots, now = new Date() }: { tasks: TaskDto[]; slots: ScheduleSlots; now?: Date }) {
+export function CalendarView({ tasks, events = [], slots, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; now?: Date }) {
   const { calendarRange } = useDisplay();
   const [anchor, setAnchor] = useState(now);
   const navigate = (action: ViewDateAction) => setAnchor(current => navigateViewDate(current, action, new Date()));
   return <div aria-label="Calendar view" className="calendar">{calendarRange === "week"
-    ? <WeekSchedule tasks={tasks} anchor={anchor} onNavigate={navigate} slots={slots} now={now} />
-    : <MonthGrid tasks={tasks} month={anchor} setMonth={setAnchor} onNavigate={navigate} slots={slots} now={now} />}</div>;
+    ? <WeekSchedule tasks={tasks} events={events} anchor={anchor} onNavigate={navigate} slots={slots} now={now} />
+    : <MonthGrid tasks={tasks} events={events} month={anchor} setMonth={setAnchor} onNavigate={navigate} slots={slots} now={now} />}</div>;
 }
 

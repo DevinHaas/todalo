@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-disconnect-calendar-account"
+description = "Enables the disconnect_calendar_account command without any pre-configured scope."
+commands.allow = ["disconnect_calendar_account"]
+
+[[permission]]
+identifier = "deny-disconnect-calendar-account"
+description = "Denies the disconnect_calendar_account command without any pre-configured scope."
+commands.deny = ["disconnect_calendar_account"]

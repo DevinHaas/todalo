@@ -15,6 +15,10 @@ import * as settings from "@todalo/server/settings";
 import * as attachments from "@todalo/server/attachments";
 import * as metadata from "@todalo/server/metadata";
 import { createMetadataRoutes } from "./metadata-routes";
+import { createCalendarRoutes } from "./calendar-routes";
+import * as calendar from "@todalo/server/calendar-connections";
+import { handleCalendarWebhook } from "@todalo/server/calendar-sync";
+import * as live from "@todalo/server/live";
 import { createSearchRoutes } from "./search-routes";
 
 const dependencies = productionDependencies();
@@ -71,6 +75,20 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   tasks: (userId) => getTasksForUser(userId),
   projects: projects.getProjectsForUser,
   sections: (userId) => organization.getSectionsForUser(userId),
+})).use(createCalendarRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  events: calendar.getCalendarEventsForUser,
+  accounts: calendar.getCalendarAccounts,
+  setShowEvents: calendar.setAccountShowEvents,
+  setVisible: calendar.setCalendarVisible,
+  resync: calendar.resyncAccount,
+  // Better Auth unlinks with the caller's own session (cookie or bearer).
+  disconnect: (userId, accountId, session) => calendar.disconnectAccount(userId, accountId, (body) => auth.api.unlinkAccount({ headers: session, body })),
+  webhook: handleCalendarWebhook,
+  // The webhook and the stream share this process's bus (see live.ts).
+  subscribe: live.subscribe,
+  publish: live.publish,
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",
