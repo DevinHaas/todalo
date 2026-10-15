@@ -209,12 +209,13 @@ export function qaBulkRoutes(options: {
       for (const row of rows) { tasks.splice(tasks.indexOf(row), 1); tasks.push(row); }
       return true;
     },
-    reorder: async (userId, id, anchorId, position) => {
-      const [task, anchor] = owned(userId, [id, anchorId]) ?? [];
+    reorder: async (userId, id, { anchorId, position, status }) => {
+      const [task, anchor] = owned(userId, anchorId ? [id, anchorId] : [id]) ?? [];
       if (!task) return false;
-      if (!anchor || task.projectId !== anchor.projectId) return "invalid";
+      if (anchorId && (!anchor || task.projectId !== anchor.projectId)) return "invalid";
       const members = tasks.filter(row => row.userId === userId && row.projectId === task.projectId);
-      arrange(members, planReorder(members.map(row => row.id), id, anchorId, position)!);
+      if (status && status !== task.status) touch(task, { status });
+      arrange(members, planReorder(members.map(row => row.id), id, anchorId ?? null, position)!);
       return true;
     },
   });

@@ -2,7 +2,7 @@
 // legacy Server Actions and /api/v1. Every operation checks that the user owns
 // every selected task before it writes anything: a selection with one missing
 // or foreign ID changes nothing ("missing"). Bulk moves live in organization.ts.
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@todalo/db";
 import { taskLabels, tasks } from "@todalo/db/schema";
@@ -10,7 +10,7 @@ import { deleteTaskFromCalendar } from "./calendar";
 import { assertOwnedLabels } from "./task-labels";
 import { completeTask, syncToCalendar } from "./tasks";
 import { manualOrder } from "./today";
-import { bulkIds, planReorder, type BulkCompletionDto, type ReorderPosition } from "./bulk-input";
+import { bulkIds, planReorder, type BulkCompletionDto, type ReorderInput } from "./bulk-input";
 
 /** One neon-http batch: the statements commit together or not at all. */
 export async function atomically(writes: BatchItem<"pg">[]) {
@@ -89,18 +89,26 @@ export const inCollection = (projectId: string | null) => projectId ? eq(tasks.p
  * the Inbox), relative to the current server order. The whole collection is
  * renumbered in one batch, so concurrent reorders leave the last writer's
  * complete order rather than a mix, and a retry rewrites the same numbers.
- * Only `sortOrder` changes (not `updatedAt`): open editors stay valid.
+ * Renumbering keeps `updatedAt` (open editors stay valid); a status change
+ * (legacy status board, ticket 17) is an edit and moves it, in the same batch.
+ * Without an anchor the task goes to the end of its collection, so a retried
+ * drop is a no-op.
  */
-export async function reorderTask(userId: string, id: string, anchorId: string, position: ReorderPosition): Promise<"reordered" | "missing" | "invalid"> {
-  const pair = await db.select({ id: tasks.id, projectId: tasks.projectId }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, [id, anchorId])));
+export async function reorderTask(userId: string, id: string, move: ReorderInput): Promise<"reordered" | "missing" | "invalid"> {
+  const anchorId = move.anchorId ?? null;
+  const pair = await db.select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, anchorId ? [id, anchorId] : [id])));
   const task = pair.find(row => row.id === id);
   const anchor = pair.find(row => row.id === anchorId);
-  if (!task || !anchor) return "missing";
-  if (id === anchorId || task.projectId !== anchor.projectId) return "invalid";
+  if (!task || (anchorId && !anchor)) return "missing";
+  if (anchor && (id === anchorId || task.projectId !== anchor.projectId)) return "invalid";
   const collection = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.userId, userId), inCollection(task.projectId))).orderBy(...manualOrder);
-  const order = planReorder(collection.map(row => row.id), id, anchorId, position);
+  const order = planReorder(collection.map(row => row.id), id, anchorId, move.position);
   if (!order) return "missing";
+  const writes: BatchItem<"pg">[] = [];
+  if (move.status && move.status !== task.status) writes.push(db.update(tasks).set({ status: move.status }).where(and(eq(tasks.id, id), eq(tasks.userId, userId))));
+  // sql self-reference: without it drizzle's $onUpdate would move every row's updatedAt.
   // A task moved to another collection meanwhile keeps its own number.
-  await atomically(order.map((taskId, sortOrder) => db.update(tasks).set({ sortOrder }).where(and(eq(tasks.id, taskId), eq(tasks.userId, userId), inCollection(task.projectId)))));
+  for (const [sortOrder, taskId] of order.entries()) writes.push(db.update(tasks).set({ sortOrder, updatedAt: sql`${tasks.updatedAt}` }).where(and(eq(tasks.id, taskId), eq(tasks.userId, userId), inCollection(task.projectId))));
+  await atomically(writes);
   return "reordered";
 }

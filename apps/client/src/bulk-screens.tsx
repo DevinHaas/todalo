@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { bulk, metadataReads, organizationReads } from "./runtime";
-import { bulkMutations, completion, type ReorderPosition } from "./bulk";
+import { bulkMutations, completion, type ReorderInput, type ReorderPosition } from "./bulk";
 import { SelectionControl, SelectionToolbar, useSelection, type BulkActions } from "./bulk-views";
 import { nativeFeedback } from "./feedback";
 import type { TaskDto } from "./tasks";
@@ -43,11 +43,12 @@ export function useBulkSelection(userId: string, tasks: TaskDto[]): SelectionSlo
   };
 }
 
-/** Manual reorder (drag or keyboard) of one task next to another in its project. */
+/** Manual reorder (drag or keyboard) of one task next to another in its project, or into a board column (`move`). */
 export function useReorder(userId: string) {
   const reorder = useMutation(useBulkWrites(userId).reorder);
   return {
     reorder: (task: TaskDto, anchorId: string, position: ReorderPosition) => reorder.mutate({ task, anchorId, position }),
+    move: (task: TaskDto, move: ReorderInput) => reorder.mutate({ task, ...move }),
     error: reorder.error?.message ?? null,
   };
 }

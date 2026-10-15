@@ -36,7 +36,7 @@ describe("bulk transports", () => {
     expect(await browserBulkTransport(respond(404)).clearDates(["a"])).toBe(false);
     expect(await browserBulkTransport(respond(200)).metadata(["a"], { priority: 1 })).toBe(true);
     expect(await browserBulkTransport(respond(200)).move(["a"], { projectId: null, sectionId: null })).toBe(true);
-    expect(await browserBulkTransport(respond(200, { id: "a/b" })).reorder("a/b", "c", "after")).toBe(true);
+    expect(await browserBulkTransport(respond(200, { id: "a/b" })).reorder("a/b", { anchorId: "c", position: "after" })).toBe(true);
     await expect(browserBulkTransport(respond(400)).metadata(["a"], { labelIds: ["gone"] })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     await expect(browserBulkTransport(respond(500)).remove(["a"])).rejects.toMatchObject({ code: "SAVE_FAILED" });
     expect(calls.map(([path]) => path)).toEqual(["/api/v1/bulk/complete", "/api/v1/bulk/delete", "/api/v1/bulk/clear-date", "/api/v1/bulk/metadata", "/api/v1/bulk/move", "/api/v1/tasks/a%2Fb/reorder", "/api/v1/bulk/metadata", "/api/v1/bulk/delete"]);
@@ -50,12 +50,14 @@ describe("bulk transports", () => {
     native.tauri = true; native.calls = []; native.result = { ids: ["a"] };
     const transport = bulkTransport();
     await transport.remove(["a"]); await transport.clearDates(["a"]); await transport.metadata(["a"], { deadline: null });
-    await transport.move(["a"], { projectId: "work", sectionId: null }); await transport.reorder("a", "b", "before");
+    await transport.move(["a"], { projectId: "work", sectionId: null }); await transport.reorder("a", { anchorId: "b", position: "before" });
+    await transport.reorder("a", { status: "done" });
     native.result = null;
     expect(await transport.complete([{ id: "a", occurrence: null }], TAP)).toBeNull();
     expect(native.calls).toEqual([
       ["bulk_delete", { ids: ["a"] }], ["bulk_clear_date", { ids: ["a"] }], ["bulk_metadata", { ids: ["a"], change: { deadline: null } }],
       ["bulk_move", { ids: ["a"], projectId: "work", sectionId: null }], ["reorder_task", { id: "a", anchorId: "b", position: "before" }],
+      ["reorder_task", { id: "a", status: "done" }],
       ["bulk_complete", { tasks: [{ id: "a", occurrence: null }], operationId: TAP }],
     ]);
     native.tauri = false;
@@ -126,7 +128,7 @@ describe("bulk cache", () => {
     await expect(run(writes.complete, selection)).resolves.toEqual({ completed: ["a"], changed: ["b"] });
     expect(sent[0]).toEqual([[{ id: "a", occurrence: VERSION }, { id: "b", occurrence: null }], selection.operationId]);
     await run(writes.reorder, { task: task("c"), anchorId: "a", position: "before" });
-    expect(sent[1]).toEqual(["c", "a", "before"]);
+    expect(sent[1]).toEqual(["c", { anchorId: "a", position: "before" }]);
     // The settled refetch has no query function here, so the optimistic order stays visible.
     expect(cache.getQueryData<{ tasks: TaskDto[] }>(projectKeys.detail("alice", "work"))!.tasks.map(item => item.id)).toEqual(["c", "a", "b"]);
   });

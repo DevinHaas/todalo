@@ -8,7 +8,10 @@ import { ProjectsView, ProjectView } from "./project-views";
 import { ProjectFilesScreen } from "./attachment-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { useBulkSelection, useReorder } from "./bulk-screens";
-import { treeOrder } from "./tasks";
+import { treeOrder, type TaskDto } from "./tasks";
+import { useDisplay } from "./schedule-views";
+import { ProjectCalendar } from "./schedule-screens";
+import { BoardScreen } from "./board-screens";
 
 
 function useProjectMutations(userId: string) {
@@ -36,6 +39,11 @@ export function ProjectScreen({ account }: { account: Account }) {
   const selection = useBulkSelection(account.user.id, query.data ? treeOrder(query.data.tasks.filter(task => task.status !== "done")) : []);
   const order = useReorder(account.user.id);
   const pending = rename.isPending || remove.isPending || createSection.isPending || removeSection.isPending;
+  // Legacy ProjectView handed Board and Calendar the tasks Display shows (completed only when switched on).
+  const display = useDisplay();
+  const shown = (tasks: TaskDto[]) => display.showCompleted ? tasks : tasks.filter(task => task.status !== "done");
+  const layout = display.layout === "board" ? (tasks: TaskDto[]) => <BoardScreen account={account} tasks={shown(tasks)} />
+    : display.layout === "calendar" ? (tasks: TaskDto[]) => <ProjectCalendar account={account} tasks={shown(tasks)} /> : undefined;
   return <ProjectView
     key={id}
     state={query}
@@ -47,6 +55,7 @@ export function ProjectScreen({ account }: { account: Account }) {
     write={{ pending, error: (rename.error ?? remove.error ?? createSection.error ?? removeSection.error)?.message ?? order.error }}
     selection={selection}
     reorder={order.reorder}
+    layout={layout}
     files={<ProjectFilesScreen userId={account.user.id} projectId={id} />}
   />;
 }

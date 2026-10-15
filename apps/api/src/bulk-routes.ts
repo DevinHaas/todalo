@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { bulkCompleteInput, bulkIdsInput, bulkMetadataInput, bulkMoveInput, reorderInput, type BulkCompletionDto, type ReorderPosition } from "@todalo/server/bulk-input";
+import { bulkCompleteInput, bulkIdsInput, bulkMetadataInput, bulkMoveInput, reorderInput, type BulkCompletionDto, type ReorderInput } from "@todalo/server/bulk-input";
 import { MissingReferenceError } from "@todalo/server/metadata-input";
 import { writeUser } from "./project-routes";
 
@@ -17,8 +17,8 @@ export interface BulkWrites {
   /** Throws MissingReferenceError for a deleted or foreign label. */
   metadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[] }): Promise<boolean>;
   move(userId: string, ids: string[], destination: { projectId: string | null; sectionId: string | null }): Promise<boolean>;
-  /** "invalid": the anchor is in another collection (or is the task itself). */
-  reorder(userId: string, id: string, anchorId: string, position: ReorderPosition): Promise<boolean | "invalid">;
+  /** Place next to an anchor and/or set a status (appending without an anchor). "invalid": the anchor is in another collection (or is the task itself). */
+  reorder(userId: string, id: string, move: ReorderInput): Promise<boolean | "invalid">;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -69,7 +69,7 @@ export function createBulkRoutes(deps: BulkWrites) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const input = reorderInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
-      const result = await deps.reorder(userId, params.id, input.data.anchorId, input.data.position);
+      const result = await deps.reorder(userId, params.id, input.data);
       if (result === "invalid") return status(400, INVALID);
       return result ? { id: params.id } : status(404, NOT_FOUND);
     });

@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 export async function relationalBoundary(boundary: { rows: Record<string, Record<string, unknown>[]> }) {
-  const { getTableName } = await import("drizzle-orm");
+  const { getTableColumns, getTableName, is, SQL: SQLClass } = await import("drizzle-orm");
   const { PgDialect } = await import("drizzle-orm/pg-core");
   function matches(row: Record<string, unknown>, predicate?: SQL) {
     if (!predicate) return true;
@@ -34,7 +34,13 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
               result = result.map(row => { const existing = rows.find(item => item[key] === row[key]); return existing ? Object.assign(existing, set) : (rows.push(row), row); });
             } else rows.push(...result);
           }
-          if (kind === "update") result.forEach(row => Object.assign(row, values[0]));
+          if (kind === "update") {
+            // As drizzle: unset columns with $onUpdate get a fresh value; a `sql` value
+            // (a self-reference such as sql`${tasks.updatedAt}`) keeps the column as it was.
+            const fresh = Object.fromEntries(Object.entries(getTableColumns(table!)).filter(([name, column]) => column.onUpdateFn && !(name in values[0])).map(([name, column]) => [name, column.onUpdateFn!()]));
+            const set = Object.fromEntries(Object.entries(values[0]).filter(([, value]) => !is(value, SQLClass)));
+            result.forEach(row => Object.assign(row, fresh, set));
+          }
           if (kind === "delete") boundary.rows[key] = rows.filter(row => !result.includes(row));
           if (fields) result = result.map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, row[column.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())]])));
           return Promise.resolve(result).then(resolve, reject);

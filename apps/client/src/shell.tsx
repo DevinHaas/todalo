@@ -14,6 +14,7 @@ import { haptics, hapticsSupported } from "./feedback";
 import { useTaskWrites } from "./task-writes";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
 import { TodayCalendar } from "./schedule-screens";
+import { BoardScreen } from "./board-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
@@ -109,7 +110,9 @@ export function TodayScreen({ account }: { account: Account }) {
   const { overdue, today } = todaySections(query.data?.tasks ?? [], new Date(), display.showCompleted);
   const selection = useBulkSelection(account.user.id, [...overdue, ...today]);
   return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error} selection={selection}
-    showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} /> : undefined}
+    // `calendar` renders any non-list layout over the whole collection (legacy Today's ViewSwitcher).
+    showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} />
+      : display.layout === "board" ? (tasks) => <BoardScreen account={account} tasks={tasks} /> : undefined}
     composer={<Composer dueDate={startOfToday} onCreate={(task) => writes.create.mutateAsync(task)} />} />;
 }
 

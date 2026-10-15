@@ -27,10 +27,10 @@ const app = createBulkRoutes({
     return owned(userId, ids) && Boolean(writes.push(`metadata:${ids}:${JSON.stringify(change)}`));
   },
   move: async (userId, ids, destination) => owned(userId, ids) && destination.projectId !== "bob-project" && Boolean(writes.push(`move:${ids}:${destination.projectId}`)),
-  reorder: async (userId, id, anchorId, position) => {
-    if (!owned(userId, [id, anchorId])) return false;
+  reorder: async (userId, id, { anchorId, position, status }) => {
+    if (!owned(userId, anchorId ? [id, anchorId] : [id])) return false;
     if (id === anchorId) return "invalid";
-    writes.push(`reorder:${id}:${position}:${anchorId}`);
+    writes.push(`reorder:${id}:${position ?? "end"}:${anchorId ?? "-"}:${status ?? "-"}`);
     return true;
   },
 });
@@ -54,6 +54,7 @@ describe("bulk routes", () => {
       ["/bulk/metadata", { ids: ["a", "other"], priority: 1 }],
       ["/bulk/move", { ids: ["other"], projectId: null, sectionId: null }],
       ["/tasks/a/reorder", { anchorId: "other", position: "after" }],
+      ["/tasks/other/reorder", { status: "done" }],
     ] as const) expect(await json(await post(path, body)), path).toEqual({ status: 404, body: { code: "NOT_FOUND", message: "This task does not exist or you do not have access to it." } });
     expect(writes).toEqual([]);
   });
@@ -71,6 +72,11 @@ describe("bulk routes", () => {
       ["/bulk/move", { ids: ["a"], projectId: null, sectionId: "s" }],
       ["/tasks/a/reorder", { anchorId: "a", position: "after" }],
       ["/tasks/a/reorder", { anchorId: "b", position: "middle" }],
+      ["/tasks/a/reorder", {}],
+      ["/tasks/a/reorder", { anchorId: "b" }],
+      ["/tasks/a/reorder", { position: "after", status: "done" }],
+      ["/tasks/a/reorder", { status: "archived" }],
+      ["/tasks/a/reorder", { status: "done", sortOrder: 0 }],
       ["/bulk/delete", "{"],
     ] as const) expect(await json(await post(path, body)), `${path} ${JSON.stringify(body)}`).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
     expect(writes).toEqual([]);
@@ -85,12 +91,16 @@ describe("bulk routes", () => {
     expect((await post("/bulk/move", { ids: ["a"], projectId: "work", sectionId: null })).status).toBe(200);
     expect((await post("/bulk/move", { ids: ["a"], projectId: "bob-project", sectionId: null })).status).toBe(404);
     expect(await json(await post("/tasks/b/reorder", { anchorId: "a", position: "before" }))).toEqual({ status: 200, body: { id: "b" } });
+    expect(await json(await post("/tasks/b/reorder", { status: "in_progress" }))).toEqual({ status: 200, body: { id: "b" } });
+    expect((await post("/tasks/b/reorder", { anchorId: "a", position: "after", status: "done" })).status).toBe(200);
     expect(writes).toEqual([
       `complete:${TAP}:a@2026-10-05T09:00:00.000Z,b@none`,
       `metadata:a,b:{"deadline":null}`,
       `metadata:a:{"deadline":"2026-10-10T00:00:00.000Z"}`,
       "move:a:work",
-      "reorder:b:before:a",
+      "reorder:b:before:a:-",
+      "reorder:b:end:-:in_progress",
+      "reorder:b:after:a:done",
     ]);
   });
 });

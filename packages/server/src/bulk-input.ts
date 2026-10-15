@@ -32,9 +32,17 @@ export type BulkMetadataChange = Omit<BulkMetadataInput, "ids">;
 export const bulkMoveInput = z.object({ ids: bulkIds, projectId: id.nullable(), sectionId: id.nullable() }).strict()
   .refine(move => move.projectId !== null || move.sectionId === null, { path: ["sectionId"], message: "Inbox has no sections" });
 
-/** Place one task directly before or after another task of the same collection. */
-export const reorderInput = z.object({ anchorId: id, position: z.enum(["before", "after"]) }).strict();
-export type ReorderPosition = z.infer<typeof reorderInput>["position"];
+/**
+ * Place one task directly before or after another task of the same collection,
+ * and/or set its status (ticket 17, legacy status board). A status without an
+ * anchor appends the task to the end of its collection, as the legacy board did.
+ */
+export const reorderInput = z.object({ anchorId: id.optional(), position: z.enum(["before", "after"]).optional(), status: z.enum(["todo", "in_progress", "done"]).optional() }).strict()
+  .refine(move => (move.anchorId === undefined) === (move.position === undefined), { path: ["position"], message: "An anchor needs a position" })
+  .refine(move => move.anchorId !== undefined || move.status !== undefined, { message: "Choose a place or a status" });
+export type ReorderInput = z.infer<typeof reorderInput>;
+export type ReorderPosition = "before" | "after";
+export type TaskStatus = NonNullable<ReorderInput["status"]>;
 
 /** `completed`: written now or by an earlier attempt of this tap; `changed`: edited, completed or removed elsewhere. */
 export interface BulkCompletionDto { completed: string[]; changed: string[] }
@@ -42,11 +50,12 @@ export interface BulkCompletionDto { completed: string[]; changed: string[] }
 /**
  * The collection order after moving `id` next to `anchorId`. Relative to the
  * current order (not the client's copy), so a retry is a no-op and another
- * device's moves of other tasks are kept. null when either task is not in it.
+ * device's moves of other tasks are kept. A null anchor moves `id` to the end
+ * (a status board drop). null when either task is not in it.
  */
-export function planReorder(order: readonly string[], id: string, anchorId: string, position: ReorderPosition): string[] | null {
-  if (id === anchorId || !order.includes(id) || !order.includes(anchorId)) return null;
+export function planReorder(order: readonly string[], id: string, anchorId: string | null, position: ReorderPosition = "after"): string[] | null {
+  if (id === anchorId || !order.includes(id) || (anchorId !== null && !order.includes(anchorId))) return null;
   const rest = order.filter(item => item !== id);
-  const at = rest.indexOf(anchorId) + (position === "after" ? 1 : 0);
+  const at = anchorId === null ? rest.length : rest.indexOf(anchorId) + (position === "after" ? 1 : 0);
   return [...rest.slice(0, at), id, ...rest.slice(at)];
 }

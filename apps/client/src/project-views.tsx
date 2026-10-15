@@ -40,11 +40,13 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
 /** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
 export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder }: {
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout }: {
   state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
   sections?: SectionActions; now?: Date;
   /** Ticket 15: selection and bulk toolbar, and drag/keyboard reordering within a section. */
   selection?: SelectionSlots; reorder?: (task: TaskDto, anchorId: string, position: ReorderPosition) => void;
+  /** Ticket 17: Board or Calendar from Display, over every project task, in place of the section list. */
+  layout?: (tasks: TaskDto[]) => ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     <div className="project-header">
       <h1 className="page-title">{project.name}</h1>
       <div className="project-actions">
-        {selection?.control}
+        {!layout && selection?.control}
         {sectionActions
           ? <button type="button" className="button outline" aria-expanded={adding} onClick={() => setAdding(value => !value)}>Add section</button>
           : <span className="button outline" aria-disabled="true">Add section</span>}
@@ -91,9 +93,9 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     </section>}
     {adding && sectionActions && <SectionComposer pending={write.pending} onCreate={sectionActions.create} onClose={() => setAdding(false)} />}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
-    {selection?.toolbar}
+    {!layout && selection?.toolbar}
     {files}
-    <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>
+    {layout ? layout(tasks) : <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>
       {section
         ? <SectionHeader section={section} collapsed={collapsed.has(section.id)} onToggle={() => toggle(section.id)} pending={write.pending} onDelete={() => sectionActions?.remove(section)} />
         : <h2 className="section-heading">Tasks</h2>}
@@ -107,6 +109,6 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
         {!section && open.length === 0 && <p className="state">No open tasks in this project.</p>}
         <span className="composer" aria-disabled="true"><Plus />Add task</span>
       </>}
-    </section>)}</div>
+    </section>)}</div>}
   </div>;
 }

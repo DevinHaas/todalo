@@ -53,7 +53,8 @@ describe("sections", () => {
 });
 
 describe("one task's organization through updateTask", () => {
-  const edit = (id: string, change: Record<string, unknown>) => updateTask("alice", { id, ...change }, { seenUpdatedAt: SEEN });
+  // The copy the editor last saw: a cascaded move ($onUpdate) also changes a sub-task's updatedAt.
+  const edit = (id: string, change: Record<string, unknown>) => updateTask("alice", { id, ...change }, { seenUpdatedAt: (task(id)?.updatedAt as Date | undefined) ?? SEEN });
 
   it("moves a parent with its sub-tasks and detaches a sub-task moved alone", async () => {
     expect(await edit("parent", { projectId: "home", sectionId: "garden" })).toBe("updated");

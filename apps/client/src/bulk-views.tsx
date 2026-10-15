@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type Announcements, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
@@ -168,22 +168,32 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
 export function SortableTasks({ ids, label, onReorder, children }: {
   ids: string[]; label: (id: string) => string; onReorder: (id: string, overId: string, position: ReorderPosition) => void; children: ReactNode;
 }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const sensors = useDragSensors();
   function end({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;
     const from = ids.indexOf(String(active.id)); const to = ids.indexOf(String(over.id));
     if (from < 0 || to < 0) return;
     onReorder(String(active.id), String(over.id), from < to ? "after" : "before");
   }
+  return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={end} accessibility={{ announcements: dragAnnouncements(label) }}>
+    <SortableContext items={ids} strategy={verticalListSortingStrategy}>{children}</SortableContext>
+  </DndContext>;
+}
+
+/** Shared by lists and the board: 5 px pointer threshold (mouse and touch), keyboard pick-up on the handle. */
+export function useDragSensors() {
+  return useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+}
+
+/** Screen-reader announcements; `label` names a task or a board column by droppable ID. */
+export function dragAnnouncements(label: (id: string) => string): Announcements {
   const name = (id: string | number) => label(String(id));
-  return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={end} accessibility={{ announcements: {
+  return {
     onDragStart: ({ active }) => `Picked up ${name(active.id)}.`,
     onDragOver: ({ active, over }) => over ? `${name(active.id)} is over ${name(over.id)}.` : `${name(active.id)} is no longer over a task.`,
     onDragEnd: ({ active, over }) => over ? `${name(active.id)} was dropped at ${name(over.id)}.` : `${name(active.id)} was dropped.`,
     onDragCancel: ({ active }) => `Moving ${name(active.id)} was cancelled.`,
-  } }}>
-    <SortableContext items={ids} strategy={verticalListSortingStrategy}>{children}</SortableContext>
-  </DndContext>;
+  };
 }
 
 /** A row inside SortableTasks: the grip handle starts drags; the row itself keeps its taps and links. */

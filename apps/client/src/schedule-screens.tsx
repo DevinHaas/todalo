@@ -11,6 +11,7 @@ import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type ScheduleSlo
 import { labels, startOfDay } from "./schedule";
 import type { TaskDto } from "./tasks";
 import { useCalendarEvents } from "./calendar-screens";
+import { BoardScreen } from "./board-screens";
 
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
 function useSchedule(account: Account, tasks: TaskDto[]) {
@@ -43,6 +44,15 @@ function useSchedule(account: Account, tasks: TaskDto[]) {
   return { writes, slots, overlay, now };
 }
 
+/** A project's Calendar layout (legacy ViewSwitcher default CalendarView, ticket 17). */
+export function ProjectCalendar({ account, tasks }: { account: Account; tasks: TaskDto[] }) {
+  const { slots, overlay, writes, now } = useSchedule(account, tasks);
+  const events = useCalendarEvents(account.user.id);
+  // ponytail: legacy slot clicks created the task in this project; the client cannot create
+  // project tasks yet (the project "Add task" is still inert), so slots stay inert here until it can.
+  return <>{writes.error && <p role="alert" className="form-error">{writes.error}</p>}<CalendarView tasks={tasks} events={events} slots={{ ...slots, slot() {} }} now={now} />{overlay}</>;
+}
+
 /** Today's Calendar layout: the legacy daily schedule. */
 export function TodayCalendar({ account, tasks }: { account: Account; tasks: TaskDto[] }) {
   const { slots, overlay, writes, now } = useSchedule(account, tasks);
@@ -64,7 +74,9 @@ export function UpcomingScreen({ account }: { account: Account }) {
   else body = <>
     {query.status === "error" && <Failure error={query.error} onRetry={() => void query.refetch()} />}
     {writes.error && <p role="alert" className="form-error">{writes.error}</p>}
-    {layout === "calendar" ? <CalendarView tasks={tasks} events={events} slots={slots} now={now} /> : <UpcomingList tasks={tasks} events={events} slots={slots} composer={composer} now={now} />}
+    {layout === "board" ? <BoardScreen account={account} tasks={tasks} />
+      : layout === "calendar" ? <CalendarView tasks={tasks} events={events} slots={slots} now={now} />
+      : <UpcomingList tasks={tasks} events={events} slots={slots} composer={composer} now={now} />}
   </>;
   return <div><h1 className="page-title upcoming-title">Upcoming</h1>{body}{overlay}</div>;
 }

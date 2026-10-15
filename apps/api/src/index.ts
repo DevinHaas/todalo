@@ -42,7 +42,7 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   // A missing or foreign task or destination is the route's 404.
   move: (userId, ids, destination) => organization.moveTasks(userId, ids, destination)
     .then(() => true, (error: unknown) => { if (error instanceof TaskOrganizationError) return false; throw error; }),
-  reorder: async (userId, id, anchorId, position) => { const result = await bulk.reorderTask(userId, id, anchorId, position); return result === "invalid" ? result : result === "reordered"; },
+  reorder: async (userId, id, move) => { const result = await bulk.reorderTask(userId, id, move); return result === "invalid" ? result : result === "reordered"; },
 })).use(createProjectRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

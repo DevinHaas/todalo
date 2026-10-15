@@ -446,7 +446,7 @@ removed after an account response returns 401.
   transaction): metadata (fields + label replacement), move (move, detach, order) and
   reorder. Complete/clear-date/delete keep legacy per-task calendar effects.
 - **Order:** every task read sorts by `manualOrder` (`sortOrder`, `createdAt`, `id`,
-  `today.ts`). `reorderTask(id, anchorId, "before" | "after")` places a task next to
+  `today.ts`). `reorderTask(id, { anchorId, position: "before" | "after" })` places a task next to
   another of the same project (or Inbox) *relative to the current server order* and
   renumbers that whole collection 0…n−1 in one batch: a retry rewrites the same numbers,
   concurrent reorders leave one complete order, and only `sortOrder` changes (no
@@ -460,6 +460,7 @@ removed after an account response returns 401.
   → `{ ids }`; `POST /tasks/:id/reorder` `{ anchorId, position }` → `{ id }`. 1–200 IDs,
   strict bodies. A missing/foreign task or destination anywhere in the selection is one
   `404` with nothing written; a deleted/foreign label or a cross-collection anchor `400`.
+  The reorder body may also (or instead) carry `status` — see ticket 17 below.
   Write auth as every task write.
 - **Native:** `bulk_complete`, `bulk_delete`, `bulk_clear_date`, `bulk_metadata`
   (`change` must set exactly one field), `bulk_move`, `reorder_task` in
@@ -478,13 +479,43 @@ removed after an account response returns 401.
   Bind X to `toggle(focusedId)` and `,` to focusing `[role="toolbar"][aria-label="Selected
   task actions"]`; reuse `BulkActions`/`bulkMutations` for task.complete/delete/clear-date,
   priority 1–4, deadline and labels on a selection, and `moveTasks` (`bulk.move`) for V.
-- **For ticket 17 (boards):** `SortableTasks` (`ids`, `label`, `onReorder(id, overId,
+- **Drag primitives:** `SortableTasks` (`ids`, `label`, `onReorder(id, overId,
   position)`) and `SortableRow` (grip handle; pointer with a 5 px threshold, so touch
   and WKWebView work via pointer events with `touch-action: none`; keyboard Space/arrows
-  with titled announcements) wrap any vertical list. Reorder within a column with
-  `bulk.reorder`; moving across columns stays `organize`/`bulk.move` (sections) — a
-  status board needs a status field on the reorder command (legacy `reorderTask` set
-  `status` and appended to the column).
+  with titled announcements) wrap any vertical list; `useDragSensors` and
+  `dragAnnouncements(label)` are shared with the board.
+
+## Layouts and the status board (ticket 17 conventions)
+
+- **Layouts:** Display (`useDisplay`, shell-wide and in memory like legacy) cycles
+  list → board → calendar with the toolbar arrows (`nextLayout`) or the Display dialog.
+  Today (`TodayView`'s `calendar` slot renders any non-list layout), Upcoming and project
+  pages honour it. A project's Board/Calendar get the tasks Display shows (completed
+  only when switched on, legacy `ProjectView`); Today and Upcoming boards get the whole
+  collection, done included (legacy). `ProjectView` takes `layout(tasks)` in place of the
+  section list; the project calendar's slot clicks are inert until projects can create
+  tasks. Label, filter and search pages still render only their list.
+- **Board:** `StatusBoard` (`board-views.tsx`, pure) — legacy To do / In progress /
+  Done columns (`boardColumns`), cards in `treeOrder`, title opens the editor.
+  `BoardScreen` (`board-screens.tsx`) wires `useReorder(userId).move` and `TaskEditor`.
+  Cards drag only by their grip (pointer or keyboard Space/arrows/Space, Escape
+  cancels; focus returns to the grip after a keyboard move), so swiping a card scrolls
+  the board, which scrolls sideways on phones (`.board`, columns ≥ 14rem).
+- **Writes:** one command, `POST /api/v1/tasks/:id/reorder` with `{ anchorId, position }`,
+  `{ status }` or both (native `reorder_task` with optional `anchorId`/`position`/
+  `status`). `boardDrop(tasks, id, overId)` maps a drop: another column (or a card in
+  it) → `{ status }`, which sets the status and appends to the task's collection
+  (`planReorder` with a null anchor); same column → next to the card, same collection
+  only (Today/Upcoming boards mix projects). The status change and renumbering commit
+  in one batch; a status change moves `updatedAt`, renumbering keeps it
+  (`updatedAt: sql\`${tasks.updatedAt}\`` — drizzle's `$onUpdate` would otherwise bump
+  every row, now modelled by the test boundary). The legacy web `reorderTask` Server
+  Action is untouched. Optimistic on Today and project lists with rollback; settles
+  like every bulk write (now including `["user", id, "search"]`).
+- **For ticket 19 (keyboard):** board cards carry `data-task-id` and live in
+  `[data-task-column="todo" | "in_progress" | "done"]` columns (legacy hooks); move a
+  focused card between columns with `useReorder(userId).move(task, { status })` rather
+  than a new write path. Layout cycling is `display.set({ layout: nextLayout(layout) })`.
 
 ## Isolated manual QA
 

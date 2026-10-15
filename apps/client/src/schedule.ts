@@ -38,11 +38,10 @@ export function eachDay(start: Date, end: Date) {
 export function navigateViewDate(anchor: Date, action: ViewDateAction, today = new Date()) {
   return action === "today" ? startOfDay(today) : addDays(anchor, action === "next-week" ? 7 : -7);
 }
-// ponytail: Board is ticket 17, so the toolbar arrows cycle list ⇄ calendar; add "board" back here then.
-const cycle: Layout[] = ["list", "calendar"];
+/** Legacy lib/view-navigation nextLayout: list → board → calendar, wrapping both ways. */
+const cycle: Layout[] = ["list", "board", "calendar"];
 export function nextLayout(layout: Layout, direction = 1): Layout {
-  const index = Math.max(cycle.indexOf(layout), 0);
-  return cycle[(index + direction + cycle.length) % cycle.length];
+  return cycle[(cycle.indexOf(layout) + direction + cycle.length) % cycle.length];
 }
 
 // Per call, not a cached Intl.DateTimeFormat: that pins the zone it was built in,

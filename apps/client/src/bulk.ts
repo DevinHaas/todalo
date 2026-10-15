@@ -1,12 +1,12 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { MutationOptions, QueryClient } from "@tanstack/react-query";
-import { planReorder, type BulkCompletionDto, type BulkMetadataChange, type ReorderPosition } from "../../../packages/server/src/bulk-input";
+import { planReorder, type BulkCompletionDto, type BulkMetadataChange, type ReorderInput, type ReorderPosition, type TaskStatus } from "../../../packages/server/src/bulk-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { operationId as newOperationId, taskKeys, type TaskDto, type TodayDto } from "./tasks";
+import { operationId as newOperationId, taskKeys, treeOrder, type TaskDto, type TodayDto } from "./tasks";
 import type { ProjectDetailDto } from "./projects";
 import type { Feedback } from "./feedback";
 
-export type { BulkCompletionDto, BulkMetadataChange, ReorderPosition };
+export type { BulkCompletionDto, BulkMetadataChange, ReorderInput, ReorderPosition, TaskStatus };
 export type Destination = { projectId: string | null; sectionId: string | null };
 
 /** Ticket 15 writes. null/false: some selected task (or the destination) is missing or another user's; nothing was written. */
@@ -16,7 +16,7 @@ export interface BulkTransport {
   clearDates(ids: string[]): Promise<boolean>;
   metadata(ids: string[], change: BulkMetadataChange): Promise<boolean>;
   move(ids: string[], destination: Destination): Promise<boolean>;
-  reorder(id: string, anchorId: string, position: ReorderPosition): Promise<boolean>;
+  reorder(id: string, move: ReorderInput): Promise<boolean>;
 }
 
 export function browserBulkTransport(fetcher: typeof fetch = fetch): BulkTransport {
@@ -40,7 +40,7 @@ export function browserBulkTransport(fetcher: typeof fetch = fetch): BulkTranspo
     clearDates: (ids) => done(post("/api/v1/bulk/clear-date", { ids })),
     metadata: (ids, change) => done(post("/api/v1/bulk/metadata", { ids, ...change })),
     move: (ids, destination) => done(post("/api/v1/bulk/move", { ids, ...destination })),
-    reorder: (id, anchorId, position) => done(post(`/api/v1/tasks/${encodeURIComponent(id)}/reorder`, { anchorId, position })),
+    reorder: (id, move) => done(post(`/api/v1/tasks/${encodeURIComponent(id)}/reorder`, move)),
   };
 }
 
@@ -58,7 +58,7 @@ export function bulkTransport(): BulkTransport {
     clearDates: (ids) => done(command("bulk_clear_date", { ids })),
     metadata: (ids, change) => done(command("bulk_metadata", { ids, change })),
     move: (ids, { projectId, sectionId }) => done(command("bulk_move", { ids, projectId, sectionId })),
-    reorder: (id, anchorId, position) => done(command("reorder_task", { id, anchorId, position })),
+    reorder: (id, move) => done(command("reorder_task", { id, ...move })),
   };
 }
 
@@ -75,15 +75,40 @@ export function reorderAnchor(tasks: TaskDto[], id: string, overId: string): str
   return task.parentId === null && over.parentId !== task.id ? over.parentId : null;
 }
 
-/** The project page's tasks after the move, in the server's terms (planReorder). */
-export function reorderTasks(tasks: TaskDto[], id: string, anchorId: string, position: ReorderPosition): TaskDto[] {
+/** Legacy BoardView columns (ticket 17). */
+export const boardColumns = [{ status: "todo", label: "To do" }, { status: "in_progress", label: "In progress" }, { status: "done", label: "Done" }] as const satisfies readonly { status: TaskStatus; label: string }[];
+/** Droppable ID of a column; card IDs are task IDs. */
+export const columnId = (status: TaskStatus) => `column:${status}`;
+
+/**
+ * A board drop as a reorder command. Another column, or a card in it, sets that
+ * status and appends (legacy BoardView); a card in the same column places the
+ * task next to it (same rules as the list, and only within one collection,
+ * since Today and Upcoming boards mix projects). null: nothing to write.
+ */
+export function boardDrop(tasks: TaskDto[], id: string, overId: string): ReorderInput | null {
+  const task = tasks.find(item => item.id === id);
+  const over = tasks.find(item => item.id === overId);
+  const status = over?.status ?? boardColumns.find(column => columnId(column.status) === overId)?.status;
+  if (!task || !status) return null;
+  if (status !== task.status) return { status };
+  if (!over) return null;
+  const column = treeOrder(tasks.filter(item => item.status === status));
+  const anchor = column.find(item => item.id === reorderAnchor(column, id, over.id));
+  if (!anchor || anchor.projectId !== task.projectId) return null;
+  return { anchorId: anchor.id, position: column.indexOf(task) < column.indexOf(over) ? "after" : "before" };
+}
+
+/** The project page's tasks after the move, in the server's terms (planReorder; no anchor appends). */
+export function reorderTasks(tasks: TaskDto[], id: string, anchorId: string | null, position?: ReorderPosition): TaskDto[] {
   const order = planReorder(tasks.map(task => task.id), id, anchorId, position);
   return order ? order.map(taskId => tasks.find(task => task.id === taskId)!) : tasks;
 }
 
 export interface BulkSelection { tasks: TaskDto[] }
 export interface BulkCompletion extends BulkSelection { operationId: string }
-export interface Reorder { task: TaskDto; anchorId: string; position: ReorderPosition }
+/** Next to an anchor and/or into a status board column (no anchor: appended). */
+export type Reorder = { task: TaskDto } & ReorderInput;
 
 // Same retry rule as task writes: only failures that may hide an applied write.
 // Each bulk write is safe to repeat (one tap ID per completion; the others set
@@ -111,6 +136,7 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
     cache.invalidateQueries({ queryKey: [...user, "task"] }),
     cache.invalidateQueries({ queryKey: projects }),
     cache.invalidateQueries({ queryKey: [...user, "metadata"] }),
+    cache.invalidateQueries({ queryKey: [...user, "search"] }),
   ]);
   async function optimistic(change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
     await Promise.all([cache.cancelQueries({ queryKey: taskKeys.today(userId) }), cache.cancelQueries({ queryKey: projects })]);
@@ -177,18 +203,10 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
       onSettled: settle,
     } satisfies MutationOptions<void, Error, BulkSelection & { destination: Destination }>,
     reorder: {
-      mutationFn: async ({ task, anchorId, position }: Reorder) => written(await transport.reorder(task.id, anchorId, position)),
+      mutationFn: async ({ task, ...move }: Reorder) => written(await transport.reorder(task.id, move)),
       retry, retryDelay,
-      onMutate: async ({ task, anchorId, position }: Reorder) => {
-        await cache.cancelQueries({ queryKey: projects });
-        const entries: Snapshot["entries"] = [];
-        for (const [key, data] of cache.getQueriesData<ProjectDetailDto | null>({ queryKey: projects })) {
-          if (!data?.tasks?.some(item => item.id === task.id)) continue;
-          entries.push([key, data]);
-          cache.setQueryData<ProjectDetailDto>(key, { ...data, tasks: reorderTasks(data.tasks, task.id, anchorId, position) });
-        }
-        return { entries };
-      },
+      // Today and every project list: the row moves (to the end for a board column) and takes the status.
+      onMutate: ({ task, anchorId, position, status }: Reorder) => optimistic(tasks => reorderTasks(status ? matching({ tasks: [task] }, { status })(tasks) : tasks, task.id, anchorId ?? null, position)),
       onError: rollback,
       onSettled: settle,
     } satisfies MutationOptions<void, Error, Reorder, Snapshot>,

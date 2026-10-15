@@ -122,10 +122,12 @@ describe("schedule grid", () => {
     expect(isSameDay(slotAt(new Date(2026, 2, 29), 2.5 * 48).start, new Date(2026, 2, 29))).toBe(true);
   });
 
-  it("cycles list and calendar layouts while board waits for ticket 17", () => {
-    expect(nextLayout("list")).toBe("calendar");
+  it("cycles list, board and calendar layouts both ways (legacy nextLayout)", () => {
+    expect(nextLayout("list")).toBe("board");
+    expect(nextLayout("board")).toBe("calendar");
     expect(nextLayout("calendar")).toBe("list");
     expect(nextLayout("list", -1)).toBe("calendar");
+    expect(nextLayout("board", -1)).toBe("list");
   });
 });
 

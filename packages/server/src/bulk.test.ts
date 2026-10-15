@@ -53,27 +53,52 @@ describe("planReorder", () => {
     expect(planReorder(["a", "b"], "a", "a", "after")).toBeNull();
     expect(planReorder(["a", "b"], "a", "x", "after")).toBeNull();
   });
+
+  it("appends without an anchor (status board drop), idempotently", () => {
+    expect(planReorder(["a", "b", "c"], "a", null)).toEqual(["b", "c", "a"]);
+    expect(planReorder(["b", "c", "a"], "a", null)).toEqual(["b", "c", "a"]);
+    expect(planReorder(["a", "b"], "x", null)).toBeNull();
+  });
 });
 
 describe("reorderTask", () => {
   it("renumbers the collection relative to the current order and is safe to retry", async () => {
-    expect(await reorderTask("alice", "d", "a", "after")).toBe("reordered");
+    expect(await reorderTask("alice", "d", { anchorId: "a", position: "after" })).toBe("reordered");
     expect(order("work")).toEqual(["a", "d", "b", "c"]);
-    expect(await reorderTask("alice", "d", "a", "after")).toBe("reordered");
+    expect(await reorderTask("alice", "d", { anchorId: "a", position: "after" })).toBe("reordered");
     expect(order("work")).toEqual(["a", "d", "b", "c"]);
     // Moving another task keeps the earlier move (relative, not a client copy of the list).
-    expect(await reorderTask("alice", "c", "a", "before")).toBe("reordered");
+    expect(await reorderTask("alice", "c", { anchorId: "a", position: "before" })).toBe("reordered");
     expect(order("work")).toEqual(["c", "a", "d", "b"]);
     expect(task("home-1")?.sortOrder).toBe(5);
-    expect(task("d")?.updatedAt).toEqual(SEEN);
+    // Renumbering is not an edit: every row keeps updatedAt despite $onUpdate.
+    expect(boundary.rows.tasks.filter(item => item.projectId === "work").map(item => item.updatedAt)).toEqual([SEEN, SEEN, SEEN, SEEN]);
+  });
+
+  it("sets a status board column and appends to the collection in one batch, safe to retry", async () => {
+    expect(await reorderTask("alice", "a", { status: "in_progress" })).toBe("reordered");
+    expect(order("work")).toEqual(["b", "c", "d", "a"]);
+    expect(task("a")).toMatchObject({ status: "in_progress", sortOrder: 3 });
+    // A status change is an edit (open editors refuse stale copies); neighbours are untouched.
+    expect(task("a")?.updatedAt).not.toEqual(SEEN);
+    expect(task("b")?.updatedAt).toEqual(SEEN);
+    const after = snapshot();
+    expect(await reorderTask("alice", "a", { status: "in_progress" })).toBe("reordered");
+    expect(boundary.rows).toEqual(after);
+    // With an anchor the status and place change together.
+    expect(await reorderTask("alice", "c", { anchorId: "b", position: "before", status: "done" })).toBe("reordered");
+    expect(order("work")).toEqual(["c", "b", "d", "a"]);
+    expect(task("c")?.status).toBe("done");
   });
 
   it("writes nothing for a missing or foreign task or anchor, or across collections", async () => {
     const before = snapshot();
-    expect(await reorderTask("alice", "a", "bob-task", "after")).toBe("missing");
-    expect(await reorderTask("alice", "bob-task", "inbox", "after")).toBe("missing");
-    expect(await reorderTask("alice", "a", "gone", "before")).toBe("missing");
-    expect(await reorderTask("alice", "a", "home-1", "before")).toBe("invalid");
+    expect(await reorderTask("alice", "a", { anchorId: "bob-task", position: "after" })).toBe("missing");
+    expect(await reorderTask("alice", "bob-task", { anchorId: "inbox", position: "after" })).toBe("missing");
+    expect(await reorderTask("alice", "a", { anchorId: "gone", position: "before" })).toBe("missing");
+    expect(await reorderTask("alice", "a", { anchorId: "home-1", position: "before", status: "done" })).toBe("invalid");
+    expect(await reorderTask("alice", "bob-task", { status: "done" })).toBe("missing");
+    expect(await reorderTask("alice", "a", { anchorId: "gone", position: "before", status: "done" })).toBe("missing");
     expect(boundary.rows).toEqual(before);
   });
 });

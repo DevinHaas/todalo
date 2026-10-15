@@ -34,7 +34,7 @@ export function LayoutSwitcher() {
 }
 
 const stubRows = [["Sort", [["Grouping", "None"], ["Sorting", "Smart"]]], ["Filter", [["Assignee", "Me and unassigned"], ["Deadline", "All"], ["Priority", "All"], ["Label", "All"]]]] as const;
-/** Legacy Display dialog. Board is ticket 17; Sort/Filter rows were single-option stubs in legacy too. */
+/** Legacy Display dialog. Sort/Filter rows were single-option stubs in legacy too. */
 export function DisplayMenu() {
   const display = useDisplay();
   const [open, setOpen] = useState(false);
@@ -46,7 +46,7 @@ export function DisplayMenu() {
         <div className="display-heading"><h2 id="display-title" className="dialog-title">Layout</h2><HelpCircle aria-hidden="true" /><button type="button" className="icon-button" aria-label="Close" autoFocus onClick={close}><X /></button></div>
         <div className="segmented" role="group" aria-label="Layout">
           <button type="button" aria-pressed={display.layout === "list"} onClick={() => display.set({ layout: "list" })}><List />List</button>
-          <button type="button" aria-disabled="true"><LayoutGrid />Board</button>
+          <button type="button" aria-pressed={display.layout === "board"} onClick={() => display.set({ layout: "board" })}><LayoutGrid />Board</button>
           <button type="button" aria-pressed={display.layout === "calendar"} onClick={() => display.set({ layout: "calendar" })}><CalendarDays />Calendar</button>
         </div>
         {display.layout === "calendar" && <div className="segmented" role="group" aria-label="Calendar range">

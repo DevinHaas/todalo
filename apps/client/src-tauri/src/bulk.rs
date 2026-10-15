@@ -158,25 +158,47 @@ pub async fn bulk_move(
         .await?)
 }
 
-fn reorder_body(anchor_id: &str, position: &str) -> Result<Value, &'static str> {
-    if !valid_id(anchor_id) || !matches!(position, "before" | "after") {
-        return Err(INVALID);
+/// An anchor with its position, a status board column (ticket 17), or both.
+fn reorder_body(
+    anchor_id: Option<&str>,
+    position: Option<&str>,
+    status: Option<&str>,
+) -> Result<Value, &'static str> {
+    let mut body = json!({});
+    match (anchor_id, position) {
+        (Some(anchor_id), Some(position))
+            if valid_id(anchor_id) && matches!(position, "before" | "after") =>
+        {
+            body["anchorId"] = json!(anchor_id);
+            body["position"] = json!(position);
+        }
+        (None, None) if status.is_some() => {}
+        _ => return Err(INVALID),
     }
-    Ok(json!({ "anchorId": anchor_id, "position": position }))
+    match status {
+        Some(status) if matches!(status, "todo" | "in_progress" | "done") => {
+            body["status"] = json!(status)
+        }
+        Some(_) => return Err(INVALID),
+        None => {}
+    }
+    Ok(body)
 }
 
-/// Places a task directly before or after another task of the same collection.
+/// Places a task next to another task of the same collection and/or sets its
+/// status; a status alone appends the task to its collection.
 #[tauri::command]
 pub async fn reorder_task(
     state: tauri::State<'_, NativeAuth>,
     id: String,
-    anchor_id: String,
-    position: String,
+    anchor_id: Option<String>,
+    position: Option<String>,
+    status: Option<String>,
 ) -> Result<Option<Value>, String> {
     if !valid_id(&id) {
         return Ok(None);
     }
-    let body = reorder_body(&anchor_id, &position)?;
+    let body = reorder_body(anchor_id.as_deref(), position.as_deref(), status.as_deref())?;
     Ok(state
         .write(
             Method::POST,
@@ -280,10 +302,26 @@ mod tests {
         assert_eq!(move_body(&selection, &None, &Some("doing".into())), INVALID);
         assert_eq!(move_body(&selection, &Some("a/b".into()), &None), INVALID);
         assert_eq!(
-            reorder_body("b", "after").unwrap(),
+            reorder_body(Some("b"), Some("after"), None).unwrap(),
             json!({ "anchorId": "b", "position": "after" })
         );
-        assert_eq!(reorder_body("b", "middle"), INVALID);
-        assert_eq!(reorder_body("../b", "before"), INVALID);
+        assert_eq!(
+            reorder_body(None, None, Some("in_progress")).unwrap(),
+            json!({ "status": "in_progress" })
+        );
+        assert_eq!(
+            reorder_body(Some("b"), Some("before"), Some("done")).unwrap(),
+            json!({ "anchorId": "b", "position": "before", "status": "done" })
+        );
+        for (anchor, position, status) in [
+            (Some("b"), Some("middle"), None),
+            (Some("../b"), Some("before"), None),
+            (None, None, None),
+            (Some("b"), None, Some("done")),
+            (None, Some("after"), Some("done")),
+            (None, None, Some("archived")),
+        ] {
+            assert_eq!(reorder_body(anchor, position, status), INVALID);
+        }
     }
 }
