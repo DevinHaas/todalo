@@ -129,6 +129,48 @@ removed after an account response returns 401.
   (`todalo.haptics`, on by default) and lives on the Account screen. Reduced
   motion does not silence it; iOS applies its own System Haptics setting.
 
+## Task edits and recurrence (ticket 11 conventions)
+
+- **Shared operations:** the legacy edit is now `updateTask(userId, input, { seenUpdatedAt })`
+  in `packages/server/src/tasks.ts` (fields, labels, organization, parent, calendar
+  push when `dueDate` is in the edit); the Server Action only adds `revalidatePath`.
+  Pure decisions live in `packages/server/src/task-rules.ts` (`planCompletion`,
+  `editConflicts`) so the QA API runs the same rules. Tickets 13/14 should extend
+  the API schema and call `updateTask`, not write their own update.
+- **API:** `PATCH /api/v1/tasks/:id` with `taskDetailsInput` (`task-input.ts`:
+  `updatedAt`, `title`, `description`, `priority`, `deadline`, `dueDate`,
+  `dueDateEnd`, `recurrence`; strict, every field sent as the legacy dialog did)
+  → `{ task }`. `POST …/complete` takes `{ occurrence, operationId }`. A stale
+  copy answers `412 { code: "TASK_CHANGED" }` (409 stays `TASK_CONFLICT` for
+  create). `TaskDto` now carries `recurrence` (`until` ISO or null) and `updatedAt`.
+- **Recurrence (ADR 0001):** `nextOccurrenceOnCompletion` unchanged, in the
+  server process's zone (both hosts must run the same `TZ`; legacy runs UTC).
+  `dueDateEnd` is not moved on advance (legacy). Completion writes are a
+  compare-and-set on `status`, `dueDate` and `lastCompletionId`, so concurrent
+  taps advance once. `tasks.last_completion_id` (migration `0010`) stores the
+  tap's operation ID: a retry after the task moved on is a no-op, a tap on a date
+  another device changed is `TASK_CHANGED`. Without an operation ID the ticket 5
+  silent no-op remains.
+- **Edits:** refused as `TASK_CHANGED` when `updatedAt` differs, unless the task
+  already holds every requested value (that is how a retried edit is recognised,
+  so edits are retried like creates). The editor keeps the draft and offers
+  "Load current details"; a pristine editor follows newer copies.
+- **Native:** `update_task { id, details }` (typed fields only, bounded in Rust)
+  and `complete_task { id, occurrence, operationId }` in `src-tauri/src/writes.rs`;
+  412 maps to the `TASK_CHANGED` copy in `src/errors.ts`.
+- **Client:** `taskMutations.complete` takes `{ task, operationId }` (one ID per
+  tap via `operationId()`); `taskMutations.update` is not optimistic. Every task
+  write now also invalidates `["user", userId, "project"]`. `TaskEditor`
+  (`src/views.tsx`) is the legacy edit dialog without labels/link/attachments; it
+  opens on the task page as legacy did. Date fields use native inputs read and
+  written in the viewer's zone (`dateInputValue`, `timeInputValue`, `localInstant`).
+- **Software keyboard:** `src/software-keyboard.ts` mirrors the visual viewport
+  into `--keyboard-inset` (page bottom padding, fixed dialogs end above the
+  keyboard and scroll), scrolls the focused field into view when the keyboard
+  opens, and an opaque safe-area strip plus a sticky phone toolbar keep content
+  from running under the status bar. Give any form that can unmount while focused
+  `ref={releaseFocus}` (stops the stale iOS autocorrect bubble). Use 16px inputs.
+
 ## Projects and writes (ticket 8 conventions)
 
 - **API:** `apps/api/src/project-routes.ts` — `GET /api/v1/projects` →

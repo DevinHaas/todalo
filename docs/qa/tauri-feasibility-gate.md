@@ -69,6 +69,8 @@ synthetic item removed). The CSP fix applies to the Mac webview too (same
    status bar/Dynamic Island; once visible, typing and submitting worked. A stale
    autocorrect bubble also stayed on screen after a project form unmounted. These
    are layout polish, not auth/storage/audio; track with ticket 11 (task editing).
+   Ticket 11 added the shell accommodation (`src/software-keyboard.ts`); its check
+   with the software keyboard is still open — see `tauri-task-editing.md`.
 3. **OAuth cold return needs one extra tap (accepted, see decision 3).** Reproduced
    with tao 0.37.1: the launch URL is dropped; "Return to todalo" on the still-open
    Safari page completes sign-in.

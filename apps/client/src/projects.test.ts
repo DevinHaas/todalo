@@ -10,7 +10,7 @@ import { TodayView } from "./views";
 
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
   id, title: id, description: null, status: "todo", priority: 4, projectId: "work", parentId: null,
-  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], ...extra,
+  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 });
 const work = { id: "work", name: "Work", color: null };
 const render = (node: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(MemoryRouter, null, node));

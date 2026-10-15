@@ -150,6 +150,9 @@ export const tasks = pgTable(
     recurrence: jsonb("recurrence").$type<Recurrence>(),
     googleCalendarEventId: text("google_calendar_event_id"),
     completedAt: timestamp("completed_at"),
+    // Operation ID of the last applied completion, so a retried completion of a
+    // recurring task is recognised after the task has moved to its next date.
+    lastCompletionId: text("last_completion_id"),
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

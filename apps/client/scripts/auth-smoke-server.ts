@@ -6,6 +6,7 @@ import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-googl
 import { createTaskRoutes } from "../../api/src/task-routes";
 import { qaAttachmentRoutes, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
+import { editConflicts, planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
 import { createApi } from "../../api/src/app";
 import { connectSpeech } from "../../api/src/speech";
 import type { SpeechCallbacks, SpeechConnection } from "../../api/src/elevenlabs";
@@ -27,9 +28,11 @@ const { user: other } = await auth.api.signUpEmail({ body: { name: "Other User",
 
 // Fixture tasks mirror docs/qa/tauri-baseline-fixture.ts, relative to the service's start day.
 const day = (offset: number, hours = 0, minutes = 0) => { const date = new Date(); date.setDate(date.getDate() + offset); date.setHours(hours, minutes, 0, 0); return date; };
-const task = (id: string, userId: string, title: string, extra: Partial<TaskRecord> = {}) => ({
+type QaTask = TaskRecord & { userId: string; recurrence: CompletionTarget["recurrence"]; lastCompletionId: string | null; updatedAt: Date };
+const task = (id: string, userId: string, title: string, extra: Partial<QaTask> = {}): QaTask => ({
   id, userId, title, description: null, status: "todo" as const, priority: 4, projectId: null, parentId: null,
-  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [] as string[], ...extra,
+  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [] as string[],
+  recurrence: null, lastCompletionId: null, updatedAt: new Date(), ...extra,
 });
 const tasks = [
   task("overdue-review", user.id, "Review the migration checklist", { dueDate: day(-1, 12), priority: 2, description: "Walk through every inventory row before the cutover." }),
@@ -37,9 +40,10 @@ const tasks = [
   task("future", user.id, "Future fixture task", { dueDate: day(2), projectId: "qa-work" }),
   task("undated", user.id, "Undated fixture task", { projectId: "qa-work" }),
   task("completed", user.id, "Completed fixture task", { dueDate: day(0, 9), status: "done", completedAt: day(0, 9) }),
+  task("daily-standup", user.id, "Daily standup notes", { dueDate: day(0, 9, 30), recurrence: { n: 1, unit: "day", basedOn: "scheduled" } }),
   task("other-private", other.id, "Another user's private task", { dueDate: day(0, 10), projectId: "qa-other" }),
 ];
-if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 5);
+if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 6);
 const tomorrow = day(1);
 
 const projects = [
@@ -70,7 +74,7 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
   task: async (userId, id) => tasks.find(item => item.userId === userId && item.id === id) ?? null,
   allowedOrigins: new Set([clientOrigin]),
   // Memory copy of @todalo/server/tasks operation-ID rules (no calendar). With
-  // QA_AMBIGUOUS_WRITES set, each first create/complete is applied and then
+  // QA_AMBIGUOUS_WRITES set, each first create/complete/edit is applied and then
   // answered with a 500, so QA can watch the client retry without duplicates.
   create: async (userId, input) => {
     const existing = tasks.find(item => item.id === input.id);
@@ -80,13 +84,29 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
     ambiguous(`create:${input.id}`);
     return { task: created, created: true };
   },
-  complete: async (userId, id, occurrence) => {
+  // Same pure rules as @todalo/server/tasks (task-rules.ts): recurrence, replays, stale taps/edits.
+  complete: async (userId, id, request) => {
     const owned = tasks.find(item => item.userId === userId && item.id === id);
     if (!owned) return null;
-    if (owned.status !== "done" && (occurrence === undefined || (owned.dueDate?.getTime() ?? null) === (occurrence?.getTime() ?? null))) {
-      Object.assign(owned, { status: "done", completedAt: new Date() });
+    const plan = planCompletion({ ...owned, dueDate: owned.dueDate ? new Date(owned.dueDate) : null }, request);
+    if (plan.kind === "changed") return "changed";
+    if (plan.kind === "write") {
+      Object.assign(owned, plan.patch, { updatedAt: new Date() });
       ambiguous(`complete:${id}`);
     }
+    return owned;
+  },
+  update: async (userId, id, { updatedAt, ...details }) => {
+    const owned = tasks.find(item => item.userId === userId && item.id === id);
+    if (!owned) return null;
+    const date = (value: string | null | undefined) => value ? new Date(value) : null;
+    const changes = {
+      ...details, deadline: date(details.deadline), dueDate: date(details.dueDate), dueDateEnd: date(details.dueDateEnd),
+      recurrence: details.recurrence && { ...details.recurrence, until: date(details.recurrence.until) },
+    };
+    if (editConflicts(owned, changes, new Date(updatedAt))) return "changed";
+    Object.assign(owned, changes, { updatedAt: new Date() });
+    ambiguous(`update:${id}`);
     return owned;
   },
   remove: async (userId, id) => {

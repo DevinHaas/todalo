@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { treeOrder } from "./tasks";
 import { Failure, TaskRow, type ReadState } from "./views";
 import type { ProjectDetailDto, ProjectDto } from "./projects";
+import { releaseFocus } from "./software-keyboard";
 
 // Pure screen views (legacy ProjectDirectory / ProjectView): no runtime imports.
 type Write = { pending: boolean; error: string | null };
@@ -59,7 +60,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     </div>
     <p className="page-count">{open.length} tasks</p>
     {menuOpen && <section className="project-menu" aria-label="Project menu">
-      <form className="inline-form" onSubmit={rename}>
+      <form ref={releaseFocus} className="inline-form" onSubmit={rename}>
         <input aria-label="Project name" value={name ?? project.name} onChange={event => setName(event.target.value)} required maxLength={200} />
         <button type="submit" className="button" disabled={write.pending || !(name ?? project.name).trim()}>Save project name</button>
       </form>

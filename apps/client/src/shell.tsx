@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import type { Account } from "./session";
 import { projectReads, reads, session, tasks } from "./runtime";
-import { taskMutations, type TaskDto } from "./tasks";
-import { Composer, TaskView, TodayView, type RowActions } from "./views";
+import { operationId, taskMutations, type TaskDto } from "./tasks";
+import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
 import { haptics, hapticsSupported, nativeFeedback } from "./feedback";
 import { TaskAttachmentsScreen } from "./attachment-screens";
@@ -26,8 +26,9 @@ function useTaskWrites(userId: string) {
   const create = useMutation(writes.create);
   const complete = useMutation(writes.complete);
   const remove = useMutation(writes.remove);
-  const actions: RowActions = { complete: (task) => complete.mutate(task), remove: (task) => remove.mutate(task) };
-  return { create, complete, remove, actions, error: (complete.error ?? remove.error)?.message ?? null };
+  const update = useMutation(writes.update);
+  const actions: RowActions = { complete: (task) => complete.mutate({ task, operationId: operationId() }), remove: (task) => remove.mutate(task) };
+  return { create, complete, remove, update, actions, error: (complete.error ?? remove.error)?.message ?? null };
 }
 
 const startOfToday = () => { const day = new Date(); day.setHours(0, 0, 0, 0); return day.toISOString(); };
@@ -113,11 +114,17 @@ export function TaskScreen({ account }: { account: Account }) {
   const navigate = useNavigate();
   const query = useQuery(reads.task(account.user.id, id));
   const writes = useTaskWrites(account.user.id);
+  // Legacy TaskDetailPage opens the edit dialog on arrival; closing it keeps the page.
+  const [closedFor, setClosedFor] = useState<string | null>(null);
   const actions: RowActions = {
     complete: writes.actions.complete,
     remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
   };
-  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error} attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
+  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} onClose={() => setClosedFor(id)}
+    onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }} />;
+  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
+    onEdit={() => setClosedFor(null)} editor={editor}
+    attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
 }
 
 export function AccountScreen({ account, error }: { account: Account; error: string | null }) {

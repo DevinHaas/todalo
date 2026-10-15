@@ -6,19 +6,25 @@ import { MutationObserver, QueryClient } from "@tanstack/react-query";
 import { AccountTransportError } from "./errors";
 import {
   browserTaskTransport, dueLabel, operationId, taskKeys, taskMutations, todayHeading, todaySections,
-  type NewTask, type TaskDto, type TaskTransport, type TodayDto,
+  type NewTask, type TaskDetails, type TaskDto, type TaskTransport, type TodayDto,
 } from "./tasks";
-import { Composer, TaskView, TodayView } from "./views";
+import { Composer, TaskEditor, TaskView, TodayView } from "./views";
+import { dateInputValue, localInstant, repeatChoice, repeatLabel, timeInputValue } from "./tasks";
 
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
   id, title: id, description: null, status: "todo", priority: 4, projectId: null, parentId: null,
-  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], ...extra,
+  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 });
 const now = new Date(2026, 9, 4, 10);
 const respond = (status: number, body?: unknown) => (async () => new Response(body === undefined ? null : JSON.stringify(body), { status })) as unknown as typeof fetch;
 const render = (node: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(MemoryRouter, null, node));
 const noop = () => {};
+const TAP = "0b6f2f8e-1c1a-4f4e-8a55-3a3d6e1c2b10";
+const details: TaskDetails = {
+  updatedAt: "2026-10-04T08:00:00.000Z", title: "Plan", description: "", priority: 2, deadline: null,
+  dueDate: local(5, 9), dueDateEnd: local(5, 10), recurrence: { n: 1, unit: "week", basedOn: "scheduled" },
+};
 
 describe("Today read model", () => {
   it("groups open tasks into overdue and today in the viewer's local day, keeping subtasks under parents", () => {
@@ -95,7 +101,7 @@ describe("Today and task screens", () => {
 });
 
 describe("browser task writes", () => {
-  it("sends the basic task and completion occurrence, and maps write failures", async () => {
+  it("sends the basic task, the completion occurrence and tap ID, and edits; maps write failures", async () => {
     const sent: { method: string; path: string; body: unknown }[] = [];
     const fetcher = (async (path: string, init: RequestInit) => {
       sent.push({ method: init.method!, path, body: init.body ? JSON.parse(init.body as string) : undefined });
@@ -104,15 +110,20 @@ describe("browser task writes", () => {
     const transport = browserTaskTransport(fetcher);
     const input: NewTask = { id: operationId(), title: "Plan", dueDate: local(4) };
     expect((await transport.create(input)).id).toBe("t");
-    expect((await transport.complete("a/b", local(4)))?.id).toBe("t");
+    expect((await transport.complete("a/b", local(4), TAP))?.id).toBe("t");
+    expect((await transport.update("a/b", details))?.id).toBe("t");
     expect(await transport.remove("t")).toBe(true);
     expect(sent).toEqual([
       { method: "POST", path: "/api/v1/tasks", body: input },
-      { method: "POST", path: "/api/v1/tasks/a%2Fb/complete", body: { occurrence: local(4) } },
+      { method: "POST", path: "/api/v1/tasks/a%2Fb/complete", body: { occurrence: local(4), operationId: TAP } },
+      { method: "PATCH", path: "/api/v1/tasks/a%2Fb", body: details },
       { method: "DELETE", path: "/api/v1/tasks/t", body: undefined },
     ]);
+    await expect(browserTaskTransport(respond(412, { code: "TASK_CHANGED" })).update("t", details)).rejects.toMatchObject({ code: "TASK_CHANGED" });
+    await expect(browserTaskTransport(respond(412, { code: "TASK_CHANGED" })).complete("t", null, TAP)).rejects.toMatchObject({ code: "TASK_CHANGED" });
+    expect(await browserTaskTransport(respond(404, { code: "NOT_FOUND" })).update("gone", details)).toBeNull();
     expect(await browserTaskTransport(respond(404, { code: "NOT_FOUND" })).remove("gone")).toBe(false);
-    expect(await browserTaskTransport(respond(404, { code: "NOT_FOUND" })).complete("gone", null)).toBeNull();
+    expect(await browserTaskTransport(respond(404, { code: "NOT_FOUND" })).complete("gone", null, TAP)).toBeNull();
     await expect(browserTaskTransport(respond(400)).create(input)).rejects.toMatchObject({ code: "INVALID_INPUT" });
     await expect(browserTaskTransport(respond(500)).create(input)).rejects.toMatchObject({ code: "SAVE_FAILED" });
     await expect(browserTaskTransport(respond(401)).remove("t")).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -167,7 +178,7 @@ describe("task mutations", () => {
     const occurrences: (string | null)[] = [];
     const { cache, writes } = setup({ complete: (_id, occurrence) => { occurrences.push(occurrence); return new Promise((_, reject) => { release = reject; }); } });
     const before = cache.getQueryData<TodayDto>(today)!;
-    const pending = new MutationObserver(cache, writes.complete).mutate(before.tasks[0]);
+    const pending = new MutationObserver(cache, writes.complete).mutate({ task: before.tasks[0], operationId: TAP });
     await Promise.resolve(); await Promise.resolve();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(cache.getQueryData<TodayDto>(today)).toMatchObject({ openCount: 1, tasks: [{ id: "a", status: "done" }, { id: "b", status: "todo" }] });
@@ -176,6 +187,39 @@ describe("task mutations", () => {
     await expect(pending).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect(cache.getQueryData(today)).toEqual(before);
     expect(occurrences).toHaveLength(1);
+  });
+
+  it("retries a completion with the same tap ID, and rolls back a stale tap without retrying it", async () => {
+    const taps: string[] = [];
+    const { cache, writes } = setup({ complete: async (_id, _occurrence, operation) => { taps.push(operation); if (taps.length === 1) throw new AccountTransportError("CONNECTION_FAILED"); return task("a", { dueDate: local(5) }); } });
+    await new MutationObserver(cache, { ...writes.complete, retryDelay: 0 }).mutate({ task: task("a", { dueDate: local(4) }), operationId: TAP });
+    expect(taps).toEqual([TAP, TAP]);
+    const stale = setup({ complete: async () => { taps.push("stale"); throw new AccountTransportError("TASK_CHANGED"); } });
+    const before = stale.cache.getQueryData(today);
+    await expect(new MutationObserver(stale.cache, stale.writes.complete).mutate({ task: task("a", { dueDate: local(4) }), operationId: TAP })).rejects.toMatchObject({ code: "TASK_CHANGED" });
+    expect(taps.filter(tap => tap === "stale")).toHaveLength(1);
+    expect(stale.cache.getQueryData(today)).toEqual(before);
+    expect(stale.cache.getQueryState(today)?.isInvalidated).toBe(true);
+  });
+
+  it("saves an edit, retries a lost response with the same body, and refreshes the task, Today and project lists", async () => {
+    const bodies: TaskDetails[] = [];
+    const { cache, writes } = setup({ update: async (_id, body) => { bodies.push(body); if (bodies.length === 1) throw new AccountTransportError("SAVE_FAILED"); return task("a", { title: body.title, updatedAt: "2026-10-04T09:00:00.000Z" }); } });
+    cache.setQueryData(["user", "alice", "project", "p1"], { project: {}, tasks: [] });
+    const saved = await new MutationObserver(cache, { ...writes.update, retryDelay: 0 }).mutate({ id: "a", details });
+    expect(bodies).toEqual([details, details]);
+    expect(cache.getQueryData(taskKeys.task("alice", "a"))).toEqual(saved);
+    expect(cache.getQueryState(today)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(["user", "alice", "project", "p1"])?.isInvalidated).toBe(true);
+  });
+
+  it("does not retry a stale or missing edit", async () => {
+    let calls = 0;
+    const changed = setup({ update: async () => { calls += 1; throw new AccountTransportError("TASK_CHANGED"); } });
+    await expect(new MutationObserver(changed.cache, changed.writes.update).mutate({ id: "a", details })).rejects.toMatchObject({ code: "TASK_CHANGED" });
+    const missing = setup({ update: async () => { calls += 1; return null; } });
+    await expect(new MutationObserver(missing.cache, missing.writes.update).mutate({ id: "a", details })).rejects.toMatchObject({ code: "TASK_NOT_FOUND" });
+    expect(calls).toBe(2);
   });
 
   it("deletes optimistically and treats a task already gone after a retry as deleted", async () => {
@@ -210,5 +254,46 @@ describe("task write controls", () => {
     expect(todayForm).toContain('aria-label="Description"');
     expect(todayForm).toContain("Today");
     expect(render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }))).toContain("Inbox");
+  });
+});
+
+describe("task editor", () => {
+  it("reads and writes dates in the viewer's zone, keeping all-day tasks untimed", () => {
+    expect(dateInputValue(local(31, 23, 30))).toBe("2026-10-31");
+    expect(timeInputValue(local(4))).toBe("");
+    expect(timeInputValue(local(4, 9, 5))).toBe("09:05");
+    expect(timeInputValue(local(4), false)).toBe("00:00");
+    expect(localInstant("2026-10-04")).toBe(local(4));
+    expect(localInstant("2026-10-04", "14:30")).toBe(local(4, 14, 30));
+    expect(dateInputValue(localInstant("2026-03-29"))).toBe("2026-03-29");
+  });
+
+  it("maps recurrences to the legacy presets and describes anything else", () => {
+    expect(repeatChoice(null)).toBe("none");
+    expect(repeatChoice({ n: 1, unit: "week", basedOn: "scheduled", until: null })).toBe("weekly");
+    expect(repeatChoice({ n: 1, unit: "day", basedOn: "completed", until: null })).toBe("custom");
+    expect(repeatChoice({ n: 1, unit: "month", basedOn: "scheduled", until: local(31) })).toBe("custom");
+    expect(repeatLabel({ n: 3, unit: "day", basedOn: "completed", until: local(31) })).toBe("Every 3 days after completion until 31 Oct 2026");
+    expect(repeatLabel({ n: 1, unit: "year", basedOn: "scheduled", until: null })).toBe("Every year");
+  });
+
+  it("opens with the task's details, schedule and a kept custom repeat", () => {
+    const html = render(createElement(TaskEditor, {
+      task: task("t", { title: "Plan", description: "Notes", priority: 2, dueDate: local(5, 9), dueDateEnd: local(5, 10, 30), deadline: local(9), recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: null }, updatedAt: "v1" }),
+      onSave: async () => {}, onClose: noop,
+    }));
+    for (const fragment of ['role="dialog"', 'value="Plan"', ">Notes</textarea>", 'value="2026-10-05"', 'value="09:00"', 'value="10:30"', 'value="2026-10-09"', ">Every 2 weeks</option>", ">Does not repeat</option>", "Priority 1 — highest", ">Save</button>"]) {
+      expect(html).toContain(fragment);
+    }
+    const allDay = render(createElement(TaskEditor, { task: task("t", { recurrence: { n: 1, unit: "day", basedOn: "scheduled", until: null } }), onSave: async () => {}, onClose: noop }));
+    expect(allDay).not.toContain('aria-label="Start time"');
+    expect(allDay).not.toContain("Every day</option>");
+  });
+
+  it("offers editing on the task page and shows the repeat rule", () => {
+    const html = render(createElement(TaskView, { state: { status: "success", data: task("t", { dueDate: local(5), recurrence: { n: 1, unit: "month", basedOn: "scheduled", until: null } }), error: null }, onRetry: noop, onEdit: noop }));
+    expect(html).toContain("Edit task details");
+    expect(html).toContain("Due 5 Oct · Every month");
+    expect(render(createElement(TaskView, { state: { status: "success", data: task("t"), error: null }, onRetry: noop }))).not.toContain("Edit task details");
   });
 });

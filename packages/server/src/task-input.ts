@@ -37,5 +37,36 @@ export const basicTaskInput = z.object({
 });
 export type BasicTaskInput = z.infer<typeof basicTaskInput>;
 
-/** `occurrence`: the due date the client saw, so a replay cannot advance a recurrence twice. */
-export const completionInput = z.object({ occurrence: z.iso.datetime({ offset: true }).nullable().optional() }).optional();
+/** The legacy edit (Server Action and @todalo/server updateTask): any task field by ID. */
+export const updateTaskInput = taskInput.partial().extend({ id: z.string() });
+export type UpdateTaskInput = z.infer<typeof updateTaskInput>;
+
+const isoDate = z.iso.datetime({ offset: true });
+/**
+ * Task details the shared client edits (ticket 11): the legacy edit dialog
+ * without labels/organization (tickets 13/14). Every field is sent, as the
+ * legacy dialog did, so `dueDate` always triggers the calendar push.
+ * `updatedAt` is the copy the editor started from (stale-edit check).
+ */
+export const taskDetailsInput = z.object({
+  updatedAt: isoDate,
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(10_000),
+  priority: z.number().int().min(1).max(4),
+  deadline: isoDate.nullable(),
+  dueDate: isoDate.nullable(),
+  dueDateEnd: isoDate.nullable(),
+  recurrence: z.object({
+    n: z.number().int().positive().max(1000),
+    unit: z.enum(["day", "week", "month", "year"]),
+    basedOn: z.enum(["scheduled", "completed"]),
+    until: isoDate.nullable().optional(),
+  }).strict().nullable(),
+}).strict().refine(details => details.dueDate !== null || details.dueDateEnd === null, { path: ["dueDateEnd"], message: "An end time needs a due date" });
+export type TaskDetailsInput = z.infer<typeof taskDetailsInput>;
+
+/**
+ * `occurrence`: the due date the client saw; `operationId`: generated per tap and
+ * reused on its retries, so a replay is recognised and a stale tap is refused.
+ */
+export const completionInput = z.object({ occurrence: isoDate.nullable().optional(), operationId: z.uuid().optional() }).optional();

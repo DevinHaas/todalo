@@ -5,8 +5,11 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
   function matches(row: Record<string, unknown>, predicate?: SQL) {
     if (!predicate) return true;
     const query = new PgDialect().sqlToQuery(predicate);
-    const expression = query.sql.replace(/"\w+"\."(\w+)"/g, (_, column: string) => `row[${JSON.stringify(column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()))}]`).replace(/\$(\d+)/g, (_, index: string) => `parameters[${Number(index) - 1}]`).replace(/(row\["\w+"\]) in \(([^)]+)\)/g, "[$2].includes($1)").replace(/\band\b/g, "&&").replace(/\bor\b/g, "||").replace(/ = /g, " === ");
-    return Boolean(new Function("row", "parameters", `return ${expression}`)(row, query.params));
+    const expression = query.sql.replace(/"\w+"\."(\w+)"/g, (_, column: string) => `row[${JSON.stringify(column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()))}]`).replace(/\$(\d+)/g, (_, index: string) => `parameters[${Number(index) - 1}]`).replace(/(row\["\w+"\]) in \(([^)]+)\)/g, "[$2].includes($1)").replace(/\band\b/g, "&&").replace(/\bor\b/g, "||").replace(/ is not null/g, " != null").replace(/ is null/g, " == null").replace(/ <> /g, " !== ").replace(/ = /g, " === ");
+    // Timestamps compare as the ISO strings drizzle sends to the driver.
+    const instant = (value: unknown) => value instanceof Date ? value.toISOString() : value;
+    const view = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, instant(value)]));
+    return Boolean(new Function("row", "parameters", `return ${expression}`)(view, query.params.map(instant)));
   }
   function builder(kind: string, table?: Parameters<typeof getTableName>[0], fields?: Record<string, { name: string }>) {
     let predicate: SQL | undefined; let values: Record<string, unknown>[] = []; let limit = Infinity; let skipConflicts = false;

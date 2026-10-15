@@ -21,7 +21,7 @@ main.centered { min-height: 100svh; display: flex; align-items: center; justify-
 .account-panel p { font-size: .875rem; line-height: 1.5; margin: 0; color: var(--muted-foreground); }
 form { display: grid; gap: 1rem; }
 label { display: grid; gap: .375rem; font-size: .875rem; font-weight: 500; }
-input { width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .375rem; padding: .5rem .625rem; font: inherit; font-size: 1rem; background: var(--background); color: inherit; box-shadow: 0 1px 2px #0000000d; }
+input, textarea, select { width: 100%; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .375rem; padding: .5rem .625rem; font: inherit; font-size: 1rem; background: var(--background); color: inherit; box-shadow: 0 1px 2px #0000000d; }
 .account-panel button { min-height: 2.75rem; border: 0; border-radius: .375rem; background: var(--primary); color: oklch(.985 0 0); font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer; padding: .625rem 1rem; }
 .account-panel button:disabled, input:disabled { opacity: .5; cursor: default; }
 .account-panel .error { color: var(--destructive); }
@@ -123,7 +123,7 @@ button.composer:hover { color: var(--foreground); }
 .composer-form input { min-height: 2rem; border: 0; box-shadow: none; padding: 0; outline: none; }
 .composer-form input[aria-label="Task name"] { font-weight: 500; }
 .composer-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: .75rem; border-top: 1px solid var(--border); }
-.composer-actions, .task-actions { display: flex; gap: .5rem; }
+.composer-actions, .task-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: max(4rem, env(safe-area-inset-top)) 1rem 1rem; background: #0000004d; }
 .dialog { width: 100%; max-width: 34rem; display: grid; gap: .5rem; padding: .5rem; border-radius: .75rem; background: var(--background); box-shadow: 0 10px 30px #00000026; font-size: .875rem; }
 .dialog svg { width: 1rem; height: 1rem; }
@@ -145,6 +145,32 @@ button.composer:hover { color: var(--foreground); }
 .project-files .button:focus-within { outline: 2px solid var(--ring, var(--brand)); outline-offset: 2px; }
 .attachment-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 .attachment-list a, .attachment-list button { color: inherit; text-align: left; overflow-wrap: anywhere; }
+/* Task edit dialog (ticket 11): legacy TaskEditDialog fields. */
+.dialog-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.task-editor { gap: 1rem; padding: 1rem; }
+.task-editor fieldset { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.task-editor textarea { min-height: 5rem; resize: vertical; }
+/* Clear sits under its field (legacy deadline layout); WebKit date inputs keep an intrinsic width, so no side-by-side row. */
+.task-editor .field-row { display: grid; gap: .25rem; justify-items: start; }
+.task-editor .field-row label { justify-self: stretch; }
+.task-editor label { grid-template-columns: minmax(0, 1fr); }
+.task-editor input { min-width: 0; max-width: 100%; }
+/* iOS WebKit sizes native date/time inputs past width: 100% unless appearance is reset. */
+.task-editor input[type="date"], .task-editor input[type="time"] { -webkit-appearance: none; appearance: none; }
+.task-editor input::-webkit-date-and-time-value { text-align: left; }
+.task-editor .field-row .text-action { min-height: 2.75rem; font-size: .875rem; }
+.task-editor .text-action:disabled { opacity: .5; cursor: default; }
+.time-range { display: flex; align-items: center; gap: .375rem; color: var(--muted-foreground); }
+.time-range input { width: auto; flex: 1; }
+.task-editor .composer-actions { justify-content: flex-end; }
+
+/* Software keyboard (gate finding 2): --keyboard-inset comes from software-keyboard.ts.
+   The page gets room to scroll a focused field above the keyboard, dialogs end
+   above it and scroll inside, and an opaque strip keeps scrolled content from
+   running under the status bar (zero-height outside notched/fullscreen shells). */
+.content { padding-bottom: calc(max(1.5rem, env(safe-area-inset-bottom)) + var(--keyboard-inset, 0px)); }
+.dialog-backdrop { bottom: var(--keyboard-inset, 0px); overflow-y: auto; overscroll-behavior: contain; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; z-index: 25; height: env(safe-area-inset-top); background: var(--background); pointer-events: none; }
 
 @media (max-width: 767px) {
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 18rem; display: none; }
@@ -157,4 +183,6 @@ button.composer:hover { color: var(--foreground); }
   .nav-item { height: 2.75rem; }
   .pill.project { margin-right: 0; }
   .button { min-height: 2.75rem; }
+  /* Touch layout: the toolbar stays below the status bar while the page scrolls. */
+  .toolbar { position: sticky; top: 0; z-index: 5; background: var(--background); }
 }

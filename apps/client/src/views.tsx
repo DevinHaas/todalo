@@ -1,7 +1,12 @@
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CalendarClock, ChevronDown, Hash, Inbox, Plus, X } from "lucide-react";
-import { deadlineLabel, dueLabel, isOverdue, operationId, todayHeading, todaySections, type NewTask, type TaskDto, type TodayDto } from "./tasks";
+import {
+  dateInputValue, deadlineLabel, dueLabel, isOverdue, localInstant, operationId, repeatChoice, repeatLabel, repeatPresets, timeInputValue,
+  todayHeading, todaySections, type NewTask, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto, type TodayDto,
+} from "./tasks";
+import { AccountTransportError } from "./errors";
+import { releaseFocus } from "./software-keyboard";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -66,7 +71,7 @@ export function Composer({ dueDate, onCreate, onCancel, startOpen = false }: {
       setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.");
     } finally { setPending(false); }
   }
-  return <form className="composer-form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+  return <form ref={releaseFocus} className="composer-form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
     {error && <p role="alert" className="form-error">{error}</p>}
     <input autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" value={title} onChange={(event) => setTitle(event.target.value)} />
     <input aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -106,14 +111,18 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   </div></div>;
 }
 
-export function TaskView({ state, onRetry, actions, writeError, attachments }: { state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null; attachments?: ReactNode }) {
+export function TaskView({ state, onRetry, actions, writeError, attachments, onEdit, editor }: {
+  state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null; attachments?: ReactNode;
+  /** Opens the edit dialog (rendered as `editor`); without it the page stays read-only. */
+  onEdit?: () => void; editor?: ReactNode;
+}) {
   let body: ReactNode;
   if (state.status === "pending") body = <p className="state" role="status">Loading task…</p>;
   else if (state.status === "error") body = <Failure error={state.error} onRetry={onRetry} />;
   else if (!state.data) body = <><h1 className="page-title">Task not found</h1><p className="state">This task does not exist or you do not have access to it.</p></>;
   else {
     const task = state.data;
-    const meta = [`Priority ${task.priority}`, task.dueDate && `Due ${dueLabel(task.dueDate)}`, task.deadline && `Deadline ${deadlineLabel(task.deadline)}`].filter(Boolean).join(" · ");
+    const meta = [`Priority ${task.priority}`, task.dueDate && `Due ${dueLabel(task.dueDate)}`, task.recurrence && repeatLabel(task.recurrence), task.deadline && `Deadline ${deadlineLabel(task.deadline)}`].filter(Boolean).join(" · ");
     body = <>
       <h1 className="page-title">{task.title}</h1>
       {task.status === "done" && <p>Completed task</p>}
@@ -121,11 +130,98 @@ export function TaskView({ state, onRetry, actions, writeError, attachments }: {
       <p>{meta}</p>
       {attachments}
       {writeError && <p role="alert" className="form-error">{writeError}</p>}
-      {actions && <div className="task-actions">
-        {task.status !== "done" && <button type="button" className="button outline" onClick={() => actions.complete(task)}>Complete task</button>}
-        <button type="button" className="button destructive" onClick={() => actions.remove(task)}>Delete task</button>
+      {(actions || onEdit) && <div className="task-actions">
+        {onEdit && <button type="button" className="button" onClick={onEdit}>Edit task details</button>}
+        {actions && task.status !== "done" && <button type="button" className="button outline" onClick={() => actions.complete(task)}>Complete task</button>}
+        {actions && <button type="button" className="button destructive" onClick={() => actions.remove(task)}>Delete task</button>}
       </div>}
+      {editor}
     </>;
   }
   return <article className="task-detail">{body}<Link className="text-action" to="/today">Back to Today</Link></article>;
+}
+
+type Draft = { title: string; description: string; priority: number; deadline: string; date: string; start: string; end: string; recurrence: RecurrenceDto | null };
+const draftOf = (task: TaskDto): Draft => ({
+  title: task.title, description: task.description ?? "", priority: task.priority, deadline: dateInputValue(task.deadline),
+  date: dateInputValue(task.dueDate), start: timeInputValue(task.dueDate), end: timeInputValue(task.dueDateEnd, false), recurrence: task.recurrence,
+});
+const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Does not repeat", daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
+
+/**
+ * The legacy task edit dialog (ticket 11; labels are ticket 14). It saves every
+ * field with the version it was opened from. A pristine form follows newer
+ * copies of the task; a draft is never replaced silently — if another device
+ * changed the task, saving fails with TASK_CHANGED and the user loads the
+ * current details. A custom repeat (from quick add) is kept unless replaced.
+ */
+export function TaskEditor({ task, onSave, onClose }: { task: TaskDto; onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void }) {
+  const [base, setBase] = useState(task);
+  const [draft, setDraft] = useState(() => draftOf(task));
+  const [dirty, setDirty] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const load = (copy: TaskDto) => { setBase(copy); setDraft(draftOf(copy)); setDirty(false); setError(null); };
+  useEffect(() => { if (!dirty && task.updatedAt !== base.updatedAt) load(task); }, [task, dirty, base.updatedAt]);
+  const edit = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setDirty(true); };
+  const changed = error instanceof AccountTransportError && error.code === "TASK_CHANGED";
+  const choice = repeatChoice(draft.recurrence);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!draft.title.trim() || pending) return;
+    setPending(true); setError(null);
+    try {
+      await onSave({
+        updatedAt: base.updatedAt ?? "", title: draft.title.trim(), description: draft.description, priority: draft.priority,
+        deadline: draft.deadline ? localInstant(draft.deadline) : null,
+        dueDate: draft.date ? localInstant(draft.date, draft.start) : null,
+        dueDateEnd: draft.date && draft.end ? localInstant(draft.date, draft.end) : null,
+        recurrence: draft.recurrence,
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason : new Error("Your changes could not be saved. Try again."));
+    } finally { setPending(false); }
+  }
+
+  return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="task-editor-title" className="dialog task-editor">
+      <h2 id="task-editor-title" className="dialog-title">{base.title}</h2>
+      <form ref={releaseFocus} onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
+        {error && <p role="alert" className="form-error">{error.message}{changed && <> <button type="button" className="text-action" disabled={task.updatedAt === base.updatedAt} onClick={() => load(task)}>{task.updatedAt === base.updatedAt ? "Loading current details…" : "Load current details"}</button></>}</p>}
+        <fieldset disabled={pending}>
+          <label>Task name<input autoFocus value={draft.title} enterKeyHint="done" onChange={(event) => edit({ title: event.target.value })} /></label>
+          <label>Description<textarea value={draft.description} rows={3} onChange={(event) => edit({ description: event.target.value })} /></label>
+          <label>Priority<select value={draft.priority} onChange={(event) => edit({ priority: Number(event.target.value) })}>
+            {[1, 2, 3, 4].map(value => <option key={value} value={value}>Priority {value}{value === 1 ? " — highest" : value === 4 ? " — normal" : ""}</option>)}
+          </select></label>
+          <div className="field-row">
+            <label>Deadline<input type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
+            <button type="button" className="text-action" disabled={!draft.deadline} onClick={() => edit({ deadline: "" })}>Clear deadline</button>
+          </div>
+          <div className="field-row">
+            <label>Due date<input type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
+            <button type="button" className="text-action" disabled={!draft.date} onClick={() => edit({ date: "", start: "", end: "" })}>Clear date</button>
+          </div>
+          {/* Shown once a date is set; leaving both empty keeps the task all-day. */}
+          {draft.date && <div className="time-range">
+            <input type="time" aria-label="Start time" value={draft.start} onChange={(event) => edit({ start: event.target.value })} />
+            <span>to</span>
+            <input type="time" aria-label="End time" value={draft.end} onChange={(event) => edit({ end: event.target.value })} />
+          </div>}
+          <label>Repeat<select value={choice} onChange={(event) => {
+            const value = event.target.value as RepeatChoice;
+            if (value !== "custom") edit({ recurrence: value === "none" ? null : repeatPresets[value] });
+          }}>
+            {(Object.keys(repeatNames) as (keyof typeof repeatNames)[]).map(value => <option key={value} value={value}>{repeatNames[value]}</option>)}
+            {choice === "custom" && draft.recurrence && <option value="custom">{repeatLabel(draft.recurrence)}</option>}
+          </select></label>
+        </fieldset>
+        <div className="composer-actions">
+          <button type="button" className="button outline" disabled={pending} onClick={onClose}>Cancel</button>
+          <button type="submit" className="button" disabled={pending || !draft.title.trim()}>{pending ? "Saving…" : "Save"}</button>
+        </div>
+      </form>
+    </div>
+  </div>;
 }

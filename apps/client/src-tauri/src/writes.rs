@@ -47,23 +47,107 @@ pub async fn create_task(
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
-/// `occurrence` is the due date the client saw (or null), so a replayed
-/// completion cannot advance a recurring task twice.
+fn completion_body(
+    occurrence: Option<String>,
+    operation_id: Option<String>,
+) -> Result<Value, &'static str> {
+    match operation_id {
+        Some(id) if !valid_operation_id(&id) => Err(INVALID),
+        Some(id) => Ok(json!({ "occurrence": occurrence, "operationId": id })),
+        None => Ok(json!({ "occurrence": occurrence })),
+    }
+}
+
+/// `occurrence` is the due date the client saw (or null) and `operation_id`
+/// identifies the tap, so a replay is recognised and a stale tap refused (412).
 #[tauri::command]
 pub async fn complete_task(
     state: tauri::State<'_, NativeAuth>,
     id: String,
     occurrence: Option<String>,
+    operation_id: Option<String>,
 ) -> Result<Option<Value>, String> {
     if !valid_id(&id) {
         return Ok(None);
     }
+    let body = completion_body(occurrence, operation_id)?;
     Ok(state
         .write(
             Method::POST,
             &format!("/api/v1/tasks/{id}/complete"),
-            Some(json!({ "occurrence": occurrence })),
+            Some(body),
         )
+        .await?)
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum Unit {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum BasedOn {
+    Scheduled,
+    Completed,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Recurrence {
+    n: u32,
+    unit: Unit,
+    based_on: BasedOn,
+    until: Option<String>,
+}
+
+/// The editable task details (ticket 11). Every field is sent; dates are ISO
+/// strings validated by the API. `updated_at` is the copy the edit started from.
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetails {
+    updated_at: String,
+    title: String,
+    description: String,
+    priority: u8,
+    deadline: Option<String>,
+    due_date: Option<String>,
+    due_date_end: Option<String>,
+    recurrence: Option<Recurrence>,
+}
+
+fn details_body(details: &TaskDetails) -> Result<Value, &'static str> {
+    let title = details.title.trim();
+    if title.is_empty()
+        || title.chars().count() > 500
+        || details.description.chars().count() > 10_000
+        || !(1..=4).contains(&details.priority)
+        || details
+            .recurrence
+            .as_ref()
+            .is_some_and(|recurrence| !(1..=1000).contains(&recurrence.n))
+    {
+        return Err(INVALID);
+    }
+    serde_json::to_value(details).map_err(|_| INVALID)
+}
+
+#[tauri::command]
+pub async fn update_task(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+    details: TaskDetails,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&id) {
+        return Ok(None);
+    }
+    let body = details_body(&details)?;
+    Ok(state
+        .write(Method::PATCH, &format!("/api/v1/tasks/{id}"), Some(body))
         .await?)
 }
 
@@ -82,7 +166,7 @@ pub async fn delete_task(
 
 #[cfg(test)]
 mod tests {
-    use super::{NewTask, task_body};
+    use super::{NewTask, TaskDetails, completion_body, details_body, task_body};
     use serde_json::json;
 
     fn task(id: &str, title: &str) -> NewTask {
@@ -116,5 +200,61 @@ mod tests {
                 Err("Check your entry and try again.")
             );
         }
+    }
+
+    #[test]
+    fn completion_bodies_carry_only_the_occurrence_and_a_uuid_tap_id() {
+        let id = "6f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11";
+        assert_eq!(
+            completion_body(None, Some(id.into())).unwrap(),
+            json!({ "occurrence": null, "operationId": id })
+        );
+        assert_eq!(
+            completion_body(Some("2026-10-15T00:00:00.000Z".into()), None).unwrap(),
+            json!({ "occurrence": "2026-10-15T00:00:00.000Z" })
+        );
+        assert_eq!(
+            completion_body(None, Some("../x".into())),
+            Err("Check your entry and try again.")
+        );
+    }
+
+    #[test]
+    fn edit_bodies_are_rebuilt_from_typed_detail_fields() {
+        let input = json!({
+            "updatedAt": "2026-10-15T08:00:00.000Z", "title": "Plan", "description": "",
+            "priority": 2, "deadline": null, "dueDate": "2026-10-15T07:00:00.000Z", "dueDateEnd": null,
+            "recurrence": { "n": 1, "unit": "week", "basedOn": "completed", "until": null },
+            "userId": "bob", "projectId": "other"
+        });
+        let details: TaskDetails = serde_json::from_value(input).unwrap();
+        assert_eq!(
+            details_body(&details).unwrap(),
+            json!({
+                "updatedAt": "2026-10-15T08:00:00.000Z", "title": "Plan", "description": "",
+                "priority": 2, "deadline": null, "dueDate": "2026-10-15T07:00:00.000Z", "dueDateEnd": null,
+                "recurrence": { "n": 1, "unit": "week", "basedOn": "completed", "until": null }
+            })
+        );
+        for change in [
+            json!({ "title": "  " }),
+            json!({ "priority": 5 }),
+            json!({ "recurrence": { "n": 0, "unit": "day", "basedOn": "scheduled", "until": null } }),
+        ] {
+            let mut value = serde_json::to_value(&details).unwrap();
+            for (key, field) in change.as_object().unwrap() {
+                value[key] = field.clone();
+            }
+            let parsed: TaskDetails = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                details_body(&parsed),
+                Err("Check your entry and try again.")
+            );
+        }
+        // An unknown recurrence unit cannot even be deserialized.
+        assert!(serde_json::from_value::<TaskDetails>(json!({
+            "updatedAt": "x", "title": "Plan", "description": "", "priority": 4, "deadline": null,
+            "dueDate": null, "dueDateEnd": null, "recurrence": { "n": 1, "unit": "fortnight", "basedOn": "scheduled", "until": null }
+        })).is_err());
     }
 }

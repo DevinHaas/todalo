@@ -45,6 +45,7 @@ fn main() {
             "task",
             "create_task",
             "complete_task",
+            "update_task",
             "delete_task",
             "projects",
             "project",

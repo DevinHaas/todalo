@@ -83,6 +83,7 @@ pub fn run() {
             reads::task,
             writes::create_task,
             writes::complete_task,
+            writes::update_task,
             writes::delete_task,
             projects::projects,
             projects::project,

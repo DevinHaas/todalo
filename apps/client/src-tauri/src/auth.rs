@@ -272,6 +272,9 @@ impl NativeAuth {
             StatusCode::NOT_FOUND => Ok(None),
             StatusCode::BAD_REQUEST => Err("Check your entry and try again."),
             StatusCode::PAYLOAD_TOO_LARGE => Err("A paste batch must be at most 10 MB."),
+            StatusCode::PRECONDITION_FAILED => {
+                Err("This task changed on another device. Review it and try again.")
+            }
             status if status.is_success() => response
                 .json()
                 .await

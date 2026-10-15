@@ -8,7 +8,7 @@ const memory = () => { const values = new Map<string, string>(); return { getIte
 const broken = () => { throw new Error("storage blocked"); };
 const task = (id: string): TaskDto => ({
   id, title: id, description: null, status: "todo", priority: 4, projectId: null, parentId: null,
-  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [],
+  dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null,
 });
 
 describe("haptics preference", () => {
@@ -71,7 +71,7 @@ describe("completion feedback trigger", () => {
     const { cache, writes } = setup({
       complete: () => { calls += 1; if (calls === 1) return Promise.reject(new AccountTransportError("CONNECTION_FAILED")); return new Promise(resolve => { release = resolve; }); },
     }, (event) => played.push(event));
-    const pending = new MutationObserver(cache, { ...writes.complete, retryDelay: 0 }).mutate(task("a"));
+    const pending = new MutationObserver(cache, { ...writes.complete, retryDelay: 0 }).mutate({ task: task("a"), operationId: "tap" });
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(played).toEqual(["taskCompleted"]);
     await vi.waitFor(() => expect(calls).toBe(2));
@@ -83,7 +83,7 @@ describe("completion feedback trigger", () => {
   it("never fails or blocks the completion when feedback throws", async () => {
     const native = feedback(() => { throw new Error("haptics broke"); }, () => true);
     const { cache, writes } = setup({ complete: async () => ({ ...task("a"), status: "done" }) }, native.play);
-    await expect(new MutationObserver(cache, writes.complete).mutate(task("a"))).resolves.toMatchObject({ status: "done" });
+    await expect(new MutationObserver(cache, writes.complete).mutate({ task: task("a"), operationId: "tap" })).resolves.toMatchObject({ status: "done" });
   });
 
   it("does not play for create or delete", async () => {

@@ -1,10 +1,15 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
-import type { TaskDto, TodayDto } from "../../../packages/server/src/task-dto";
+import type { RecurrenceDto, TaskDto, TodayDto } from "../../../packages/server/src/task-dto";
+import type { TaskDetailsInput } from "../../../packages/server/src/task-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { Feedback } from "./feedback";
 
-export type { TaskDto, TodayDto };
+export type { RecurrenceDto, TaskDto, TodayDto };
+/** Everything the edit dialog saves (ticket 11), with the version it started from. */
+export type TaskDetails = TaskDetailsInput;
+/** One completion tap; the operation ID is reused by that tap's retries. */
+export interface Completion { task: TaskDto; operationId: string }
 
 /** A basic task (ticket 5): Today when dueDate is set, otherwise Inbox. */
 export interface NewTask {
@@ -21,7 +26,9 @@ export interface TaskTransport {
   task(id: string): Promise<TaskDto | null>;
   create(task: NewTask): Promise<TaskDto>;
   /** `occurrence` is the due date the client saw; null when the task is missing or not the user's. */
-  complete(id: string, occurrence: string | null): Promise<TaskDto | null>;
+  complete(id: string, occurrence: string | null, operationId: string): Promise<TaskDto | null>;
+  /** null when the task is missing or not the user's; TASK_CHANGED when edited elsewhere. */
+  update(id: string, details: TaskDetails): Promise<TaskDto | null>;
   /** false when the task is missing or not the signed-in user's (already gone). */
   remove(id: string): Promise<boolean>;
 }
@@ -39,6 +46,7 @@ export function browserTaskTransport(fetcher: typeof fetch = fetch): TaskTranspo
     if (response.status === 401) throw new AccountTransportError("UNAUTHENTICATED");
     if (response.status === 404) return null;
     if (response.status === 400) throw new AccountTransportError("INVALID_INPUT");
+    if (response.status === 412) throw new AccountTransportError("TASK_CHANGED");
     if (!response.ok) throw new AccountTransportError(method === "GET" ? "TASKS_UNAVAILABLE" : "SAVE_FAILED");
     try { return await response.json() as T; }
     catch { throw new AccountTransportError("INVALID_RESPONSE"); }
@@ -56,7 +64,8 @@ export function browserTaskTransport(fetcher: typeof fetch = fetch): TaskTranspo
       if (!created) throw new AccountTransportError("SAVE_FAILED");
       return created.task;
     },
-    complete: async (id, occurrence) => (await request<{ task: TaskDto }>("POST", `${path(id)}/complete`, { occurrence }))?.task ?? null,
+    complete: async (id, occurrence, operationId) => (await request<{ task: TaskDto }>("POST", `${path(id)}/complete`, { occurrence, operationId }))?.task ?? null,
+    update: async (id, details) => (await request<{ task: TaskDto }>("PATCH", path(id), details))?.task ?? null,
     remove: async (id) => (await request<{ id: string }>("DELETE", path(id))) !== null,
   };
 }
@@ -72,7 +81,8 @@ export function taskTransport(): TaskTransport {
     today: () => command<TodayDto>("today"),
     task: async (id) => (await command<{ task: TaskDto } | null>("task", { id }))?.task ?? null,
     create: async (task) => (await command<{ task: TaskDto }>("create_task", { task })).task,
-    complete: async (id, occurrence) => (await command<{ task: TaskDto } | null>("complete_task", { id, occurrence }))?.task ?? null,
+    complete: async (id, occurrence, operationId) => (await command<{ task: TaskDto } | null>("complete_task", { id, occurrence, operationId }))?.task ?? null,
+    update: async (id, details) => (await command<{ task: TaskDto } | null>("update_task", { id, details }))?.task ?? null,
     remove: async (id) => (await command<{ id: string } | null>("delete_task", { id })) !== null,
   };
 }
@@ -102,7 +112,8 @@ export function operationId(random: (bytes: Uint8Array) => Uint8Array = (bytes) 
 
 // Only failures that may hide an applied write are retried: no response, or a
 // server error. Each is safe to repeat: create carries its operation ID,
-// completion its occurrence, and a repeated delete finds the task gone.
+// completion its occurrence and tap ID, an edit is recognised by the values it
+// already wrote, and a repeated delete finds the task gone.
 const ambiguous = (error: unknown) => error instanceof AccountTransportError && (error.code === "CONNECTION_FAILED" || error.code === "SAVE_FAILED");
 const retry = (failures: number, error: unknown) => failures < 2 && ambiguous(error);
 const retryDelay = (failures: number) => 300 * 2 ** failures;
@@ -128,9 +139,11 @@ type Snapshot = { previous?: TodayDto };
  */
 export function taskMutations(transport: TaskTransport, cache: QueryClient, userId: string, feedback?: Feedback) {
   const today = taskKeys.today(userId);
+  // Today (and the sidebar count), the task, and every open project list.
   const settle = (id: string) => Promise.all([
     cache.invalidateQueries({ queryKey: today }),
     cache.invalidateQueries({ queryKey: taskKeys.task(userId, id) }),
+    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "project"] }),
   ]);
   async function optimistic(task: TaskDto, change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
     await cache.cancelQueries({ queryKey: today });
@@ -141,7 +154,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     }
     return { previous };
   }
-  const rollback = (_error: Error, _task: TaskDto, snapshot?: Snapshot) => { if (snapshot?.previous) cache.setQueryData(today, snapshot.previous); };
+  const rollback = (_error: Error, _input: unknown, snapshot?: Snapshot) => { if (snapshot?.previous) cache.setQueryData(today, snapshot.previous); };
   return {
     create: {
       mutationFn: (task: NewTask) => transport.create(task),
@@ -150,15 +163,26 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       onSettled: (_task: TaskDto | undefined, _error: Error | null, input: NewTask) => settle(input.id),
     } satisfies MutationOptions<TaskDto, Error, NewTask>,
     complete: {
-      mutationFn: (task: TaskDto) => transport.complete(task.id, task.dueDate),
+      mutationFn: ({ task, operationId }: Completion) => transport.complete(task.id, task.dueDate, operationId),
       retry, retryDelay,
-      onMutate: (task: TaskDto) => {
+      onMutate: ({ task }: Completion) => {
         feedback?.play("taskCompleted");
         return optimistic(task, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item));
       },
       onError: rollback,
-      onSettled: (_result: unknown, _error: Error | null, task: TaskDto) => settle(task.id),
-    } satisfies MutationOptions<TaskDto | null, Error, TaskDto, Snapshot>,
+      onSettled: (_result: unknown, _error: Error | null, { task }: Completion) => settle(task.id),
+    } satisfies MutationOptions<TaskDto | null, Error, Completion, Snapshot>,
+    // Not optimistic (the legacy dialog waited too); the editor keeps its draft until saved.
+    update: {
+      mutationFn: async ({ id, details }: { id: string; details: TaskDetails }) => {
+        const task = await transport.update(id, details);
+        if (!task) throw new AccountTransportError("TASK_NOT_FOUND");
+        return task;
+      },
+      retry, retryDelay,
+      onSuccess: (task: TaskDto) => { cache.setQueryData(taskKeys.task(userId, task.id), task); },
+      onSettled: (_task: TaskDto | undefined, _error: Error | null, { id }: { id: string }) => settle(id),
+    } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }>,
     remove: {
       mutationFn: (task: TaskDto) => transport.remove(task.id),
       retry, retryDelay,
@@ -202,3 +226,46 @@ export function dueLabel(value: string) {
 export const todayHeading = (now = new Date()) => `${now.getDate()} ${month.format(now)} · Today · ${weekday.format(now)}`;
 /** Legacy taskDateLabel in the viewer's zone, used for deadlines. */
 export const deadlineLabel = (value: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
+
+// Edit-form values in the viewer's zone, as the legacy dialog read and wrote them
+// (task-metadata-fields dateInputValue/dateInputDate, task-dates combineDateAndTime).
+const local = (value: string) => new Date(value);
+/** `<input type="date">` value, or "". */
+export const dateInputValue = (value: string | null) => {
+  if (!value) return "";
+  const date = local(value);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+/** "HH:mm", or "" when `allDay` and the instant is local midnight (legacy hasDueTime). */
+export const timeInputValue = (value: string | null, allDay = true) => {
+  if (!value) return "";
+  const date = local(value);
+  return allDay && !date.getHours() && !date.getMinutes() ? "" : `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+/** A local calendar date plus optional "HH:mm" as an ISO instant. */
+export function localInstant(date: string, time = "") {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time ? time.split(":").map(Number) : [0, 0];
+  return new Date(year, month - 1, day, hours, minutes).toISOString();
+}
+
+/** The legacy edit dialog's Repeat presets (ADR 0001 shape). */
+export const repeatPresets = {
+  daily: { n: 1, unit: "day", basedOn: "scheduled", until: null },
+  weekly: { n: 1, unit: "week", basedOn: "scheduled", until: null },
+  monthly: { n: 1, unit: "month", basedOn: "scheduled", until: null },
+} as const satisfies Record<string, RecurrenceDto>;
+export type RepeatChoice = "none" | keyof typeof repeatPresets | "custom";
+export function repeatChoice(recurrence: RecurrenceDto | null): RepeatChoice {
+  if (!recurrence) return "none";
+  const preset = (Object.keys(repeatPresets) as (keyof typeof repeatPresets)[]).find(key => {
+    const value = repeatPresets[key];
+    return value.n === recurrence.n && value.unit === recurrence.unit && value.basedOn === recurrence.basedOn && !recurrence.until;
+  });
+  return preset ?? "custom";
+}
+/** "Every 3 days after completion until 31 Dec 2026". */
+export function repeatLabel({ n, unit, basedOn, until }: RecurrenceDto) {
+  const every = n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+  return `${every}${basedOn === "completed" ? " after completion" : ""}${until ? ` until ${deadlineLabel(until)}` : ""}`;
+}

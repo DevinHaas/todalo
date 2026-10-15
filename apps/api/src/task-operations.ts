@@ -1,7 +1,7 @@
 // Production binding of the task routes to the shared server operations (the
 // same functions the legacy Server Actions wrap), including calendar effects.
 import { getOwnedTask } from "@todalo/server/today";
-import { completeTask, createTask, deleteTask, TaskIdConflictError } from "@todalo/server/tasks";
+import { completeTask, createTask, deleteTask, TaskIdConflictError, updateTask } from "@todalo/server/tasks";
 import type { TaskWrites } from "./task-routes";
 
 export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
@@ -16,6 +16,17 @@ export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
       throw error;
     }
   },
-  complete: async (userId, id, occurrence) => await completeTask(userId, id, { occurrence }) ? getOwnedTask(userId, id) : null,
+  async complete(userId, id, request) {
+    const result = await completeTask(userId, id, request);
+    return result === "completed" ? getOwnedTask(userId, id) : result === "changed" ? "changed" : null;
+  },
+  async update(userId, id, { updatedAt, deadline, dueDate, dueDateEnd, recurrence, ...details }) {
+    const date = (value: string | null) => value === null ? null : new Date(value);
+    const result = await updateTask(userId, {
+      id, ...details, deadline: date(deadline), dueDate: date(dueDate), dueDateEnd: date(dueDateEnd),
+      recurrence: recurrence && { ...recurrence, until: date(recurrence.until ?? null) },
+    }, { seenUpdatedAt: new Date(updatedAt) });
+    return result === "updated" ? getOwnedTask(userId, id) : result === "changed" ? "changed" : null;
+  },
   remove: deleteTask,
 };

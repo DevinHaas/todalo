@@ -59,7 +59,7 @@ export function qaAttachmentRoutes(options: {
       if (!projects.some(project => project.userId === userId && project.id === projectId)) throw new AttachmentError("Project not found.", 404);
       try { validateAttachmentFiles(files); } catch (error) { throw new AttachmentError((error as Error).message, 400); }
       const created = await Promise.all(files.map(async file => {
-        const task: OwnedTask = { id: crypto.randomUUID(), userId, title: file.name, description: null, status: "todo", priority: 4, projectId, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [] };
+        const task: OwnedTask = { id: crypto.randomUUID(), userId, title: file.name, description: null, status: "todo", priority: 4, projectId, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: new Date() };
         return { task, attachment: { id: crypto.randomUUID(), userId, taskId: task.id, name: file.name, mediaType: file.type || "application/octet-stream", byteSize: file.size, content: Buffer.from(await file.arrayBuffer()).toString("base64") } };
       }));
       for (const { task, attachment } of created) { tasks.push(task); attachments.push(attachment); }

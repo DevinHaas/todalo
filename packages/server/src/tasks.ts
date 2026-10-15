@@ -1,15 +1,15 @@
 // Server-only task commands shared by the legacy Server Actions and /api/v1.
 // Callers authenticate first and pass the session's userId; nothing here reads
 // request context or Next caches (callers revalidate their own views).
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks } from "@todalo/db/schema";
 import { assertTaskParent } from "@todalo/db/task-parent";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
-import { nextOccurrenceOnCompletion } from "@todalo/ramble/recurrence";
 import { deleteTaskFromCalendar, pushTaskToCalendar } from "./calendar";
 import { assertOwnedLabels, replaceTaskLabels } from "./task-labels";
-import { createTaskInput, type CreateTaskInput } from "./task-input";
+import { createTaskInput, updateTaskInput, type CreateTaskInput, type UpdateTaskInput } from "./task-input";
+import { editConflicts, planCompletion, type CompletionRequest } from "./task-rules";
 
 /** A client-chosen task ID that already belongs to a different user. */
 export class TaskIdConflictError extends Error {
@@ -82,32 +82,77 @@ export async function deleteTask(userId: string, id: string): Promise<boolean> {
 }
 
 /**
- * Completes a task, advancing a recurring one. Returns false for missing and
- * other users' tasks. Replays are no-ops: a done task stays as it is, and when
- * `occurrence` (the due date the caller saw) is given, a recurring task that
- * has already moved past it is not advanced a second time.
+ * Completes a task, advancing a recurring one (rules in ./task-rules). Replays
+ * are no-ops: a done task stays as it is, and a retried operation ID is
+ * recognised after the task moved on. "changed" means the caller's
+ * `occurrence` is no longer the task's due date (another device edited or
+ * completed it), so nothing was written.
  */
-export async function completeTask(userId: string, id: string, options: { occurrence?: Date | null } = {}): Promise<boolean> {
-  const [task] = await db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  if (!task) return false;
-  if (task.status === "done") return true;
-  if (options.occurrence !== undefined && (task.dueDate?.getTime() ?? null) !== (options.occurrence?.getTime() ?? null)) return true;
-
-  if (task.recurrence) {
-    const completedAt = new Date();
-    const next = nextOccurrenceOnCompletion(task.dueDate, completedAt, task.recurrence);
-    if (next) {
-      await db.update(tasks).set({ dueDate: next, completedAt: null }).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-      await syncToCalendar(userId, id);
-    } else {
-      // `until` has passed — complete this occurrence without rescheduling.
-      await db.update(tasks).set({ completedAt, status: "done" }).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-    }
-  } else {
-    await db.update(tasks).set({ completedAt: new Date(), status: "done" }).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+export async function completeTask(userId: string, id: string, request: CompletionRequest = {}): Promise<"completed" | "missing" | "changed"> {
+  const owned = and(eq(tasks.id, id), eq(tasks.userId, userId));
+  // One retry: a lost compare-and-set re-reads and decides again (for example,
+  // the concurrent writer was this same operation's earlier attempt).
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const [task] = await db.select().from(tasks).where(owned);
+    if (!task) return "missing";
+    const plan = planCompletion(task, request);
+    if (plan.kind !== "write") return plan.kind === "changed" ? "changed" : "completed";
+    // Compare-and-set against the state the plan came from: neon-http has no
+    // interactive transactions, and a concurrent completion or date edit must
+    // not be overwritten or advanced twice.
+    const [written] = await db.update(tasks).set({ ...plan.patch, updatedAt: new Date() })
+      .where(and(owned, ne(tasks.status, "done"), same(tasks.dueDate, task.dueDate), same(tasks.lastCompletionId, task.lastCompletionId)))
+      .returning({ id: tasks.id });
+    if (!written) continue;
+    if (plan.patch.dueDate) await syncToCalendar(userId, id);
+    return "completed";
   }
-  return true;
+  return "changed";
+}
+
+const same = <T,>(column: Parameters<typeof eq>[0], value: T | null) => value === null ? isNull(column) : eq(column, value);
+
+/**
+ * The legacy task edit (moved from the Server Action): fields, labels,
+ * organization and parent with their invariants, then the calendar push when
+ * `dueDate` is part of the edit. With `seenUpdatedAt` (the copy the editor
+ * started from) an edit of a task changed elsewhere is refused as "changed"
+ * unless it is a replay of itself (see `editConflicts`).
+ */
+export async function updateTask(userId: string, input: UpdateTaskInput, options: { seenUpdatedAt?: Date } = {}): Promise<"updated" | "missing" | "changed"> {
+  const { id, labelIds, ...data } = updateTaskInput.parse(input);
+  const [owned] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+  if (!owned) return "missing";
+  // ponytail: the check and the write are separate statements (no neon-http
+  // transactions); a write landing in between is last-write-wins, as before.
+  if (editConflicts(owned, data, options.seenUpdatedAt)) return "changed";
+  if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
+  if (data.projectId !== undefined || data.sectionId !== undefined) {
+    await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });
+  }
+  if (data.parentId) {
+    await assertTaskParent({ userId, taskId: id, parentId: data.parentId });
+    const [parent] = await db.select().from(tasks).where(and(eq(tasks.id, data.parentId), eq(tasks.userId, userId))).limit(1);
+    data.projectId = parent.projectId; data.sectionId = parent.sectionId;
+  }
+  const projectId = data.projectId === undefined ? owned.projectId : data.projectId;
+  const sectionId = data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId;
+  await assertTaskOrganization({ userId, projectId, sectionId });
+  if (data.projectId !== undefined) data.sectionId = sectionId;
+  const organizationChanged = projectId !== owned.projectId || sectionId !== owned.sectionId;
+  if (organizationChanged && owned.parentId && data.parentId === undefined) data.parentId = null;
+  if (data.parentId !== undefined) {
+    const [existing] = await db.select({ id: tasks.id }).from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+    if (!existing) return "missing";
+    await assertTaskParent({ userId, taskId: id, parentId: data.parentId });
+  }
+  await db
+    .update(tasks)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  if (labelIds !== undefined) await replaceTaskLabels(userId, id, labelIds);
+  if (organizationChanged) await db.update(tasks).set({ projectId, sectionId }).where(and(eq(tasks.parentId, id), eq(tasks.userId, userId)));
+  if ("dueDate" in data) await syncToCalendar(userId, id);
+  return "updated";
 }

@@ -10,8 +10,10 @@ const row = (id: string, userId: string, extra: Partial<TaskRecord> = {}): Row =
 } as Row);
 let rows: Row[] = [];
 const seen: string[] = [];
-const completions: (Date | null | undefined)[] = [];
-beforeEach(() => { rows = [row("alice-task", "alice"), row("bob-task", "bob")]; completions.length = 0; });
+const completions: { occurrence?: Date | null; operationId?: string }[] = [];
+const edits: unknown[] = [];
+const VERSION = "2026-10-04T08:00:00.000Z";
+beforeEach(() => { rows = [row("alice-task", "alice", { updatedAt: new Date(VERSION) }), row("bob-task", "bob")]; completions.length = 0; edits.length = 0; });
 
 const owned = (userId: string, id: string) => rows.find(task => task.userId === userId && task.id === id) ?? null;
 const ORIGIN = "http://localhost:5173";
@@ -28,10 +30,19 @@ const app = createTaskRoutes({
     rows.push(task);
     return { task, created: true };
   },
-  complete: async (userId, id, occurrence) => {
-    completions.push(occurrence);
+  complete: async (userId, id, request) => {
+    completions.push(request);
     const task = owned(userId, id);
+    if (task && request.occurrence && request.occurrence.getTime() !== new Date(task.dueDate!).getTime()) return "changed";
     if (task) Object.assign(task, { status: "done", completedAt: new Date("2026-10-04T13:00:00.000Z") });
+    return task;
+  },
+  // Stale-edit semantics of @todalo/server/tasks updateTask (covered there).
+  update: async (userId, id, details) => {
+    edits.push(details);
+    const task = owned(userId, id);
+    if (task && new Date(details.updatedAt).getTime() !== new Date(task.updatedAt!).getTime()) return "changed";
+    if (task) Object.assign(task, { ...details, updatedAt: new Date("2026-10-04T09:00:00.000Z") });
     return task;
   },
   remove: async (userId, id) => { const task = owned(userId, id); rows = rows.filter(item => item !== task); return Boolean(task); },
@@ -66,6 +77,7 @@ describe("task read API", () => {
     expect(await response.json()).toEqual({ openCount: 1, tasks: [{
       id: "alice-task", title: "alice task", description: null, status: "todo", priority: 4, projectId: null, parentId: null,
       dueDate: "2026-10-04T12:30:00.000Z", dueDateEnd: null, deadline: null, completedAt: null, labelIds: ["label"],
+      recurrence: null, updatedAt: VERSION,
     }] });
   });
 
@@ -117,7 +129,7 @@ describe("task write API", () => {
     const done = await send("POST", "/api/v1/tasks/alice-task/complete", { user: "alice", body: { occurrence: "2026-10-04T12:30:00.000Z" } });
     expect(done.status).toBe(200);
     expect(((await done.json()) as { task: { status: string } }).task.status).toBe("done");
-    expect(completions).toEqual([new Date("2026-10-04T12:30:00.000Z")]);
+    expect(completions).toEqual([{ occurrence: new Date("2026-10-04T12:30:00.000Z"), operationId: undefined }]);
     for (const [method, path] of [["POST", "/api/v1/tasks/bob-task/complete"], ["DELETE", "/api/v1/tasks/bob-task"], ["DELETE", "/api/v1/tasks/nope"]]) {
       const response = await send(method, path, { user: "alice" });
       expect(response.status).toBe(404);
@@ -141,5 +153,62 @@ describe("task write API", () => {
     expect(rows.find(item => item.id === "alice-task")).toMatchObject({ status: "todo" });
     const browser = await send("POST", "/api/v1/tasks/alice-task/complete", { cookie: "alice", origin: ORIGIN });
     expect(browser.status).toBe(200);
+  });
+
+  const TAP = "0b6f2f8e-1c1a-4f4e-8a55-3a3d6e1c2b10";
+  it("passes the completion operation ID through and answers a stale occurrence with 412", async () => {
+    const stale = await send("POST", "/api/v1/tasks/alice-task/complete", { user: "alice", body: { occurrence: "2026-10-03T12:30:00.000Z", operationId: TAP } });
+    expect(stale.status).toBe(412);
+    expect(await stale.json()).toEqual({ code: "TASK_CHANGED", message: "This task changed on another device. Review it and try again." });
+    expect(completions.at(-1)).toEqual({ occurrence: new Date("2026-10-03T12:30:00.000Z"), operationId: TAP });
+    expect(rows.find(item => item.id === "alice-task")).toMatchObject({ status: "todo" });
+    const bad = await send("POST", "/api/v1/tasks/alice-task/complete", { user: "alice", body: { occurrence: null, operationId: "not-a-uuid" } });
+    expect(bad.status).toBe(400);
+  });
+});
+
+describe("task edit API", () => {
+  const details = {
+    updatedAt: VERSION, title: "  Renamed  ", description: "Notes", priority: 2, deadline: "2026-10-20T00:00:00.000+02:00",
+    dueDate: "2026-10-15T09:00:00.000+02:00", dueDateEnd: "2026-10-15T10:00:00.000+02:00",
+    recurrence: { n: 2, unit: "week", basedOn: "completed", until: "2026-12-31T00:00:00.000Z" },
+  };
+
+  it("edits an owned task's details and schedule and returns the explicit DTO", async () => {
+    const response = await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body: details });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(edits).toEqual([{ ...details, title: "Renamed" }]);
+    const { task } = await response.json() as { task: Record<string, unknown> };
+    expect(task).toMatchObject({ title: "Renamed", priority: 2, updatedAt: "2026-10-04T09:00:00.000Z", recurrence: { n: 2, unit: "week", basedOn: "completed", until: "2026-12-31T00:00:00.000Z" } });
+    expect(task).not.toHaveProperty("userId");
+    expect(task).not.toHaveProperty("googleCalendarEventId");
+  });
+
+  it("validates the edit body without reaching the task", async () => {
+    for (const body of [
+      { ...details, title: " " }, { ...details, priority: 5 }, { ...details, dueDate: "tomorrow" }, { ...details, updatedAt: undefined },
+      { ...details, dueDate: null }, { ...details, recurrence: { n: 0, unit: "day", basedOn: "scheduled" } },
+      { ...details, recurrence: { n: 1, unit: "fortnight", basedOn: "scheduled" } }, { ...details, userId: "bob" }, { ...details, projectId: "p" }, "not json",
+    ]) {
+      const response = await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body });
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await response.json()).toEqual({ code: "INVALID_INPUT", message: "Check your entry and try again." });
+    }
+    expect(edits).toEqual([]);
+  });
+
+  it("answers a stale edit with 412, foreign and missing IDs with one 404, and guards cookie writes", async () => {
+    const stale = await send("PATCH", "/api/v1/tasks/alice-task", { user: "alice", body: { ...details, updatedAt: "2026-10-01T00:00:00.000Z" } });
+    expect(stale.status).toBe(412);
+    expect(await stale.json()).toMatchObject({ code: "TASK_CHANGED" });
+    const foreign = await send("PATCH", "/api/v1/tasks/bob-task", { user: "alice", body: details });
+    const missing = await send("PATCH", "/api/v1/tasks/nope", { user: "alice", body: details });
+    expect([foreign.status, missing.status]).toEqual([404, 404]);
+    expect(await foreign.json()).toEqual(await missing.json());
+    expect(rows.find(item => item.id === "bob-task")).toMatchObject({ title: "bob task" });
+    expect((await send("PATCH", "/api/v1/tasks/alice-task", { body: details, origin: ORIGIN })).status).toBe(401);
+    expect((await send("PATCH", "/api/v1/tasks/alice-task", { cookie: "alice", origin: "https://evil.example", body: details })).status).toBe(403);
+    expect((await send("PATCH", "/api/v1/tasks/alice-task", { cookie: "alice", origin: ORIGIN, body: details })).status).toBe(200);
   });
 });

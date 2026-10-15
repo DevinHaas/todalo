@@ -24,7 +24,7 @@ const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try agai
 // share one 404 so IDs cannot be probed.
 /** Writes: a bearer header (native) authenticates by itself and cookies are
  * ignored; a cookie session must come from an allowed Origin (CSRF guard). */
-export async function writeUser(store: Pick<ProjectStore, "verify" | "allowedOrigins">, request: Request): Promise<string | null | "forbidden"> {
+export async function writeUser(store: Pick<ProjectStore, "verify"> & { allowedOrigins: ReadonlySet<string> }, request: Request): Promise<string | null | "forbidden"> {
   const authorization = request.headers.get("authorization");
   if (authorization?.startsWith("Bearer ")) return store.verify(new Headers({ authorization }));
   const origin = request.headers.get("origin");
