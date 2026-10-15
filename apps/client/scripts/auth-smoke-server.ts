@@ -2,6 +2,7 @@
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "../../api/src/auth-routes";
+import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 
@@ -10,7 +11,10 @@ const auth = createSessionAuth({
   baseURL: "http://localhost:5173",
   secret: "local-smoke-test-only-secret-32-characters",
   trustedOrigins: ["http://localhost:5173"],
+  // Fake Google: consent at /api/fake-google/authorize, token endpoint stubbed below.
+  socialProviders: { google: { clientId: "qa-fake-google-client", clientSecret: "qa-fake-google-secret" } },
 });
+globalThis.fetch = fakeGoogleFetch(fetch);
 const { user } = await auth.api.signUpEmail({ body: { name: "Development User", email: "existing@example.test", password: "dev-password-123" } });
 const { user: other } = await auth.api.signUpEmail({ body: { name: "Other User", email: "other@example.test", password: "dev-password-123" } });
 
@@ -31,7 +35,7 @@ const tasks = [
 if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 5);
 const tomorrow = day(1);
 
-createAuthRoutes(auth).use(createTaskRoutes({
+const app = createAuthRoutes(auth).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   // ponytail: inline copy of countTodayTasks; importing @todalo/server/today would pull in the production DB client.
   today: async (userId) => {
@@ -39,5 +43,6 @@ createAuthRoutes(auth).use(createTaskRoutes({
     return { tasks: owned, openCount: owned.filter(item => item.status !== "done" && item.dueDate && item.dueDate < tomorrow).length };
   },
   task: async (userId, id) => tasks.find(item => item.userId === userId && item.id === id) ?? null,
-})).listen({ hostname: "127.0.0.1", port: 3009 });
+}));
+Bun.serve({ hostname: "127.0.0.1", port: 3009, fetch: withFakeGoogleConsent((request) => app.handle(request)) });
 console.log("Isolated account QA API listening on 127.0.0.1:3009");

@@ -1,6 +1,7 @@
 mod auth;
 mod credentials;
 mod endpoint;
+mod oauth;
 mod reads;
 use auth::{Account, Credentials, NativeAuth};
 
@@ -43,9 +44,39 @@ async fn sign_out(state: tauri::State<'_, NativeAuth>) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Rust-only: the webview gets no opener or deep-link permission.
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(NativeAuth::new())
+        .manage(oauth::GoogleFlow::default())
+        .setup(|app| {
+            use tauri_plugin_deep_link::DeepLinkExt;
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                oauth::handle(
+                    &handle,
+                    event.urls().iter().map(|url| url.to_string()).collect(),
+                );
+            });
+            // Cold launch by the returning link.
+            if let Some(urls) = app.deep_link().get_current()? {
+                oauth::handle(
+                    app.handle(),
+                    urls.iter().map(|url| url.to_string()).collect(),
+                );
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
-            account, sign_in, sign_up, sign_out, reads::today, reads::task
+            account,
+            sign_in,
+            sign_up,
+            sign_out,
+            reads::today,
+            reads::task,
+            oauth::google_start,
+            oauth::google_finish,
+            oauth::google_cancel
         ])
         .run(tauri::generate_context!())
         .expect("Cannot launch todalo");

@@ -38,5 +38,11 @@
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [{ "scheme": ["app.todalo.client"], "appLink": false }],
+      "desktop": { "schemes": ["app.todalo.client"] }
+    }
   }
 }

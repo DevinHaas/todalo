@@ -13,6 +13,16 @@ export interface AccountTransport {
   signOut(): Promise<void>;
 }
 
+export type GoogleIntent = "sign-in" | "link";
+export interface GoogleOutcome { account: Account; linked: boolean }
+/** System-browser Google flow. No method ever carries a code, token or URL. */
+export interface GoogleTransport {
+  startGoogle(intent: GoogleIntent): Promise<void>;
+  /** Resolves when a pending flow returns; null when none is pending. */
+  finishGoogle(): Promise<GoogleOutcome | null>;
+  cancelGoogle(): Promise<void>;
+}
+
 interface SessionState {
   status: "loading" | "signed-in" | "signed-out" | "error";
   account: Account | null;
@@ -25,9 +35,16 @@ export class SessionController {
   private generation = 0;
   private mutationCount = 0;
 
-  constructor(private transport: AccountTransport, private clearUserCache: () => void) {}
+  // Kept apart from `state` so an account refresh racing the browser return
+  // (focus/visibility fire as the app reopens) cannot wipe a Google error.
+  private googlePending = false;
+  private googleError: string | null = null;
+
+  constructor(private transport: AccountTransport, private clearUserCache: () => void, private google?: GoogleTransport) {}
 
   getSnapshot = () => this.state;
+  getGooglePending = () => this.googlePending;
+  getGoogleError = () => this.googleError;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
@@ -38,7 +55,7 @@ export class SessionController {
     for (const listener of this.listeners) listener();
   }
 
-  clearError() { this.update({ ...this.state, error: null }); }
+  clearError() { this.googleError = null; this.update({ ...this.state, error: null }); }
 
   async refresh() {
     if (this.mutationCount > 0) return;
@@ -82,5 +99,51 @@ export class SessionController {
     } finally {
       this.mutationCount--;
     }
+  }
+
+  /** Opens the system browser, then waits until the handoff reopens the app. */
+  async continueWithGoogle(intent: GoogleIntent) {
+    if (!this.google || this.googlePending) return;
+    this.googlePending = true;
+    this.googleError = null;
+    this.update({ ...this.state });
+    try {
+      await this.google.startGoogle(intent);
+      this.settleGoogle(await this.google.finishGoogle());
+    } catch (error) {
+      this.failGoogle(error);
+    } finally {
+      this.googlePending = false;
+      this.update({ ...this.state });
+    }
+  }
+
+  /** Cold start: finishes a flow begun before the app was closed, if any. */
+  async resumeGoogle() {
+    if (!this.google) return;
+    try { this.settleGoogle(await this.google.finishGoogle()); }
+    catch (error) { this.failGoogle(error); }
+  }
+
+  async cancelGoogle() {
+    try { await this.google?.cancelGoogle(); }
+    catch (error) { this.failGoogle(error); }
+  }
+
+  private settleGoogle(outcome: GoogleOutcome | null) {
+    if (!outcome) return;
+    // Supersede account reads that started before the handoff completed.
+    ++this.generation;
+    if (outcome.account.user.id !== this.state.account?.user.id) this.clearUserCache();
+    this.googleError = null;
+    this.update({ status: "signed-in", account: outcome.account, error: null });
+  }
+
+  private failGoogle(error: unknown) {
+    // Leaving Google on purpose is not an error; everything else keeps the
+    // current account and shows only known recovery copy.
+    this.googleError = !(error instanceof AccountTransportError) ? "Google sign-in could not be completed. Try again."
+      : error.code === "GOOGLE_CANCELLED" ? null : error.message;
+    this.update({ ...this.state });
   }
 }

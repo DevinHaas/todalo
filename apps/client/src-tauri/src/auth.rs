@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 use crate::{credentials, endpoint::endpoint};
 
 pub struct NativeAuth {
-    client: Client,
+    pub(crate) client: Client,
     base: Result<Url, &'static str>,
     pub gate: Mutex<()>,
 }
@@ -60,7 +60,7 @@ impl NativeAuth {
         }
     }
 
-    fn origin(&self) -> Result<String, &'static str> {
+    pub(crate) fn origin(&self) -> Result<String, &'static str> {
         Ok(self
             .base
             .as_ref()
@@ -69,7 +69,7 @@ impl NativeAuth {
             .ascii_serialization())
     }
 
-    fn url(&self, path: &str) -> Result<Url, &'static str> {
+    pub(crate) fn url(&self, path: &str) -> Result<Url, &'static str> {
         self.base
             .as_ref()
             .map_err(|error| *error)?
@@ -77,7 +77,7 @@ impl NativeAuth {
             .map_err(|_| "Invalid API endpoint.")
     }
 
-    async fn revoke(&self, token: &str) -> Result<(), &'static str> {
+    pub(crate) async fn revoke(&self, token: &str) -> Result<(), &'static str> {
         let response = self
             .client
             .post(self.url("/api/auth/sign-out")?)
@@ -92,7 +92,7 @@ impl NativeAuth {
         }
     }
 
-    async fn identity(&self, token: &str) -> Result<Option<Account>, &'static str> {
+    pub(crate) async fn identity(&self, token: &str) -> Result<Option<Account>, &'static str> {
         let response = self
             .client
             .get(self.url("/api/v1/account")?)

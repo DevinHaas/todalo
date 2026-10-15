@@ -1,5 +1,6 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { bearer } from "better-auth/plugins";
+import { nativeOAuth } from "./native-oauth";
 
 // Both HTTP hosts use this configuration and the existing session database.
 // Accepting the database here also lets boundary tests use Better Auth's adapter.
@@ -8,7 +9,7 @@ export function createSessionAuth(options: Pick<BetterAuthOptions, "database" | 
     ...options,
     emailAndPassword: { enabled: true },
     advanced: { disableOriginCheck: false, disableCSRFCheck: false },
-    plugins: [bearer({ requireSignature: true })],
+    plugins: [bearer({ requireSignature: true }), nativeOAuth()],
     account: {
       accountLinking: { enabled: true, trustedProviders: ["google"], allowDifferentEmails: true },
     },

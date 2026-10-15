@@ -2,8 +2,8 @@
 
 The browser, Mac and iOS shells share this React client: account screens, the app
 sidebar shell, a read-only Today list and task detail (ticket 3). Email sign-in
-and registration use the existing Better Auth account/session tables. No provider
-OAuth has been added to this client.
+and registration use the existing Better Auth account/session tables. Google
+sign-in and account linking (ticket 4) go through the system browser.
 
 ## Run against your development API
 
@@ -37,6 +37,38 @@ attaches bearer headers. There is no token getter, web storage fallback, or
 general HTTP command. A failed server sign-out keeps the credential for retry;
 user query caches are cleared when sign-out starts. Expired/revoked sessions are
 removed after an account response returns 401.
+
+## Google sign-in and linking (ticket 4)
+
+- **Browser:** Better Auth's own `POST /api/auth/sign-in/social` and
+  `/link-social` with `callbackURL` back to the initiating page
+  (`?google=signed-in|linked|failed`, stripped on return). The session arrives as
+  the usual HttpOnly cookie; the legacy `/api/auth/callback/google` is unchanged.
+- **Native:** `google_start { intent }`, `google_finish`, `google_cancel` (in
+  `src-tauri/src/oauth.rs`; the webview never sees a URL, code or token). Rust
+  creates a 32-byte verifier and state, calls `POST /api/auth/native-oauth/begin`
+  (bearer-authenticated for `link`), keeps `{state, verifier, intent, expiry}` in
+  Apple Keychain, and opens the returned `/api/auth/native-oauth/authorize` URL in
+  the **system browser** (Safari/default browser via the opener plugin; not a
+  webview). That endpoint runs Better Auth's normal Google state/callback; then
+  `/native-oauth/complete` (in the same browser) issues a 2-minute single-use code
+  and shows a "Return to todalo" page that opens
+  `app.todalo.client://oauth/callback?state=…&code=…` (or `&error=cancelled|not_linked|already_linked|failed`).
+  Rust accepts it only for the pending state, deletes the pending flow before any
+  network call, and exchanges `{code, verifier}` at `/native-oauth/exchange` for a
+  signed session stored straight into Keychain. Replayed, forged or stale links
+  are ignored; codes are consumed even on a wrong verifier.
+- **Server:** `packages/auth/src/native-oauth.ts` is a Better Auth plugin, so both
+  hosts that mount `auth.handler` (legacy Next and Elysia) serve it beside the
+  existing Google callback. Attempts live 10 minutes, codes 2 minutes, both in
+  the Better Auth `verification` table and consumed atomically. The browser
+  session created by the Google callback is revoked before the code is issued.
+- **Accounts are never merged silently:** Better Auth refuses implicit linking to
+  an unverified email/password account (`not_linked`); the user signs in with the
+  password and links Google from the account screen instead.
+- **Deep links:** only the `app.todalo.client` scheme for `oauth/callback` is
+  registered (`plugins.deep-link` in `tauri.conf.json`; CFBundleURLTypes in the
+  generated iOS Info.plist). No task routes.
 
 ## Authenticated reads (ticket 3 conventions)
 
@@ -74,6 +106,10 @@ fixture Today tasks and a second user's private task (`/tasks/other-private`) fo
 cross-user checks. `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
 All these records disappear on service restart. It imports no production DB or
 auth singleton. Registration can create additional disposable QA accounts.
+Google is faked (`apps/api/src/fake-google.ts`): authorization redirects go to a
+local consent page at `/api/fake-google/authorize` (consent as
+`google-qa@example.test`, as `existing@example.test`, or cancel) and the token
+endpoint returns an unsigned ID token. Real Google is never contacted.
 
 To build a local Mac app against that service:
 

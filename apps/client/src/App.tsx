@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { session } from "./runtime";
+import { GoogleButton } from "./google";
 import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
 
   useEffect(() => {
     void session.refresh();
+    void session.resumeGoogle();
     const refresh = () => { if (document.visibilityState === "visible") void session.refresh(); };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
@@ -60,6 +62,7 @@ export default function App() {
         {state.error && <p className="error" role="alert">{state.error}</p>}
         <button type="submit" disabled={pending}>{pending ? "Please wait…" : mode === "signIn" ? "Sign in" : "Sign up"}</button>
       </form>
+      <GoogleButton intent="sign-in" disabled={pending} />
       <p className="switch-mode">{mode === "signIn" ? "Don't have an account? " : "Already have an account? "}<button className="text-button" disabled={pending} onClick={() => { session.clearError(); setMode(mode === "signIn" ? "signUp" : "signIn"); }}>{mode === "signIn" ? "Sign up" : "Sign in"}</button></p>
     </>}
   </section></main>;

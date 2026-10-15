@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { Account } from "./session";
 import { reads, session } from "./runtime";
+import { GoogleButton } from "./google";
 import { TaskView, TodayView } from "./views";
 
 // ponytail: controls without a migrated backend (search, add task, inbox,
@@ -85,6 +86,7 @@ export function AccountScreen({ account, error }: { account: Account; error: str
     <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
     <dl><dt>Name</dt><dd>{account.user.name}</dd><dt>Email</dt><dd>{account.user.email}</dd></dl>
     {error && <p className="error" role="alert">{error}</p>}
+    <GoogleButton intent="link" disabled={pending} />
     <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
   </section>;
 }
