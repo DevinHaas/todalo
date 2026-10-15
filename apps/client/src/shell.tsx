@@ -15,6 +15,7 @@ import { useTaskWrites } from "./task-writes";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
 import { TodayCalendar } from "./schedule-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
+import { TaskOrganizerScreen } from "./organization-screens";
 
 // ponytail: controls without a migrated backend (search, inbox,
 // filters) keep their legacy appearance but are inert
@@ -116,6 +117,7 @@ export function TaskScreen({ account }: { account: Account }) {
     onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
     onEdit={() => setClosedFor(null)} editor={editor}
+    organize={(task) => <TaskOrganizerScreen userId={account.user.id} task={task} />}
     attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
 }
 

@@ -225,6 +225,43 @@ removed after an account response returns 401.
   `src/attachment-views.tsx` (picker label, paste outside text fields, drop, retry
   only for interrupted saves), runtime glue in `src/attachment-screens.tsx`.
 
+## Sections and sub-tasks (ticket 13 conventions)
+
+- **Server logic:** `packages/server/src/organization.ts` (sections, destinations,
+  legacy multi-task `moveTasks`, `setTaskParent`); the legacy organization actions
+  only add `revalidatePath`. Zod schemas in `organization-input.ts` (client-safe).
+  `TaskOrganizationError` (`@todalo/db/task-organization-validation`) carries
+  `reason: "missing"` (absent or another user's project/section/parent → 404) or
+  `"invalid"` (own parent, sub-task of a sub-task, nesting a task with sub-tasks → 400);
+  messages are the legacy ones.
+- **One task's move or parent change is an `updateTask` edit**, sent to
+  `PATCH /api/v1/tasks/:id` as `{ updatedAt, projectId, sectionId }` or
+  `{ updatedAt, parentId }` (strict union beside `taskDetailsInput`, never both; Inbox is
+  `projectId: null` with no section). Same stale check (412) and replay rule as edits.
+  Legacy invariants: a moved parent carries its sub-tasks, a sub-task moved on its own
+  becomes a root, nesting joins the parent's project and section, one level only.
+  The legacy move has no ordering, so no dedicated command was needed; ticket 15's bulk
+  move should expose `moveTasks` (several IDs, same carry/detach rules) as its own
+  owner-checked command, and own ordering (`sortOrder`) there.
+- **API:** `GET /api/v1/destinations` → `{ projects: [{ id, name }], sections }`;
+  `GET /api/v1/projects/:id` now includes `sections: SectionDto[]` (legacy order) and
+  every `TaskDto` has `sectionId`; `POST /api/v1/projects/:id/sections { name }` →
+  `201 { section }`; `DELETE /api/v1/sections/:id` → `{ id }` (tasks stay in the
+  project, unsectioned). Write auth as project writes.
+- **Native:** `destinations`, `create_section { projectId, name }`,
+  `delete_section { id }`, `organize_task { id, change }` in
+  `src-tauri/src/organization.rs`; `change` must be exactly a move or a parent change
+  (Rust rebuilds the body, rejects anything else as `INVALID_INPUT` copy).
+- **Client:** `src/organization.ts` (`organizationKeys.destinations` =
+  `["user", id, "destinations"]`, `organizationMutations`, `parentCandidates`).
+  Organize and section delete invalidate Today, every `["user", id, "task"]` and
+  `["user", id, "project"]` key (sub-tasks move too); section create invalidates the
+  project and destinations. Not optimistic, retried like edits. Touch UI: Move task /
+  Nest task / Unnest task on the task page (`TaskOrganizer`), Add section and per-section
+  collapse/Delete section on the project page (`sectionGroups`, `SectionHeader`).
+  Board layouts (ticket 17) should group by `sectionGroups` and move cards between
+  sections with `organize` (`{ projectId, sectionId }`).
+
 ## Upcoming, calendar and schedule (ticket 16 conventions)
 
 - **One read:** `/upcoming`, the month/week calendar and Today's schedule all use

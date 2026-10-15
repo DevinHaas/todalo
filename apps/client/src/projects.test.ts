@@ -9,7 +9,7 @@ import { ProjectsView, ProjectView } from "./project-views";
 import { TodayView } from "./views";
 
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
-  id, title: id, description: null, status: "todo", priority: 4, projectId: "work", parentId: null,
+  id, title: id, description: null, status: "todo", priority: 4, projectId: "work", sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 });
 const work = { id: "work", name: "Work", color: null };
@@ -92,7 +92,7 @@ describe("project screens", () => {
 
   it("opens a project with its open member tasks, children after parents", () => {
     const tasks = [task("child", { parentId: "parent" }), task("parent"), task("done", { status: "done" })];
-    const html = render(createElement(ProjectView, { state: success({ project: work, tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: idle }));
+    const html = render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: idle }));
     expect(html).toContain("<h1 class=\"page-title\">Work</h1>");
     expect(html).toContain("2 tasks");
     expect(html.indexOf(">parent<")).toBeLessThan(html.indexOf(">child<"));
@@ -102,7 +102,7 @@ describe("project screens", () => {
 
   it("renders empty, not-found and error project states", () => {
     const view = (state: Parameters<typeof ProjectView>[0]["state"]) => render(createElement(ProjectView, { state, onRetry: noop, onRename: async () => {}, onDelete: noop, write: idle }));
-    expect(view(success({ project: work, tasks: [] }))).toContain("No open tasks in this project.");
+    expect(view(success({ project: work, sections: [], tasks: [] }))).toContain("No open tasks in this project.");
     expect(view(success(null))).toContain("Project not found");
     expect(view({ status: "error", error: new Error("Cannot reach todalo. Check your connection and try again.") })).toContain("Cannot reach todalo");
     expect(view({ status: "pending", error: null })).toContain("Loading project…");

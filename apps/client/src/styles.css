@@ -71,6 +71,11 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .section-toggle .closed { transform: rotate(-90deg); }
 .muted-count { font-weight: 400; color: var(--muted-foreground); }
 .section-heading { margin: 0 0 .5rem; font-size: .875rem; font-weight: 600; }
+/* Ticket 13: legacy section header (name toggle + Delete section), touch-sized. */
+.section-header { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: .5rem; font-size: .875rem; }
+.section-header .section-toggle, .section-header .text-action { min-height: 2.75rem; margin: 0; }
+.section-header .text-action { font-size: .75rem; }
+.organizer { display: grid; gap: .5rem; margin: 1rem 0; }
 .task-row { display: flex; align-items: center; gap: .75rem; min-height: 3rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
 .task-row.child { margin-left: 1.5rem; }
 .checkbox { width: 1rem; height: 1rem; flex-shrink: 0; border: 1px solid var(--input); border-radius: 4px; box-shadow: 0 1px 2px #0000000d; }

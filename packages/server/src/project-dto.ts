@@ -4,13 +4,17 @@ import type { TaskDto } from "./task-dto";
 
 export interface ProjectDto { id: string; name: string; color: string | null }
 export interface ProjectsDto { projects: ProjectDto[] }
-/** A project with its member tasks (all statuses; the client hides completed ones). */
-export interface ProjectDetailDto { project: ProjectDto; tasks: TaskDto[] }
+export interface SectionDto { id: string; projectId: string; name: string }
+/** A project with its sections (legacy order) and member tasks (all statuses; the client hides completed ones). */
+export interface ProjectDetailDto { project: ProjectDto; sections: SectionDto[]; tasks: TaskDto[] }
+/** Everything a task can be moved to (legacy getOrganizationDestinations); Inbox is implicit. */
+export interface DestinationsDto { projects: Pick<ProjectDto, "id" | "name">[]; sections: SectionDto[] }
 
 export interface ProjectRecord { id: string; name: string; color: string | null }
 
 /** Allow-lists fields: user IDs and creation internals never leave the server. */
 export const toProjectDto = (project: ProjectRecord): ProjectDto => ({ id: project.id, name: project.name, color: project.color });
+export const toSectionDto = (section: SectionDto): SectionDto => ({ id: section.id, projectId: section.projectId, name: section.name });
 
 /** Legacy rule (apps/web projects/actions.ts): trimmed name, 1–200 characters. */
 export function parseProjectName(body: unknown): string | null {

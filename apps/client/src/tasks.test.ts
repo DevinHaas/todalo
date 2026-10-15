@@ -13,7 +13,7 @@ import { dateInputValue, localInstant, repeatChoice, repeatLabel, timeInputValue
 
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
-  id, title: id, description: null, status: "todo", priority: 4, projectId: null, parentId: null,
+  id, title: id, description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 });
 const now = new Date(2026, 9, 4, 10);

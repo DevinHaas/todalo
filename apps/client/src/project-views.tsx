@@ -4,6 +4,8 @@ import { Plus } from "lucide-react";
 import { treeOrder } from "./tasks";
 import { Failure, TaskRow, type ReadState } from "./views";
 import type { ProjectDetailDto, ProjectDto } from "./projects";
+import type { SectionDto } from "./organization";
+import { SectionComposer, SectionHeader, sectionGroups } from "./organization-views";
 import { releaseFocus } from "./software-keyboard";
 
 // Pure screen views (legacy ProjectDirectory / ProjectView): no runtime imports.
@@ -33,18 +35,25 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
   </div>;
 }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, now = new Date() }: {
-  state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode; now?: Date;
+/** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
+export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
+
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date() }: {
+  state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
+  sections?: SectionActions; now?: Date;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   if (state.status === "pending") return <p className="state" role="status">Loading project…</p>;
   if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div><h1 className="page-title">Project not found</h1><p className="state">This project does not exist or you do not have access to it.</p><Link className="text-action" to="/projects">Back to Projects</Link></div>;
-  const { project, tasks } = state.data;
+  const { project, tasks, sections = [] } = state.data;
   // Legacy display default hides completed tasks; server order is sortOrder.
   const open = treeOrder(tasks.filter(task => task.status !== "done"));
+  const toggle = (id: string) => setCollapsed(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   async function rename(event: FormEvent) {
     event.preventDefault();
     try { await onRename(name ?? project.name); setMenuOpen(false); setName(null); } catch { /* shown through write.error */ }
@@ -53,8 +62,9 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     <div className="project-header">
       <h1 className="page-title">{project.name}</h1>
       <div className="project-actions">
-        {/* ponytail: sections are ticket 13. */}
-        <span className="button outline" aria-disabled="true">Add section</span>
+        {sectionActions
+          ? <button type="button" className="button outline" aria-expanded={adding} onClick={() => setAdding(value => !value)}>Add section</button>
+          : <span className="button outline" aria-disabled="true">Add section</span>}
         <button type="button" className="button outline" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}>Project menu</button>
       </div>
     </div>
@@ -73,13 +83,18 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
         </div>
       </div> : <button type="button" className="button destructive" disabled={write.pending} onClick={() => setConfirming(true)}>Delete project</button>}
     </section>}
+    {adding && sectionActions && <SectionComposer pending={write.pending} onCreate={sectionActions.create} onClose={() => setAdding(false)} />}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
     {files}
-    <section>
-      <h2 className="section-heading">Tasks</h2>
-      {open.map(task => <TaskRow key={task.id} task={task} now={now} projectName={project.name} />)}
-      {open.length === 0 && <p className="state">No open tasks in this project.</p>}
-      <span className="composer" aria-disabled="true"><Plus />Add task</span>
-    </section>
+    <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"}>
+      {section
+        ? <SectionHeader section={section} collapsed={collapsed.has(section.id)} onToggle={() => toggle(section.id)} pending={write.pending} onDelete={() => sectionActions?.remove(section)} />
+        : <h2 className="section-heading">Tasks</h2>}
+      {!(section && collapsed.has(section.id)) && <>
+        {grouped.map(task => <TaskRow key={task.id} task={task} now={now} projectName={project.name} />)}
+        {!section && open.length === 0 && <p className="state">No open tasks in this project.</p>}
+        <span className="composer" aria-disabled="true"><Plus />Add task</span>
+      </>}
+    </section>)}</div>
   </div>;
 }

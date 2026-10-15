@@ -21,7 +21,7 @@ afterEach(() => { process.env.TZ = originalZone; });
 // Node applies a runtime TZ change to Date immediately.
 const zones = ["Europe/Zurich", "America/New_York", "Australia/Sydney", "Pacific/Auckland", "UTC"];
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
-  id, title: id, description: null, status: "todo", priority: 4, projectId: null, parentId: null,
+  id, title: id, description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 });
 const keys = (days: Date[]) => days.map(dayKey);

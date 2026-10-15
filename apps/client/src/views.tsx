@@ -118,10 +118,12 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   </div></div>;
 }
 
-export function TaskView({ state, onRetry, actions, writeError, attachments, onEdit, editor }: {
+export function TaskView({ state, onRetry, actions, writeError, attachments, onEdit, editor, organize }: {
   state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null; attachments?: ReactNode;
   /** Opens the edit dialog (rendered as `editor`); without it the page stays read-only. */
   onEdit?: () => void; editor?: ReactNode;
+  /** Ticket 13: Move / Nest / Unnest for the loaded task. */
+  organize?: (task: TaskDto) => ReactNode;
 }) {
   let body: ReactNode;
   if (state.status === "pending") body = <p className="state" role="status">Loading task…</p>;
@@ -142,6 +144,7 @@ export function TaskView({ state, onRetry, actions, writeError, attachments, onE
         {actions && task.status !== "done" && <button type="button" className="button outline" onClick={() => actions.complete(task)}>Complete task</button>}
         {actions && <button type="button" className="button destructive" onClick={() => actions.remove(task)}>Delete task</button>}
       </div>}
+      {organize?.(task)}
       {editor}
     </>;
   }

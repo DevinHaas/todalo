@@ -4,6 +4,7 @@ mod credentials;
 mod endpoint;
 mod feedback;
 mod oauth;
+mod organization;
 mod projects;
 mod ramble;
 mod reads;
@@ -90,6 +91,10 @@ pub fn run() {
             projects::create_project,
             projects::rename_project,
             projects::delete_project,
+            organization::destinations,
+            organization::create_section,
+            organization::delete_section,
+            organization::organize_task,
             attachments::attachments,
             attachments::upload_files,
             attachments::save_attachment,

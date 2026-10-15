@@ -4,7 +4,7 @@ import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
-import { qaAttachmentRoutes, qaProjectRoutes } from "./qa-projects";
+import { qaAttachmentRoutes, qaOrganize, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { editConflicts, planCompletion, type CompletionTarget } from "../../../packages/server/src/task-rules";
 import { createApi } from "../../api/src/app";
@@ -42,6 +42,9 @@ const tasks = [
   task("completed", user.id, "Completed fixture task", { dueDate: day(0, 9), status: "done", completedAt: day(0, 9) }),
   task("daily-standup", user.id, "Daily standup notes", { dueDate: day(0, 9, 30), recurrence: { n: 1, unit: "day", basedOn: "scheduled" } }),
   task("other-private", other.id, "Another user's private task", { dueDate: day(0, 10), projectId: "qa-other" }),
+  // Ticket 13: a sectioned sub-task under an undated Work task.
+  task("undated-step", user.id, "Undated fixture sub-task", { projectId: "qa-work", sectionId: "qa-doing", parentId: "undated-parent" }),
+  task("undated-parent", user.id, "Sectioned fixture parent", { projectId: "qa-work", sectionId: "qa-doing" }),
 ];
 if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 6);
 const tomorrow = day(1);
@@ -50,6 +53,11 @@ const projects = [
   { id: "qa-work", userId: user.id, name: "Work", color: null },
   { id: "qa-errands", userId: user.id, name: "Errands", color: null },
   { id: "qa-other", userId: other.id, name: "Other user's project", color: null },
+];
+const sections = [
+  { id: "qa-doing", userId: user.id, projectId: "qa-work", name: "Doing", sortOrder: 0 },
+  { id: "qa-later", userId: user.id, projectId: "qa-work", name: "Later", sortOrder: 1 },
+  { id: "qa-other-section", userId: other.id, projectId: "qa-other", name: "Other user's section", sortOrder: 0 },
 ];
 // Rows as the legacy paste route stored them (base64 content), for compatibility checks.
 const stored = (id: string, userId: string, taskId: string, name: string, text: string) => ({ id, userId, taskId, name, mediaType: "text/plain", byteSize: Buffer.byteLength(text), content: Buffer.from(text).toString("base64") });
@@ -63,6 +71,7 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
   verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
   projects,
+  sections,
   tasks,
 })).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
@@ -109,6 +118,7 @@ const app = createAuthRoutes(auth).use(qaProjectRoutes({
     ambiguous(`update:${id}`);
     return owned;
   },
+  organize: qaOrganize({ projects, sections, tasks }),
   remove: async (userId, id) => {
     const index = tasks.findIndex(item => item.userId === userId && item.id === id);
     if (index >= 0) tasks.splice(index, 1);

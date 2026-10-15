@@ -32,6 +32,11 @@ const app = createProjectRoutes({
     if (projects.length < before) tasks.forEach(item => { if (item.projectId === id) item.projectId = null; });
     return projects.length < before;
   },
+  // Sections and destinations: organization-routes.test.ts.
+  sections: async () => [],
+  createSection: async () => null,
+  removeSection: async () => false,
+  destinations: async () => ({ projects: [], sections: [] }),
 });
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
   const headers = new Headers();

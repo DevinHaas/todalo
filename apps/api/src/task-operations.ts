@@ -2,6 +2,7 @@
 // same functions the legacy Server Actions wrap), including calendar effects.
 import { getOwnedTask } from "@todalo/server/today";
 import { completeTask, createTask, deleteTask, TaskIdConflictError, updateTask } from "@todalo/server/tasks";
+import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
 import type { TaskWrites } from "./task-routes";
 
 export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
@@ -27,6 +28,16 @@ export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
       recurrence: recurrence && { ...recurrence, until: date(recurrence.until ?? null) },
     }, { seenUpdatedAt: new Date(updatedAt) });
     return result === "updated" ? getOwnedTask(userId, id) : result === "changed" ? "changed" : null;
+  },
+  // Ticket 13: moves and parent changes are updateTask edits too (same rules and stale check).
+  async organize(userId, id, { updatedAt, ...change }) {
+    try {
+      const result = await updateTask(userId, { id, ...change }, { seenUpdatedAt: new Date(updatedAt) });
+      return result === "updated" ? getOwnedTask(userId, id) : result === "changed" ? "changed" : null;
+    } catch (error) {
+      if (error instanceof TaskOrganizationError) return error.reason === "missing" ? null : "invalid";
+      throw error;
+    }
   },
   remove: deleteTask,
 };

@@ -9,6 +9,8 @@ export interface TaskDto {
   status: "todo" | "in_progress" | "done";
   priority: number;
   projectId: string | null;
+  /** Section within `projectId` (always null in the Inbox). */
+  sectionId: string | null;
   parentId: string | null;
   dueDate: string | null;
   dueDateEnd: string | null;
@@ -30,7 +32,7 @@ const iso = (value: DateLike) => value == null ? null : new Date(value).toISOStr
 
 export interface TaskRecord {
   id: string; title: string; description: string | null; status: TaskDto["status"]; priority: number;
-  projectId: string | null; parentId: string | null; dueDate: DateLike; dueDateEnd: DateLike;
+  projectId: string | null; sectionId?: string | null; parentId: string | null; dueDate: DateLike; dueDateEnd: DateLike;
   deadline: DateLike; completedAt: DateLike; labelIds: string[];
   recurrence?: { n: number; unit: RecurrenceDto["unit"]; basedOn: RecurrenceDto["basedOn"]; until?: DateLike } | null;
   updatedAt?: DateLike;
@@ -40,7 +42,7 @@ export interface TaskRecord {
 export function toTaskDto(task: TaskRecord): TaskDto {
   return {
     id: task.id, title: task.title, description: task.description, status: task.status, priority: task.priority,
-    projectId: task.projectId, parentId: task.parentId, dueDate: iso(task.dueDate), dueDateEnd: iso(task.dueDateEnd),
+    projectId: task.projectId, sectionId: task.sectionId ?? null, parentId: task.parentId, dueDate: iso(task.dueDate), dueDateEnd: iso(task.dueDateEnd),
     deadline: iso(task.deadline), completedAt: iso(task.completedAt), labelIds: [...task.labelIds],
     recurrence: task.recurrence ? { n: task.recurrence.n, unit: task.recurrence.unit, basedOn: task.recurrence.basedOn, until: iso(task.recurrence.until) } : null,
     updatedAt: iso(task.updatedAt),

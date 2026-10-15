@@ -5,6 +5,7 @@ import { AccountTransportError } from "./errors";
 import { taskQueries, taskTransport } from "./tasks";
 import { projectQueries, projectTransport } from "./projects";
 import { attachmentQueries, attachmentTransport } from "./attachments";
+import { organizationQueries, organizationTransport } from "./organization";
 
 // A read or write that finds the session revoked re-checks the account, which
 // signs the UI out (and clears every user-scoped query) when the server agrees.
@@ -21,3 +22,5 @@ export const projects = projectTransport();
 export const projectReads = projectQueries(projects);
 export const attachments = attachmentTransport();
 export const attachmentReads = attachmentQueries(attachments);
+export const organization = organizationTransport();
+export const organizationReads = organizationQueries(organization);

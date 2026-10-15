@@ -46,6 +46,8 @@ const app = createTaskRoutes({
     return task;
   },
   remove: async (userId, id) => { const task = owned(userId, id); rows = rows.filter(item => item !== task); return Boolean(task); },
+  // Moves and parent changes: organization-routes.test.ts.
+  organize: async () => null,
 });
 const get = (path: string, user?: string) => app.handle(new Request(`http://localhost${path}`, user ? { headers: { authorization: `Bearer ${user}` } } : {}));
 const send = (method: string, path: string, { user, body, cookie, origin }: { user?: string; body?: unknown; cookie?: string; origin?: string } = {}) =>
@@ -75,7 +77,7 @@ describe("task read API", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(seen).toEqual(["alice"]);
     expect(await response.json()).toEqual({ openCount: 1, tasks: [{
-      id: "alice-task", title: "alice task", description: null, status: "todo", priority: 4, projectId: null, parentId: null,
+      id: "alice-task", title: "alice task", description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
       dueDate: "2026-10-04T12:30:00.000Z", dueDateEnd: null, deadline: null, completedAt: null, labelIds: ["label"],
       recurrence: null, updatedAt: VERSION,
     }] });

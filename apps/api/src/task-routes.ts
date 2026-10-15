@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { toTaskDto, type TaskDto, type TaskRecord, type TodayDto } from "@todalo/server/task-dto";
 import { basicTaskInput, completionInput, taskDetailsInput, type BasicTaskInput, type TaskDetailsInput } from "@todalo/server/task-input";
+import { taskOrganizationInput, type TaskOrganizationInput } from "@todalo/server/organization-input";
 import { writeUser } from "./project-routes";
 
 export interface TaskReads {
@@ -20,6 +21,12 @@ export interface TaskWrites {
   complete(userId: string, id: string, request: { occurrence?: Date | null; operationId?: string }): Promise<TaskRecord | null | "changed">;
   /** "changed": the task was edited elsewhere since `details.updatedAt`, nothing was written. */
   update(userId: string, id: string, details: TaskDetailsInput): Promise<TaskRecord | null | "changed">;
+  /**
+   * A move or parent change through the same updateTask. null also covers a
+   * missing or foreign project, section or parent; "invalid" a hierarchy rule
+   * (own parent, sub-task of a sub-task, nesting a task that has sub-tasks).
+   */
+  organize(userId: string, id: string, change: TaskOrganizationInput): Promise<TaskRecord | null | "changed" | "invalid">;
   remove(userId: string, id: string): Promise<boolean>;
 }
 
@@ -79,9 +86,16 @@ export function createTaskRoutes(deps: TaskReads & TaskWrites) {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN_ORIGIN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const input = taskDetailsInput.safeParse(body);
-      if (!input.success) return status(400, INVALID);
-      const task = await deps.update(userId, params.id, input.data);
+      // Ticket 13: the same PATCH also takes one organization change (both strict, so a body is one or the other).
+      const organization = taskOrganizationInput.safeParse(body);
+      let task: Awaited<ReturnType<TaskWrites["organize"]>>;
+      if (organization.success) task = await deps.organize(userId, params.id, organization.data);
+      else {
+        const input = taskDetailsInput.safeParse(body);
+        if (!input.success) return status(400, INVALID);
+        task = await deps.update(userId, params.id, input.data);
+      }
+      if (task === "invalid") return status(400, INVALID);
       if (task === "changed") return status(412, TASK_CHANGED);
       return task ? { task: toTaskDto(task) satisfies TaskDto } : status(404, NOT_FOUND);
     })

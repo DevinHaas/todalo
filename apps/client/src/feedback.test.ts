@@ -7,7 +7,7 @@ import { taskKeys, taskMutations, type TaskDto, type TaskTransport } from "./tas
 const memory = () => { const values = new Map<string, string>(); return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => void values.set(key, value) }; };
 const broken = () => { throw new Error("storage blocked"); };
 const task = (id: string): TaskDto => ({
-  id, title: id, description: null, status: "todo", priority: 4, projectId: null, parentId: null,
+  id, title: id, description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null,
 });
 

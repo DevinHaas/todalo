@@ -5,18 +5,26 @@ import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { createAttachmentRoutes } from "../../api/src/attachment-routes";
 import { AttachmentError } from "../../../packages/server/src/attachment-http";
 import { validateAttachmentFiles } from "../../../packages/server/src/attachment-limits";
+import { editConflicts } from "../../../packages/server/src/task-rules";
+import { TaskOrganizationError, validateTaskOrganization } from "../../../packages/db/src/task-organization-validation";
+import { validateTaskParent } from "../../../packages/db/src/task-parent-validation";
+import type { TaskWrites } from "../../api/src/task-routes";
 
 type OwnedTask = TaskRecord & { userId: string };
 type Project = { id: string; userId: string; name: string; color: string | null };
+export type QaSection = { id: string; userId: string; projectId: string; name: string; sortOrder: number };
 
 export function qaProjectRoutes(options: {
   verify: (headers: Headers) => Promise<string | null>;
   allowedOrigins: Set<string>;
   projects: Project[];
+  sections: QaSection[];
   tasks: OwnedTask[];
 }) {
-  const { projects, tasks } = options;
+  const { projects, sections, tasks } = options;
   const owned = (userId: string, id: string) => projects.find(project => project.userId === userId && project.id === id) ?? null;
+  // Legacy order: sortOrder, then name.
+  const ownedSections = (userId: string) => sections.filter(section => section.userId === userId).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   return createProjectRoutes({
     verify: options.verify,
     allowedOrigins: options.allowedOrigins,
@@ -29,10 +37,60 @@ export function qaProjectRoutes(options: {
       const project = owned(userId, id);
       if (!project) return false;
       projects.splice(projects.indexOf(project), 1);
-      for (const task of tasks) if (task.projectId === id) task.projectId = null;
+      for (const task of tasks) if (task.projectId === id) Object.assign(task, { projectId: null, sectionId: null });
+      for (const section of sections.filter(item => item.projectId === id)) sections.splice(sections.indexOf(section), 1);
       return true;
     },
+    sections: async (userId, projectId) => ownedSections(userId).filter(section => section.projectId === projectId),
+    createSection: async (userId, projectId, name) => {
+      if (!owned(userId, projectId)) return null;
+      const section = { id: crypto.randomUUID(), userId, projectId, name, sortOrder: 0 };
+      sections.push(section);
+      return section;
+    },
+    removeSection: async (userId, id) => {
+      const index = sections.findIndex(section => section.userId === userId && section.id === id);
+      if (index < 0) return false;
+      sections.splice(index, 1);
+      for (const task of tasks) if (task.sectionId === id) task.sectionId = null;
+      return true;
+    },
+    destinations: async (userId) => ({ projects: projects.filter(project => project.userId === userId).sort((a, b) => a.name.localeCompare(b.name)), sections: ownedSections(userId) }),
   });
+}
+
+/**
+ * Memory twin of updateTask's organization branch (@todalo/server/tasks) using
+ * the same pure validators: a move detaches a sub-task and carries sub-tasks;
+ * nesting joins the parent's project and section.
+ * ponytail: a copy of ~15 lines of updateTask; extract a pure planner if they diverge.
+ */
+export function qaOrganize(options: { projects: Project[]; sections: QaSection[]; tasks: (OwnedTask & { updatedAt: Date })[] }): TaskWrites["organize"] {
+  const { projects, sections, tasks } = options;
+  return async (userId, id, { updatedAt, ...change }) => {
+    const owned = tasks.find(task => task.userId === userId && task.id === id);
+    if (!owned) return null;
+    if (editConflicts(owned, change, new Date(updatedAt))) return "changed";
+    try {
+      let { projectId, parentId } = owned;
+      let sectionId = owned.sectionId ?? null;
+      if ("parentId" in change) {
+        const parent = tasks.find(task => task.id === change.parentId);
+        validateTaskParent({ userId, taskId: id, parentId: change.parentId }, parent, tasks.some(task => task.parentId === id));
+        if (parent) { projectId = parent.projectId; sectionId = parent.sectionId ?? null; }
+        parentId = change.parentId;
+      } else ({ projectId, sectionId } = change);
+      validateTaskOrganization({ userId, projectId, sectionId }, projects.find(project => project.id === projectId), sections.find(section => section.id === sectionId));
+      const moved = projectId !== owned.projectId || sectionId !== (owned.sectionId ?? null);
+      if (moved && !("parentId" in change)) parentId = null;
+      Object.assign(owned, { projectId, sectionId, parentId, updatedAt: new Date() });
+      if (moved) for (const task of tasks) if (task.userId === userId && task.parentId === id) Object.assign(task, { projectId, sectionId });
+      return owned;
+    } catch (error) {
+      if (error instanceof TaskOrganizationError) return error.reason === "missing" ? null : "invalid";
+      throw error;
+    }
+  };
 }
 
 type Attachment = { id: string; userId: string; taskId: string; name: string; mediaType: string; byteSize: number; content: string };
