@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { treeOrder } from "./tasks";
@@ -32,8 +32,8 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
   </div>;
 }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, now = new Date() }: {
-  state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; now?: Date;
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, now = new Date() }: {
+  state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode; now?: Date;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState<string | null>(null);
@@ -73,6 +73,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, now = n
       </div> : <button type="button" className="button destructive" disabled={write.pending} onClick={() => setConfirming(true)}>Delete project</button>}
     </section>}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
+    {files}
     <section>
       <h2 className="section-heading">Tasks</h2>
       {open.map(task => <TaskRow key={task.id} task={task} now={now} projectName={project.name} />)}

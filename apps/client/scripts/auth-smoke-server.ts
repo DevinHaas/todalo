@@ -4,7 +4,7 @@ import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "../../api/src/auth-routes";
 import { fakeGoogleFetch, withFakeGoogleConsent } from "../../api/src/fake-google";
 import { createTaskRoutes } from "../../api/src/task-routes";
-import { qaProjectRoutes } from "./qa-projects";
+import { qaAttachmentRoutes, qaProjectRoutes } from "./qa-projects";
 import type { TaskRecord } from "../../../packages/server/src/task-dto";
 import { createApi } from "../../api/src/app";
 import { connectSpeech } from "../../api/src/speech";
@@ -42,16 +42,25 @@ const tasks = [
 if (process.env.QA_EMPTY_TODAY) tasks.splice(0, 5);
 const tomorrow = day(1);
 
+const projects = [
+  { id: "qa-work", userId: user.id, name: "Work", color: null },
+  { id: "qa-errands", userId: user.id, name: "Errands", color: null },
+  { id: "qa-other", userId: other.id, name: "Other user's project", color: null },
+];
+// Rows as the legacy paste route stored them (base64 content), for compatibility checks.
+const stored = (id: string, userId: string, taskId: string, name: string, text: string) => ({ id, userId, taskId, name, mediaType: "text/plain", byteSize: Buffer.byteLength(text), content: Buffer.from(text).toString("base64") });
+const attachments = [
+  stored("qa-legacy-file", user.id, "undated", "Legacy brief.txt", "Stored by the legacy web app.\n"),
+  stored("qa-other-file", other.id, "other-private", "Private notes.txt", "Another user's attachment.\n"),
+];
+
+const verifySession = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
 const app = createAuthRoutes(auth).use(qaProjectRoutes({
-  verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
+  verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
-  projects: [
-    { id: "qa-work", userId: user.id, name: "Work", color: null },
-    { id: "qa-errands", userId: user.id, name: "Errands", color: null },
-    { id: "qa-other", userId: other.id, name: "Other user's project", color: null },
-  ],
+  projects,
   tasks,
-})).use(createTaskRoutes({
+})).use(qaAttachmentRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, tasks, attachments })).use(createTaskRoutes({
   verify: async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null,
   // ponytail: inline copy of countTodayTasks; importing @todalo/server/today would pull in the production DB client.
   today: async (userId) => {

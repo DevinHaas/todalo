@@ -106,7 +106,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   </div></div>;
 }
 
-export function TaskView({ state, onRetry, actions, writeError }: { state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null }) {
+export function TaskView({ state, onRetry, actions, writeError, attachments }: { state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null; attachments?: ReactNode }) {
   let body: ReactNode;
   if (state.status === "pending") body = <p className="state" role="status">Loading task…</p>;
   else if (state.status === "error") body = <Failure error={state.error} onRetry={onRetry} />;
@@ -119,6 +119,7 @@ export function TaskView({ state, onRetry, actions, writeError }: { state: ReadS
       {task.status === "done" && <p>Completed task</p>}
       {task.description && <p className="description">{task.description}</p>}
       <p>{meta}</p>
+      {attachments}
       {writeError && <p role="alert" className="form-error">{writeError}</p>}
       {actions && <div className="task-actions">
         {task.status !== "done" && <button type="button" className="button outline" onClick={() => actions.complete(task)}>Complete task</button>}

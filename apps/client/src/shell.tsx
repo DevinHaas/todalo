@@ -11,6 +11,7 @@ import { taskMutations, type TaskDto } from "./tasks";
 import { Composer, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
 import { haptics, hapticsSupported, nativeFeedback } from "./feedback";
+import { TaskAttachmentsScreen } from "./attachment-screens";
 
 // ponytail: controls without a migrated backend (search, inbox,
 // upcoming, filters, display) keep their legacy appearance but are inert
@@ -116,7 +117,7 @@ export function TaskScreen({ account }: { account: Account }) {
     complete: writes.actions.complete,
     remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
   };
-  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error} />;
+  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error} attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
 }
 
 export function AccountScreen({ account, error }: { account: Account; error: string | null }) {

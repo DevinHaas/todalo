@@ -1,3 +1,4 @@
+mod attachments;
 mod auth;
 mod credentials;
 mod endpoint;
@@ -88,6 +89,9 @@ pub fn run() {
             projects::create_project,
             projects::rename_project,
             projects::delete_project,
+            attachments::attachments,
+            attachments::upload_files,
+            attachments::save_attachment,
             oauth::google_start,
             oauth::google_finish,
             oauth::google_cancel,

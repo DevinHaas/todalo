@@ -225,16 +225,45 @@ impl NativeAuth {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<Option<serde_json::Value>, &'static str> {
+        self.send_write(method, path, |request| match body {
+            Some(body) => request.json(&body),
+            None => request,
+        })
+        .await
+    }
+
+    /// Bearer multipart POST built by attachments.rs (never by the webview).
+    /// Same mapping as `write`; a 413 is the batch-size message.
+    pub async fn upload(
+        &self,
+        path: &str,
+        boundary: &str,
+        body: Vec<u8>,
+    ) -> Result<Option<serde_json::Value>, &'static str> {
+        let content_type = format!("multipart/form-data; boundary={boundary}");
+        self.send_write(reqwest::Method::POST, path, |request| {
+            request
+                .header(reqwest::header::CONTENT_TYPE, content_type)
+                .body(body)
+                // Up to 10 MB on a slow connection; the client default is 20 s.
+                .timeout(Duration::from_secs(120))
+        })
+        .await
+    }
+
+    async fn send_write(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        build: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
+    ) -> Result<Option<serde_json::Value>, &'static str> {
         let origin = self.origin()?;
         let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
-        let mut request = self
+        let request = self
             .client
             .request(method, self.url(path)?)
             .bearer_auth(&*token);
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let response = request
+        let response = build(request)
             .send()
             .await
             .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
@@ -242,6 +271,7 @@ impl NativeAuth {
             StatusCode::UNAUTHORIZED => Err("Please sign in again."),
             StatusCode::NOT_FOUND => Ok(None),
             StatusCode::BAD_REQUEST => Err("Check your entry and try again."),
+            StatusCode::PAYLOAD_TOO_LARGE => Err("A paste batch must be at most 10 MB."),
             status if status.is_success() => response
                 .json()
                 .await
@@ -249,6 +279,47 @@ impl NativeAuth {
                 .map_err(|_| "The server returned an invalid response."),
             _ => Err("Your changes could not be saved. Try again."),
         }
+    }
+
+    /// Bearer GET of an attachment's bytes for a fixed path chosen by
+    /// attachments.rs. The bytes stay in Rust; 404 is Ok(None). Responses over
+    /// `limit` bytes are refused before and while reading.
+    pub async fn download(
+        &self,
+        path: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<u8>>, &'static str> {
+        const FAILED: &str = "The file could not be downloaded. Try again.";
+        let origin = self.origin()?;
+        let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
+        let mut response = self
+            .client
+            .get(self.url(path)?)
+            .bearer_auth(&*token)
+            .timeout(Duration::from_secs(120))
+            .send()
+            .await
+            .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => return Err("Please sign in again."),
+            StatusCode::NOT_FOUND => return Ok(None),
+            status if !status.is_success() => return Err(FAILED),
+            _ => {}
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > limit as u64)
+        {
+            return Err(FAILED);
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| FAILED)? {
+            if bytes.len() + chunk.len() > limit {
+                return Err(FAILED);
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(Some(bytes))
     }
 
     /// Bearer POST minting a one-use Ramble socket ticket (see ramble.rs). Only

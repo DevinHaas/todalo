@@ -27,6 +27,10 @@ const messages = {
   INVALID_RESPONSE: "The server returned an invalid response.",
   INVALID_INPUT: "Check your entry and try again.",
   SAVE_FAILED: "Your changes could not be saved. Try again.",
+  FILES_TOO_LARGE: "A paste batch must be at most 10 MB.",
+  PROJECT_NOT_FOUND: "This project does not exist or you do not have access to it.",
+  DOWNLOAD_FAILED: "The file could not be downloaded. Try again.",
+  FILE_SAVE_FAILED: "The file could not be saved on this device. Try again.",
   UNKNOWN_NATIVE_ERROR: "The native account operation could not finish. Try again.",
 } as const;
 

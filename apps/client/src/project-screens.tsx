@@ -5,6 +5,7 @@ import type { Account } from "./session";
 import { projectReads, projects } from "./runtime";
 import { projectMutations } from "./projects";
 import { ProjectsView, ProjectView } from "./project-views";
+import { ProjectFilesScreen } from "./attachment-screens";
 
 
 function useProjectMutations(userId: string) {
@@ -34,5 +35,6 @@ export function ProjectScreen({ account }: { account: Account }) {
     // The Inbox route is ticket 12, so deletion returns to Projects.
     onDelete={() => remove.mutate()}
     write={{ pending: rename.isPending || remove.isPending, error: (rename.error ?? remove.error)?.message ?? null }}
+    files={<ProjectFilesScreen userId={account.user.id} projectId={id} />}
   />;
 }

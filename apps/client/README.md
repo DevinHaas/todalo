@@ -157,6 +157,32 @@ removed after an account response returns 401.
   delete with in-page confirmation, since native `confirm()` is unreliable in iOS
   WKWebView). Deletion returns to `/projects` until Inbox (ticket 12) exists.
 
+## Attachments (ticket 9 conventions)
+
+- **API:** `apps/api/src/attachment-routes.ts` — `POST /api/v1/projects/:id/files`
+  (multipart `files`, one task per file, legacy limits) → `201 { tasks: [{ id, title }] }`;
+  `GET /api/v1/tasks/:id/attachments` → `{ attachments: AttachmentDto[] }`;
+  `GET /api/v1/attachments/:id` → the bytes as a forced, sandboxed download. Same
+  401/404/403 rules as project writes; `400 INVALID_INPUT`, `413 FILES_TOO_LARGE`.
+- **Server logic:** `packages/server/src/attachments.ts` (owner-checked create/list/read,
+  shared with the legacy Next routes), `attachment-http.ts` (bounded body read, our
+  own multipart parser — Bun's `formData()` replaces each part's type with an
+  extension guess — and the download response) and `attachment-limits.ts`
+  (client-safe limits and DTOs). Storage stays the `task_attachments` row (base64),
+  so legacy rows need no migration and no bucket or key is involved.
+- **Native:** `attachments { id }`, `upload_files` and `save_attachment { id, name }`
+  in `src-tauri/src/attachments.rs`. Upload sends the files back to back as one raw
+  IPC body with `x-todalo-project` and an ASCII-JSON `x-todalo-files` header; Rust
+  re-checks every limit and frames the multipart body (`NativeAuth::upload`).
+  Downloads are fetched in Rust (`NativeAuth::download`, size-capped) and written
+  without overwriting to Downloads (Mac) or Documents (iOS, shown in Files under
+  On My iPhone › todalo); the webview receives only `{ name, location }`. No URL or
+  path ever carries the bearer. `dragDropEnabled: false` lets HTML5 drops reach the page.
+- **Client:** `src/attachments.ts` (`attachmentKeys.task` sits under the task key;
+  uploads validate first, then invalidate only `projectKeys.detail`), pure views in
+  `src/attachment-views.tsx` (picker label, paste outside text fields, drop, retry
+  only for interrupted saves), runtime glue in `src/attachment-screens.tsx`.
+
 ## Isolated manual QA
 
 Avoid production account/database changes. From this directory:
@@ -169,7 +195,8 @@ CLIENT_API_PROXY_TARGET=http://127.0.0.1:3009 bun run dev
 The in-memory service seeds `existing@example.test` with `dev-password-123`, plus
 fixture Today tasks and a second user's private task (`/tasks/other-private`) for
 cross-user checks. Projects: `Work` (three fixture tasks), `Errands` (empty) and a
-second user's project (`/projects/qa-other`). Set `QA_CLIENT_ORIGIN` when Vite runs
+second user's project (`/projects/qa-other`). Attachments: `/tasks/undated` carries a legacy-format
+`Legacy brief.txt`; the other user's `qa-other-file` checks download ownership. Set `QA_CLIENT_ORIGIN` when Vite runs
 on a port other than 5173 (it is the trusted auth origin and the allowed write origin). `QA_EMPTY_TODAY=1` starts it with no tasks for the seeded user.
 `QA_AMBIGUOUS_WRITES=1` applies each first create/completion and then answers
 500, to watch the client retry without duplicating it.
