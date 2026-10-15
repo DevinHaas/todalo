@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
 import type { TaskDto, TodayDto } from "../../../packages/server/src/task-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
+import type { Feedback } from "./feedback";
 
 export type { TaskDto, TodayDto };
 
@@ -119,8 +120,13 @@ type Snapshot = { previous?: TodayDto };
  * optimistically to Today (list and sidebar count) and roll back on failure;
  * every write then refetches Today and the task so server results (such as a
  * recurring task's next date) win.
+ *
+ * Completion feedback plays in onMutate, with the optimistic check-off, so it
+ * matches what the user sees instead of lagging by a round trip; onMutate runs
+ * once per tap, not per retry. The adapter is fire-and-forget, so feedback can
+ * neither delay nor fail the write; a later rollback shows the error instead.
  */
-export function taskMutations(transport: TaskTransport, cache: QueryClient, userId: string) {
+export function taskMutations(transport: TaskTransport, cache: QueryClient, userId: string, feedback?: Feedback) {
   const today = taskKeys.today(userId);
   const settle = (id: string) => Promise.all([
     cache.invalidateQueries({ queryKey: today }),
@@ -146,7 +152,10 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     complete: {
       mutationFn: (task: TaskDto) => transport.complete(task.id, task.dueDate),
       retry, retryDelay,
-      onMutate: (task: TaskDto) => optimistic(task, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item)),
+      onMutate: (task: TaskDto) => {
+        feedback?.play("taskCompleted");
+        return optimistic(task, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item));
+      },
       onError: rollback,
       onSettled: (_result: unknown, _error: Error | null, task: TaskDto) => settle(task.id),
     } satisfies MutationOptions<TaskDto | null, Error, TaskDto, Snapshot>,

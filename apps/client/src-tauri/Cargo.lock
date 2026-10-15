@@ -3849,6 +3849,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-haptics"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f19d31ed9ea0775948e47104916565b9c9bb422c9bfdabaedfaa47c2494fd9b"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "tauri-plugin-opener"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4101,6 +4115,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
+ "tauri-plugin-haptics",
  "tauri-plugin-opener",
  "tokio",
  "zeroize",

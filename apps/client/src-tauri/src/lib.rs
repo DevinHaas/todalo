@@ -1,6 +1,7 @@
 mod auth;
 mod credentials;
 mod endpoint;
+mod feedback;
 mod oauth;
 mod projects;
 mod ramble;
@@ -50,6 +51,8 @@ pub fn run() {
         // Rust-only: the webview gets no opener or deep-link permission.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Rust-only too: the webview reaches it through the semantic `feedback` command.
+        .plugin(tauri_plugin_haptics::init())
         .manage(NativeAuth::new())
         .manage(oauth::GoogleFlow::default())
         .setup(|app| {
@@ -88,7 +91,8 @@ pub fn run() {
             oauth::google_start,
             oauth::google_finish,
             oauth::google_cancel,
-            ramble::ramble_socket
+            ramble::ramble_socket,
+            feedback::feedback
         ])
         .run(tauri::generate_context!())
         .expect("Cannot launch todalo");

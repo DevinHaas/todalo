@@ -1,6 +1,6 @@
 # 7. Feel optional feedback when completing a task
 
-Status: ready-for-agent
+Status: in-progress (code-complete; physical-iPhone haptic and Reduce Motion check pending)
 Type: task
 
 **Blocked by:** 5.
@@ -10,3 +10,5 @@ Type: task
 ## Comments
 
 Published from the approved implementation proposal on 2026-10-04. Eligibility requires every listed blocker to be complete.
+
+2026-10-15: Implemented the semantic adapter (`apps/client/src/feedback.ts`), a per-device opt-out on the Account screen (default on, iPhone/iPad app only) and one native `feedback` command over `tauri-plugin-haptics` (standard notification success). Feedback plays in the completion `onMutate` and swallows all errors. In the iOS Simulator the completion reached `UINotificationFeedbackGenerator` once (the simulator cannot play haptics), the opt-out survived a relaunch and suppressed the call; in Chromium with reduced motion emulated, completion worked and no setting appeared. Not felt on a physical iPhone and iOS Reduce Motion not toggled. Evidence: `docs/qa/tauri-feedback.md`.

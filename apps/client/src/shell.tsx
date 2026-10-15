@@ -10,6 +10,7 @@ import { projectReads, reads, session, tasks } from "./runtime";
 import { taskMutations, type TaskDto } from "./tasks";
 import { Composer, TaskView, TodayView, type RowActions } from "./views";
 import { GoogleButton } from "./google";
+import { haptics, hapticsSupported, nativeFeedback } from "./feedback";
 
 // ponytail: controls without a migrated backend (search, inbox,
 // upcoming, filters, display) keep their legacy appearance but are inert
@@ -20,7 +21,7 @@ function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; 
 
 function useTaskWrites(userId: string) {
   const cache = useQueryClient();
-  const writes = useMemo(() => taskMutations(tasks, cache, userId), [cache, userId]);
+  const writes = useMemo(() => taskMutations(tasks, cache, userId, nativeFeedback), [cache, userId]);
   const create = useMutation(writes.create);
   const complete = useMutation(writes.complete);
   const remove = useMutation(writes.remove);
@@ -120,10 +121,15 @@ export function TaskScreen({ account }: { account: Account }) {
 
 export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
   const [pending, setPending] = useState(false);
+  const [feel, setFeel] = useState(haptics.enabled);
   return <section className="account-panel inline">
     <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
     <dl><dt>Name</dt><dd>{account.user.name}</dd><dt>Email</dt><dd>{account.user.email}</dd></dl>
     {error && <p className="error" role="alert">{error}</p>}
+    {hapticsSupported && <label className="setting">
+      <input type="checkbox" checked={feel} onChange={(event) => { haptics.set(event.target.checked); setFeel(event.target.checked); }} />
+      <span>Haptic feedback when completing a task</span>
+    </label>}
     <GoogleButton intent="link" disabled={pending} />
     <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
   </section>;

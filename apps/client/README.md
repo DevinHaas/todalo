@@ -117,6 +117,17 @@ removed after an account response returns 401.
 - **Cache:** `taskMutations` (`src/tasks.ts`) applies completion and deletion
   optimistically to Today and its count, rolls back on failure, then invalidates
   `taskKeys.today` and `taskKeys.task`. Later write tickets should reuse it.
+- **Completion feedback (ticket 7):** `src/feedback.ts` is the semantic adapter
+  (`play("taskCompleted")`); `taskMutations` takes it and plays it in the
+  completion's `onMutate`, alongside the optimistic check-off (once per tap, not
+  per retry). It is fire-and-forget and swallows every error, so it can never
+  delay or fail a write. On the iPhone/iPad app it invokes the single native
+  `feedback` command (`src-tauri/src/feedback.rs`), which accepts only semantic
+  events and plays a standard `UINotificationFeedbackGenerator` success through
+  `tauri-plugin-haptics` (the webview has no `haptics:*` permission). Web and Mac
+  use a no-op and show no setting. The opt-out is per device in `localStorage`
+  (`todalo.haptics`, on by default) and lives on the Account screen. Reduced
+  motion does not silence it; iOS applies its own System Haptics setting.
 
 ## Projects and writes (ticket 8 conventions)
 

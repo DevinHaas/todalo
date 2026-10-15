@@ -25,6 +25,8 @@ input { width: 100%; min-height: 2.75rem; border: 1px solid var(--border); borde
 .account-panel button { min-height: 2.75rem; border: 0; border-radius: .375rem; background: var(--primary); color: oklch(.985 0 0); font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer; padding: .625rem 1rem; }
 .account-panel button:disabled, input:disabled { opacity: .5; cursor: default; }
 .account-panel .error { color: var(--destructive); }
+.account-panel .setting { display: flex; align-items: center; gap: .625rem; min-height: 2.75rem; font-weight: 400; cursor: pointer; }
+.account-panel .setting input { width: 1.125rem; height: 1.125rem; min-height: 0; margin: 0; box-shadow: none; accent-color: var(--primary); }
 .switch-mode { text-align: center; }
 .account-panel .text-button { background: transparent; color: var(--foreground); text-decoration: underline; text-underline-offset: 4px; padding: 0 .25rem; }
 dl { margin: 0; font-size: .875rem; line-height: 1.5; }
