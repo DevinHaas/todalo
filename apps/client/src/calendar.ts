@@ -198,7 +198,8 @@ export function nativeLiveTransport(): LiveTransport {
 export const liveTransport = (): LiveTransport => isTauri() ? nativeLiveTransport() : browserLiveTransport();
 
 /**
- * Query keys each live topic invalidates. Ticket 22 adds task topics here; a
+ * Query keys each live topic invalidates. Task changes from other devices arrive
+ * by polling and foreground refetch (ticket 22, connection.ts) instead; a
  * topic this table does not know is ignored, so the server may add topics first.
  */
 export const liveTopicKeys: Record<string, (userId: string) => QueryKey[]> = {

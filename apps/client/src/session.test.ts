@@ -1,7 +1,8 @@
 import { expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { SessionController, type Account, type AccountTransport } from "./session";
-import { nativeAccountError } from "./errors";
+import { AccountTransportError, nativeAccountError } from "./errors";
+import { browserTransport } from "./transport";
 
 const account: Account = { user: { id: "alice", name: "Alice", email: "alice@example.test", image: null, emailVerified: false }, expiresAt: "2026-10-05T10:00:00.000Z" };
 
@@ -103,4 +104,30 @@ it("unknown transport exceptions never become account recovery copy", async () =
   failure = nativeAccountError("Apple Keychain is unavailable. Unexpected private detail");
   await session.refresh();
   expect(session.getSnapshot().error).toBe("The native account operation could not finish. Try again.");
+});
+
+it("a refresh that cannot reach the server keeps the signed-in screens, cache and drafts", async () => {
+  let failure: unknown = null;
+  const transport: AccountTransport = {
+    account: async () => { if (failure) throw failure; return account; },
+    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+  };
+  const queries = new QueryClient();
+  const session = new SessionController(transport, () => queries.clear());
+  await session.refresh();
+  queries.setQueryData(["tasks", "alice"], ["private"]);
+  for (failure of [nativeAccountError("Cannot reach todalo. Check your connection and try again."), new AccountTransportError("ACCOUNT_UNAVAILABLE")]) {
+    await session.refresh();
+    expect(session.getSnapshot()).toEqual({ status: "signed-in", account, error: null });
+    expect(queries.getQueryData(["tasks", "alice"])).toEqual(["private"]);
+  }
+  // Any other failure still signs the UI out of an account it cannot confirm.
+  failure = nativeAccountError("The saved credential is invalid. Sign out and try again.");
+  await session.refresh();
+  expect(session.getSnapshot().status).toBe("error");
+  expect(queries.getQueryData(["tasks", "alice"])).toBeUndefined();
+});
+
+it("the browser account read reports a lost connection as CONNECTION_FAILED", async () => {
+  await expect(browserTransport(async () => { throw new TypeError("Failed to fetch"); }).account()).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
 });

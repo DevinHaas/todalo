@@ -29,6 +29,8 @@ interface SessionState {
   error: string | null;
 }
 
+const transient = new Set(["CONNECTION_FAILED", "ACCOUNT_UNAVAILABLE"]);
+
 export class SessionController {
   private state: SessionState = { status: "loading", account: null, error: null };
   private listeners = new Set<() => void>();
@@ -66,6 +68,9 @@ export class SessionController {
       if (account?.user.id !== this.state.account?.user.id || !account) this.clearUserCache();
       this.update({ status: account ? "signed-in" : "signed-out", account, error: null });
     } catch (error) {
+      // Not reaching the server says nothing about the session: a signed-in UI
+      // stays (with its cache and open drafts) and the connection status shows.
+      if (generation === this.generation && this.state.account && error instanceof AccountTransportError && transient.has(error.code)) return;
       if (generation === this.generation) {
         this.clearUserCache();
         this.update({ status: "error", account: null, error: error instanceof AccountTransportError ? error.message : "Cannot reach todalo. Check your connection and try again." });

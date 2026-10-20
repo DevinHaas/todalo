@@ -4,7 +4,9 @@ import { AccountTransportError, nativeAccountError, type AccountErrorCode } from
 
 export function browserTransport(fetcher: typeof fetch = fetch): AccountTransport {
   async function account(): Promise<Account | null> {
-    const response = await fetcher("/api/v1/account", { credentials: "same-origin", cache: "no-store" });
+    let response: Response;
+    try { response = await fetcher("/api/v1/account", { credentials: "same-origin", cache: "no-store" }); }
+    catch { throw new AccountTransportError("CONNECTION_FAILED"); }
     if (response.status === 401) return null;
     if (!response.ok) throw new AccountTransportError("ACCOUNT_UNAVAILABLE");
     return response.json();

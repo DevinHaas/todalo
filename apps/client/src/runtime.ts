@@ -1,4 +1,4 @@
-import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
+import { connectionMonitor, userQueryClient } from "./connection";
 import { SessionController } from "./session";
 import { accountTransport, googleTransport } from "./transport";
 import { AccountTransportError } from "./errors";
@@ -16,11 +16,8 @@ import { searchQueries, searchTransport } from "./search";
 // A read or write that finds the session revoked re-checks the account, which
 // signs the UI out (and clears every user-scoped query) when the server agrees.
 const onError = (error: Error) => { if (error instanceof AccountTransportError && error.code === "UNAUTHENTICATED") void session.refresh(); };
-export const queries = new QueryClient({
-  queryCache: new QueryCache({ onError }),
-  mutationCache: new MutationCache({ onError }),
-  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-});
+export const connection = connectionMonitor();
+export const queries = userQueryClient(connection, onError);
 export const session = new SessionController(accountTransport(), () => queries.clear(), googleTransport());
 export const tasks = taskTransport();
 export const reads = taskQueries(tasks);

@@ -6,7 +6,7 @@ import {
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { metadataReads, projectReads, reads, session } from "./runtime";
+import { connection, metadataReads, projectReads, queries, reads, session } from "./runtime";
 import { todaySections, type TaskDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
@@ -42,6 +42,17 @@ function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) 
       {added && <p role="status" className="state">Added “{added.title}”{added.projectId ? "" : " to Inbox"}. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
     </div>
   </div>;
+}
+
+const connectionCopy = { online: "", offline: "You're offline. Changes can't be saved until you reconnect.", unreachable: "Can't reach todalo. Changes can't be saved right now." };
+
+/** Ticket 22: always mounted so screen readers announce each change; empty while online. */
+function ConnectionStatus() {
+  const state = useSyncExternalStore(connection.subscribe, connection.get);
+  return <div role="status" className="connection-status" data-state={state}>{state !== "online" && <>
+    {connectionCopy[state]}
+    {state === "unreachable" && <button type="button" className="text-action" onClick={() => void queries.refetchQueries({ type: "active" })}>Try again</button>}
+  </>}</div>;
 }
 
 export function Shell({ account }: { account: Account }) {
@@ -92,6 +103,7 @@ export function Shell({ account }: { account: Account }) {
         </div>
         <DisplayMenu />
       </div>
+      <ConnectionStatus />
       <main className="content"><Outlet /></main>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
@@ -135,7 +147,7 @@ export function TaskScreen({ account }: { account: Account }) {
   // The editor's label checkboxes; without the list it keeps the task's labels.
   const labels = useQuery(metadataReads.list(account.user.id));
   // Resolved before the tap: WebKit only allows clipboard writes inside the gesture.
-  const link = useQuery({ queryKey: ["user", account.user.id, "task-link", id], queryFn: () => taskUrl(id), staleTime: Infinity });
+  const link = useQuery({ queryKey: ["user", account.user.id, "task-link", id], queryFn: () => taskUrl(id), staleTime: Infinity, refetchInterval: false });
   const editor = inserting?.task.id === id ? <section className="task-insert" aria-label={`Add task ${inserting.edge} ${inserting.task.title}`}>
     <Composer key={inserting.edge} startOpen projectId={inserting.task.projectId} sectionId={inserting.task.sectionId} placement={{ edge: inserting.edge, anchorId: id }}
       dueDate={() => inserting.task.dueDate ? new Date(new Date(inserting.task.dueDate).setHours(0, 0, 0, 0)).toISOString() : null}

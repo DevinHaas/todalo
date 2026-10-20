@@ -126,8 +126,9 @@ const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Do
  * The legacy task edit dialog (ticket 11, labels ticket 14). It saves every
  * field with the version it was opened from. A pristine form follows newer
  * copies of the task; a draft is never replaced silently — if another device
- * changed the task, saving fails with TASK_CHANGED and the user loads the
- * current details. A custom repeat (from quick add) is kept unless replaced.
+ * changed the task, saving fails with TASK_CHANGED and the user chooses: load
+ * the current details, or keep the draft on top of the newer version and save
+ * again (ticket 22). A custom repeat (from quick add) is kept unless replaced.
  * With `labels` (the user's list) it shows the label checkboxes and sends the
  * checked set, limited to labels that still exist; without it labels are kept.
  */
@@ -174,7 +175,10 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
     <div role="dialog" aria-modal="true" aria-labelledby="task-editor-title" className="dialog task-editor">
       <h2 id="task-editor-title" className="dialog-title">{base.title}</h2>
       <form ref={releaseFocus} onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-        {error && <p role="alert" className="form-error">{error.message}{changed && <> <button type="button" className="text-action" disabled={task.updatedAt === base.updatedAt} onClick={() => load(task)}>{task.updatedAt === base.updatedAt ? "Loading current details…" : "Load current details"}</button></>}</p>}
+        {error && <p role="alert" className="form-error">{error.message}{changed && (task.updatedAt === base.updatedAt ? " Loading current details…" : <>
+          {" "}<button type="button" className="text-action" onClick={() => load(task)}>Load current details</button>
+          {" "}<button type="button" className="text-action" onClick={() => { setBase(task); setError(null); }}>Keep my changes</button>
+        </>)}</p>}
         <fieldset disabled={pending}>
           <label>Task name<input autoFocus value={draft.title} enterKeyHint="done" onChange={(event) => edit({ title: event.target.value })} /></label>
           <label>Description<textarea value={draft.description} rows={3} onChange={(event) => edit({ description: event.target.value })} /></label>
