@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -44,7 +44,40 @@ const STATUS = {
   connecting: "Connecting…", starting: "Starting microphone…", listening: "Listening", paused: "Microphone paused",
   error: "Capture paused", committing: "Adding tasks…", committed: "Tasks added",
 } as const;
-const BARS = [820, 960, 740, 1080, 880, 760, 1020, 900, 780];
+const WAVE_BARS = 24;
+const WAVE_TICK_MS = 50;
+const deadlineLabel = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+/** A scrolling loudness history (legacy RambleWave): newest on the right, so silence reads as silence. */
+function RambleWave({ analyser }: { analyser: AnalyserNode | null }) {
+  const barsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const bars = Array.from(barsRef.current?.children ?? []) as HTMLElement[];
+    if (!analyser) { bars.forEach((bar) => { bar.style.transform = ""; }); return; }
+    const samples = new Float32Array(analyser.fftSize);
+    const history: number[] = Array(WAVE_BARS).fill(0);
+    let frame = 0;
+    let last = 0;
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      if (now - last < WAVE_TICK_MS) return;
+      last = now;
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      // Map -55 dBFS (room noise) .. -15 dBFS (loud speech) to 0..1.
+      const db = 10 * Math.log10(sum / samples.length || 1e-10);
+      history.shift();
+      history.push(Math.max(0, Math.min(1, (db + 55) / 40)));
+      bars.forEach((bar, index) => { bar.style.transform = `scaleY(${0.15 + history[index] * 0.85})`; });
+    };
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, [analyser]);
+  return <div ref={barsRef} className="ramble-wave" data-active={!!analyser} aria-hidden="true">
+    {Array.from({ length: WAVE_BARS }, (_, index) => <span key={index} />)}
+  </div>;
+}
 
 /** Legacy Ramble modal (apps/web ramble-modal.tsx) as a screen. Leaving it discards unsaved tasks. */
 export function RambleScreen() {
@@ -114,15 +147,23 @@ export function RambleScreen() {
   function card(todo: RambleTodo, nested = false) {
     const project = projects.find((item) => item.id === todo.projectId);
     const due = todo.dueDate ? new Date(`${todo.dueDate}T${todo.startTime ?? "00:00"}:00`) : null;
-    return <li key={todo.id} className={nested ? "ramble-card nested" : "ramble-card"}>
+    // A local guess the model has not confirmed yet: dimmed and not removable.
+    const provisional = view!.provisionalIds.includes(todo.id);
+    return <li key={todo.id} aria-busy={provisional} className={`ramble-card${nested ? " nested" : ""}${provisional ? " provisional" : ""}`}>
       <div className="ramble-card-title">
-        <p>{todo.title}</p>
-        <button type="button" className="icon-button" disabled={busy || !view!.connected} aria-label={`Remove ${todo.title}`} onClick={() => recorder.remove(todo.id)}><X /></button>
+        <div>
+          <p>{todo.title}</p>
+          {todo.description && <p className="ramble-card-description">{todo.description}</p>}
+        </div>
+        <button type="button" className="icon-button" disabled={busy || !view!.connected || provisional} aria-label={`Remove ${todo.title}`} onClick={() => recorder.remove(todo.id)}><X /></button>
       </div>
       <div className="task-meta">
         {due && <span className="pill">{dueLabel(due.toISOString())}</span>}
         {todo.endTime && <span className="pill">until {todo.endTime}</span>}
         {todo.recurrence && <span className="pill repeat"><Repeat2 />Every {todo.recurrence.n > 1 ? `${todo.recurrence.n} ${todo.recurrence.unit}s` : todo.recurrence.unit}</span>}
+        {todo.priority < 4 && <span className="pill priority" aria-label={`Priority ${todo.priority}`}>P{todo.priority}</span>}
+        {todo.deadline && <span className="pill">Deadline {deadlineLabel(todo.deadline)}</span>}
+        {todo.labelIds.length > 0 && <span className="pill">{todo.labelIds.length} label{todo.labelIds.length > 1 ? "s" : ""}</span>}
         <span className="pill project">{project ? <Hash /> : <Inbox />}{project?.name ?? "Inbox"}</span>
       </div>
     </li>;
@@ -132,9 +173,7 @@ export function RambleScreen() {
     <header>
       <h1 id="ramble-title">Ramble</h1>
       <div className="ramble-controls">
-        <div className="ramble-wave" data-active={active} aria-hidden="true">
-          {BARS.map((duration, index) => <span key={index} style={{ animationDuration: `${duration}ms`, animationDelay: `${index * -130}ms` }} />)}
-        </div>
+        <RambleWave analyser={active ? view.analyser : null} />
         <button type="button" className="icon-button" aria-label={active ? "Pause listening" : "Resume listening"} title={`${status} · ${microphone}`}
           disabled={!view.connected || busy || view.understandingFailed || view.status === "starting"} onClick={() => recorder.toggle()}>
           {view.status === "connecting" || view.status === "starting" ? <LoaderCircle className="spin" /> : active ? <Mic /> : <MicOff />}
@@ -158,7 +197,13 @@ export function RambleScreen() {
     <div className="ramble-staged" aria-label="Staged tasks">
       {todos.length
         ? <ul>{todos.filter((todo) => !todo.parentId).flatMap((todo) => [card(todo), ...todos.filter((child) => child.parentId === todo.id).map((child) => card(child, true))])}</ul>
-        : <div className="ramble-empty"><p>Try saying</p><p>“Buy groceries tomorrow at 17:00”</p></div>}
+        : view.status === "connecting" || view.status === "starting"
+          ? <div role="status" className="ramble-empty ramble-loading">
+            <LoaderCircle className="spin" aria-hidden="true" />
+            <p>{status}</p>
+            {view.status === "starting" && <p>Allow microphone access if your browser asks.</p>}
+          </div>
+          : <div className="ramble-empty"><p>Try saying</p><p>“Buy groceries tomorrow at 17:00”</p></div>}
     </div>
     <footer className="ramble-footer">
       <p>{status}{todos.length > 0 && ` · ${count}`}</p>

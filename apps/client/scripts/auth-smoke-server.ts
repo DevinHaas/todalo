@@ -229,7 +229,8 @@ const ramble = createApi({
   // The account's smart-date setting and owned projects, as production.ts reads them.
   preferences: async (userId) => {
     const owned = projects.filter((project) => project.userId === userId).map(({ id, name }) => ({ id, name }));
-    return { smartRecognition: settings.get(userId) ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned };
+    const ownedLabels = labels.filter((label) => label.userId === userId).map(({ id, name }) => ({ id, name }));
+    return { smartRecognition: settings.get(userId) ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned, labels: ownedLabels };
   },
   speech: process.env.RAMBLE_STT_PROVIDER ? connectSpeech : fakeSpeech,
   semantic: fixtureSemanticProcessor,
@@ -239,9 +240,11 @@ const ramble = createApi({
   commit: async (userId, todos, timeZone, operationId) => {
     const rows = prepareTaskRows(todos, userId, timeZone, operationId);
     if (rows.some((row) => row.projectId && !projects.some((project) => project.userId === userId && project.id === row.projectId))) throw new RambleCommitError("missing");
-    for (const row of rows) {
+    if (todos.some((todo) => todo.labelIds.some((id) => !labels.some((label) => label.userId === userId && label.id === id)))) throw new RambleCommitError("missing", "Label unavailable");
+    for (const [index, row] of rows.entries()) {
       if (tasks.some((item) => item.id === row.id)) continue;
-      tasks.push(task(row.id, userId, row.title, { parentId: row.parentId, projectId: row.projectId, dueDate: row.dueDate, dueDateEnd: row.dueDateEnd, recurrence: row.recurrence }));
+      tasks.push(task(row.id, userId, row.title, { parentId: row.parentId, projectId: row.projectId, dueDate: row.dueDate, dueDateEnd: row.dueDateEnd, recurrence: row.recurrence,
+        description: row.description, priority: row.priority, deadline: row.deadline, labelIds: [...new Set(todos[index].labelIds)] }));
     }
     ambiguous(`ramble:${operationId}`);
     return rows.length;

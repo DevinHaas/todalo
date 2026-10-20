@@ -11,6 +11,8 @@ export interface RambleView {
   connected: boolean;
   /** The server's staged state (todos, capture mode); null until it arrives. */
   state: RambleSessionState | null;
+  /** Local guesses shown before the model confirmed them; never removable. */
+  provisionalIds: string[];
   /** Finalized phrases still being understood. */
   pending: number;
   understandingFailed: boolean;
@@ -19,6 +21,8 @@ export interface RambleView {
   committed: number | null;
   /** The chosen microphone; "" is the system default. Kept for this screen visit only, as the legacy modal. */
   deviceId: string;
+  /** The live microphone signal while capturing, for the level meter. */
+  analyser: AnalyserNode | null;
 }
 
 export interface RambleSocket {
@@ -39,7 +43,7 @@ export interface RambleRecorderDependencies {
   /** Browser: same-origin URL (cookies). Native: one-use ticket URL from Rust. */
   socketUrl(): Promise<string>;
   openSocket(url: string): RambleSocket;
-  capture(options: { deviceId?: string; signal: AbortSignal; onAudio: (buffer: ArrayBuffer) => void; onEnded: () => void }): Promise<{ stop(): void; deviceId?: string }>;
+  capture(options: { deviceId?: string; signal: AbortSignal; onAudio: (buffer: ArrayBuffer) => void; onEnded: () => void }): Promise<{ stop(): void; deviceId?: string; analyser?: AnalyserNode }>;
   startOptions(): Record<string, unknown>;
   /** Saves a batch the socket can no longer save; a replay of the same operation is a no-op. */
   commit(input: RambleCommit): Promise<number>;
@@ -71,9 +75,11 @@ export const SAVE_UNCONFIRMED = "The tasks could not be confirmed as added. They
  */
 export function createRambleRecorder(dependencies: RambleRecorderDependencies, onChange: (view: RambleView) => void) {
   let deviceId = "";
-  const fresh = (): RambleView => ({ status: "connecting", connected: false, state: null, pending: 0, understandingFailed: false, error: null, committed: null, deviceId });
+  const fresh = (): RambleView => ({ status: "connecting", connected: false, state: null, provisionalIds: [], pending: 0, understandingFailed: false, error: null, committed: null, deviceId, analyser: null });
   let view = fresh();
   const update = (next: Partial<RambleView>) => { view = { ...view, ...next }; onChange(view); };
+  // Only model-confirmed tasks are ever saved, as the server's own commit.
+  const confirmed = () => (view.state?.todos ?? []).filter((todo) => !view.provisionalIds.includes(todo.id));
 
   let generation = 0;
   let operationId = "";
@@ -96,6 +102,7 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
     capture?.stop();
     capture = undefined;
     queue.clear();
+    if (view.analyser) update({ analyser: null });
   }
 
   function closeSocket(discard: boolean) {
@@ -158,10 +165,13 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
       });
       if (controller !== owner) { next.stop(); return; }
       capture = next;
+      clearTimeout(startTimer);
       // The default microphone resolves to a real device; show which one.
-      if (next.deviceId) { deviceId = next.deviceId; update({ deviceId }); }
+      if (next.deviceId) deviceId = next.deviceId;
       startProvider();
-      if (ready) { clearTimeout(startTimer); update({ status: "listening" }); }
+      // Audio queues until the speech provider is ready, so listening starts
+      // with the microphone rather than after the provider handshake.
+      update({ deviceId, analyser: next.analyser ?? null, status: "listening" });
     } catch (error) {
       if (controller !== owner) return;
       const name = error instanceof Error ? error.name : "";
@@ -178,16 +188,15 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
 
   function receive(data: unknown) {
     if (typeof data !== "string") return;
-    let message: { type?: string; state?: RambleSessionState; pending?: unknown; count?: unknown; code?: string; message?: unknown };
+    let message: { type?: string; state?: RambleSessionState; provisionalIds?: unknown; pending?: unknown; count?: unknown; code?: string; message?: unknown };
     try { message = JSON.parse(data); } catch { fail("Ramble received an unexpected response. Start a new session."); return; }
     if (message.type === "state" && message.state) {
-      update({ state: message.state });
+      update({ state: message.state, provisionalIds: Array.isArray(message.provisionalIds) ? message.provisionalIds.filter((id) => typeof id === "string") : [] });
       // A spoken "done": the server is saving.
       if (message.state.readyToCommit) { committing = true; stopCapture(); update({ status: "committing", error: null }); }
     } else if (message.type === "ready") {
       ready = true;
       queue.flush((frame) => { send(frame); });
-      if (capture) { clearTimeout(startTimer); update({ status: "listening" }); }
     } else if (message.type === "processing") {
       update({ pending: typeof message.pending === "number" ? message.pending : 0 });
     } else if (message.type === "understanding_recovered") {
@@ -214,13 +223,14 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
     update({ connected: false });
     // The save may or may not have been applied: replay it under the same ID.
     if (saving) { void save(); return; }
-    const lostSpeech = view.pending > 0 || view.understandingFailed;
-    update({ pending: 0, understandingFailed: false });
-    fail(!view.state?.todos.length ? CONNECTION_LOST : lostSpeech ? LOST_WITH_SPEECH : LOST_WITH_TASKS);
+    const lostSpeech = view.pending > 0 || view.understandingFailed || view.provisionalIds.length > 0;
+    // Unconfirmed guesses died with the socket; show only what Add tasks would save.
+    update({ pending: 0, understandingFailed: false, provisionalIds: [], state: view.state && { ...view.state, todos: confirmed() } });
+    fail(!confirmed().length ? CONNECTION_LOST : lostSpeech ? LOST_WITH_SPEECH : LOST_WITH_TASKS);
   }
 
   async function save() {
-    const todos = view.state?.todos ?? [];
+    const todos = confirmed();
     if (!todos.length) return;
     const current = generation;
     committing = true;

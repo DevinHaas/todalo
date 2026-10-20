@@ -192,10 +192,9 @@ button.composer:hover { color: var(--foreground); }
 .ramble-capture .icon-button:disabled { opacity: .5; cursor: default; }
 .ramble-controls { display: flex; align-items: center; gap: .25rem; }
 .ramble-wave { display: flex; align-items: center; gap: .125rem; height: 1.5rem; margin-right: .5rem; color: var(--brand); }
-.ramble-wave span { width: 2px; height: 20px; border-radius: 999px; background: currentColor; transform: scaleY(.2); opacity: .3; }
-.ramble-wave[data-active="true"] span { animation: ramble-wave ease-in-out infinite alternate; opacity: .8; }
-@keyframes ramble-wave { from { transform: scaleY(.2); } to { transform: scaleY(.85); } }
-@media (prefers-reduced-motion: reduce) { .ramble-wave[data-active="true"] span { animation: none; transform: scaleY(.5); } }
+/* Bar heights are a scrolling history of live microphone loudness (RambleWave). */
+.ramble-wave span { width: 2px; height: 20px; border-radius: 999px; background: currentColor; transform: scaleY(.15); opacity: .3; }
+.ramble-wave[data-active="true"] span { opacity: .8; }
 .ramble-capture .spin { animation: ramble-spin 1s linear infinite; }
 @keyframes ramble-spin { to { transform: rotate(360deg); } }
 .ramble-capture .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -205,9 +204,13 @@ button.composer:hover { color: var(--foreground); }
 .ramble-staged { margin: 1.5rem 0; min-height: 12rem; max-height: 40vh; overflow-y: auto; }
 .ramble-staged ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .5rem; }
 .ramble-card { padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); }
+.ramble-card { transition: opacity .15s; }
 .ramble-card.nested { margin-left: 1.5rem; }
+.ramble-card.provisional { opacity: .6; }
 .ramble-card-title { display: flex; align-items: flex-start; gap: .5rem; }
-.ramble-card-title p { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; font-weight: 500; }
+.ramble-card-title > div { flex: 1; min-width: 0; }
+.ramble-card-title p { margin: 0; overflow-wrap: anywhere; font-weight: 500; }
+.ramble-card-title p.ramble-card-description { margin-top: .125rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--muted-foreground); font-size: .875rem; font-weight: 400; }
 .ramble-card .icon-button { width: 1.75rem; height: 1.75rem; }
 .ramble-card .icon-button svg { width: .875rem; height: .875rem; }
 .ramble-card .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: .5rem; }
@@ -217,6 +220,9 @@ button.composer:hover { color: var(--foreground); }
 .ramble-empty { min-height: 12rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .75rem; padding: 0 .75rem; text-align: center; color: var(--brand); }
 .ramble-empty p { margin: 0; font-size: .875rem; }
 .ramble-empty p + p { max-width: 28rem; font-size: 1.125rem; font-weight: 500; }
+.ramble-loading svg { width: 2.5rem; height: 2.5rem; }
+.ramble-loading p:first-of-type { font-size: 1.125rem; font-weight: 500; }
+.ramble-loading p + p { font-size: .875rem; font-weight: 400; color: var(--muted-foreground); }
 .ramble-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .ramble-footer p { margin: 0; color: var(--muted-foreground); font-size: .75rem; }
 .ramble-footer div { display: flex; align-items: center; gap: .5rem; }

@@ -30,10 +30,10 @@ class FakeSocket implements RambleSocket {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const frame = (value: number) => new Int16Array([value]).buffer;
 const OPERATION = "4f9c1a2e-8d3b-4c5a-9e7f-1a2b3c4d5e6f";
-const todo = (id: string, title: string): RambleTodo => ({ id, title, parentId: null, dueDate: "2026-10-16", startTime: null, endTime: null, recurrence: null, projectId: null });
+const todo = (id: string, title: string): RambleTodo => ({ id, title, parentId: null, dueDate: "2026-10-16", startTime: null, endTime: null, recurrence: null, projectId: null, description: null, priority: 4, deadline: null, labelIds: [] });
 const staged = (todos: RambleTodo[], readyToCommit = false) => ({ todos, mode: "top-level", parentId: null, readyToCommit } as unknown as RambleSessionState);
 
-function setup(options: { capture?: (deviceId?: string) => Promise<{ stop(): void; deviceId?: string }>; commit?: (input: RambleCommit) => Promise<number> } = {}) {
+function setup(options: { capture?: (deviceId?: string) => Promise<{ stop(): void; deviceId?: string; analyser?: AnalyserNode }>; commit?: (input: RambleCommit) => Promise<number> } = {}) {
   const sockets: FakeSocket[] = [];
   const views: RambleView[] = [];
   const stopCapture = vi.fn();
@@ -88,6 +88,37 @@ describe("Ramble session", () => {
     expect(t.last()).toMatchObject({ status: "listening", connected: true });
     t.audio(frame(4));
     expect(socket.audio().map((buffer) => new Int16Array(buffer)[0])).toEqual([1, 2, 3, 4]);
+  });
+
+  it("listens as soon as the microphone runs, queueing audio until the provider is ready, and meters only live capture", async () => {
+    const analyser = {} as AnalyserNode;
+    const t = setup({ capture: async () => ({ stop: () => {}, analyser }) });
+    t.recorder.open(); await flush();
+    t.socket().open();
+    expect(t.last()).toMatchObject({ status: "listening", analyser });
+    t.audio(frame(1));
+    expect(t.socket().audio()).toEqual([]);
+    t.socket().receive({ type: "ready" });
+    expect(t.socket().audio().map((buffer) => new Int16Array(buffer)[0])).toEqual([1]);
+    t.recorder.toggle();
+    expect(t.last()).toMatchObject({ status: "paused", analyser: null });
+  });
+
+  it("shows local guesses before the model confirms them, but saves and keeps only confirmed tasks", async () => {
+    const t = setup();
+    await t.listening();
+    t.socket().receive({ type: "state", state: staged([todo("1", "Buy milk"), todo("2", "Call Anna")]), provisionalIds: ["2"] });
+    expect(t.last()).toMatchObject({ provisionalIds: ["2"] });
+    expect(t.last().state?.todos).toHaveLength(2);
+    t.socket().drop();
+    expect(t.last()).toMatchObject({ error: LOST_WITH_SPEECH, provisionalIds: [] });
+    expect(t.last().state?.todos.map((item) => item.id)).toEqual(["1"]);
+    t.recorder.commit(); await flush();
+    expect(t.commit).toHaveBeenCalledWith({ operationId: OPERATION, timeZone: "Europe/Zurich", todos: [todo("1", "Buy milk")] });
+    // A state without provisional IDs (older server) confirms everything.
+    await t.listening();
+    t.socket().receive({ type: "state", state: staged([todo("1", "Buy milk")]), provisionalIds: "bad" });
+    expect(t.last().provisionalIds).toEqual([]);
   });
 
   it("reviews staged tasks, removes one and adds the rest over the socket; success only after the server confirms", async () => {

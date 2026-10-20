@@ -37,6 +37,10 @@ pub struct StagedTodo {
     end_time: Option<String>,
     recurrence: Option<Recurrence>,
     project_id: Option<String>,
+    description: Option<String>,
+    priority: u8,
+    deadline: Option<String>,
+    label_ids: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -112,7 +116,8 @@ mod tests {
     fn commit_bodies_carry_only_typed_staged_fields() {
         let todo = json!({ "id": "t1", "title": "Buy milk", "parentId": null, "dueDate": "2026-10-16",
             "startTime": "16:00", "endTime": null, "projectId": "work",
-            "recurrence": { "n": 1, "unit": "week", "basedOn": "scheduled", "until": null } });
+            "recurrence": { "n": 1, "unit": "week", "basedOn": "scheduled", "until": null },
+            "description": "Semi-skimmed", "priority": 1, "deadline": "2026-10-20", "labelIds": ["errand"] });
         let mut extra = todo.clone();
         extra["userId"] = json!("someone");
         let body = commit(
@@ -127,7 +132,8 @@ mod tests {
 
     #[test]
     fn rejects_commits_without_a_valid_operation_or_batch() {
-        let todo = json!({ "id": "t1", "title": "A", "parentId": null, "dueDate": null, "startTime": null, "endTime": null, "recurrence": null, "projectId": null });
+        let todo = json!({ "id": "t1", "title": "A", "parentId": null, "dueDate": null, "startTime": null, "endTime": null, "recurrence": null, "projectId": null,
+            "description": null, "priority": 4, "deadline": null, "labelIds": [] });
         for input in [
             json!({ "operationId": "x", "timeZone": "UTC", "todos": [todo] }),
             json!({ "operationId": OPERATION, "timeZone": "", "todos": [todo] }),
