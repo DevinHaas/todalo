@@ -33,19 +33,20 @@ const OPERATION = "4f9c1a2e-8d3b-4c5a-9e7f-1a2b3c4d5e6f";
 const todo = (id: string, title: string): RambleTodo => ({ id, title, parentId: null, dueDate: "2026-10-16", startTime: null, endTime: null, recurrence: null, projectId: null });
 const staged = (todos: RambleTodo[], readyToCommit = false) => ({ todos, mode: "top-level", parentId: null, readyToCommit } as unknown as RambleSessionState);
 
-function setup(options: { capture?: () => Promise<{ stop(): void }>; commit?: (input: RambleCommit) => Promise<number> } = {}) {
+function setup(options: { capture?: (deviceId?: string) => Promise<{ stop(): void; deviceId?: string }>; commit?: (input: RambleCommit) => Promise<number> } = {}) {
   const sockets: FakeSocket[] = [];
   const views: RambleView[] = [];
   const stopCapture = vi.fn();
   const commit = vi.fn(options.commit ?? (async (input: RambleCommit) => input.todos.length));
+  const devices: (string | undefined)[] = [];
   let audio!: (buffer: ArrayBuffer) => void;
   let ended!: () => void;
   const recorder = createRambleRecorder({
     socketUrl: async () => "ws://api.test/api/ramble/ws?ticket=one-use",
     openSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket; },
-    capture: async ({ onAudio, onEnded }) => {
-      audio = onAudio; ended = onEnded;
-      return options.capture ? options.capture() : { stop: stopCapture };
+    capture: async ({ deviceId, onAudio, onEnded }) => {
+      audio = onAudio; ended = onEnded; devices.push(deviceId);
+      return options.capture ? options.capture(deviceId) : { stop: stopCapture };
     },
     startOptions: () => ({ referenceDate: "2026-10-15T09:00:00", timeZone: "Europe/Zurich", defaultDueDate: null }),
     commit,
@@ -54,10 +55,24 @@ function setup(options: { capture?: () => Promise<{ stop(): void }>; commit?: (i
   const socket = () => sockets.at(-1)!;
   /** Open a session that is listening with a ready provider. */
   const listening = async () => { recorder.open(); await flush(); socket().open(); socket().receive({ type: "ready" }); };
-  return { recorder, sockets, socket, views, stopCapture, commit, listening, audio: (buffer: ArrayBuffer) => audio(buffer), ended: () => ended(), last: () => views.at(-1)! };
+  return { recorder, devices, sockets, socket, views, stopCapture, commit, listening, audio: (buffer: ArrayBuffer) => audio(buffer), ended: () => ended(), last: () => views.at(-1)! };
 }
 
 describe("Ramble session", () => {
+  it("captures from the default microphone until one is chosen, then restarts on exactly that device", async () => {
+    const t = setup({ capture: async (deviceId) => ({ stop: () => {}, deviceId: deviceId ?? "built-in" }) });
+    await t.listening();
+    expect(t.devices).toEqual([undefined]);
+    expect(t.last()).toMatchObject({ status: "listening", deviceId: "built-in" });
+    t.recorder.selectMicrophone("usb"); await flush();
+    expect(t.last()).toMatchObject({ status: "listening", deviceId: "usb" });
+    t.recorder.toggle();
+    t.recorder.selectMicrophone(""); await flush();
+    t.recorder.toggle(); await flush();
+    // Paused: choosing doesn't restart; the next resume uses the choice ("" = default).
+    expect(t.devices).toEqual([undefined, "usb", undefined]);
+  });
+
   it("starts the provider only after the microphone exists, with the session's operation ID, and streams frames in order", async () => {
     const t = setup();
     t.recorder.open(); await flush();

@@ -17,6 +17,8 @@ export interface RambleView {
   error: string | null;
   /** Tasks saved, once status is "committed". */
   committed: number | null;
+  /** The chosen microphone; "" is the system default. Kept for this screen visit only, as the legacy modal. */
+  deviceId: string;
 }
 
 export interface RambleSocket {
@@ -37,7 +39,7 @@ export interface RambleRecorderDependencies {
   /** Browser: same-origin URL (cookies). Native: one-use ticket URL from Rust. */
   socketUrl(): Promise<string>;
   openSocket(url: string): RambleSocket;
-  capture(options: { signal: AbortSignal; onAudio: (buffer: ArrayBuffer) => void; onEnded: () => void }): Promise<{ stop(): void }>;
+  capture(options: { deviceId?: string; signal: AbortSignal; onAudio: (buffer: ArrayBuffer) => void; onEnded: () => void }): Promise<{ stop(): void; deviceId?: string }>;
   startOptions(): Record<string, unknown>;
   /** Saves a batch the socket can no longer save; a replay of the same operation is a no-op. */
   commit(input: RambleCommit): Promise<number>;
@@ -68,7 +70,8 @@ export const SAVE_UNCONFIRMED = "The tasks could not be confirmed as added. They
  * the server confirmed it.
  */
 export function createRambleRecorder(dependencies: RambleRecorderDependencies, onChange: (view: RambleView) => void) {
-  const fresh = (): RambleView => ({ status: "connecting", connected: false, state: null, pending: 0, understandingFailed: false, error: null, committed: null });
+  let deviceId = "";
+  const fresh = (): RambleView => ({ status: "connecting", connected: false, state: null, pending: 0, understandingFailed: false, error: null, committed: null, deviceId });
   let view = fresh();
   const update = (next: Partial<RambleView>) => { view = { ...view, ...next }; onChange(view); };
 
@@ -148,12 +151,15 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
     }, dependencies.startupTimeoutMs ?? 30_000);
     try {
       const next = await dependencies.capture({
+        deviceId: deviceId || undefined,
         signal: owner.signal,
         onAudio: (buffer) => onAudio(owner, buffer),
         onEnded: () => { if (controller === owner) fail(INTERRUPTED); },
       });
       if (controller !== owner) { next.stop(); return; }
       capture = next;
+      // The default microphone resolves to a real device; show which one.
+      if (next.deviceId) { deviceId = next.deviceId; update({ deviceId }); }
       startProvider();
       if (ready) { clearTimeout(startTimer); update({ status: "listening" }); }
     } catch (error) {
@@ -275,6 +281,12 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
     toggle() {
       if (view.status === "listening") { pauseCapture(); update({ status: "paused" }); }
       else if (view.status !== "starting" && view.status !== "connecting") void listen();
+    },
+    /** Choose a microphone ("" = default); a live or failed capture restarts on it, as the legacy modal. */
+    selectMicrophone(id: string) {
+      deviceId = id;
+      update({ deviceId });
+      if (view.connected && (view.status === "listening" || view.status === "error")) void listen();
     },
     remove(id: string) { if (!committing) send(JSON.stringify({ type: "remove", id })); },
     retryUnderstanding() { send(JSON.stringify({ type: "retry-understanding" })); },

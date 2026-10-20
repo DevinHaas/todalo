@@ -58,6 +58,7 @@ export function RambleScreen() {
   const close = () => { if (key !== "default") void navigate(-1); else void navigate("/today"); };
   const projects = useQuery({ ...projectReads.list(userId), enabled: Boolean(userId) }).data ?? [];
   const [view, setView] = useState<RambleView | null>(null);
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   // ponytail: options are read once per screen visit; the setting changes elsewhere.
   const recorder = useMemo(() => createRambleRecorder(platform({ defaultDueDate, smartRecognition }), setView), []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -74,6 +75,19 @@ export function RambleScreen() {
       recorder.dispose();
     };
   }, [recorder]);
+
+  // Labels are empty until permission is granted, so list again once listening.
+  const listening = view?.status === "listening";
+  useEffect(() => {
+    let disposed = false;
+    const media = navigator.mediaDevices;
+    const enumerate = () => media?.enumerateDevices()
+      .then((devices) => { if (!disposed) setMicrophones(devices.filter((device) => device.kind === "audioinput" && device.deviceId)); })
+      .catch(() => {});
+    void enumerate();
+    media?.addEventListener("devicechange", enumerate);
+    return () => { disposed = true; media?.removeEventListener("devicechange", enumerate); };
+  }, [listening]);
 
   const committed = view?.status === "committed";
   useEffect(() => {
@@ -95,6 +109,7 @@ export function RambleScreen() {
   const active = view.status === "listening";
   const status = busy ? STATUS[view.status] : view.pending > 0 ? "Understanding tasks…" : STATUS[view.status];
   const count = `${todos.length} ${todos.length === 1 ? "task" : "tasks"}`;
+  const microphone = microphones.find((device) => device.deviceId === view.deviceId)?.label || "Default microphone";
 
   function card(todo: RambleTodo, nested = false) {
     const project = projects.find((item) => item.id === todo.projectId);
@@ -120,10 +135,15 @@ export function RambleScreen() {
         <div className="ramble-wave" data-active={active} aria-hidden="true">
           {BARS.map((duration, index) => <span key={index} style={{ animationDuration: `${duration}ms`, animationDelay: `${index * -130}ms` }} />)}
         </div>
-        <button type="button" className="icon-button" aria-label={active ? "Pause listening" : "Resume listening"} title={status}
+        <button type="button" className="icon-button" aria-label={active ? "Pause listening" : "Resume listening"} title={`${status} · ${microphone}`}
           disabled={!view.connected || busy || view.understandingFailed || view.status === "starting"} onClick={() => recorder.toggle()}>
           {view.status === "connecting" || view.status === "starting" ? <LoaderCircle className="spin" /> : active ? <Mic /> : <MicOff />}
         </button>
+        <select aria-label="Choose microphone" title={microphone} value={view.deviceId}
+          disabled={busy || view.understandingFailed || view.status === "starting"} onChange={(event) => recorder.selectMicrophone(event.target.value)}>
+          <option value="">Default microphone</option>
+          {microphones.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+        </select>
       </div>
     </header>
     <p id="ramble-help" className="sr-only">Speak your tasks. Say “sub-task” to nest tasks, “top level” to return, “undo” to go back, or “done” to add everything. Leaving discards unsaved tasks.</p>
