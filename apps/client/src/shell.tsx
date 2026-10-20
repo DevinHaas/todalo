@@ -6,13 +6,13 @@ import {
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
-import { connection, metadataReads, projectReads, queries, reads, session } from "./runtime";
+import { connection, projectReads, queries, reads, session } from "./runtime";
 import { todaySections, type TaskDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { haptics, hapticsSupported } from "./feedback";
 import { theme } from "./theme";
-import { useTaskWrites } from "./task-writes";
+import { useEditorExtras, useTaskWrites } from "./task-writes";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
 import { TodayCalendar } from "./schedule-screens";
 import { BoardScreen } from "./board-screens";
@@ -21,10 +21,9 @@ import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
 import { CalendarSettingsScreen, LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
-import { taskUrl } from "./links";
-import { KeyboardCommands, ShortcutSettingsScreen } from "./keyboard-screens";
+import { KeyboardCommands, ShortcutSettingsScreen, taskNeighbour } from "./keyboard-screens";
 
-// ponytail: controls without a migrated backend (inbox)
+// ponytail: controls legacy also left without a feature (Goals, Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
@@ -59,7 +58,7 @@ export function Shell({ account }: { account: Account }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [finding, setFinding] = useState(false);
+  const [finding, setFinding] = useState<"find" | "sections" | null>(null);
   const today = useQuery(reads.today(account.user.id));
   useEffect(() => {
     if (!mobileOpen) return;
@@ -83,8 +82,8 @@ export function Shell({ account }: { account: Account }) {
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       <nav><ul className="nav">
-        <li><button type="button" className="nav-item" onClick={() => { setFinding(true); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
-        <Inert icon={<Layers />} label="Inbox" />
+        <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
+        <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
         <li><NavLink to="/upcoming" className="nav-item"><Layers /><span>Upcoming</span></NavLink></li>
@@ -93,7 +92,7 @@ export function Shell({ account }: { account: Account }) {
         <Inert icon={<LineChart />} label="Reporting" muted />
         <Inert icon={<MoreHorizontal />} label="More" muted />
       </ul></nav>
-      <span className="nav-item help" aria-disabled="true"><HelpCircle /><span>Help & resources</span></span>
+      <button type="button" className="nav-item help" onClick={() => { setMobileOpen(false); window.dispatchEvent(new Event("todalo:help")); }}><HelpCircle /><span>Help & resources</span></button>
     </aside>
     <div className="inset">
       <div className="toolbar">
@@ -108,8 +107,8 @@ export function Shell({ account }: { account: Account }) {
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
-    {finding && <QuickFind userId={account.user.id} onClose={() => setFinding(false)} />}
-    <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)} onFind={() => setFinding(true)}
+    {finding && <QuickFind userId={account.user.id} sectionsOnly={finding === "sections"} onClose={() => setFinding(null)} />}
+    <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)} onFind={(sectionsOnly) => setFinding(sectionsOnly ? "sections" : "find")}
       onSidebar={() => window.matchMedia("(max-width: 767px)").matches ? setMobileOpen(open => !open) : setCollapsed(closed => !closed)} />
   </div></DisplayProvider>;
 }
@@ -144,15 +143,17 @@ export function TaskScreen({ account }: { account: Account }) {
     complete: writes.actions.complete,
     remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
   };
-  // The editor's label checkboxes; without the list it keeps the task's labels.
-  const labels = useQuery(metadataReads.list(account.user.id));
-  // Resolved before the tap: WebKit only allows clipboard writes inside the gesture.
-  const link = useQuery({ queryKey: ["user", account.user.id, "task-link", id], queryFn: () => taskUrl(id), staleTime: Infinity, refetchInterval: false });
+  // The editor's label checkboxes (without the list it keeps the task's labels) and task link.
+  const extras = useEditorExtras(account.user.id, id);
+  // Previous/Next: the list the task was opened from (legacy editor over a list).
+  const neighbours = { previous: taskNeighbour(id, -1), next: taskNeighbour(id, 1) };
   const editor = inserting?.task.id === id ? <section className="task-insert" aria-label={`Add task ${inserting.edge} ${inserting.task.title}`}>
     <Composer key={inserting.edge} startOpen projectId={inserting.task.projectId} sectionId={inserting.task.sectionId} placement={{ edge: inserting.edge, anchorId: id }}
       dueDate={() => inserting.task.dueDate ? new Date(new Date(inserting.task.dueDate).setHours(0, 0, 0, 0)).toISOString() : null}
       onCancel={() => setInserting(null)} onCreate={(task) => writes.create.mutateAsync(task)} />
-  </section> : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} shareUrl={link.data} onClose={() => setClosedFor(id)}
+  </section> : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setClosedFor(id)}
+    navigation={neighbours.previous || neighbours.next ? { previous: Boolean(neighbours.previous), next: Boolean(neighbours.next),
+      go: (step) => { const next = step < 0 ? neighbours.previous : neighbours.next; if (next) navigate(`/tasks/${encodeURIComponent(next)}`); } } : undefined}
     onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }}
     onInsert={(edge) => setInserting({ edge, task: query.data! })} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}

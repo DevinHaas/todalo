@@ -27,6 +27,20 @@ export function ShortcutKeys({ bindings }: { bindings: string[] }) {
   </span>;
 }
 
+export type TaskMenuAction = "edit" | "date" | "clear-date" | "complete" | "delete";
+const menuActions: [TaskMenuAction, string][] = [["edit", "Edit"], ["date", "Choose date"], ["clear-date", "Clear date"], ["complete", "Complete"], ["delete", "Delete"]];
+
+/** Legacy "Task actions" dialog (the `.` key): each choice runs what the row's own control or key does. */
+export function TaskMenu({ title, onChoose, onClose }: { title: string; onChoose: (action: TaskMenuAction) => void; onClose: () => void }) {
+  return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="task-menu-title" aria-describedby="task-menu-task" className="dialog task-menu" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+      <h2 id="task-menu-title" className="dialog-title">Task actions</h2>
+      <p id="task-menu-task" className="state">{title}</p>
+      {menuActions.map(([action, name], index) => <button key={action} type="button" className="button outline" autoFocus={index === 0} onClick={() => onChoose(action)}>{name}</button>)}
+    </div>
+  </div>;
+}
+
 /** Legacy "Keyboard Shortcuts" sheet: searchable, grouped, Escape or × closes. */
 export function ShortcutHelp({ bindings, onCustomize, onClose }: { bindings: (id: string) => string[]; onCustomize: () => void; onClose: () => void }) {
   const [query, setQuery] = useState("");

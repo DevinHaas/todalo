@@ -6,7 +6,7 @@ import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
 import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
-import { FilterScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
+import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
 
@@ -47,6 +47,7 @@ export default function App() {
     const account = state.account;
     return <BrowserRouter><SmartDatesProvider userId={account.user.id}><ComposerChoicesProvider userId={account.user.id}><Routes>
       <Route element={<Shell account={account} />}>
+        <Route path="/inbox" element={<InboxScreen account={account} />} />
         <Route path="/today" element={<TodayScreen account={account} />} />
         <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
@@ -59,6 +60,8 @@ export default function App() {
         <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
         <Route path="/ramble" element={<RambleScreen />} />
         <Route path="/search" element={<SearchScreen account={account} />} />
+        {/* Legacy /settings lives in Account; /home and unknown routes redirect to Today. */}
+        <Route path="/settings" element={<Navigate to={{ pathname: "/account", hash: location.hash }} replace />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
     </Routes></ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;

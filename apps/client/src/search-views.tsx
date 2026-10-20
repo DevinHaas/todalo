@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import type { TaskDto } from "./tasks";
-import { Failure, TaskRow, type ReadState, type RowActions } from "./views";
-import { listBuckets } from "./metadata-views";
+import { Failure, type ReadState } from "./views";
+import { CollectionBody, type CollectionSlots } from "./metadata-views";
 import { matchFindItems, type FindItem, type SearchDto } from "./search";
 import { releaseFocus } from "./software-keyboard";
 
@@ -38,15 +38,14 @@ export function QuickFindDialog({ state, onRetry, sectionsOnly = false, onOpen, 
 }
 
 /** Legacy /search page: the query form, the result count and the matching tasks. */
-export function SearchView({ query, state, onSearch, onRetry, projectNames = {}, actions, writeError, now = new Date() }: {
-  query: string; state: ReadState<SearchDto>; onSearch: (query: string) => void; onRetry: () => void;
-  projectNames?: Record<string, string>; actions?: RowActions; writeError?: string | null; now?: Date;
+export function SearchView({ query, state, onSearch, onRetry, writeError, ...slots }: CollectionSlots & {
+  query: string; state: ReadState<SearchDto>; onSearch: (query: string) => void; onRetry: () => void; writeError?: string | null;
 }) {
   const [draft, setDraft] = useState(query);
   const submit = (event: FormEvent) => { event.preventDefault(); onSearch(draft); };
   const tasks: TaskDto[] = state.data?.tasks ?? [];
   return <div className="collection">
-    <h1 className="page-title">Search</h1>
+    <div className="project-header"><h1 className="page-title">Search</h1>{state.data && !slots.layout && slots.selection?.control}</div>
     <form className="search-form" role="search" onSubmit={submit}>
       <input aria-label="Search tasks" name="q" placeholder="Search tasks" enterKeyHint="search" value={draft} onChange={(event) => setDraft(event.target.value)} />
       <button type="submit" className="button outline">Search</button>
@@ -57,12 +56,7 @@ export function SearchView({ query, state, onSearch, onRetry, projectNames = {},
         <p className="state" role="status">{tasks.length} results</p>
         {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
         {writeError && <p role="alert" className="form-error">{writeError}</p>}
-        <div className="sections">
-          {listBuckets(tasks, now).map(bucket => <section key={bucket.label}>
-            <h2 className="section-heading muted">{bucket.label}</h2>
-            {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} />)}
-          </section>)}
-        </div>
+        <CollectionBody tasks={tasks} {...slots} />
       </>}
   </div>;
 }

@@ -10,6 +10,8 @@ import { ProjectView } from "./project-views";
 import { projectKeys } from "./projects";
 import { taskKeys, type TaskDto, type TodayDto } from "./tasks";
 import { TodayView } from "./views";
+import { TaskCollectionView } from "./metadata-views";
+import { SearchView } from "./search-views";
 
 const native = vi.hoisted(() => ({ tauri: false, calls: [] as unknown[][], result: null as unknown }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -160,5 +162,33 @@ describe("selection views", () => {
     }));
     expect(project).toContain('aria-label="Reorder a"');
     expect(project).toContain('aria-roledescription="sortable"');
+  });
+
+  it("gives label, filter, Inbox and search lists the Select button, toolbar and row checkboxes; other layouts replace the list", () => {
+    const slots = { control: createElement("button", null, "Select"), toolbar: createElement("div", { role: "toolbar" }, "2 selected"), row: (item: TaskDto) => ({ selected: item.id === "a", toggle() {} }) };
+    const state = { status: "success" as const, data: { name: "Inbox", tasks: [task("a", { projectId: null }), task("b", { projectId: null })] }, error: null };
+    for (const kind of ["label", "filter", "inbox"] as const) {
+      const html = render(createElement(TaskCollectionView, { kind, state, onRetry() {}, selection: slots }));
+      expect(html).toContain(">Select</button>");
+      expect(html).toContain("2 selected");
+      expect(html).toContain('aria-label="Select a" checked=""');
+      expect(html.includes("Manage")).toBe(kind !== "inbox");
+    }
+    const board = render(createElement(TaskCollectionView, { kind: "label", state, onRetry() {}, selection: slots, layout: (tasks) => createElement("p", null, `board of ${tasks.length}`) }));
+    expect(board).toContain("board of 2");
+    expect(board).not.toContain(">Select</button>");
+    const search = render(createElement(SearchView, { query: "a", state: { status: "success", data: { query: "a", tasks: [task("a")] }, error: null }, onSearch() {}, onRetry() {}, selection: slots }));
+    expect(search).toContain(">Select</button>");
+    expect(search).toContain('aria-label="Select a" checked=""');
+  });
+
+  it("lets project rows complete and delete, and shows completed tasks when Display does", () => {
+    const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks: [task("open"), task("done", { status: "done" })] }, error: null };
+    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false, error: null }, actions: { complete() {}, remove() {} } };
+    const html = render(createElement(ProjectView, props));
+    expect(html).toContain('aria-label="Complete open"');
+    expect(html).toContain('aria-label="Delete open"');
+    expect(html).not.toContain('aria-label="Complete done"');
+    expect(render(createElement(ProjectView, { ...props, showCompleted: true }))).toContain('aria-label="Complete done"');
   });
 });

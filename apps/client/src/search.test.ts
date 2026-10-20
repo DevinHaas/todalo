@@ -1,13 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { browserSearchTransport, searchKeys } from "./search";
 import { QuickFindDialog, SearchView } from "./search-views";
-import { copyText, followNativeLinks, openRoute, taskPath } from "./links";
+import { copyTaskLink, copyText, followNativeLinks, openRoute, taskPath } from "./links";
 import { taskMutations, type TaskDto, type TaskTransport } from "./tasks";
-import { TaskEditor } from "./views";
+import { TaskEditor, TaskView } from "./views";
 import { AccountTransportError } from "./errors";
 
 const task = (id: string, extra: Partial<TaskDto> = {}) => ({
@@ -74,6 +74,17 @@ describe("search views", () => {
     expect(html).toContain('href="/tasks/a%2Fb"');
     expect(html).toContain("Copy link");
   });
+  it("show Previous and Next in the editor when it was opened from a list, disabled at its ends", () => {
+    const props = { task: task("a", { updatedAt: "2026-10-01T00:00:00.000Z" }), onSave: async () => {}, onClose: noop };
+    expect(render(createElement(TaskEditor, props))).not.toContain(">Previous</button>");
+    const html = render(createElement(TaskEditor, { ...props, navigation: { previous: false, next: true, go: noop } }));
+    expect(html).toMatch(/data-navigate="-1" disabled="">Previous<\/button>/);
+    expect(html).toMatch(/data-navigate="1">Next<\/button>/);
+  });
+  it("link the task page to its collection: the project, else the Inbox", () => {
+    expect(render(createElement(TaskView, { state: success(task("a")), onRetry: noop }))).toMatch(/href="\/inbox"[^>]*>Open task collection/);
+    expect(render(createElement(TaskView, { state: success(task("a", { projectId: "p 1" })), onRetry: noop }))).toMatch(/href="\/projects\/p%201"[^>]*>Open task collection/);
+  });
 });
 
 describe("task links", () => {
@@ -84,6 +95,14 @@ describe("task links", () => {
     await expect(copyText("x", undefined)).rejects.toThrow("Clipboard access is unavailable. Open task details and copy the link manually.");
     await expect(copyText("x", { writeText: async () => { throw new Error("NotAllowed"); } })).rejects.toThrow("The browser blocked copying. Retry using Copy link or copy the task link manually.");
     expect(taskPath("a/b")).toBe("/tasks/a%2Fb");
+  });
+
+  it("copies a row's link from a key press with the page origin", async () => {
+    vi.stubGlobal("window", { location: { origin: "https://todalo.example" } });
+    const written: string[] = [];
+    await copyTaskLink("a/b", { writeText: async (text) => { written.push(text); }, write: async () => {} }, false);
+    expect(written).toEqual(["https://todalo.example/tasks/a%2Fb"]);
+    vi.unstubAllGlobals();
   });
 
   function fakeWindow(pathname = "/today") {

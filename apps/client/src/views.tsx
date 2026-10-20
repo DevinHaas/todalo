@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronDown, Hash, Inbox, Plus, X } from "lucide-react";
 import {
@@ -27,8 +27,24 @@ export interface RowSelection { selected: boolean; toggle(): void }
 /** Ticket 15 slots: the header's Select button, the selection toolbar, and each row's checkbox. */
 export interface SelectionSlots { control: ReactNode; toolbar: ReactNode; row(task: TaskDto): RowSelection | undefined }
 
+/**
+ * Legacy collapsedIds: parents whose sub-tasks are hidden (Shift+E, toggle
+ * nested). Page state, cleared on navigation (keyboard-screens.tsx).
+ */
+let collapsed: ReadonlySet<string> = new Set();
+const collapseListeners = new Set<() => void>();
+export const collapsedTasks = {
+  get: () => collapsed,
+  subscribe(listener: () => void) { collapseListeners.add(listener); return () => { collapseListeners.delete(listener); }; },
+  set(next: ReadonlySet<string>) { collapsed = next; collapseListeners.forEach(listener => listener()); },
+  toggle(id: string) { const next = new Set(collapsed); if (!next.delete(id)) next.add(id); collapsedTasks.set(next); },
+};
+
 export function TaskRow({ task, now, projectName, actions, selection }: { task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection }) {
-  return <div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
+  const isCollapsed = () => Boolean(task.parentId && collapsed.has(task.parentId));
+  const hidden = useSyncExternalStore(collapsedTasks.subscribe, isCollapsed, isCollapsed);
+  return <div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+    data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" onClick={() => actions.complete(task)} />
@@ -111,7 +127,9 @@ export function TaskView({ state, onRetry, actions, writeError, attachments, onE
       {editor}
     </>;
   }
-  return <article className="task-detail">{body}<Link className="text-action" to="/today">Back to Today</Link></article>;
+  // Legacy "Open task collection": the task's project, else the Inbox.
+  const collection = state.data ? state.data.projectId ? `/projects/${encodeURIComponent(state.data.projectId)}` : "/inbox" : null;
+  return <article className="task-detail">{body}{collection && <Link className="text-action" to={collection}>Open task collection</Link>}<Link className="text-action" to="/today">Back to Today</Link></article>;
 }
 
 type Draft = { title: string; description: string; priority: number; deadline: string; date: string; start: string; end: string; recurrence: RecurrenceDto | null; labelIds: string[] };
@@ -132,13 +150,15 @@ const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Do
  * With `labels` (the user's list) it shows the label checkboxes and sends the
  * checked set, limited to labels that still exist; without it labels are kept.
  */
-export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }: {
+export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation }: {
   task: TaskDto; labels?: { id: string; name: string }[];
   /** The resolved https task link (ticket 18); the legacy "Task link · Copy link" row shows once known. */
   shareUrl?: string;
   onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
   /** Legacy inline editor's Save and add above/below: called once the save succeeds. */
   onInsert?: (edge: "above" | "below") => void;
+  /** Legacy Previous/Next: save, then open the adjacent task of the list it was opened from. */
+  navigation?: { previous: boolean; next: boolean; go(step: -1 | 1): void };
 }) {
   const [base, setBase] = useState(task);
   const [draft, setDraft] = useState(() => draftOf(task));
@@ -153,7 +173,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
   const choice = repeatChoice(draft.recurrence);
 
   async function submit(event: FormEvent) { event.preventDefault(); await save(); }
-  async function save(after?: "above" | "below") {
+  async function save(after?: "above" | "below" | -1 | 1) {
     if (!draft.title.trim() || pending) return;
     setPending(true); setError(null);
     try {
@@ -165,7 +185,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
         recurrence: draft.recurrence,
         ...(labels && { labelIds: draft.labelIds.filter(id => labels.some(label => label.id === id)) }),
       });
-      if (after) onInsert?.(after);
+      if (after === "above" || after === "below") onInsert?.(after);
+      else if (after) navigation?.go(after);
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error("Your changes could not be saved. Try again."));
     } finally { setPending(false); }
@@ -219,6 +240,10 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
           </select></label>
         </fieldset>
         <div className="composer-actions">
+          {navigation && <>
+            <button type="button" className="button outline" data-navigate="-1" disabled={pending || !navigation.previous || !draft.title.trim()} onClick={() => void save(-1)}>Previous</button>
+            <button type="button" className="button outline" data-navigate="1" disabled={pending || !navigation.next || !draft.title.trim()} onClick={() => void save(1)}>Next</button>
+          </>}
           {onInsert && <>
             <button type="button" className="button outline" data-insert="above" disabled={pending || !draft.title.trim()} onClick={() => void save("above")}>Save and add above</button>
             <button type="button" className="button outline" data-insert="below" disabled={pending || !draft.title.trim()} onClick={() => void save("below")}>Save and add below</button>

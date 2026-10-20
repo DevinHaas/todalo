@@ -1,16 +1,16 @@
 import { useNavigate, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { projectReads, searchReads } from "./runtime";
+import { searchReads } from "./runtime";
 import { searchQuery } from "./search";
 import { QuickFindDialog, SearchView, revealHash } from "./search-views";
-import { useTaskWrites } from "./task-writes";
+import { useCollection } from "./metadata-screens";
 
 /** Mounted only while open, so every opening refetches the user's items (legacy layout data). */
-export function QuickFind({ userId, onClose }: { userId: string; onClose: () => void }) {
+export function QuickFind({ userId, sectionsOnly, onClose }: { userId: string; sectionsOnly?: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const query = useQuery(searchReads.find(userId));
-  return <QuickFindDialog state={query} onRetry={() => void query.refetch()} onClose={onClose}
+  return <QuickFindDialog sectionsOnly={sectionsOnly} state={query} onRetry={() => void query.refetch()} onClose={onClose}
     onOpen={(href) => { navigate(href); revealHash(href); }} />;
 }
 
@@ -20,9 +20,7 @@ export function SearchScreen({ account }: { account: Account }) {
   const [params, setParams] = useSearchParams();
   const q = searchQuery(params.get("q") ?? "");
   const query = useQuery(searchReads.results(userId, q));
-  const projects = useQuery(projectReads.list(userId));
-  const names = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
-  const writes = useTaskWrites(userId);
+  const { slots, writeError } = useCollection(account, query.data?.tasks ?? []);
   return <SearchView key={q} query={q} state={query} onRetry={() => void query.refetch()} onSearch={(next) => setParams({ q: next })}
-    projectNames={names} actions={writes.actions} writeError={writes.error} />;
+    writeError={writeError} {...slots} />;
 }

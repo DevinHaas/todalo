@@ -68,7 +68,7 @@ export const detectPlatform = (platform = navigator.platform): Platform =>
 export const clientCommandIds = [
   "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find",
   "navigation.today", "navigation.upcoming", "navigation.projects", "navigation.labels", "navigation.filters",
-  "navigation.settings", "navigation.account", "navigation.help", "navigation.theme",
+  "navigation.settings", "navigation.account", "navigation.help", "navigation.theme", "navigation.inbox", "navigation.sections",
   "task.previous", "task.next", "view.first", "view.last",
   "task.details", "task.edit", "task.complete", "task.delete", "task.select", "task.toolbar",
   "task.add-bottom", "task.add-top", "editor.submit-below", "editor.save-below", "editor.save-above", "editor.save",
@@ -76,6 +76,7 @@ export const clientCommandIds = [
   "task.date", "task.clear-date", "task.priority-1", "task.priority-2", "task.priority-3", "task.priority-4", "task.priority",
   "task.labels", "task.deadline", "task.clear-deadline", "task.move", "task.nest", "task.unnest", "editor.previous", "editor.next",
   "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
+  "task.menu", "task.copy-url", "task.reveal", "task.toggle-children", "view.toggle-nested",
   "upcoming.today", "upcoming.next-week", "upcoming.previous-week", "calendar.today", "calendar.next-week", "calendar.previous-week",
 ] as const;
 export type ClientCommandId = typeof clientCommandIds[number];

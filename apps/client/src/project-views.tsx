@@ -1,8 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { treeOrder, type NewTask, type TaskDto } from "./tasks";
-import { Composer, Failure, TaskRow, type ReadState, type SelectionSlots } from "./views";
+import { Composer, Failure, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
 import { SortableRow, SortableTasks } from "./bulk-views";
 import { reorderAnchor, type ReorderPosition } from "./bulk";
 import { sortProjectTasks, type ProjectDetailDto, type ProjectDto, type ProjectSort } from "./projects";
@@ -40,7 +40,7 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
 /** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
 export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate, initialSort = "manual" }: {
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate, initialSort = "manual", actions, showCompleted = false }: {
   state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
   sections?: SectionActions; now?: Date;
   /** Ticket 15: selection and bulk toolbar, and drag/keyboard reordering within a section. */
@@ -50,6 +50,10 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   /** Legacy per-section TaskComposer; without it "Add task" stays the inert placeholder. */
   onCreate?: (task: NewTask) => Promise<unknown>;
   initialSort?: ProjectSort;
+  /** Row complete/delete (legacy TaskRow); without them rows keep the inert checkbox. */
+  actions?: RowActions;
+  /** Display's "Completed tasks" (legacy ProjectView showCompleted). */
+  showCompleted?: boolean;
 }) {
   const [sort, setSort] = useState<ProjectSort>(initialSort);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -57,15 +61,22 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   const [confirming, setConfirming] = useState(false);
   const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Toggle nested (keyboard-screens.tsx) folds or unfolds every section, as legacy "todalo:toggle-sections".
+  const sectionIds = (state.data?.sections ?? []).map(section => section.id).join(" ");
+  useEffect(() => {
+    const toggle = () => setCollapsed(current => current.size ? new Set() : new Set(sectionIds.split(" ").filter(Boolean)));
+    window.addEventListener("todalo:toggle-sections", toggle);
+    return () => window.removeEventListener("todalo:toggle-sections", toggle);
+  }, [sectionIds]);
   if (state.status === "pending") return <p className="state" role="status">Loading project…</p>;
   if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div><h1 className="page-title">Project not found</h1><p className="state">This project does not exist or you do not have access to it.</p><Link className="text-action" to="/projects">Back to Projects</Link></div>;
   const { project, tasks, sections = [] } = state.data;
-  // Legacy display default hides completed tasks; server order is sortOrder.
+  // Completed tasks show only when Display says so (legacy default hides them); server order is sortOrder.
   // Sub-tasks stay under their parents in every sort (legacy tree); only Manual allows reordering and nesting.
-  const open = treeOrder(sortProjectTasks(tasks.filter(task => task.status !== "done"), sort));
+  const open = treeOrder(sortProjectTasks(tasks.filter(task => showCompleted || task.status !== "done"), sort));
   const manual = sort === "manual";
-  const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} selection={selection?.row(task)} />;
+  const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} actions={actions} selection={selection?.row(task)} />;
   const toggle = (id: string) => setCollapsed(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   async function rename(event: FormEvent) {
     event.preventDefault();

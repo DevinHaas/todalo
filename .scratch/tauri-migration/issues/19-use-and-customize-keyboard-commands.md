@@ -64,3 +64,39 @@ Upcoming and month-calendar week keys, `Shift+V` cycling List/Board/Calendar.
 
 Pending only: Mac app run (Tauri menu interception), iPhone/iPad hardware keyboards, VoiceOver
 on device.
+
+2026-10-20 — Leftovers closed and a final parity pass with legacy `apps/web`.
+- Selection on every legacy ViewSwitcher list: Upcoming, label, filter, search and the new Inbox
+  now have the Select button, the bulk toolbar and row checkboxes (list layout, as on Today), so
+  `x`, `,`, `y`/`l`/`d`/`t` and `v` act on a selection there too. Label, filter, Inbox and search
+  also get the Board and week Calendar layouts the toolbar arrows switch to (legacy ViewSwitcher).
+- New keys: `.` opens the legacy "Task actions" dialog (Edit, Choose date, Clear date, Complete,
+  Delete; each runs the row's own control/key, Clear date on that task only; Escape refocuses the
+  row); `Cmd/Ctrl+Shift+C` copies the row's link ("Task link copied."; native passes WebKit a
+  ClipboardItem so the write starts inside the key press); `Shift+G` opens the task's project
+  (else the Inbox) with `#task-<id>` and focuses its row; `Shift+E` folds the row's sub-tasks;
+  `Cmd/Ctrl+Option+0` folds every sub-task and project section (Manual sort only); `g i` Inbox,
+  `g /` Navigate sections (sections-only Quick Find). Legacy had no visible control for the
+  menu, copy key, reveal or folding either; folding is page state cleared on navigation.
+- Dialog focus: the Move, Nest and bulk Priority/Labels/Deadline dialogs take focus when opened by
+  a tap (the field, else the dialog), so Escape and Tab work on the tap path.
+- Parity fixes: `/inbox` route and sidebar link (project deletion now lands there, as legacy);
+  `/settings` redirects to Account; project rows complete and delete; the project list honours
+  Display › Completed tasks; a project's Calendar slot adds the task to that project; sidebar
+  Help & resources opens the shortcut sheet; the edit dialog has Previous/Next when opened from a
+  list (`Cmd+↑/↓` press them); task page "Open task collection"; Board/Calendar editors show
+  labels and Task link/Copy link; app-wide shortcut sync warning with "Shortcut settings".
+Evidence: `apps/client/src/keyboard.test.ts` (new bindings, sub-task folding, Task actions,
+dialog focus), `bulk.test.ts` (collection selection and layouts, project row writes and
+completed tasks), `search.test.ts` (Previous/Next, Open task collection, copy link). Root
+`bun run typecheck` and `bun run test` (74 files, 663 tests) green. Browser QA (isolated QA API,
+Chromium): Inbox list and `g i`; `/settings` → `/account`; Upcoming `x` + toolbar; tapping Move
+and Labels focuses the dialog and Escape closes it; project rows complete/delete; `Ctrl+]` then
+`Shift+E` and `Cmd+Option+0` fold/unfold (drag handles hide with their rows); `.` menu, Escape
+refocus, menu Complete; `Cmd+Shift+C` clipboard holds `/tasks/shared-screen`; `Shift+G` from
+Today to the project and to the Inbox with the row focused; `g /`; Help & resources; label page
+Select and Board/Calendar; search `x` then `l`; editor Next opens the next Today task.
+
+Still not wired: `task.paste-file` as a custom binding (default `Cmd/Ctrl+V` native paste works);
+opening a `#task-<id>` link directly does not reveal the row (only the key does); copy link in the
+Mac app is unverified.

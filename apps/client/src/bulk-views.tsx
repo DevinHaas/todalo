@@ -6,7 +6,7 @@ import { GripVertical } from "lucide-react";
 import { dateInputValue, localInstant, type TaskDto } from "./tasks";
 import type { BulkCompletionDto, BulkMetadataChange, Destination, ReorderPosition } from "./bulk";
 import type { DestinationsDto } from "./organization";
-import { MoveDialog } from "./organization-views";
+import { focusDialog, MoveDialog } from "./organization-views";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import { AccountTransportError } from "./errors";
@@ -135,7 +135,7 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
     void onSave(field === "priority" ? { priority } : field === "labels" ? { labelIds: labelIds.filter(id => labels!.some(label => label.id === id)) } : { deadline: deadline ? localInstant(deadline) : null });
   }
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor">
+    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
       <h2 className="dialog-title">{title}</h2>
       {error && <p role="alert" className="form-error">{error}</p>}
       {field === "labels" && !labels ? <p role="status" className="state">Loading labels…</p> : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>

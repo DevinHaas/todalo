@@ -43,9 +43,17 @@ export function TaskOrganizer({ task, tasks, destinations, onRetryDestinations, 
   </section>;
 }
 
+/**
+ * Ref for a dialog: takes focus when it opens unless a field inside already
+ * autofocused, so Escape and Tab start inside it on the tap path too.
+ */
+export function focusDialog(dialog: HTMLElement | null) {
+  if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+}
+
 function Dialog({ title, pending, onClose, children }: { title: string; pending: boolean; onClose: () => void; children: ReactNode }) {
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor">
+    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
       <h2 className="dialog-title">{title}</h2>
       {children}
     </div>
@@ -65,7 +73,7 @@ export function MoveDialog({ task, destinations, onRetry, pending, error, onSubm
     {!data
       ? destinations.status === "error" ? <Failure error={destinations.error} onRetry={onRetry} /> : <p role="status" className="state">Loading destinations…</p>
       : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>
-        <label>Project<select aria-label="Move to project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setSectionId(""); }}>
+        <label>Project<select autoFocus aria-label="Move to project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setSectionId(""); }}>
           <option value="">Inbox</option>
           {data.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
         </select></label>

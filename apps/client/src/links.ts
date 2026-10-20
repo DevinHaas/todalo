@@ -14,11 +14,25 @@ export async function taskUrl(id: string): Promise<string> {
   catch (error) { throw nativeAccountError(error); }
 }
 
+const BLOCKED = "The browser blocked copying. Retry using Copy link or copy the task link manually.";
+
 /** Legacy copyTaskUrl messages. Resolve the URL first: WebKit drops the user gesture across an await. */
 export async function copyText(text: string, clipboard: Pick<Clipboard, "writeText"> | undefined = navigator.clipboard) {
   if (!clipboard?.writeText) throw new Error("Clipboard access is unavailable. Open task details and copy the link manually.");
   try { await clipboard.writeText(text); }
-  catch { throw new Error("The browser blocked copying. Retry using Copy link or copy the task link manually."); }
+  catch { throw new Error(BLOCKED); }
+}
+
+/**
+ * Copy task URL key (legacy copyTaskUrl). The browser knows the link at once;
+ * native hands WebKit a ClipboardItem with the pending link, so the write
+ * still starts inside the key press.
+ */
+export function copyTaskLink(id: string, clipboard: Pick<Clipboard, "writeText" | "write"> | undefined = navigator.clipboard, native = isTauri()): Promise<void> {
+  if (!native) return copyText(`${window.location.origin}${taskPath(id)}`, clipboard);
+  if (!clipboard?.write || typeof ClipboardItem === "undefined") return taskUrl(id).then(url => copyText(url, clipboard));
+  const text = taskUrl(id).then(url => new Blob([url], { type: "text/plain" }));
+  return clipboard.write([new ClipboardItem({ "text/plain": text })]).catch(() => { throw new Error(BLOCKED); });
 }
 
 /** The only routes a native deep link may open (Rust validated them already). */

@@ -2,10 +2,15 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { metadata, metadataReads, projectReads } from "./runtime";
+import { metadata, metadataReads, projectReads, reads } from "./runtime";
 import { metadataMutations } from "./metadata";
-import { MetadataDirectory, TaskCollectionView, type MetadataActions } from "./metadata-views";
+import { listBuckets, MetadataDirectory, TaskCollectionView, type CollectionSlots, type MetadataActions } from "./metadata-views";
 import { useTaskWrites } from "./task-writes";
+import type { TaskDto } from "./tasks";
+import { useBulkSelection } from "./bulk-screens";
+import { useDisplay } from "./schedule-views";
+import { BoardScreen } from "./board-screens";
+import { ProjectCalendar } from "./schedule-screens";
 
 function useProjectNames(userId: string) {
   const projects = useQuery(projectReads.list(userId));
@@ -37,20 +42,45 @@ export function MetadataScreen({ account, mode }: { account: Account; mode: "lab
   return <MetadataDirectory key={mode} mode={mode} state={query} onRetry={() => void query.refetch()} projects={projects} actions={actions} write={{ pending, error }} />;
 }
 
+/**
+ * What a legacy ViewSwitcher gave every task collection (labels, filters,
+ * Inbox, search): row writes, selection on the list and the Display layout.
+ */
+export function useCollection(account: Account, tasks: TaskDto[]): { slots: CollectionSlots; writeError: string | null } {
+  const { names } = useProjectNames(account.user.id);
+  const writes = useTaskWrites(account.user.id);
+  const { layout } = useDisplay();
+  const selection = useBulkSelection(account.user.id, listBuckets(tasks).flatMap(bucket => bucket.items));
+  return {
+    slots: {
+      projectNames: names, actions: writes.actions, selection,
+      layout: layout === "board" ? (shown) => <BoardScreen account={account} tasks={shown} />
+        : layout === "calendar" ? (shown) => <ProjectCalendar account={account} tasks={shown} /> : undefined,
+    },
+    writeError: writes.error,
+  };
+}
+
 export function LabelScreen({ account }: { account: Account }) {
   const { id = "" } = useParams();
   const query = useQuery(metadataReads.label(account.user.id, id));
-  const { names } = useProjectNames(account.user.id);
-  const tasks = useTaskWrites(account.user.id);
+  const { slots, writeError } = useCollection(account, query.data?.tasks ?? []);
   const data = query.data && { name: query.data.label.name, tasks: query.data.tasks };
-  return <TaskCollectionView kind="label" state={{ ...query, data }} onRetry={() => void query.refetch()} projectNames={names} actions={tasks.actions} writeError={tasks.error} />;
+  return <TaskCollectionView kind="label" state={{ ...query, data }} onRetry={() => void query.refetch()} writeError={writeError} {...slots} />;
 }
 
 export function FilterScreen({ account }: { account: Account }) {
   const { id = "" } = useParams();
   const query = useQuery(metadataReads.filter(account.user.id, id));
-  const { names } = useProjectNames(account.user.id);
-  const tasks = useTaskWrites(account.user.id);
+  const { slots, writeError } = useCollection(account, query.data?.tasks ?? []);
   const data = query.data && { name: query.data.filter.name, tasks: query.data.tasks };
-  return <TaskCollectionView kind="filter" state={{ ...query, data }} onRetry={() => void query.refetch()} projectNames={names} actions={tasks.actions} writeError={tasks.error} />;
+  return <TaskCollectionView kind="filter" state={{ ...query, data }} onRetry={() => void query.refetch()} writeError={writeError} {...slots} />;
+}
+
+/** Legacy /inbox: every owned task without a project (the Today read is the full collection). */
+export function InboxScreen({ account }: { account: Account }) {
+  const query = useQuery(reads.today(account.user.id));
+  const tasks = useMemo(() => query.data?.tasks.filter(task => task.projectId === null), [query.data]);
+  const { slots, writeError } = useCollection(account, tasks ?? []);
+  return <TaskCollectionView kind="inbox" state={{ ...query, data: tasks && { name: "Inbox", tasks } }} onRetry={() => void query.refetch()} writeError={writeError} {...slots} />;
 }

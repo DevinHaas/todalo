@@ -91,6 +91,8 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .organizer { display: grid; gap: .5rem; margin: 1rem 0; }
 .task-row { display: flex; align-items: center; gap: .75rem; min-height: 3rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
 .task-row.child { margin-left: 1.5rem; }
+/* Collapsed sub-tasks (Shift+E); the drag handle goes with its row. */
+[hidden], .sortable-row:has(> .task-row[hidden]) { display: none !important; }
 .checkbox { width: 1rem; height: 1rem; flex-shrink: 0; border: 1px solid var(--input); border-radius: 4px; box-shadow: 0 1px 2px #0000000d; }
 .task-title { flex: 1; font-size: 1rem; line-height: 1.5rem; color: inherit; text-decoration: none; }
 .task-title:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -177,6 +179,7 @@ button.composer:hover { color: var(--foreground); }
 .setting-title { display: block; }
 .setting-hint { display: block; color: var(--muted-foreground); font-size: .875rem; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: max(4rem, env(safe-area-inset-top)) 1rem 1rem; background: #0000004d; }
+.dialog:focus { outline: none; }
 .dialog { width: 100%; max-width: 34rem; display: grid; gap: .5rem; padding: .5rem; border-radius: .75rem; background: var(--background); box-shadow: 0 10px 30px #00000026; font-size: .875rem; }
 .dialog svg { width: 1rem; height: 1rem; }
 /* Ramble (tickets 6, 21): the legacy modal's layout, wave and staged cards. */
@@ -485,3 +488,6 @@ kbd { display: inline-block; min-width: 1.25rem; margin-left: .125rem; padding: 
 
 /* Keyboard row writes (ticket 19): a failed nest, priority or date key reports here. */
 .keyboard-notice { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; max-width: min(28rem, calc(100vw - 2rem)); margin: 0; padding: .625rem 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); color: var(--destructive); font-size: .875rem; box-shadow: 0 4px 12px #0000001f; }
+.keyboard-notice[role="status"] { color: var(--foreground); }
+/* Legacy app-wide shortcut sync warning. */
+.shortcut-sync { position: fixed; left: .75rem; bottom: calc(.75rem + env(safe-area-inset-bottom)); z-index: 40; max-width: 24rem; margin: 0; padding: .75rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--background); font-size: .875rem; box-shadow: 0 4px 12px #0000001f; }

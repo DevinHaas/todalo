@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { operationId, treeOrder, type TaskDto } from "./tasks";
-import { Failure, TaskRow, type ReadState, type RowActions } from "./views";
+import { Failure, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
 import { blankDefinition, type FilterDefinition, type FilterFields, type LabelFields, type MetadataDto } from "./metadata";
 import type { ProjectDto } from "./projects";
 import { releaseFocus } from "./software-keyboard";
@@ -138,27 +138,40 @@ export function listBuckets(tasks: TaskDto[], now = new Date()) {
   ].filter(bucket => bucket.items.length > 0).map(bucket => ({ ...bucket, items: treeOrder(bucket.items) }));
 }
 
-/** Legacy label or saved-filter page: its name, the manage link and the matching tasks. */
-export function TaskCollectionView({ kind, state, onRetry, projectNames = {}, actions, writeError, now = new Date() }: {
-  kind: "label" | "filter"; state: ReadState<{ name: string; tasks: TaskDto[] } | null>; onRetry: () => void;
-  projectNames?: Record<string, string>; actions?: RowActions; writeError?: string | null; now?: Date;
+/** What every legacy ViewSwitcher collection takes: row writes, the selection (list only) and another Display layout. */
+export interface CollectionSlots {
+  projectNames?: Record<string, string>; actions?: RowActions; now?: Date;
+  /** Ticket 15: Select button, toolbar and row checkboxes (list layout only, as Today). */
+  selection?: SelectionSlots;
+  /** Board or Calendar from Display, over the same tasks, in place of the list. */
+  layout?: (tasks: TaskDto[]) => ReactNode;
+}
+
+/** Legacy ListView body (label, filter, Inbox and search pages): selection toolbar and bucketed rows, or the chosen layout. */
+export function CollectionBody({ tasks, projectNames = {}, actions, now = new Date(), selection, layout }: CollectionSlots & { tasks: TaskDto[] }) {
+  if (layout) return <>{layout(tasks)}</>;
+  return <>{selection?.toolbar}<div className="sections">
+    {listBuckets(tasks, now).map(bucket => <section key={bucket.label}>
+      <h2 className="section-heading muted">{bucket.label}</h2>
+      {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} />)}
+    </section>)}
+  </div></>;
+}
+
+/** Legacy label, saved-filter or Inbox page: its name, the manage link and the matching tasks. */
+export function TaskCollectionView({ kind, state, onRetry, writeError, ...slots }: CollectionSlots & {
+  kind: "label" | "filter" | "inbox"; state: ReadState<{ name: string; tasks: TaskDto[] } | null>; onRetry: () => void; writeError?: string | null;
 }) {
-  const manage = kind === "label" ? <Link className="text-action" to="/labels">Manage labels</Link> : <Link className="text-action" to="/filters">Manage filters</Link>;
+  const manage = kind === "label" ? <Link className="text-action" to="/labels">Manage labels</Link> : kind === "filter" ? <Link className="text-action" to="/filters">Manage filters</Link> : null;
   if (state.status === "pending") return <p className="state" role="status">Loading tasks…</p>;
   if (state.status === "error" && !state.data) return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div className="collection"><h1 className="page-title">{kind === "label" ? "Label not found" : "Filter not found"}</h1>
     <p className="state">This {kind} does not exist or you do not have access to it.</p>{manage}</div>;
-  const buckets = listBuckets(state.data.tasks, now);
   return <div className="collection">
-    <h1 className="page-title">{state.data.name}</h1>
+    <div className="project-header"><h1 className="page-title">{state.data.name}</h1>{!slots.layout && slots.selection?.control}</div>
     {manage}
     {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
     {writeError && <p role="alert" className="form-error">{writeError}</p>}
-    <div className="sections">
-      {buckets.map(bucket => <section key={bucket.label}>
-        <h2 className="section-heading muted">{bucket.label}</h2>
-        {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} />)}
-      </section>)}
-    </div>
+    <CollectionBody tasks={state.data.tasks} {...slots} />
   </div>;
 }

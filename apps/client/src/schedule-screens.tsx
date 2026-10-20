@@ -5,16 +5,17 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { projectReads, reads } from "./runtime";
-import { useTaskWrites } from "./task-writes";
-import { Composer, Failure, TaskEditor, TaskRow } from "./views";
+import { useEditorExtras, useTaskWrites } from "./task-writes";
+import { Composer, Failure, TaskEditor, TaskRow, type SelectionSlots } from "./views";
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type ScheduleSlots } from "./schedule-views";
 import { labels, startOfDay } from "./schedule";
 import type { TaskDto } from "./tasks";
 import { useCalendarEvents } from "./calendar-screens";
 import { BoardScreen } from "./board-screens";
+import { useBulkSelection } from "./bulk-screens";
 
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
-function useSchedule(account: Account, tasks: TaskDto[]) {
+function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection }: { projectId?: string | null; selection?: SelectionSlots } = {}) {
   const writes = useTaskWrites(account.user.id);
   const projects = useQuery(projectReads.list(account.user.id));
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
@@ -22,7 +23,7 @@ function useSchedule(account: Account, tasks: TaskDto[]) {
   const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
   const now = new Date();
   const slots: ScheduleSlots = {
-    row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} />,
+    row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} selection={selection?.row(task)} />,
     open: task => setEditing(task.id),
     complete: writes.actions.complete,
     remove: writes.actions.remove,
@@ -30,12 +31,13 @@ function useSchedule(account: Account, tasks: TaskDto[]) {
   };
   // The editor follows the latest cached copy (a pristine form picks up other devices' edits).
   const task = editing ? tasks.find(item => item.id === editing) : undefined;
+  const extras = useEditorExtras(account.user.id, task?.id ?? null);
   const overlay = <>
-    {task && <TaskEditor key={task.id} task={task} onClose={() => setEditing(null)}
+    {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setEditing(null)}
       onSave={async (details) => { await writes.update.mutateAsync({ id: task.id, details }); setEditing(null); }} />}
     {slot && <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSlot(null); }}>
       <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog">
-        <Composer startOpen dueDate={() => slot.start.toISOString()} dueDateEnd={() => slot.end.toISOString()}
+        <Composer startOpen projectId={projectId} dueDate={() => slot.start.toISOString()} dueDateEnd={() => slot.end.toISOString()}
           destination={dayDestination(slot.start, now)}
           onCancel={() => setSlot(null)} onCreate={async (created) => { await writes.create.mutateAsync(created); setSlot(null); }} />
       </div>
@@ -44,13 +46,11 @@ function useSchedule(account: Account, tasks: TaskDto[]) {
   return { writes, slots, overlay, now };
 }
 
-/** A project's Calendar layout (legacy ViewSwitcher default CalendarView, ticket 17). */
-export function ProjectCalendar({ account, tasks }: { account: Account; tasks: TaskDto[] }) {
-  const { slots, overlay, writes, now } = useSchedule(account, tasks);
+/** The week Calendar layout of a project or task collection (legacy ViewSwitcher default CalendarView); a slot adds a task to the project (else the Inbox). */
+export function ProjectCalendar({ account, tasks, projectId }: { account: Account; tasks: TaskDto[]; projectId?: string }) {
+  const { slots, overlay, writes, now } = useSchedule(account, tasks, { projectId });
   const events = useCalendarEvents(account.user.id);
-  // ponytail: legacy slot clicks created the task in this project; the client cannot create
-  // project tasks yet (the project "Add task" is still inert), so slots stay inert here until it can.
-  return <>{writes.error && <p role="alert" className="form-error">{writes.error}</p>}<CalendarView tasks={tasks} events={events} slots={{ ...slots, slot() {} }} now={now} />{overlay}</>;
+  return <>{writes.error && <p role="alert" className="form-error">{writes.error}</p>}<CalendarView tasks={tasks} events={events} slots={slots} now={now} />{overlay}</>;
 }
 
 /** Today's Calendar layout: the legacy daily schedule. */
@@ -65,7 +65,9 @@ export function UpcomingScreen({ account }: { account: Account }) {
   const { layout } = useDisplay();
   const events = useCalendarEvents(account.user.id);
   const tasks = query.data?.tasks ?? [];
-  const { slots, overlay, writes, now } = useSchedule(account, tasks);
+  // Ticket 15 selection on the list layout (legacy TaskKeyboardProvider wrapped Upcoming too).
+  const selection = useBulkSelection(account.user.id, tasks);
+  const { slots, overlay, writes, now } = useSchedule(account, tasks, { selection: layout === "list" ? selection : undefined });
   const composer = (day: Date): ReactNode => <Composer dueDate={() => startOfDay(day).toISOString()} destination={dayDestination(day, now)}
     onCreate={(task) => writes.create.mutateAsync(task)} />;
   let body: ReactNode;
@@ -76,9 +78,9 @@ export function UpcomingScreen({ account }: { account: Account }) {
     {writes.error && <p role="alert" className="form-error">{writes.error}</p>}
     {layout === "board" ? <BoardScreen account={account} tasks={tasks} />
       : layout === "calendar" ? <CalendarView tasks={tasks} events={events} slots={slots} now={now} />
-      : <UpcomingList tasks={tasks} events={events} slots={slots} composer={composer} now={now} />}
+      : <>{selection.toolbar}<UpcomingList tasks={tasks} events={events} slots={slots} composer={composer} now={now} /></>}
   </>;
-  return <div><h1 className="page-title upcoming-title">Upcoming</h1>{body}{overlay}</div>;
+  return <div><div className="project-header"><h1 className="page-title upcoming-title">Upcoming</h1>{layout === "list" && query.data && selection.control}</div>{body}{overlay}</div>;
 }
 
 /** Legacy composer date chip: Today, Tomorrow or "d MMM". */

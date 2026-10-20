@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, validatePreferences } from "@todalo/ramble/keyboard";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ShortcutHelp, ShortcutSettings } from "./keyboard-views";
+import { MemoryRouter } from "react-router";
+import { ShortcutHelp, ShortcutSettings, TaskMenu } from "./keyboard-views";
+import { collapsedTasks, TaskRow } from "./views";
+import { focusDialog } from "./organization-views";
+import type { TaskDto } from "./tasks";
 import { adjacentRow, browserKeyboardTransport, clientCommands, detectPlatform, dispatchCommands, isEditable } from "./keyboard";
 
 const key = (key: string, extra: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; repeat: boolean }> = {}) =>
@@ -81,6 +85,21 @@ describe("client keyboard commands", () => {
     expect(run(all, key("1"), { typing: true })).toBeUndefined();
   });
 
+  it("maps the legacy task menu, copy link, reveal, sub-task folding and Inbox/sections keys", () => {
+    const ids = ["task.menu", "task.copy-url", "task.reveal", "task.toggle-children", "view.toggle-nested", "navigation.inbox", "navigation.sections"];
+    const handlers = Object.fromEntries(ids.map(id => [id, vi.fn()]));
+    const commands = dispatchCommands(handlers, id => effectiveBindings(id, defaultPreferences(), "mac"));
+    const run = (...inputs: ReturnType<typeof key>[]) => { const dispatcher = new KeyboardDispatcher(); return inputs.map((input, index) => dispatcher.dispatch(input, commands, "view", index * 100).commandId).at(-1); };
+    expect(run(key("."))).toBe("task.menu");
+    expect(run(key("C", { metaKey: true, shiftKey: true }))).toBe("task.copy-url");
+    expect(run(key("G", { shiftKey: true }))).toBe("task.reveal");
+    expect(run(key("E", { shiftKey: true }))).toBe("task.toggle-children");
+    expect(run(key("0", { metaKey: true, altKey: true }))).toBe("view.toggle-nested");
+    expect(run(key("g"), key("i"))).toBe("navigation.inbox");
+    expect(run(key("g"), key("/"))).toBe("navigation.sections");
+    expect(clientCommands.map(command => command.id)).toEqual(expect.arrayContaining(ids));
+  });
+
   it("never fires in editable fields or behind an open dialog", () => {
     const dispatcher = new KeyboardDispatcher();
     expect(dispatcher.dispatch(key("q"), commands(), "today", 0, { typing: true }).consumed).toBe(false);
@@ -119,6 +138,42 @@ describe("client keyboard commands", () => {
   });
 });
 
+describe("task menu, folding and dialog focus", () => {
+  const task = (id: string, parentId: string | null = null) => ({ id, title: id, description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId,
+    dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null }) as TaskDto;
+  const row = (item: TaskDto) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(TaskRow, { task: item, now: new Date() })));
+
+  it("hides a collapsed parent's sub-tasks and names the parent on each child row", () => {
+    collapsedTasks.set(new Set());
+    expect(row(task("child", "parent"))).toContain('data-parent-id="parent"');
+    expect(row(task("child", "parent"))).not.toContain(" hidden=\"\"");
+    collapsedTasks.toggle("parent");
+    expect(row(task("child", "parent"))).toContain('hidden=""');
+    expect(row(task("parent"))).not.toContain(" hidden=\"\"");
+    collapsedTasks.toggle("parent");
+    expect(row(task("child", "parent"))).not.toContain(" hidden=\"\"");
+  });
+
+  it("offers the legacy Task actions, the first one focused", () => {
+    const html = renderToStaticMarkup(createElement(TaskMenu, { title: "Pay rent", onChoose() {}, onClose() {} }));
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain("Task actions");
+    expect(html).toContain("Pay rent");
+    for (const name of ["Edit", "Choose date", "Clear date", "Complete", "Delete"]) expect(html).toContain(`>${name}</button>`);
+  });
+
+  it("moves focus into a dialog unless a field inside already took it", () => {
+    const focus = vi.fn();
+    vi.stubGlobal("document", { activeElement: "outside" });
+    focusDialog({ contains: (element: unknown) => element === "inside", focus } as never);
+    expect(focus).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("document", { activeElement: "inside" });
+    focusDialog({ contains: (element: unknown) => element === "inside", focus } as never);
+    expect(focus).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("keyboard preference transport", () => {
   const custom = { ...defaultPreferences(), overrides: { "general.help": ["Alt+Shift+2"] } };
   it("reads and replaces the account document", async () => {
@@ -145,7 +200,7 @@ describe("shortcut views", () => {
     expect(html).toContain('aria-label="Command plus k"');
     expect(html).toContain('aria-label="g then t"');
     expect(html).toContain("Capture task");
-    expect(html).not.toContain("Task action menu");
+    expect(html).not.toContain("Paste file as a task");
   });
 
   it("shows a reserved Mac key as an error with a fix, and labels every touch control", () => {

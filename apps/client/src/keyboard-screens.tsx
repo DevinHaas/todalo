@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
 import { reads, shortcutReads, shortcuts } from "./runtime";
@@ -8,7 +8,9 @@ import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
 import type { TaskDto } from "./tasks";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
-import { ShortcutHelp, ShortcutSettings } from "./keyboard-views";
+import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
+import { collapsedTasks } from "./views";
+import { copyTaskLink } from "./links";
 import { theme } from "./theme";
 
 const platform = detectPlatform();
@@ -123,10 +125,10 @@ function picker(toolbar: string | null, field: string) {
   void waitFor(() => document.querySelector<HTMLElement>(`.task-editor form [data-field="${field}"]`)).then(target =>
     (target?.matches("fieldset") ? target.querySelector<HTMLElement>("input") ?? target : target)?.focus());
 }
-/** Move: the toolbar's Move; with nothing selected, the focused row is selected first (Select, its checkbox) and the selection ends after the dialog. */
+/** Move: the toolbar's Move (its dialog takes focus); with nothing selected, the focused row is selected first (Select, its checkbox) and the selection ends after the dialog. */
 function moveDialog() {
   const button = bulkButton("move");
-  if (button) { button.click(); void waitFor(() => document.querySelector<HTMLElement>('[role="dialog"] select')).then(field => field?.focus()); return; }
+  if (button) return void button.click();
   const row = activeRow();
   const start = document.querySelector<HTMLElement>("[data-selection-start]");
   if (!row || (!start && !row.querySelector(".select-box"))) return false;
@@ -137,7 +139,6 @@ function moveDialog() {
     const move = await waitFor(() => bulkButton("move"));
     if (!move) return;
     move.click();
-    (await waitFor(() => document.querySelector<HTMLElement>('[role="dialog"] select')))?.focus();
     afterDialogs(() => { if (start) document.querySelector<HTMLElement>("[data-selection-stop]")?.click(); requestAnimationFrame(() => refocus(row, index)); });
   })();
 }
@@ -147,18 +148,36 @@ const recordList = (event: Event) => {
   const title = (event.target as Element | null)?.closest?.(`main [data-task-id] :is(${TITLE})`);
   if (title) openedFrom = visibleRows().map(row => row.dataset.taskId!);
 };
+/** The task before (-1) or after (1) `id` in that list, if any. */
+export const taskNeighbour = (id: string, step: -1 | 1): string | undefined => {
+  const index = openedFrom.indexOf(id);
+  return index < 0 ? undefined : openedFrom[index + step];
+};
 
 /**
  * Ticket 19: the legacy global key handler. Keys typed into fields, while a
  * dialog or menu is open, during IME composition, or already handled (dnd-kit)
  * never run commands; macOS app-menu keys are reserved in the shared registry.
  */
-export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { userId: string; onCapture: () => void; onSidebar: () => void; onFind: () => void }) {
+export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { userId: string; onCapture: () => void; onSidebar: () => void; onFind: (sectionsOnly?: boolean) => void }) {
   const navigate = useNavigate();
   const cache = useQueryClient();
-  const { effective } = useShortcuts(userId);
+  const { effective, syncError } = useShortcuts(userId);
   const [help, setHelp] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const handlers = useRef<Partial<Record<ClientCommandId, () => void | boolean>>>({});
+  // Collapsed sub-tasks are page state (legacy provider per page).
+  const { pathname } = useLocation();
+  useEffect(() => collapsedTasks.set(new Set()), [pathname]);
+  useEffect(() => { if (!status) return; const id = setTimeout(() => setStatus(null), 4000); return () => clearTimeout(id); }, [status]);
+  // The sidebar's Help & resources opens the same sheet as `?`.
+  useEffect(() => {
+    const open = () => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setHelp(true); };
+    window.addEventListener("todalo:help", open);
+    return () => window.removeEventListener("todalo:help", open);
+  }, []);
   const opener = useRef<HTMLElement | null>(null);
   const dispatcher = useRef(new KeyboardDispatcher());
   // Immediate row writes use the mutations behind the toolbar and the task page's Nest/Unnest buttons.
@@ -189,20 +208,17 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       choose(select, value);
     };
     const week = (scope: string, action: string) => press(document.querySelector(`main ${scope}`), `[data-view-nav="${action}"]`);
-    /** Save, then the adjacent task of the list the editor was opened from, its editor open (the task page opens it on arrival). */
-    const editAdjacent = (step: number) => {
-      const form = editorForm();
-      const id = location.pathname.startsWith("/tasks/") ? decodeURIComponent(location.pathname.slice(7)) : null;
-      const index = id ? openedFrom.indexOf(id) : -1;
-      const next = index >= 0 ? openedFrom[index + step] : undefined;
-      if (!form || !next || press(form, 'button[type="submit"]') === false) return false;
-      void waitFor(() => !form.isConnected || null, 15_000).then(saved => { if (saved) void latest.current.navigate(`/tasks/${encodeURIComponent(next)}`); });
-    };
-    const handlers: Partial<Record<ClientCommandId, () => void | boolean>> = {
+    /** The editor's Previous/Next (save, then the adjacent task of the list it was opened from). */
+    const editAdjacent = (step: number) => press(editorForm(), `[data-navigate="${step}"]`);
+    /** Hiding a focused sub-task moves focus to its parent row. */
+    const keepFocus = (row: HTMLElement | null) => requestAnimationFrame(() => {
+      if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
+    });
+    handlers.current = {
       "general.capture": () => latest.current.onCapture(), "general.ramble": go("/ramble"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
-      "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
+      "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
       "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": go("/account#keyboard-shortcuts"), "navigation.account": go("/account"), "navigation.theme": () => theme.toggle(),
       "task.previous": () => moveRow(-1), "task.next": () => moveRow(1), "view.first": () => moveRow(-Infinity), "view.last": () => moveRow(Infinity),
       // Enter on the title opens it; Enter on the row's buttons keeps their own action.
@@ -280,10 +296,45 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         if (press(document, '[aria-label="Next layout"]') === false) return false;
         requestAnimationFrame(() => { if (was instanceof HTMLElement && !was.isConnected) (visibleRows()[0]?.querySelector<HTMLElement>(TITLE) ?? document.querySelector<HTMLElement>("main"))?.focus(); });
       },
+      // Legacy task menu, copy link, reveal and sub-task folding (no row control in legacy either).
+      "task.menu": () => { const row = activeRow(); if (!row) return false; setMenu(row); },
+      // The clipboard write starts inside the key press (WebKit needs the gesture).
+      "task.copy-url": () => {
+        const row = activeRow();
+        if (!row) return false;
+        setNotice(null);
+        copyTaskLink(row.dataset.taskId!).then(() => setStatus("Task link copied."), (reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Could not copy task link"));
+      },
+      // Shift+G: the task's project (else the Inbox), the row focused there.
+      "task.reveal": () => {
+        const row = activeRow();
+        if (!row) return false;
+        write(async () => {
+          const { task } = await focusedTask(row);
+          if (!task) return;
+          const path = task.projectId ? `/projects/${encodeURIComponent(task.projectId)}` : "/inbox";
+          const moving = location.pathname !== path;
+          await latest.current.navigate(`${path}#task-${task.id}`);
+          // The old page's copy of the row stays mounted until the new route renders.
+          const title = await waitFor(() => !(moving && row.isConnected) ? document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(task.id)}"]:not([hidden]) :is(${TITLE})`) : null);
+          title?.scrollIntoView?.({ block: "center" });
+          title?.focus();
+        });
+      },
+      "task.toggle-children": () => { const row = activeRow(); if (!row) return false; collapsedTasks.toggle(row.dataset.taskId!); },
+      // Every parent's sub-tasks and a project's sections; a project only in Manual sort (legacy nestedAllowed).
+      "view.toggle-nested": () => {
+        if (!sortable()) return false;
+        const row = activeRow();
+        const parents = [...document.querySelectorAll<HTMLElement>("main [data-parent-id]")].map(child => child.dataset.parentId!);
+        collapsedTasks.set(collapsedTasks.get().size ? new Set() : new Set(parents));
+        window.dispatchEvent(new Event("todalo:toggle-sections"));
+        keepFocus(row);
+      },
       "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };
-    const commands = dispatchCommands(handlers, id => effectiveBindings(id, effective, platform));
+    const commands = dispatchCommands(handlers.current, id => effectiveBindings(id, effective, platform));
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) { dispatcher.current.reset(); return; }
       const result = dispatcher.current.dispatch(event, commands, location.pathname, Date.now(), { typing: isEditable(event.target), modal: modalOpen(), composing: event.isComposing });
@@ -298,8 +349,26 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
   }, [effective, userId]);
 
   const close = () => { setHelp(false); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); }); };
+  const menuCommands: Record<TaskMenuAction, ClientCommandId> = { edit: "task.edit", date: "task.date", "clear-date": "task.clear-date", complete: "task.complete", delete: "task.delete" };
+  /** Closes the menu on its row, then runs the row command (its focused-row target). */
+  const closeMenu = (action?: TaskMenuAction) => {
+    const row = menu;
+    setMenu(null);
+    requestAnimationFrame(() => {
+      if (!row?.isConnected) return;
+      row.querySelector<HTMLElement>(TITLE)?.focus();
+      // Legacy cleared only the menu's task, never the selection.
+      if (action === "clear-date") return void cache.fetchQuery(reads.today(userId))
+        .then(({ tasks }) => { const task = tasks.find(item => item.id === row.dataset.taskId); return task && clearDates.mutateAsync({ tasks: [task] }); })
+        .catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again."));
+      if (action) handlers.current[menuCommands[action]]?.();
+    });
+  };
   return <>
     {notice && <p role="alert" className="keyboard-notice">{notice}</p>}
+    {status && <p role="status" className="keyboard-notice">{status}</p>}
+    {syncError && <div role="status" className="shortcut-sync">{syncError} <button type="button" className="text-action" onClick={() => navigate("/account#keyboard-shortcuts")}>Shortcut settings</button></div>}
+    {menu && <TaskMenu title={menu.querySelector(TITLE)?.textContent ?? ""} onChoose={closeMenu} onClose={() => closeMenu()} />}
     {help && <ShortcutHelp bindings={id => effectiveBindings(id, effective, platform)} onClose={close}
       onCustomize={() => { setHelp(false); navigate("/account#keyboard-shortcuts"); }} />}
   </>;
