@@ -23,6 +23,11 @@ import { createCalendarRoutes } from "./calendar-routes";
 import * as calendar from "@todalo/server/calendar-connections";
 import { handleCalendarWebhook } from "@todalo/server/calendar-sync";
 import * as live from "@todalo/server/live";
+import { db } from "@todalo/db";
+import { sql } from "drizzle-orm";
+
+// Opening the database link costs seconds; pay it at boot, not on the first Ramble.
+db.execute(sql`select 1`).catch(() => {});
 
 const dependencies = productionDependencies();
 const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };

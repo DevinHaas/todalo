@@ -20,7 +20,8 @@ export function connectElevenLabs(callbacks: SpeechCallbacks): SpeechConnection 
     model_id: "scribe_v2_realtime",
     audio_format: "pcm_16000",
     commit_strategy: "vad",
-    vad_silence_threshold_secs: "1.0",
+    // Tuning knob: lower commits faster but splits phrases at thinking pauses.
+    vad_silence_threshold_secs: process.env.RAMBLE_VAD_SILENCE_SECS ?? "0.6",
     include_timestamps: "false",
   }).toString();
   const socket = new WebSocket(url.toString(), { headers: { "xi-api-key": key } });

@@ -13,6 +13,12 @@ export interface RambleTodo {
   endTime: string | null;
   recurrence: (Omit<Recurrence, "until"> & { until: string | null }) | null;
   projectId: string | null;
+  description: string | null;
+  /** 1 is highest, 4 is normal — the same scale as the task editor. */
+  priority: number;
+  /** YYYY-MM-DD; a hard due date, separate from the scheduled dueDate. */
+  deadline: string | null;
+  labelIds: string[];
 }
 
 export type StagedTodo = RambleTodo;
@@ -171,6 +177,7 @@ export function interpretSegment(text: string, state: RambleSessionState): Rambl
     startTime: parsed.startTime, endTime: parsed.endTime,
     recurrence: parsed.recurrence ? { ...parsed.recurrence, until: parsed.recurrence.until?.toISOString() ?? null } : null,
     projectId: state.projectId,
+    description: null, priority: 4, deadline: null, labelIds: [],
   };
   const type = mode.mode === "sub-task" ? "create-sub-task" : "create-todo";
   return {
@@ -178,4 +185,37 @@ export function interpretSegment(text: string, state: RambleSessionState): Rambl
     nextState: { ...state, ...mode, nextId: state.nextId + 1, todos: [...state.todos, todo],
       undoStack: [...state.undoStack, { type, todoId: todo.id }] },
   };
+}
+
+// Local guesses show before the model answers, so a retracted guess is visible
+// flicker. Only plain single imperatives qualify; anything the model might
+// split, edit, drop or route to a project waits for it.
+const LEAD_IN = /^(?:i (?:need|have|got|want) to|i should|i must|we (?:need|have) to|remember to|don'?t forget to|please)\s+/i;
+const UNSURE = /\?|[,;]|:(?!\d)|\.\s|\b(?:and|also|then|plus|but|or|actually|instead|wait|no|not|never|don'?t|cancel|scratch|undo|remove|delete|change|make that|move|rename|sub-?\s?task|top level|project|list|done|stop|already|yesterday|ago|earlier|last|um+|uh+|hmm+|like|maybe|might|probably|okay|ok|well|so|hey|hi|hello|thanks?|thank you)\b/i;
+const NOT_IMPERATIVE = /^(?:i|we|it|that|this|these|those|the|there|he|she|they|you|my|our|what|why|how|when|where|who|is|are|was|were|do|does|did|can|could|would|should)\b/i;
+
+/** A confident task title for an obvious single-task phrase, otherwise null. */
+export function localTaskTitle(text: string): string | null {
+  const phrase = text.trim().replace(/[.!]+$/, "").trim().replace(LEAD_IN, "");
+  const words = phrase.split(/\s+/).length;
+  if (words < 2 || words > 10 || UNSURE.test(phrase) || NOT_IMPERATIVE.test(phrase)) return null;
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}
+
+/**
+ * Stage confident local guesses on top of the confirmed state, in spoken order.
+ * Stops at the first phrase that needs the model, so every guessed ID is the
+ * one the model's single create would receive and confirmed cards keep their key.
+ */
+export function previewSegments(state: RambleSessionState, texts: string[]): { state: RambleSessionState; provisionalIds: string[] } {
+  const provisionalIds: string[] = [];
+  for (const text of texts) {
+    const title = localTaskTitle(text);
+    if (!title) break;
+    const result = interpretSegment(title, state);
+    if (result.action.type !== "create-todo" && result.action.type !== "create-sub-task") break;
+    state = result.nextState;
+    provisionalIds.push(result.action.todo.id);
+  }
+  return { state, provisionalIds };
 }

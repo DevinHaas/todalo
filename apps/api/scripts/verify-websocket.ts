@@ -36,7 +36,7 @@ function speech(callbacks: SpeechCallbacks): SpeechConnection {
 const app = createApi({
   allowedOrigins: new Set([origin]),
   verify: async (headers) => headers.get("cookie") === cookie || headers.get("authorization") === bearer ? "test-user" : null,
-  preferences: async () => ({ smartRecognition: true, projectIds: new Set(["project-trip"]), projects: [{ id: "project-trip", name: "Trip" }] }),
+  preferences: async () => ({ smartRecognition: true, projectIds: new Set(["project-trip"]), projects: [{ id: "project-trip", name: "Trip" }], labels: [] }),
   speech,
   semantic: fixtureSemanticProcessor,
   commit: async (userId, todos, timeZone) => {
@@ -99,7 +99,11 @@ async function connected(url = ws, headers: Record<string, string> = { origin, c
     const bytes = new TextEncoder().encode(text);
     const frame = new Uint8Array(bytes.length + bytes.length % 2);
     frame.set(bytes); socket.send(frame);
-    const message = await wait((message) => message.type === "state", after);
+    // Each phrase publishes a preview, then the model's result; a late result
+    // from the previous phrase must not be mistaken for this one.
+    const final = await wait((message) => message.type === "transcript" && message.final === true && message.text === text, after);
+    const idle = await wait((message) => message.type === "processing" && message.pending === 0, messages.indexOf(final));
+    const message = messages.slice(0, messages.indexOf(idle)).findLast((message) => message.type === "state")!;
     assert.ok(message.state);
     assert.ok(messages.slice(after).some((message) => message.type === "transcript" && message.final === false));
     assert.ok(messages.slice(after).some((message) => message.type === "transcript" && message.final === true && message.text === text));
@@ -141,7 +145,7 @@ try {
   assert.equal(saved.length, 0, "capturing must never persist tasks");
   state = await client.segment("sub-task"); assert.equal(state.mode, "sub-task");
   state = await client.segment("Buy adapter tomorrow at 4pm");
-  assert.deepEqual(state.todos[1], { id: "ramble-2", title: "Buy adapter", parentId: "ramble-1", dueDate: "2026-10-04", startTime: "16:00", endTime: null, recurrence: null, projectId: "project-trip" });
+  assert.deepEqual(state.todos[1], { id: "ramble-2", title: "Buy adapter", parentId: "ramble-1", dueDate: "2026-10-04", startTime: "16:00", endTime: null, recurrence: null, projectId: "project-trip", description: null, priority: 4, deadline: null, labelIds: [] });
   state = await client.segment("undo"); assert.equal(state.todos.length, 1); assert.equal(state.mode, "sub-task");
   state = await client.segment("undo"); assert.equal(state.mode, "top-level");
   await client.segment("sub task"); await client.segment("Renew passport tomorrow");

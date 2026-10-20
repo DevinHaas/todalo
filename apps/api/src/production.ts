@@ -1,6 +1,6 @@
 import { auth } from "@todalo/auth";
 import { db } from "@todalo/db";
-import { projects, userSettings } from "@todalo/db/schema";
+import { labels, projects, userSettings } from "@todalo/db/schema";
 import { eq } from "drizzle-orm";
 import { connectSpeech } from "./speech";
 import { commitRambleTodos } from "./commit";
@@ -14,11 +14,12 @@ export function productionDependencies(): ApiDependencies {
     allowedOrigins: new Set(origins),
     verify: async (headers) => (await auth.api.getSession({ headers }))?.user.id ?? null,
     preferences: async (userId) => {
-      const [settings, owned] = await Promise.all([
+      const [settings, owned, ownedLabels] = await Promise.all([
         db.select().from(userSettings).where(eq(userSettings.userId, userId)),
         db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.userId, userId)),
+        db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.userId, userId)),
       ]);
-      return { smartRecognition: settings[0]?.smartDateRecognitionEnabled ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned };
+      return { smartRecognition: settings[0]?.smartDateRecognitionEnabled ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned, labels: ownedLabels };
     },
     speech: connectSpeech,
     semantic: createSemanticProcessor(),

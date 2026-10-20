@@ -57,7 +57,7 @@ const durations: number[] = []; const failed: string[] = [];
 for (const [index, item] of cases.entries()) {
   if (index && interval) await Bun.sleep(interval);
   const state = item.state?.() ?? initial();
-  const input: SemanticInput = { text: item.text, state, timeZone: "Europe/Zurich", projects, recentSpeech: item.recentSpeech ?? [] };
+  const input: SemanticInput = { text: item.text, state, timeZone: "Europe/Zurich", projects, labels: [], recentSpeech: item.recentSpeech ?? [] };
   const start = performance.now();
   try {
     const operations = await processor.process(input, new AbortController().signal);

@@ -16,7 +16,7 @@ const SAVE_FAILED = { code: "SAVE_FAILED", message: "Your changes could not be s
 
 export interface ApiDependencies {
   verify(headers: Headers): Promise<string | null>;
-  preferences(userId: string): Promise<{ smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[] }>;
+  preferences(userId: string): Promise<{ smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[]; labels: SemanticProject[] }>;
   speech: typeof connectSpeech;
   semantic: SemanticProcessor;
   commit: typeof commitRambleTodos;
@@ -25,8 +25,10 @@ export interface ApiDependencies {
 }
 
 export function createApi(dependencies: ApiDependencies) {
-  const connections = new Map<string, RambleConnection>();
-  const authenticated = new WeakMap<Request, { userId: string; smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[] }>();
+  type Preferences = Awaited<ReturnType<ApiDependencies["preferences"]>>;
+  // A connection resolves once its preferences load; messages wait for it.
+  const connections = new Map<string, Promise<RambleConnection | undefined>>();
+  const authenticated = new WeakMap<Request, { userId: string; preferences: Promise<Preferences> }>();
   const tickets = dependencies.tickets ?? createSocketTickets();
   return new Elysia({ websocket: { maxPayloadLength: 64_000, idleTimeout: 120, backpressureLimit: 512_000, closeOnBackpressureLimit: true } })
     .get("/api/ramble/health", () => ({ ok: true }))
@@ -66,6 +68,7 @@ export function createApi(dependencies: ApiDependencies) {
     .ws("/api/ramble/ws", {
       async beforeHandle({ request, status }) {
         const ticket = new URL(request.url).searchParams.get("ticket");
+        const started = performance.now();
         let userId: string | null;
         if (ticket !== null) {
           // A ticket is not ambient authority, so no Origin is required; cookies
@@ -78,33 +81,38 @@ export function createApi(dependencies: ApiDependencies) {
           if (!origin || !dependencies.allowedOrigins.has(origin)) return status(403, "Origin not allowed");
           userId = await dependencies.verify(request.headers);
         }
+        console.log(`[ramble] upgrade verify ${Math.round(performance.now() - started)}ms user=${userId ? "yes" : "no"}`);
         if (!userId) return status(401, "Not authenticated");
-        authenticated.set(request, { userId, ...await dependencies.preferences(userId) });
+        // Load preferences while the browser starts its microphone, instead of
+        // holding the upgrade open for them; a cold database link costs seconds.
+        const preferences = dependencies.preferences(userId);
+        preferences.catch(() => {});
+        authenticated.set(request, { userId, preferences });
       },
       open(ws) {
+        console.log(`[ramble] socket ${ws.id} open`);
         const context = authenticated.get(ws.data.request);
         if (!context) { ws.close(1008, "Not authenticated"); return; }
         authenticated.delete(ws.data.request);
-        connections.set(ws.id, new RambleConnection({
+        connections.set(ws.id, context.preferences.then((preferences) => new RambleConnection({
           send: (message) => { ws.send(JSON.stringify(message)); },
           speech: dependencies.speech,
           semantic: dependencies.semantic,
           commit: (todos, zone, operationId) => dependencies.commit(context.userId, todos, zone, operationId),
-          smartRecognition: context.smartRecognition,
-          projectIds: context.projectIds,
-          projects: context.projects,
-        }));
+          ...preferences,
+        }), () => { ws.close(1011, "Preferences unavailable"); return undefined; }));
       },
       async message(ws, message) {
         try {
-          await connections.get(ws.id)?.message(message);
+          await (await connections.get(ws.id))?.message(message);
           if (typeof message === "object" && message !== null && "type" in message && message.type === "discard") ws.close(1000);
         } catch {
           ws.send(JSON.stringify({ type: "error", code: "session_error", message: "The capture could not continue. Try again." }));
         }
       },
-      close(ws) {
-        connections.get(ws.id)?.close();
+      close(ws, code, reason) {
+        console.log(`[ramble] socket ${ws.id} closed code=${code} reason=${reason || "-"}`);
+        void connections.get(ws.id)?.then((connection) => connection?.close());
         connections.delete(ws.id);
       },
     });

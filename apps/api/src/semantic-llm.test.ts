@@ -5,7 +5,7 @@ import type { SemanticInput } from "@todalo/ramble/semantic";
 import { operation } from "../test-fixtures/semantic";
 
 const env = { GEMINI_API_KEY: "test-server-secret" };
-const input = (): SemanticInput => ({ text: "I need to call Anna", state: createRambleSession(), timeZone: "Europe/Zurich", projects: [{ id: "work", name: "Work" }], recentSpeech: [] });
+const input = (): SemanticInput => ({ text: "I need to call Anna", state: createRambleSession(), timeZone: "Europe/Zurich", projects: [{ id: "work", name: "Work" }], labels: [], recentSpeech: [] });
 const response = (operations: unknown[] = []) => Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ operations }) }] } }] });
 
 describe("model adapter", () => {
@@ -59,6 +59,30 @@ describe("model adapter", () => {
       .process(input(), new AbortController().signal);
     expect(String(request.mock.calls[0][0])).toBe("http://localhost:11434/v1/chat/completions");
     expect(JSON.parse(request.mock.calls[0][1]?.body as string)).not.toHaveProperty("reasoning_effort");
+  });
+  it("routes OpenRouter only to Cerebras, then Groq, with strict JSON and hidden low-effort reasoning", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ choices: [{ finish_reason: "stop", message: { content: '{"operations":[]}' } }] }));
+    await createSemanticProcessor({ RAMBLE_LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "or-secret" }, request).process(input(), new AbortController().signal);
+    const [url, options] = request.mock.calls[0];
+    expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(options?.headers).toMatchObject({ authorization: "Bearer or-secret" });
+    expect(JSON.parse(options?.body as string)).toMatchObject({
+      model: "openai/gpt-oss-120b", reasoning: { effort: "low", exclude: true },
+      provider: { order: ["cerebras", "groq"], only: ["cerebras", "groq"], require_parameters: true },
+      response_format: { type: "json_schema", json_schema: { strict: true } },
+    });
+  });
+  it("warms the provider connection without credentials, at most once per 20 seconds", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null));
+    const processor = createSemanticProcessor({ RAMBLE_LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "or-secret" }, request);
+    processor.warm?.(); processor.warm?.();
+    expect(request).toHaveBeenCalledOnce();
+    const [url, options] = request.mock.calls[0];
+    expect(String(url)).toBe("https://openrouter.ai");
+    expect(options).toMatchObject({ method: "HEAD" });
+    expect(options).not.toHaveProperty("headers");
+    const failing = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
+    expect(() => createSemanticProcessor({ RAMBLE_LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "x" }, failing).warm?.()).not.toThrow();
   });
   it("rejects missing credentials and insecure remote endpoints before making a request", async () => {
     const request = vi.fn<typeof fetch>();

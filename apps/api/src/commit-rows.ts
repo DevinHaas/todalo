@@ -30,10 +30,13 @@ export function prepareTaskRows(todos: RambleTodo[], userId: string, timeZone: s
   const id = (stagedId: string) => rambleTaskId(userId, operationId, stagedId);
   return todos.map((todo, sortOrder) => {
     if (!todo.title.trim() || todo.title.length > 4000) throw new RambleCommitError("invalid", "Invalid title");
+    if ((todo.description?.length ?? 0) > 4000 || ![1, 2, 3, 4].includes(todo.priority)) throw new RambleCommitError("invalid", "Invalid task details");
     const parent = todo.parentId ? byId.get(todo.parentId) : null;
     if (todo.parentId && (!parent || parent.parentId || parent.id === todo.id)) throw new RambleCommitError("invalid", "Invalid sub-task parent");
-    let dueDate: Date | null, dueDateEnd: Date | null;
+    let dueDate: Date | null, dueDateEnd: Date | null, deadline: Date | null;
     try {
+      // Matches the task editor, which stores a deadline as local midnight.
+      deadline = zonedTaskDate(todo.deadline, null, timeZone);
       dueDate = zonedTaskDate(todo.dueDate, todo.startTime, timeZone);
       dueDateEnd = todo.endTime ? zonedTaskDate(todo.dueDate, todo.endTime, timeZone) : null;
       if (dueDate && dueDateEnd && dueDateEnd <= dueDate) {
@@ -48,6 +51,7 @@ export function prepareTaskRows(todos: RambleTodo[], userId: string, timeZone: s
       id: id(todo.id), userId, title: todo.title.trim(),
       parentId: todo.parentId ? id(todo.parentId) : null,
       projectId: todo.projectId, dueDate, dueDateEnd,
+      description: todo.description?.trim() || null, priority: todo.priority, deadline,
       recurrence: todo.recurrence ? { ...todo.recurrence, until: todo.recurrence.until ? new Date(todo.recurrence.until) : null } : null, sortOrder,
     };
   });

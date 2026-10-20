@@ -26,6 +26,8 @@ export function RambleModal({ defaults, projects, onClose }: {
   const { enabled } = useSmartDateRecognition();
   const [phase, setPhase] = useState<Phase>("connecting");
   const [state, setState] = useState<RambleSessionState | null>(null);
+  // Local guesses the server has not confirmed with the model yet.
+  const [provisionalIds, setProvisionalIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState("");
@@ -33,6 +35,7 @@ export function RambleModal({ defaults, projects, onClose }: {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [pendingUnderstanding, setPendingUnderstanding] = useState(0);
   const [understandingFailed, setUnderstandingFailed] = useState(false);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<RambleCapture | null>(null);
   const waitingAudio = useRef(createRambleAudioQueue());
@@ -56,6 +59,7 @@ export function RambleModal({ defaults, projects, onClose }: {
     abortRef.current = null;
     captureRef.current?.stop();
     captureRef.current = null;
+    setAnalyser(null);
     waitingAudio.current.clear();
   }
 
@@ -77,6 +81,8 @@ export function RambleModal({ defaults, projects, onClose }: {
       if (!disposed && socket.readyState === WebSocket.CONNECTING) {
         setError("Ramble could not connect. Check your connection and try again.");
         setPhase("error");
+        // Keep the connect error; this was never a live session to lose.
+        socket.onclose = null;
         socket.close();
       }
     }, 12000);
@@ -92,6 +98,7 @@ export function RambleModal({ defaults, projects, onClose }: {
         const message = JSON.parse(event.data);
         if (message.type === "state") {
           setState(message.state);
+          setProvisionalIds(Array.isArray(message.provisionalIds) ? message.provisionalIds : []);
           if (message.state.readyToCommit) {
             committing.current = true;
             stopCapture();
@@ -131,8 +138,9 @@ export function RambleModal({ defaults, projects, onClose }: {
       if (disposed) return;
       setError("Could not connect to Ramble. Check your connection and try again.");
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (disposed) return;
+      console.warn(`[ramble] socket closed code=${event.code} reason=${event.reason || "-"} clean=${event.wasClean}`);
       stopCapture();
       setConnected(false);
       setPhase("error");
@@ -228,11 +236,14 @@ export function RambleModal({ defaults, projects, onClose }: {
       if (controller.signal.aborted) { capture.stop(); return; }
       clearMicrophoneTimeout();
       captureRef.current = capture;
+      setAnalyser(capture.analyser);
       if (capture.deviceId) setDeviceId(capture.deviceId);
       // Acquire permission and a running audio graph before starting the
       // provider, so a browser permission prompt cannot expire its connection.
       startProvider();
-      if (providerReady.current) setPhase("listening");
+      // Audio queues until the speech provider is ready, so listening starts
+      // with the microphone rather than after the provider handshake.
+      setPhase("listening");
       // Labels become available after permission; refreshing the menu must not
       // delay listening or block on slow device enumeration.
       void navigator.mediaDevices.enumerateDevices().then((available) => {
@@ -297,10 +308,14 @@ export function RambleModal({ defaults, projects, onClose }: {
   function card(todo: RambleTodo, nested = false) {
     const project = projects.find((item) => item.id === todo.projectId);
     const dueDate = todo.dueDate ? new Date(`${todo.dueDate}T${todo.startTime ?? "00:00"}:00`) : null;
-    return <li key={todo.id} className={`rounded-lg border bg-background p-3 ${nested ? "ml-6" : ""}`}>
+    const provisional = provisionalIds.includes(todo.id);
+    return <li key={todo.id} aria-busy={provisional} className={`rounded-lg border bg-background p-3 transition-opacity ${provisional ? "opacity-60" : ""} ${nested ? "ml-6" : ""}`}>
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 break-words font-medium">{todo.title}</p>
-        <Button variant="ghost" size="icon-sm" disabled={busy || !connected} aria-label={`Remove ${todo.title}`} onClick={() => send({ type: "remove", id: todo.id })}>
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-medium">{todo.title}</p>
+          {todo.description && <p className="mt-0.5 line-clamp-2 break-words text-sm text-muted-foreground">{todo.description}</p>}
+        </div>
+        <Button variant="ghost" size="icon-sm" disabled={busy || !connected || provisional} aria-label={`Remove ${todo.title}`} onClick={() => send({ type: "remove", id: todo.id })}>
           <X className="size-3.5" />
         </Button>
       </div>
@@ -308,6 +323,9 @@ export function RambleModal({ defaults, projects, onClose }: {
         {dueDate && <DatePill dueDate={dueDate} />}
         {todo.endTime && <span className="text-xs text-muted-foreground">until {todo.endTime}</span>}
         {todo.recurrence && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Repeat2 className="size-3.5" />Every {todo.recurrence.n > 1 ? `${todo.recurrence.n} ${todo.recurrence.unit}s` : todo.recurrence.unit}</span>}
+        {todo.priority < 4 && <span className="text-xs font-semibold" aria-label={`Priority ${todo.priority}`}>P{todo.priority}</span>}
+        {todo.deadline && <span className="text-xs text-muted-foreground">Deadline {format(new Date(`${todo.deadline}T00:00:00`), "MMM d")}</span>}
+        {todo.labelIds.length > 0 && <span className="text-xs text-muted-foreground">{todo.labelIds.length} label{todo.labelIds.length > 1 ? "s" : ""}</span>}
         <ProjectPill name={project?.name} color={project?.color} />
       </div>
     </li>;
@@ -318,9 +336,7 @@ export function RambleModal({ defaults, projects, onClose }: {
       <div className="flex items-center justify-between gap-4">
         <DialogTitle className="text-xl font-semibold">Ramble</DialogTitle>
         <div className="flex items-center gap-1">
-          <div className="mr-2 flex h-6 items-center gap-0.5 text-brand" data-active={active} aria-hidden="true">
-            {[820, 960, 740, 1080, 880, 760, 1020, 900, 780].map((duration, index) => <span key={index} className={`${waveStyles.bar} w-0.5 rounded-full bg-current`} style={{ animationDuration: `${duration}ms`, animationDelay: `${index * -130}ms` }} />)}
-          </div>
+          <RambleWave analyser={active ? analyser : null} />
           <Button variant="ghost" size="icon" aria-label={active ? "Pause listening" : "Resume listening"} title={`${status} · ${selectedMicrophone}`} disabled={!connected || busy || understandingFailed || phase === "starting"} onClick={toggleCapture}>
             {phase === "connecting" || phase === "starting" ? <LoaderCircle className="size-5 animate-spin" /> : active ? <Mic className="size-5" /> : <MicOff className="size-5" />}
           </Button>
@@ -346,7 +362,13 @@ export function RambleModal({ defaults, projects, onClose }: {
       {state?.mode === "sub-task" && <p className="mt-3 text-xs text-muted-foreground">Capturing sub-tasks</p>}
       <div className="my-6 max-h-[40vh] min-h-48 overflow-y-auto" aria-label="Staged tasks">
         {todos.length ? <ul className="space-y-2">{todos.filter((todo) => !todo.parentId).flatMap((todo) => [card(todo), ...todos.filter((child) => child.parentId === todo.id).map((child) => card(child, true))])}</ul> :
-          <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-3 text-center text-brand"><p className="text-sm">Try saying</p><p className="max-w-md text-lg font-medium">“Buy groceries tomorrow at 17:00”</p></div>}
+          phase === "connecting" || phase === "starting"
+            ? <div role="status" className="flex min-h-48 flex-col items-center justify-center gap-3 px-3 text-center text-brand">
+              <LoaderCircle className="size-10 animate-spin" aria-hidden="true" />
+              <p className="text-lg font-medium">{status}</p>
+              {phase === "starting" && <p className="text-sm text-muted-foreground">Allow microphone access if your browser asks.</p>}
+            </div>
+            : <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-3 text-center text-brand"><p className="text-sm">Try saying</p><p className="max-w-md text-lg font-medium">“Buy groceries tomorrow at 17:00”</p></div>}
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">{status}{todos.length > 0 && ` · ${todos.length} ${todos.length === 1 ? "task" : "tasks"}`}</p>
@@ -357,4 +379,38 @@ export function RambleModal({ defaults, projects, onClose }: {
       </div>
     </DialogContent>
   </Dialog>;
+}
+
+const WAVE_BARS = 24;
+const WAVE_TICK_MS = 50;
+
+/** A scrolling loudness history: newest on the right, so silence reads as silence. */
+function RambleWave({ analyser }: { analyser: AnalyserNode | null }) {
+  const barsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const bars = Array.from(barsRef.current?.children ?? []) as HTMLElement[];
+    if (!analyser) { bars.forEach((bar) => { bar.style.transform = ""; }); return; }
+    const samples = new Float32Array(analyser.fftSize);
+    const history: number[] = Array(WAVE_BARS).fill(0);
+    let frame = 0;
+    let last = 0;
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      if (now - last < WAVE_TICK_MS) return;
+      last = now;
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      // Map -55 dBFS (room noise) .. -15 dBFS (loud speech) to 0..1.
+      const db = 10 * Math.log10(sum / samples.length || 1e-10);
+      history.shift();
+      history.push(Math.max(0, Math.min(1, (db + 55) / 40)));
+      bars.forEach((bar, index) => { bar.style.transform = `scaleY(${0.15 + history[index] * 0.85})`; });
+    };
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, [analyser]);
+  return <div ref={barsRef} className="mr-2 flex h-6 items-center gap-0.5 text-brand" data-active={!!analyser} aria-hidden="true">
+    {Array.from({ length: WAVE_BARS }, (_, index) => <span key={index} className={`${waveStyles.bar} w-0.5 rounded-full bg-current`} />)}
+  </div>;
 }

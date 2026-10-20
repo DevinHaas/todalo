@@ -10,6 +10,7 @@ Ignore filler, small talk, observations, completed activities, questions without
 Create concise tasks in the speaker's language, preserving intent. Split distinct actions into separate create operations. A task does not require the words 'add task'.
 Corrections like 'actually make that Friday' EDIT the referenced staged task, never create a correction task. 'Don't add that' REMOVE the referenced task. Use real staged IDs, or $last for the latest task and $last-root for the latest top-level task. Never invent IDs.
 For create, text is a clean task title. For edit, text is the new title only if the title changed; otherwise null. Nullable fields mean unchanged/default; clearFields explicitly clears existing fields. Only set details actually spoken. Recurrence: day/week/month/year, integer interval, scheduled/completed, optional end date.
+Task details: description holds spoken notes or context beyond the title ("with a note that...", "details:"), never a copy of the title. priority is 1 (highest/urgent) to 4 (normal); "high priority" or "urgent" means 1, "medium" means 2, "low" means 3, unspoken means null. deadline is a hard "due by"/"deadline" date, separate from dueDate (when it is scheduled); "do it Monday, deadline Friday" sets both. labelIds only from the supplied labels, matched by name, the full desired set for that task; unknown labels are ignored.
 Resolve dates to YYYY-MM-DD and times to HH:mm in the supplied reference wall clock and timezone. Honor smartRecognition: false by leaving dueDate/startTime/endTime/recurrence null and retaining date words in titles. Match a project by name only to the supplied IDs; unknown names must not invent a project.
 For sub-task/top-level mode commands use those operations. For an explicitly requested subtask parent use an existing top-level parentId or $last-root; null inherits capture mode. Existing task parents cannot be edited.
 'Undo', 'scratch that', and 'remove last' alone mean undo. Other targeted deletion uses remove. Only use end when the ENTIRE current segment is an explicit 'done', 'stop', or 'that's all'; mentioning done inside a task or sentence never ends capture.
@@ -20,11 +21,12 @@ Never choose the first available project as a default. Unknown or unmentioned pr
 For a spoken weekday, use the nearest matching future date in upcomingDates. "This Friday" means this week's Friday when it is still upcoming, not the following week. Dates contain ONLY YYYY-MM-DD, and times ONLY HH:mm. If no time was spoken, startTime and endTime MUST be JSON null.
 When smartRecognition=false, retain ALL date, time, and recurrence words in the task title; for example "Call Anna tomorrow" remains text="Call Anna tomorrow", dueDate=null. Do not strip tomorrow.
 Recurrence without a spoken clock time requires startTime=null and endTime=null; "Water plants every three days" means recurrence={"n":3,"unit":"day","basedOn":"scheduled","until":null}, with no invented date or time.
-Complete JSON example for "Call Anna tomorrow" on 2026-10-03: {"operations":[{"type":"create","targetId":null,"text":"Call Anna","parentId":null,"dueDate":"2026-10-04","startTime":null,"endTime":null,"projectId":null,"recurrence":null,"clearFields":[]}]}.
-Complete unknown-project example: available projects=[{"id":"work","name":"Work"}], currentSegment="Call Anna and put it in the SecretProject project" -> {"operations":[{"type":"create","targetId":null,"text":"Call Anna","parentId":null,"dueDate":null,"startTime":null,"endTime":null,"projectId":null,"recurrence":null,"clearFields":[]}]}. SecretProject does not match Work. Never substitute Work for an unknown name.
+Complete JSON example for "Call Anna tomorrow" on 2026-10-03: {"operations":[{"type":"create","targetId":null,"text":"Call Anna","parentId":null,"dueDate":"2026-10-04","startTime":null,"endTime":null,"projectId":null,"recurrence":null,"description":null,"priority":null,"deadline":null,"labelIds":null,"clearFields":[]}]}.
+Complete unknown-project example: available projects=[{"id":"work","name":"Work"}], currentSegment="Call Anna and put it in the SecretProject project" -> {"operations":[{"type":"create","targetId":null,"text":"Call Anna","parentId":null,"dueDate":null,"startTime":null,"endTime":null,"projectId":null,"recurrence":null,"description":null,"priority":null,"deadline":null,"labelIds":null,"clearFields":[]}]}. SecretProject does not match Work. Never substitute Work for an unknown name.
 Examples with referenceDate 2026-10-03 and smartRecognition true (omitted fields must be null; clearFields=[]):
 "I need to call Anna tomorrow" -> create text="Call Anna", dueDate="2026-10-04".
 "Buy milk and send the invoice tomorrow" -> TWO creates: "Buy milk" and "Send the invoice", with the spoken tomorrow due date.
+"Urgent: renew passport by the 20th, remember to bring the old one" -> create text="Renew passport", priority=1, deadline="2026-10-20", description="Bring the old one".
 "Actually make that Friday" with staged ramble-1 -> edit targetId="ramble-1", text=null, dueDate="2026-10-09".
 "I called Anna yesterday and already finished the invoice" -> operations=[].
 "The button says done" -> operations=[].
@@ -44,20 +46,22 @@ function controlOperation(text: string): SemanticOperation | undefined {
     undo: "undo", "scratch that": "undo", "remove last": "undo", done: "end", stop: "end", "that's all": "end",
   };
   const type = Object.hasOwn(commands, phrase) ? commands[phrase] : undefined;
-  return type ? { type, targetId: null, text: null, parentId: null, dueDate: null, startTime: null, endTime: null, projectId: null, recurrence: null, clearFields: [] } : undefined;
+  return type ? { type, targetId: null, text: null, parentId: null, dueDate: null, startTime: null, endTime: null, projectId: null, recurrence: null, description: null, priority: null, deadline: null, labelIds: null, clearFields: [] } : undefined;
 }
 export function createSemanticProcessor(env: Environment = process.env, request: ModelRequest = fetch): SemanticProcessor {
   const provider = env.RAMBLE_LLM_PROVIDER ?? "gemini";
-  const base = env.RAMBLE_LLM_BASE_URL ?? (provider === "ollama" ? "http://127.0.0.1:11434" : "https://api.groq.com/openai/v1");
+  const base = env.RAMBLE_LLM_BASE_URL ?? (provider === "ollama" ? "http://127.0.0.1:11434"
+    : provider === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.groq.com/openai/v1");
   const model = env.RAMBLE_LLM_MODEL ?? (provider === "gemini" ? "gemini-3.5-flash-lite" : "openai/gpt-oss-120b");
-  const key = env.RAMBLE_LLM_API_KEY || (provider === "gemini" ? env.GEMINI_API_KEY : provider === "groq" ? env.GROQ_API_KEY : undefined);
+  const key = env.RAMBLE_LLM_API_KEY || (provider === "gemini" ? env.GEMINI_API_KEY : provider === "groq" ? env.GROQ_API_KEY
+    : provider === "openrouter" ? env.OPENROUTER_API_KEY : undefined);
   const endpoint = new URL(provider === "gemini"
     ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
     : `${base.replace(/\/$/, "")}/${provider === "ollama" ? "api/chat" : "chat/completions"}`);
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname);
 
   function assertConfigured() {
-    if (!["gemini", "groq", "compatible", "ollama"].includes(provider)) throw new Error("Unsupported task understanding provider");
+    if (!["gemini", "groq", "openrouter", "compatible", "ollama"].includes(provider)) throw new Error("Unsupported task understanding provider");
     if (provider === "ollama" && (!local || !env.RAMBLE_LLM_MODEL)) throw new Error("Local Ollama requires a loopback endpoint and explicit model");
     if (provider === "gemini" && env.RAMBLE_LLM_BASE_URL) throw new Error("Gemini uses the official Google endpoint");
     if (provider === "compatible" && (!env.RAMBLE_LLM_BASE_URL || !env.RAMBLE_LLM_MODEL)) throw new Error("Model endpoint and model name are required");
@@ -66,8 +70,20 @@ export function createSemanticProcessor(env: Environment = process.env, request:
     if (endpoint.username || endpoint.password) throw new Error("Use a server-side model API key, not URL credentials");
   }
 
+  // A new provider connection costs 1-2.5s before the first answer (measured
+  // against OpenRouter); a reused one does not. Sessions open it while the user
+  // starts speaking. Throttled because every session shares one processor.
+  let warmedAt = 0;
+  function warm() {
+    if (local || Date.now() - warmedAt < 20_000) return;
+    warmedAt = Date.now();
+    request(endpoint.origin, { method: "HEAD", signal: AbortSignal.timeout(10_000) })
+      .then((response) => response.body?.cancel()).catch(() => {});
+  }
+
   return {
     assertConfigured,
+    warm,
     async process(input: SemanticInput, signal: AbortSignal) {
       assertConfigured();
       const control = controlOperation(input.text);
@@ -83,8 +99,9 @@ export function createSemanticProcessor(env: Environment = process.env, request:
         defaultProjectId: input.state.projectId, captureMode: input.state.mode, parentId: input.state.parentId,
         // Bound repeated input cost; the model never receives auth data or undo history.
         projects: input.projects.slice(0, 100).map(({ id, name }) => ({ id, name: name.slice(0, 160) })),
-        stagedTasks: input.state.todos.slice(-30).map(({ id, title, parentId, dueDate, startTime, endTime, projectId, recurrence }) =>
-          ({ id, title: title.slice(0, 500), parentId, dueDate, startTime, endTime, projectId, recurrence })),
+        labels: input.labels.slice(0, 100).map(({ id, name }) => ({ id, name: name.slice(0, 160) })),
+        stagedTasks: input.state.todos.slice(-30).map(({ id, title, parentId, dueDate, startTime, endTime, projectId, recurrence, description, priority, deadline, labelIds }) =>
+          ({ id, title: title.slice(0, 500), parentId, dueDate, startTime, endTime, projectId, recurrence, description: description?.slice(0, 500) ?? null, priority, deadline, labelIds })),
         previousSegments: input.recentSpeech.slice(-4).map((text) => text.slice(0, 1000)),
       };
       const response = await request(endpoint, {
@@ -106,6 +123,14 @@ export function createSemanticProcessor(env: Environment = process.env, request:
         } : {
           model, stream: false, temperature: 0, max_completion_tokens: 4096,
           ...(provider === "groq" ? { reasoning_effort: "low", include_reasoning: false } : {}),
+          // Only the two fastest hosts (measured 2026-10-15: Cerebras ~400ms,
+          // Groq ~850ms and often 429-throttled on OpenRouter's shared quota).
+          // Groq is the fallback; never a slower host, nor one that would
+          // silently drop the strict JSON schema.
+          ...(provider === "openrouter" ? {
+            reasoning: { effort: "low", exclude: true },
+            provider: { order: ["cerebras", "groq"], only: ["cerebras", "groq"], allow_fallbacks: true, require_parameters: true },
+          } : {}),
           messages: [{ role: "system", content: `${RAMBLE_SYSTEM_PROMPT}\n${EXAMPLES}` }, { role: "user", content: JSON.stringify(context) }],
           response_format: { type: "json_schema", json_schema: { name: "ramble_operations", strict: true, schema: semanticJsonSchema } },
         }),

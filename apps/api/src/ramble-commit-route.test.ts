@@ -6,7 +6,8 @@ import type { RambleTodo } from "@todalo/ramble";
 
 const OP = "4f9c1a2e-8d3b-4c5a-9e7f-1a2b3c4d5e6f";
 const todo = (fields: Partial<RambleTodo>): RambleTodo => ({
-  id: "t1", title: "Buy milk", parentId: null, dueDate: "2026-10-16", startTime: "16:00", endTime: null, recurrence: null, projectId: null, ...fields,
+  id: "t1", title: "Buy milk", parentId: null, dueDate: "2026-10-16", startTime: "16:00", endTime: null, recurrence: null, projectId: null,
+  description: null, priority: 4, deadline: null, labelIds: [], ...fields,
 });
 
 // The production commit's rules over a memory table: derived IDs, owned
@@ -18,7 +19,7 @@ function api() {
   const app = createApi({
     allowedOrigins: new Set(["http://localhost:5173"]),
     verify: async (headers) => users[headers.get("authorization") ?? ""] ?? (headers.get("cookie") === "session=browser" ? "user-1" : null),
-    preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [] }),
+    preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [], labels: [] }),
     speech: () => { throw new Error("not used"); }, semantic: fixtureSemanticProcessor,
     commit: async (userId, todos, timeZone, operationId) => {
       const prepared = prepareTaskRows(todos, userId, timeZone, operationId);
@@ -48,6 +49,17 @@ describe("POST /api/v1/ramble/commit", () => {
     // A new session (operation) is a new batch.
     await post({ ...body, operationId: "5f9c1a2e-8d3b-4c5a-9e7f-1a2b3c4d5e6f" });
     expect(rows.size).toBe(4);
+  });
+
+  it("saves spoken task details and refuses invalid ones", async () => {
+    const { rows, post } = api();
+    const details = { description: "  Bring the old one ", priority: 1, deadline: "2026-10-20", labelIds: ["errand"] };
+    expect((await post({ operationId: OP, timeZone: "Europe/Zurich", todos: [todo(details)] })).status).toBe(200);
+    expect([...rows.values()][0]).toMatchObject({ description: "Bring the old one", priority: 1, deadline: new Date("2026-10-19T22:00:00.000Z") });
+    for (const bad of [{ priority: 0 }, { priority: 5 }, { deadline: "20 Oct" }, { labelIds: Array(21).fill("x") }]) {
+      expect((await post({ operationId: OP, timeZone: "UTC", todos: [todo(bad)] })).status).toBe(400);
+    }
+    expect((await post({ operationId: OP, timeZone: "UTC", todos: [{ ...todo({}), labelIds: undefined }] })).status).toBe(400);
   });
 
   it("refuses foreign projects as 404, bad batches as 400 and writes nothing", async () => {

@@ -22,6 +22,10 @@ export const rambleTodoInput = z.object({
     until: z.iso.datetime({ offset: true }).nullable(),
   }).strict().nullable(),
   projectId: z.string().min(1).max(200).nullable(),
+  description: z.string().max(4000).nullable(),
+  priority: z.number().int().min(1).max(4),
+  deadline: day,
+  labelIds: z.array(z.string().min(1).max(200)).max(20),
 }).strict();
 
 export const rambleOperationId = z.uuid();

@@ -8,7 +8,7 @@ function api() {
   const verify = vi.fn(async (headers: Headers) => headers.get("authorization") === "Bearer signed.token" || headers.get("cookie") === "session=browser" ? "user-1" : null);
   const app = createApi({
     allowedOrigins: new Set(["http://localhost:5173"]), verify,
-    preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [] }),
+    preferences: async () => ({ smartRecognition: true, projectIds: new Set(), projects: [], labels: [] }),
     speech: () => { throw new Error("not used"); }, semantic: fixtureSemanticProcessor,
     commit: async () => 0, tickets,
   });
