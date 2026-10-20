@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import { todaySections, type TaskDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
 import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
 import { haptics, hapticsSupported } from "./feedback";
+import { theme } from "./theme";
 import { useTaskWrites } from "./task-writes";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
 import { TodayCalendar } from "./schedule-screens";
@@ -144,6 +145,7 @@ export function TaskScreen({ account }: { account: Account }) {
 export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
   const [pending, setPending] = useState(false);
   const [feel, setFeel] = useState(haptics.enabled);
+  const dark = useSyncExternalStore(theme.subscribe, theme.dark);
   return <section className="account-panel inline">
     <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
     <dl><dt>Name</dt><dd>{account.user.name}</dd><dt>Email</dt><dd>{account.user.email}</dd></dl>
@@ -153,6 +155,10 @@ export function AccountScreen({ account, error }: { account: Account; error: str
       <input type="checkbox" checked={feel} onChange={(event) => { haptics.set(event.target.checked); setFeel(event.target.checked); }} />
       <span>Haptic feedback when completing a task</span>
     </label>}
+    <label className="setting">
+      <input type="checkbox" checked={dark} onChange={(event) => theme.set(event.target.checked)} />
+      <span>Dark theme</span>
+    </label>
     <CalendarSettingsScreen userId={account.user.id} />
     <ShortcutSettingsScreen userId={account.user.id} />
     <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>

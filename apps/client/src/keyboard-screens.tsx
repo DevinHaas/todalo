@@ -5,6 +5,7 @@ import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferen
 import { shortcutReads, shortcuts } from "./runtime";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
 import { ShortcutHelp, ShortcutSettings } from "./keyboard-views";
+import { theme } from "./theme";
 
 const platform = detectPlatform();
 const TITLE = ".task-title, .board-card-title";
@@ -71,7 +72,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
       "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
-      "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": go("/account#keyboard-shortcuts"), "navigation.account": go("/account"),
+      "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": go("/account#keyboard-shortcuts"), "navigation.account": go("/account"), "navigation.theme": () => theme.toggle(),
       "task.previous": () => moveRow(-1), "task.next": () => moveRow(1), "view.first": () => moveRow(-Infinity), "view.last": () => moveRow(Infinity),
       // Enter on the title opens it; Enter on the row's buttons keeps their own action.
       "task.details": () => { const title = activeRow()?.querySelector<HTMLElement>(TITLE); if (!title || document.activeElement !== title) return false; title.click(); },

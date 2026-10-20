@@ -68,7 +68,7 @@ export const detectPlatform = (platform = navigator.platform): Platform =>
 export const clientCommandIds = [
   "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find",
   "navigation.today", "navigation.upcoming", "navigation.projects", "navigation.labels", "navigation.filters",
-  "navigation.settings", "navigation.account", "navigation.help",
+  "navigation.settings", "navigation.account", "navigation.help", "navigation.theme",
   "task.previous", "task.next", "view.first", "view.last",
   "task.details", "task.edit", "task.complete", "task.delete", "task.select", "task.toolbar",
 ] as const;
