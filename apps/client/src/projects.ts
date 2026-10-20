@@ -107,3 +107,16 @@ export function projectMutations(transport: ProjectTransport, cache: QueryClient
     },
   };
 }
+
+/**
+ * Legacy ProjectView sort: page state only (not saved, Manual on every visit).
+ * Server order is manual order; Array#sort is stable, so ties keep it.
+ */
+export type ProjectSort = "manual" | "date" | "name" | "priority";
+export function sortProjectTasks<T extends { title: string; priority: number; dueDate: string | null }>(tasks: T[], sort: ProjectSort): T[] {
+  if (sort === "manual") return tasks;
+  const due = (task: T) => task.dueDate ? Date.parse(task.dueDate) : Infinity;
+  return [...tasks].sort((a, b) => sort === "name" ? a.title.localeCompare(b.title)
+    : sort === "priority" ? a.priority - b.priority
+    : due(a) - due(b) || 0); // Infinity - Infinity is NaN: undated ties
+}

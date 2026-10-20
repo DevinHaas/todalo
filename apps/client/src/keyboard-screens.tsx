@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
-import { shortcutReads, shortcuts } from "./runtime";
+import { reads, shortcutReads, shortcuts } from "./runtime";
+import { useBulkWrites } from "./bulk-screens";
+import { useOrganizationMutations } from "./organization-screens";
+import { parentCandidates } from "./organization";
+import type { TaskDto } from "./tasks";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
 import { ShortcutHelp, ShortcutSettings } from "./keyboard-views";
 import { theme } from "./theme";
@@ -77,6 +81,73 @@ function addTask(edge: "top" | "bottom") {
   if (edge === "top") requestAnimationFrame(() => section.querySelector<HTMLElement>('form.composer-form [aria-label="Position: bottom"]')?.click());
 }
 
+/** Resolves on the next frames once `find` returns an element (null after `ms`). */
+function waitFor<T>(find: () => T | null | undefined, ms = 3000): Promise<T | null> {
+  const end = Date.now() + ms;
+  return new Promise(resolve => { const tick = () => { const found = find(); if (found) resolve(found); else if (Date.now() > end) resolve(null); else requestAnimationFrame(tick); }; tick(); });
+}
+/** Picks an option the way a tap does: React sees a native change event. */
+function choose(select: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+const dialogOpen = () => Boolean(document.querySelector('[role="dialog"]'));
+/** Runs `then` once no dialog is open (the user saved or cancelled). ponytail: 200 ms poll, capped at 10 min. */
+function afterDialogs(then: () => void) {
+  const end = Date.now() + 600_000;
+  const id = setInterval(() => { if (dialogOpen() && Date.now() < end) return; clearInterval(id); then(); }, 200);
+}
+/** Focuses the row again, or the row that took its place when it left the list. */
+function refocus(row: HTMLElement, index: number) {
+  if (document.activeElement && document.activeElement !== document.body) return;
+  const rows = visibleRows();
+  (row.isConnected ? row : rows[Math.min(index, rows.length - 1)])?.querySelector<HTMLElement>(TITLE)?.focus();
+}
+const bulkButton = (name: string) => document.querySelector<HTMLButtonElement>(`main [role="toolbar"] [data-bulk="${name}"]:not(:disabled)`);
+/** Legacy targets: the selected tasks, else the focused row. */
+const targetIds = () => {
+  const selected = [...document.querySelectorAll<HTMLElement>("main [data-task-id][data-selected]")];
+  return (selected.length ? selected : [activeRow()].filter((row): row is HTMLElement => Boolean(row))).map(row => row.dataset.taskId!);
+};
+/**
+ * Pickers without a row control (date, priority, labels, deadline): the
+ * selection toolbar's button when tasks are selected, else the focused row's
+ * task opens with its editor (as a tap on the title does) on that field.
+ */
+function picker(toolbar: string | null, field: string) {
+  const button = toolbar ? bulkButton(toolbar) : null;
+  if (button) return void button.click();
+  const title = activeRow()?.querySelector<HTMLElement>(TITLE);
+  if (!title) return false;
+  title.click();
+  void waitFor(() => document.querySelector<HTMLElement>(`.task-editor form [data-field="${field}"]`)).then(target =>
+    (target?.matches("fieldset") ? target.querySelector<HTMLElement>("input") ?? target : target)?.focus());
+}
+/** Move: the toolbar's Move; with nothing selected, the focused row is selected first (Select, its checkbox) and the selection ends after the dialog. */
+function moveDialog() {
+  const button = bulkButton("move");
+  if (button) { button.click(); void waitFor(() => document.querySelector<HTMLElement>('[role="dialog"] select')).then(field => field?.focus()); return; }
+  const row = activeRow();
+  const start = document.querySelector<HTMLElement>("[data-selection-start]");
+  if (!row || (!start && !row.querySelector(".select-box"))) return false;
+  const index = visibleRows().indexOf(row);
+  start?.click();
+  void (async () => {
+    (await waitFor(() => row.querySelector<HTMLInputElement>(".select-box")))?.click();
+    const move = await waitFor(() => bulkButton("move"));
+    if (!move) return;
+    move.click();
+    (await waitFor(() => document.querySelector<HTMLElement>('[role="dialog"] select')))?.focus();
+    afterDialogs(() => { if (start) document.querySelector<HTMLElement>("[data-selection-stop]")?.click(); requestAnimationFrame(() => refocus(row, index)); });
+  })();
+}
+/** Previous/next task while editing: the task list the editor was opened from (row title taps and Enter record it). */
+let openedFrom: string[] = [];
+const recordList = (event: Event) => {
+  const title = (event.target as Element | null)?.closest?.(`main [data-task-id] :is(${TITLE})`);
+  if (title) openedFrom = visibleRows().map(row => row.dataset.taskId!);
+};
+
 /**
  * Ticket 19: the legacy global key handler. Keys typed into fields, while a
  * dialog or menu is open, during IME composition, or already handled (dnd-kit)
@@ -84,16 +155,49 @@ function addTask(edge: "top" | "bottom") {
  */
 export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { userId: string; onCapture: () => void; onSidebar: () => void; onFind: () => void }) {
   const navigate = useNavigate();
+  const cache = useQueryClient();
   const { effective } = useShortcuts(userId);
   const [help, setHelp] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const dispatcher = useRef(new KeyboardDispatcher());
-  const latest = useRef({ navigate, onCapture, onSidebar, onFind });
-  latest.current = { navigate, onCapture, onSidebar, onFind };
+  // Immediate row writes use the mutations behind the toolbar and the task page's Nest/Unnest buttons.
+  const bulk = useBulkWrites(userId);
+  const metadata = useMutation(bulk.metadata);
+  const clearDates = useMutation(bulk.clearDates);
+  const organize = useMutation(useOrganizationMutations(userId).organize);
+  const latest = useRef({ navigate, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize });
+  latest.current = { navigate, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize };
+  useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(id); }, [notice]);
 
   useEffect(() => {
     const go = (path: string) => () => void latest.current.navigate(path);
     const openHelp = () => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setHelp(true); };
+    const all = async () => (await latest.current.cache.fetchQuery(reads.today(userId))).tasks;
+    const write = (action: () => Promise<unknown>) => { setNotice(null); action().catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.")); };
+    /** Legacy metadata keys: the selection, else the focused task; false (key passes on) with neither. */
+    const rowWrite = (change: (tasks: TaskDto[]) => Promise<unknown>) => {
+      const ids = targetIds();
+      if (!ids.length) return false;
+      write(async () => { const tasks = await all(); await change(ids.map(id => tasks.find(task => task.id === id)).filter((task): task is TaskDto => Boolean(task))); });
+    };
+    const sortable = () => (document.querySelector<HTMLSelectElement>('main [aria-label="Project sort"]')?.value ?? "manual") === "manual";
+    const focusedTask = async (row: HTMLElement) => { const tasks = await all(); return { tasks, task: tasks.find(task => task.id === row.dataset.taskId) }; };
+    const sort = (value: string, yieldToRow = false) => {
+      const select = document.querySelector<HTMLSelectElement>('main [aria-label="Project sort"]');
+      if (!select || (yieldToRow && activeRow())) return false;
+      choose(select, value);
+    };
+    const week = (scope: string, action: string) => press(document.querySelector(`main ${scope}`), `[data-view-nav="${action}"]`);
+    /** Save, then the adjacent task of the list the editor was opened from, its editor open (the task page opens it on arrival). */
+    const editAdjacent = (step: number) => {
+      const form = editorForm();
+      const id = location.pathname.startsWith("/tasks/") ? decodeURIComponent(location.pathname.slice(7)) : null;
+      const index = id ? openedFrom.indexOf(id) : -1;
+      const next = index >= 0 ? openedFrom[index + step] : undefined;
+      if (!form || !next || press(form, 'button[type="submit"]') === false) return false;
+      void waitFor(() => !form.isConnected || null, 15_000).then(saved => { if (saved) void latest.current.navigate(`/tasks/${encodeURIComponent(next)}`); });
+    };
     const handlers: Partial<Record<ClientCommandId, () => void | boolean>> = {
       "general.capture": () => latest.current.onCapture(), "general.ramble": go("/ramble"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
@@ -134,6 +238,50 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"]'); if (!field) return false; field.focus(); },
       "quick-add.actions": () => metadataField("priority"),
       "quick-add.deadline": () => metadataField("deadline"),
+      "task.date": () => picker(null, "date"),
+      "task.clear-date": () => rowWrite(tasks => latest.current.clearDates.mutateAsync({ tasks })),
+      "task.priority-1": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 1 } })),
+      "task.priority-2": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 2 } })),
+      "task.priority-3": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 3 } })),
+      "task.priority-4": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 4 } })),
+      "task.priority": () => picker("priority", "priority"),
+      "task.labels": () => picker("labels", "labels"),
+      "task.deadline": () => picker("deadline", "deadline"),
+      "task.clear-deadline": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { deadline: null } })),
+      "task.move": moveDialog,
+      // Legacy nest: under the row above (or that row's parent), only in Manual sort.
+      "task.nest": () => {
+        const row = activeRow();
+        if (!row) return false;
+        if (!sortable()) return void setNotice("Switch Sort to Manual to nest tasks.");
+        const above = visibleRows()[visibleRows().indexOf(row) - 1];
+        write(async () => {
+          const { tasks, task } = await focusedTask(row);
+          const previous = tasks.find(item => item.id === above?.dataset.taskId);
+          const parent = previous?.parentId ? tasks.find(item => item.id === previous.parentId) : previous;
+          if (!task || !parent || !parentCandidates(task, tasks).includes(parent)) throw new Error("Choose a task below the task you want to nest under.");
+          await latest.current.organize.mutateAsync({ task, change: { parentId: parent.id } });
+        });
+      },
+      "task.unnest": () => {
+        const row = activeRow();
+        if (!row) return false;
+        if (!sortable()) return void setNotice("Switch Sort to Manual to nest tasks.");
+        write(async () => { const { task } = await focusedTask(row); if (task?.parentId) await latest.current.organize.mutateAsync({ task, change: { parentId: null } }); });
+      },
+      "editor.previous": () => editAdjacent(-1), "editor.next": () => editAdjacent(1),
+      "project.section": () => press(document.querySelector("main"), '[data-project-action="section"]'),
+      "project.menu": () => press(document.querySelector("main"), '[data-project-action="menu"]'),
+      // d: a focused row's deadline wins; focus the page (Escape) to sort.
+      "project.sort-date": () => sort("date", true), "project.sort-name": () => sort("name"), "project.sort-priority": () => sort("priority"),
+      // Next layout (the toolbar arrow); focus returns to the list when the focused element left with the old layout.
+      "view.layout": () => {
+        const was = document.activeElement;
+        if (press(document, '[aria-label="Next layout"]') === false) return false;
+        requestAnimationFrame(() => { if (was instanceof HTMLElement && !was.isConnected) (visibleRows()[0]?.querySelector<HTMLElement>(TITLE) ?? document.querySelector<HTMLElement>("main"))?.focus(); });
+      },
+      "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
+      "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };
     const commands = dispatchCommands(handlers, id => effectiveBindings(id, effective, platform));
     const onKey = (event: KeyboardEvent) => {
@@ -145,13 +293,16 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", reset);
     document.addEventListener("focusin", reset);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); };
-  }, [effective]);
+    document.addEventListener("click", recordList, true);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); document.removeEventListener("click", recordList, true); };
+  }, [effective, userId]);
 
-  if (!help) return null;
   const close = () => { setHelp(false); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); }); };
-  return <ShortcutHelp bindings={id => effectiveBindings(id, effective, platform)} onClose={close}
-    onCustomize={() => { setHelp(false); navigate("/account#keyboard-shortcuts"); }} />;
+  return <>
+    {notice && <p role="alert" className="keyboard-notice">{notice}</p>}
+    {help && <ShortcutHelp bindings={id => effectiveBindings(id, effective, platform)} onClose={close}
+      onCustomize={() => { setHelp(false); navigate("/account#keyboard-shortcuts"); }} />}
+  </>;
 }
 
 /** Account › Keyboard shortcuts; a save replaces the account document and refreshes every open screen. */

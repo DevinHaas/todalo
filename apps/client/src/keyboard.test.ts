@@ -40,6 +40,47 @@ describe("client keyboard commands", () => {
     expect(details).toHaveBeenCalledTimes(1);
   });
 
+  it("maps the row, project, layout and week keys, shared keys falling through when a handler declines", () => {
+    const declines = (...ids: string[]) => Object.fromEntries(ids.map(id => [id, vi.fn(() => false)]));
+    const accepts = (...ids: string[]) => Object.fromEntries(ids.map(id => [id, vi.fn()]));
+    const run = (handlers: Record<string, () => void | boolean>, input: ReturnType<typeof key>, environment = {}) =>
+      new KeyboardDispatcher().dispatch(input, dispatchCommands(handlers, id => effectiveBindings(id, defaultPreferences(), "mac")), "view", 0, environment).commandId;
+    const all = accepts("task.date", "task.clear-date", "task.priority-1", "task.priority-4", "task.priority", "task.labels", "task.deadline", "task.clear-deadline",
+      "task.move", "task.nest", "task.unnest", "project.sort-name", "project.sort-priority", "project.section", "project.menu", "view.layout", "upcoming.today", "upcoming.next-week", "upcoming.previous-week");
+    expect(run(all, key("t"))).toBe("task.date");
+    expect(run(all, key("T", { shiftKey: true }))).toBe("task.clear-date");
+    expect(run(all, key("1"))).toBe("task.priority-1");
+    expect(run(all, key("4"))).toBe("task.priority-4");
+    expect(run(all, key("y"))).toBe("task.priority");
+    expect(run(all, key("l"))).toBe("task.labels");
+    expect(run(all, key("D", { shiftKey: true }))).toBe("task.clear-deadline");
+    expect(run(all, key("v"))).toBe("task.move");
+    expect(run(all, key("]", { ctrlKey: true }))).toBe("task.nest");
+    expect(run(all, key("[", { ctrlKey: true }))).toBe("task.unnest");
+    expect(run(all, key("n"))).toBe("project.sort-name");
+    expect(run(all, key("p"))).toBe("project.sort-priority");
+    expect(run(all, key("s"))).toBe("project.section");
+    expect(run(all, key("w"))).toBe("project.menu");
+    expect(run(all, key("V", { shiftKey: true }))).toBe("view.layout");
+    expect(run(all, key("Y", { altKey: true, shiftKey: true }))).toBe("upcoming.today");
+    expect(run(all, key("ArrowRight", { shiftKey: true }))).toBe("upcoming.next-week");
+    expect(run(all, key("ArrowLeft", { shiftKey: true }))).toBe("upcoming.previous-week");
+    // d sorts the project by date unless a task row has focus (its deadline wins).
+    expect(run({ ...accepts("project.sort-date", "task.deadline") }, key("d"))).toBe("project.sort-date");
+    expect(run({ ...declines("project.sort-date"), ...accepts("task.deadline") }, key("d"))).toBe("task.deadline");
+    // t without a focused row is the calendar's Today; week keys reach the calendar when Upcoming's list is not shown.
+    expect(run({ ...declines("task.date"), ...accepts("calendar.today") }, key("t"))).toBe("calendar.today");
+    expect(run({ ...declines("upcoming.next-week"), ...accepts("calendar.next-week") }, key("ArrowRight", { shiftKey: true }))).toBe("calendar.next-week");
+    expect(run({ ...declines("upcoming.previous-week"), ...accepts("calendar.previous-week") }, key("ArrowLeft", { shiftKey: true }))).toBe("calendar.previous-week");
+    // Command+arrows: previous/next task inside the editor, first/last row elsewhere.
+    const arrows = { ...accepts("editor.previous", "editor.next", "view.first", "view.last") };
+    expect(run(arrows, key("ArrowUp", { metaKey: true }), { typing: true, modal: true })).toBe("editor.previous");
+    expect(run(arrows, key("ArrowDown", { metaKey: true }), { typing: true, modal: true })).toBe("editor.next");
+    expect(run({ ...declines("editor.previous"), ...accepts("view.first") }, key("ArrowUp", { metaKey: true }))).toBe("view.first");
+    // Row keys never fire while typing.
+    expect(run(all, key("1"), { typing: true })).toBeUndefined();
+  });
+
   it("never fires in editable fields or behind an open dialog", () => {
     const dispatcher = new KeyboardDispatcher();
     expect(dispatcher.dispatch(key("q"), commands(), "today", 0, { typing: true }).consumed).toBe(false);
@@ -104,7 +145,7 @@ describe("shortcut views", () => {
     expect(html).toContain('aria-label="Command plus k"');
     expect(html).toContain('aria-label="g then t"');
     expect(html).toContain("Capture task");
-    expect(html).not.toContain("Sort by priority");
+    expect(html).not.toContain("Task action menu");
   });
 
   it("shows a reserved Mac key as an error with a fix, and labels every touch control", () => {

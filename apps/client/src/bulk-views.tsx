@@ -48,7 +48,7 @@ export function useSelection(visible: string[]): Selection {
 /** The page header's Select / Done button. */
 export function SelectionControl({ selection }: { selection: Selection }) {
   return selection.active
-    ? <button type="button" className="button outline" onClick={selection.stop}>Done</button>
+    ? <button type="button" className="button outline" data-selection-stop onClick={selection.stop}>Done</button>
     : <button type="button" className="button outline" data-selection-start onClick={selection.start}>Select</button>;
 }
 
@@ -101,10 +101,10 @@ export function SelectionToolbar({ selection, tasks, actions }: { selection: Sel
       <span className="selection-count">{selected.length} selected</span>
       <button type="button" className="button small" disabled={pending} onClick={() => void complete()}>Complete</button>
       <button type="button" className="button small outline" disabled={pending} onClick={() => void run(() => actions.remove(selected), leave)}>Delete</button>
-      <button type="button" className="button small outline" disabled={pending} onClick={() => setDialog({ field: "priority", tasks: selected })}>Priority</button>
-      <button type="button" className="button small outline" disabled={pending} onClick={() => setDialog({ field: "labels", tasks: selected })}>Labels</button>
-      <button type="button" className="button small outline" disabled={pending} onClick={() => setDialog({ field: "deadline", tasks: selected })}>Deadline</button>
-      <button type="button" className="button small outline" disabled={pending} onClick={() => { setError(null); setDialog({ field: "move", tasks: selected }); }}>Move</button>
+      <button type="button" className="button small outline" disabled={pending} data-bulk="priority" onClick={() => setDialog({ field: "priority", tasks: selected })}>Priority</button>
+      <button type="button" className="button small outline" disabled={pending} data-bulk="labels" onClick={() => setDialog({ field: "labels", tasks: selected })}>Labels</button>
+      <button type="button" className="button small outline" disabled={pending} data-bulk="deadline" onClick={() => setDialog({ field: "deadline", tasks: selected })}>Deadline</button>
+      <button type="button" className="button small outline" disabled={pending} data-bulk="move" onClick={() => { setError(null); setDialog({ field: "move", tasks: selected }); }}>Move</button>
       <button type="button" className="button small outline" disabled={pending} onClick={() => void run(() => actions.clearDates(selected))}>Clear date</button>
       <button type="button" className="button small ghost" onClick={selection.stop}>Clear selection</button>
     </div>}

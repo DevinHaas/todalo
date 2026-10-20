@@ -1,6 +1,6 @@
 # 19. Use and customize keyboard commands
 
-Status: code-complete (Mac app run, physical devices and VoiceOver pending)
+Status: code-complete (all code scope wired; only Mac app run, physical-device keyboards and VoiceOver checks pending)
 Type: task
 
 **Blocked by:** 12, 17, 18.
@@ -32,3 +32,35 @@ of the above on Today, a project and task pages.
 Still not wired: row-level date/priority/labels/deadline keys (t, y, 1–4, l, d, Shift+T/D),
 `editor.previous/next` (the client editor opens on the task page, not over a list),
 move/nest, sorting, layout and Upcoming/calendar week keys.
+
+2026-10-20 — Remaining commands wired; ticket 19 code scope is complete.
+- Project sort `d`/`n`/`p` choose the visible "Project sort" select (`d` yields to a focused
+  row, whose deadline wins, as legacy); `s` Add section, `w` Project menu press their buttons.
+- `Shift+V` presses "Next layout"; focus returns to the list when the old layout took it.
+- Upcoming (`Home` / Mac `Option+Shift+Y`, `Shift+←/→`) and Calendar (`t`, `Shift+←/→`) press
+  the Previous week / Today / Next week buttons of the shown view.
+- Pickers `t` (date), `y`, `l`, `d`: with tasks selected, the selection toolbar's Priority /
+  Labels / Deadline (legacy targets); otherwise the focused task opens with its editor (as a
+  title tap does) focused on Due date / Priority / Labels / Deadline — the client has no
+  per-row date picker.
+- `v` Move: the toolbar's Move; with nothing selected the focused row is selected first
+  (Select, its checkbox), the dialog's field takes focus and selection ends when it closes.
+- Immediate writes `1`–`4`, `Shift+T`, `Shift+D` (selection, else focused row) and
+  `Ctrl+]`/`Ctrl+[` nest/unnest (under the row above or its parent; Manual sort only) call the
+  same client mutations as the toolbar and the task page's Nest/Unnest buttons rather than
+  pressing a control: those controls live on another page/dialog, and legacy wrote in place.
+  Failures show a `role="alert"` notice.
+- `editor.previous/next` (`Cmd/Ctrl+↑/↓` in the editor): the client editor lives on the task
+  page, so the closest equivalent is used — the list the task was opened from (title tap or
+  Enter) is remembered; the key presses Save and, once saved, opens the adjacent task's page,
+  whose editor opens on arrival. Without a remembered neighbour the key keeps its field meaning.
+Evidence: `apps/client/src/keyboard.test.ts` (every new binding, `d`/`t`/`Shift+arrows`
+fall-through when a handler declines, `Cmd+↑` editor vs first row). Browser QA (isolated QA
+API, Chromium, Mac profile): sort keys, `1`/`4` priority pill, `Ctrl+]`/`Ctrl+[` nest and
+unnest plus both refusal notices, `v` with/without selection (Escape ends auto-selection and
+refocuses the row), `x` then `l` toolbar Labels, `Shift+T` clears a date (row leaves Today),
+`y`/`t` open the editor on Priority/Due date, `Cmd+↑` saves and opens the previous Today task,
+Upcoming and month-calendar week keys, `Shift+V` cycling List/Board/Calendar.
+
+Pending only: Mac app run (Tauri menu interception), iPhone/iPad hardware keyboards, VoiceOver
+on device.

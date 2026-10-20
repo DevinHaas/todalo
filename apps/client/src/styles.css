@@ -77,6 +77,8 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .content { padding: 1.5rem 1.5rem max(1.5rem, env(safe-area-inset-bottom)); }
 .page-title { margin: 0 0 .25rem; font-size: 1.5rem; line-height: 2rem; font-weight: 600; overflow-wrap: anywhere; }
 .page-count { margin: 0 0 1rem; color: var(--muted-foreground); }
+.project-sort { display: inline-flex; align-items: center; gap: .5rem; margin: -.25rem 0 1rem; font-weight: 400; }
+.project-sort select { width: auto; min-height: 2.25rem; padding: .25rem .5rem; }
 .sections { display: grid; gap: 1.5rem; }
 .section-toggle { display: flex; align-items: center; gap: .25rem; margin-bottom: .5rem; border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: inherit; cursor: pointer; }
 .section-toggle .closed { transform: rotate(-90deg); }
@@ -265,11 +267,12 @@ button.composer:hover { color: var(--foreground); }
 .collection { display: grid; gap: 1rem; justify-items: start; }
 .collection > * { justify-self: stretch; }
 .collection .page-title, .collection .text-action { justify-self: start; margin: 0; }
-.label-choices { gap: .5rem !important; }
+.label-choices { gap: .5rem !important; margin: 0; padding: 0; border: 0; min-width: 0; }
 .label-choices legend { padding: 0; margin-bottom: .5rem; font-size: .875rem; font-weight: 500; }
 .label-options { display: flex; flex-wrap: wrap; gap: .75rem; }
-.label-option { display: flex; align-items: center; gap: .25rem; font-weight: 400; }
-.label-option input { width: auto; min-height: 0; box-shadow: none; }
+.label-option { display: flex; align-items: center; gap: .375rem; font-weight: 400; cursor: pointer; }
+/* Native checkbox: undo the global field box and the composer panel's appearance: none (which hid it), matching .select-box in both themes. */
+.label-option input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; width: 1rem; height: 1rem; min-height: 0; flex: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; accent-color: var(--primary); }
 
 /* Display settings, Upcoming and calendar/schedule layouts (ticket 16): legacy
    display-settings, upcoming-list-view, calendar-view and schedule-grid. */
@@ -477,3 +480,6 @@ kbd { display: inline-block; min-width: 1.25rem; margin-left: .125rem; padding: 
 .shortcut-actions .icon-button { width: 2.25rem; height: 2.25rem; }
 .shortcut-actions svg { width: 1rem; height: 1rem; }
 .shortcut-problems { flex-basis: 100%; font-size: .8125rem; }
+
+/* Keyboard row writes (ticket 19): a failed nest, priority or date key reports here. */
+.keyboard-notice { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; max-width: min(28rem, calc(100vw - 2rem)); margin: 0; padding: .625rem 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); color: var(--destructive); font-size: .875rem; box-shadow: 0 4px 12px #0000001f; }

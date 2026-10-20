@@ -7,7 +7,7 @@ import { nativeFeedback } from "./feedback";
 import type { TaskDto } from "./tasks";
 import type { SelectionSlots } from "./views";
 
-function useBulkWrites(userId: string) {
+export function useBulkWrites(userId: string) {
   const cache = useQueryClient();
   return useMemo(() => bulkMutations(bulk, cache, userId, nativeFeedback), [cache, userId]);
 }

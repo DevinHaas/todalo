@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
-import { browserProjectTransport, projectKeys, projectMutations, type ProjectTransport } from "./projects";
+import { browserProjectTransport, projectKeys, projectMutations, sortProjectTasks, type ProjectTransport } from "./projects";
 import { taskKeys, type TaskDto } from "./tasks";
 import { ProjectsView, ProjectView } from "./project-views";
 import { TodayView } from "./views";
@@ -78,6 +78,21 @@ describe("project cache", () => {
   });
 });
 
+describe("project sort (legacy ProjectView)", () => {
+  const tasks = [
+    task("b", { title: "banana", priority: 2, dueDate: "2026-10-22T00:00:00.000Z" }),
+    task("a", { title: "Apple", priority: 4, dueDate: null }),
+    task("c", { title: "cherry", priority: 2, dueDate: "2026-10-21T00:00:00.000Z" }),
+    task("d", { title: "date", priority: 1, dueDate: null }),
+  ];
+  const ids = (sort: Parameters<typeof sortProjectTasks>[1]) => sortProjectTasks(tasks, sort).map(item => item.id);
+  it("keeps the server's manual order", () => expect(ids("manual")).toEqual(["b", "a", "c", "d"]));
+  it("sorts by name, case-insensitively by locale", () => expect(ids("name")).toEqual(["a", "b", "c", "d"]));
+  it("sorts by priority, ties in manual order", () => expect(ids("priority")).toEqual(["d", "b", "c", "a"]));
+  it("sorts by date, undated last in manual order", () => expect(ids("date")).toEqual(["c", "b", "a", "d"]));
+  it("does not reorder its input", () => { sortProjectTasks(tasks, "name"); expect(tasks.map(item => item.id)).toEqual(["b", "a", "c", "d"]); });
+});
+
 describe("project screens", () => {
   it("renders directory loading, error, empty and populated states", () => {
     const view = (state: Parameters<typeof ProjectsView>[0]["state"]) => render(createElement(ProjectsView, { state, onRetry: noop, onCreate: async () => {}, write: idle }));
@@ -98,6 +113,18 @@ describe("project screens", () => {
     expect(html.indexOf(">parent<")).toBeLessThan(html.indexOf(">child<"));
     expect(html).not.toContain(">done<");
     expect(html).toContain("</svg>Work</span>");
+  });
+
+  it("offers the legacy Project sort and lists rows in the chosen order, sub-tasks under parents", () => {
+    const tasks = [task("z", { title: "Zed" }), task("kid", { title: "Kid", parentId: "z" }), task("a", { title: "Ant" })];
+    const view = (sort?: "manual" | "name") => render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: idle, initialSort: sort }));
+    const manual = view();
+    expect(manual).toContain('aria-label="Project sort"');
+    expect(manual).toMatch(/<option value="manual" selected="">Manual<\/option>/);
+    expect(manual.indexOf(">Zed<")).toBeLessThan(manual.indexOf(">Ant<"));
+    const byName = view("name");
+    expect(byName.indexOf(">Ant<")).toBeLessThan(byName.indexOf(">Zed<"));
+    expect(byName.indexOf(">Zed<")).toBeLessThan(byName.indexOf(">Kid<"));
   });
 
   it("renders empty, not-found and error project states", () => {

@@ -178,14 +178,14 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
         <fieldset disabled={pending}>
           <label>Task name<input autoFocus value={draft.title} enterKeyHint="done" onChange={(event) => edit({ title: event.target.value })} /></label>
           <label>Description<textarea value={draft.description} rows={3} onChange={(event) => edit({ description: event.target.value })} /></label>
-          <label>Priority<select value={draft.priority} onChange={(event) => edit({ priority: Number(event.target.value) })}>
+          <label>Priority<select data-field="priority" value={draft.priority} onChange={(event) => edit({ priority: Number(event.target.value) })}>
             {[1, 2, 3, 4].map(value => <option key={value} value={value}>Priority {value}{value === 1 ? " — highest" : value === 4 ? " — normal" : ""}</option>)}
           </select></label>
           <div className="field-row">
-            <label>Deadline<input type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
+            <label>Deadline<input data-field="deadline" type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.deadline} onClick={() => edit({ deadline: "" })}>Clear deadline</button>
           </div>
-          {labels && <fieldset className="label-choices"><legend>Labels</legend>
+          {labels && <fieldset className="label-choices" data-field="labels"><legend>Labels</legend>
             {labels.length > 0 && <div className="label-options">{labels.map(label => <label key={label.id} className="label-option">
               <input type="checkbox" checked={draft.labelIds.includes(label.id)} onChange={(event) => edit({ labelIds: event.target.checked ? [...draft.labelIds, label.id] : draft.labelIds.filter(id => id !== label.id) })} />{label.name}
             </label>)}</div>}
@@ -197,7 +197,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }
             {copied && <span role="status">Task link copied.</span>}
           </div>}
           <div className="field-row">
-            <label>Due date<input type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
+            <label>Due date<input data-field="date" type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.date} onClick={() => edit({ date: "", start: "", end: "" })}>Clear date</button>
           </div>
           {/* Shown once a date is set; leaving both empty keeps the task all-day. */}

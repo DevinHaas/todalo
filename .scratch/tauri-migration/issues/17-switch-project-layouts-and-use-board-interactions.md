@@ -24,3 +24,13 @@ conventions: `apps/client/README.md` ("Layouts and the status board"). Legacy ha
 section columns, add-in-column or column collapse on its board, so none were added; label,
 filter and search pages still render only their list. Native commands covered by Rust
 unit tests only.
+
+2026-10-20 — Project sort ported (legacy `ProjectView` "Project sort" select: Manual, Date,
+Name, Priority). Legacy kept it as page state (not saved; Manual on every visit), so the
+client does too. Sub-tasks stay under their parents in every sort; drag/keyboard reordering
+and nesting are offered only in Manual (legacy `nestedAllowed`); Board/Calendar layouts
+receive the sorted tasks as legacy's ViewSwitcher did. Keys D/N/P choose the same select
+(D yields to a focused row's deadline). Evidence: `apps/client/src/projects.test.ts`
+(`sortProjectTasks`: manual order, locale name, priority and date with manual tie order,
+undated last; view renders the select and order); browser QA on `/projects/qa-work`
+(N/P/D re-sort, drag handles hidden when sorted, Ctrl+] refused outside Manual).

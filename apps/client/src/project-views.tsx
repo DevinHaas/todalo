@@ -5,7 +5,7 @@ import { treeOrder, type NewTask, type TaskDto } from "./tasks";
 import { Composer, Failure, TaskRow, type ReadState, type SelectionSlots } from "./views";
 import { SortableRow, SortableTasks } from "./bulk-views";
 import { reorderAnchor, type ReorderPosition } from "./bulk";
-import type { ProjectDetailDto, ProjectDto } from "./projects";
+import { sortProjectTasks, type ProjectDetailDto, type ProjectDto, type ProjectSort } from "./projects";
 import type { SectionDto } from "./organization";
 import { SectionComposer, SectionHeader, sectionGroups } from "./organization-views";
 import { releaseFocus } from "./software-keyboard";
@@ -40,7 +40,7 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
 /** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
 export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate }: {
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate, initialSort = "manual" }: {
   state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
   sections?: SectionActions; now?: Date;
   /** Ticket 15: selection and bulk toolbar, and drag/keyboard reordering within a section. */
@@ -49,7 +49,9 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   layout?: (tasks: TaskDto[]) => ReactNode;
   /** Legacy per-section TaskComposer; without it "Add task" stays the inert placeholder. */
   onCreate?: (task: NewTask) => Promise<unknown>;
+  initialSort?: ProjectSort;
 }) {
+  const [sort, setSort] = useState<ProjectSort>(initialSort);
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -60,7 +62,9 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   if (!state.data) return <div><h1 className="page-title">Project not found</h1><p className="state">This project does not exist or you do not have access to it.</p><Link className="text-action" to="/projects">Back to Projects</Link></div>;
   const { project, tasks, sections = [] } = state.data;
   // Legacy display default hides completed tasks; server order is sortOrder.
-  const open = treeOrder(tasks.filter(task => task.status !== "done"));
+  // Sub-tasks stay under their parents in every sort (legacy tree); only Manual allows reordering and nesting.
+  const open = treeOrder(sortProjectTasks(tasks.filter(task => task.status !== "done"), sort));
+  const manual = sort === "manual";
   const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} selection={selection?.row(task)} />;
   const toggle = (id: string) => setCollapsed(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   async function rename(event: FormEvent) {
@@ -73,12 +77,15 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
       <div className="project-actions">
         {!layout && selection?.control}
         {sectionActions
-          ? <button type="button" className="button outline" aria-expanded={adding} onClick={() => setAdding(value => !value)}>Add section</button>
+          ? <button type="button" className="button outline" data-project-action="section" aria-expanded={adding} onClick={() => setAdding(value => !value)}>Add section</button>
           : <span className="button outline" aria-disabled="true">Add section</span>}
-        <button type="button" className="button outline" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}>Project menu</button>
+        <button type="button" className="button outline" data-project-action="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}>Project menu</button>
       </div>
     </div>
     <p className="page-count">{open.length} tasks</p>
+    <label className="project-sort">Sort<select aria-label="Project sort" value={sort} onChange={event => setSort(event.target.value as ProjectSort)}>
+      <option value="manual">Manual</option><option value="date">Date</option><option value="name">Name</option><option value="priority">Priority</option>
+    </select></label>
     {menuOpen && <section className="project-menu" aria-label="Project menu">
       <form ref={releaseFocus} className="inline-form" onSubmit={rename}>
         <input aria-label="Project name" value={name ?? project.name} onChange={event => setName(event.target.value)} required maxLength={200} />
@@ -97,12 +104,12 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
     {!layout && selection?.toolbar}
     {files}
-    {layout ? layout(tasks) : <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>
+    {layout ? layout(sortProjectTasks(tasks, sort)) : <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>
       {section
         ? <SectionHeader section={section} collapsed={collapsed.has(section.id)} onToggle={() => toggle(section.id)} pending={write.pending} onDelete={() => sectionActions?.remove(section)} />
         : <h2 className="section-heading">Tasks</h2>}
       {!(section && collapsed.has(section.id)) && <>
-        {reorder && grouped.length > 0
+        {reorder && manual && grouped.length > 0
           ? <SortableTasks ids={grouped.map(task => task.id)} label={(id) => grouped.find(task => task.id === id)?.title ?? "task"} onReorder={(id, overId, position) => {
             const task = grouped.find(item => item.id === id); const anchorId = reorderAnchor(open, id, overId);
             if (task && anchorId) reorder(task, anchorId, position);

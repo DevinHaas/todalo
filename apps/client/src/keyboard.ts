@@ -73,6 +73,10 @@ export const clientCommandIds = [
   "task.details", "task.edit", "task.complete", "task.delete", "task.select", "task.toolbar",
   "task.add-bottom", "task.add-top", "editor.submit-below", "editor.save-below", "editor.save-above", "editor.save",
   "quick-add.description", "quick-add.actions", "quick-add.deadline",
+  "task.date", "task.clear-date", "task.priority-1", "task.priority-2", "task.priority-3", "task.priority-4", "task.priority",
+  "task.labels", "task.deadline", "task.clear-deadline", "task.move", "task.nest", "task.unnest", "editor.previous", "editor.next",
+  "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
+  "upcoming.today", "upcoming.next-week", "upcoming.previous-week", "calendar.today", "calendar.next-week", "calendar.previous-week",
 ] as const;
 export type ClientCommandId = typeof clientCommandIds[number];
 export const clientCommands = keyboardCommands.filter(command => (clientCommandIds as readonly string[]).includes(command.id));

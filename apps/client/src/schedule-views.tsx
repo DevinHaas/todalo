@@ -117,9 +117,9 @@ export function UpcomingList({ tasks, events = [], slots, composer, now = new Da
 
   return <div className="upcoming">
     <div className="week-nav">
-      <button type="button" className="button ghost small" onClick={() => navigate("previous-week")}>Previous week</button>
-      <button type="button" className="button outline small" onClick={() => navigate("today")}>Today</button>
-      <button type="button" className="button ghost small" onClick={() => navigate("next-week")}>Next week</button>
+      <button type="button" className="button ghost small" data-view-nav="previous-week" onClick={() => navigate("previous-week")}>Previous week</button>
+      <button type="button" className="button outline small" data-view-nav="today" onClick={() => navigate("today")}>Today</button>
+      <button type="button" className="button ghost small" data-view-nav="next-week" onClick={() => navigate("next-week")}>Next week</button>
     </div>
     <nav className="week-strip" aria-label="Week">
       {weekOf(active).map(day => <a key={dayKey(day)} href={`#${dayKey(day)}`} aria-current={dayKey(day) === activeDay ? "date" : undefined}
@@ -245,9 +245,9 @@ function WeekSchedule({ tasks, events, anchor, onNavigate, slots, now }: { tasks
   const template = gridTemplate(days);
   return <div>
     <div className="calendar-nav">
-      <button type="button" className="button outline small" onClick={() => onNavigate("previous-week")}>Prev</button>
-      <div className="calendar-title"><h2 aria-live="polite">{labels.week(days[0])}</h2><button type="button" className="button ghost small" onClick={() => onNavigate("today")}>Today</button></div>
-      <button type="button" className="button outline small" onClick={() => onNavigate("next-week")}>Next</button>
+      <button type="button" className="button outline small" data-view-nav="previous-week" onClick={() => onNavigate("previous-week")}>Prev</button>
+      <div className="calendar-title"><h2 aria-live="polite">{labels.week(days[0])}</h2><button type="button" className="button ghost small" data-view-nav="today" onClick={() => onNavigate("today")}>Today</button></div>
+      <button type="button" className="button outline small" data-view-nav="next-week" onClick={() => onNavigate("next-week")}>Next</button>
     </div>
     <ScheduleGrid days={days} byDay={byDay} eventDays={eventDays} slots={slots} header={<>
       <div className="week-days" style={{ gridTemplateColumns: template }}><div />
@@ -276,9 +276,9 @@ function MonthGrid({ tasks, events, month, setMonth, onNavigate, slots, now }: {
       <button type="button" className="button outline small" onClick={() => setMonth(addMonths(month, 1))}>Next</button>
     </div>
     <div className="week-nav">
-      <button type="button" className="button ghost small" onClick={() => onNavigate("previous-week")}>Previous week</button>
-      <button type="button" className="button outline small" onClick={() => onNavigate("today")}>Today</button>
-      <button type="button" className="button ghost small" onClick={() => onNavigate("next-week")}>Next week</button>
+      <button type="button" className="button ghost small" data-view-nav="previous-week" onClick={() => onNavigate("previous-week")}>Previous week</button>
+      <button type="button" className="button outline small" data-view-nav="today" onClick={() => onNavigate("today")}>Today</button>
+      <button type="button" className="button ghost small" data-view-nav="next-week" onClick={() => onNavigate("next-week")}>Next week</button>
     </div>
     <div className="month-grid">
       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(name => <div key={name} className="month-weekday">{name}</div>)}
