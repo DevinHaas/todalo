@@ -564,8 +564,15 @@ Signed-in users open Ramble from the sidebar or a composer's waveform
 (`/ramble?date=YYYY-MM-DD` seeds the legacy default due date). The screen is the
 legacy modal: the microphone starts with the session, pauses and resumes, staged
 cards can be removed, and **Add tasks** (or a spoken "done") saves the batch;
-Discard, Escape or leaving the screen abandons it. Browsers connect same-origin (Vite
-proxies `/api` WebSockets) with cookies and an exact Origin. Native shells call
+Discard, Escape or leaving the screen abandons it. As the legacy modal
+([Ramble mode](../../docs/ramble-mode.md)): listening starts with the microphone (audio
+queues until the provider is ready), the wave is a live loudness history from the
+capture's `AnalyserNode`, the server's `provisionalIds` cards (local quick-add guesses)
+are dimmed and not removable until the model confirms them, and cards show spoken
+description, priority, deadline and label count. Only confirmed tasks are ever saved,
+including by the HTTP fallback. Browsers connect same-origin (Vite
+proxies `/api` WebSockets) with cookies and an exact Origin; against a dev API add
+`http://localhost:5173` to `RAMBLE_ALLOWED_ORIGINS`, or the socket is refused (`403`). Native shells call
 `ramble_socket`: Rust mints a 30-second single-use ticket with the Keychain
 bearer and returns only the ticketed socket URL. The disposable QA service runs
 Ramble with a fake transcription provider; `scripts/ramble-smoke.ts` checks
