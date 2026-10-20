@@ -54,7 +54,7 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
   if (state.status === "pending") body = <p className="state" role="status">Loading calendars…</p>;
   else if (!state.data) body = <p className="error" role="alert">{state.error?.message ?? "Your calendars could not be loaded. Try again."} <button type="button" className="text-action" onClick={onRetry}>Try again</button></p>;
   else body = <>
-    {state.data.length === 0 && <p>No Google accounts connected yet. Sign in with Google to get started.</p>}
+    {state.data.length === 0 && <p className="setting-hint">No Google accounts connected yet. Sign in with Google to get started.</p>}
     {state.data.map(account => <AccountCard key={account.id} account={account} actions={actions} pending={pending.has(account.id)} link={link} />)}
   </>;
   return <section className="calendar-settings" aria-labelledby="calendars-title">
@@ -62,7 +62,7 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
     {error && <p className="error" role="alert">{error}</p>}
     {body}
     <div className="calendar-link">
-      <p>Find out how to show events from multiple accounts.</p>
+      <p className="setting-hint">Find out how to show events from multiple accounts.</p>
       {link}
     </div>
   </section>;
@@ -70,23 +70,22 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
 
 function AccountCard({ account, actions, pending, link }: { account: CalendarAccountDto; actions: CalendarActions; pending: boolean; link: ReactNode }) {
   if (account.needsConsent) return <div className="calendar-card">
-    <div className="calendar-card-head"><span className="calendar-email">{account.email}</span></div>
-    <p>Grant calendar access to show this account&apos;s events.</p>
-    {link}
+    <div className="calendar-card-head"><span className="calendar-email">{account.email}</span>{link}</div>
+    <p className="calendar-hint">Grant calendar access to show this account&apos;s events.</p>
   </div>;
   return <div className="calendar-card" aria-busy={pending || undefined}>
     <div className="calendar-card-head">
       <span className="calendar-email">{account.email}</span>
       <span className="calendar-status"><span className={account.hasSyncError ? "status-dot error" : "status-dot"} />{account.hasSyncError ? "Error" : "Live"}</span>
-    </div>
-    <div className="calendar-card-actions">
-      <button type="button" className="button ghost small" disabled={pending} onClick={() => actions.resync(account.id)}>Resync</button>
-      <button type="button" className="button destructive small" disabled={pending} onClick={() => actions.disconnect(account.id)}>Disconnect</button>
+      <span className="calendar-card-actions">
+        <button type="button" className="button ghost small" disabled={pending} onClick={() => actions.resync(account.id)}>Resync</button>
+        <button type="button" className="button destructive small" disabled={pending} onClick={() => actions.disconnect(account.id)}>Disconnect</button>
+      </span>
     </div>
     <p className="calendar-hint">Resync if calendars aren&apos;t up-to-date.</p>
     <label className="calendar-show">
       <span><span className="setting-title">Show events in Today/Upcoming</span><span className="setting-hint">Events are shown in Today and Upcoming.</span></span>
-      <input type="checkbox" role="switch" checked={account.showEvents} disabled={pending} onChange={(event) => actions.showEvents(account.id, event.target.checked)} />
+      <input type="checkbox" role="switch" className="switch" checked={account.showEvents} disabled={pending} onChange={(event) => actions.showEvents(account.id, event.target.checked)} />
     </label>
     <ul className="calendar-list">
       {account.calendars.map(cal => <li key={cal.id}>

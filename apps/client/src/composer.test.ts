@@ -130,7 +130,7 @@ describe("account settings", () => {
 
   it("shows the setting, a loading state and a retryable load failure", () => {
     const props = { onRetry: noop, onChange: noop, pending: false, error: null };
-    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: true }, error: null } }))).toMatch(/type="checkbox" checked=""/);
+    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: true }, error: null } }))).toMatch(/role="switch"[^>]*checked=""/);
     expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: false }, error: null } }))).not.toContain("checked");
     expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "pending", error: null } }))).toContain("Loading preferences");
     const failed = render(createElement(SmartDatesSetting, { ...props, state: { status: "error", error: new Error("x") } }));

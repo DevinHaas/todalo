@@ -19,6 +19,8 @@ import { BoardScreen } from "./board-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen } from "./organization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
+import { SettingSwitch } from "./settings-views";
+import { Popover } from "./popover";
 import { CalendarSettingsScreen, LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, ShortcutSettingsScreen, taskNeighbour } from "./keyboard-screens";
@@ -128,10 +130,7 @@ export function Shell({ account }: { account: Account }) {
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
     <aside className="sidebar" aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
       <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" onClick={() => { setCollapsed(true); setMobileOpen(false); }}><PanelLeft /></button>
-      <Link to="/account" className="account-trigger" aria-label="Account">
-        <span className="avatar">{account.user.name.slice(0, 1).toUpperCase()}</span>
-        <span>{account.user.name}</span><ChevronDown className="chevron" />
-      </Link>
+      <AccountMenu account={account} onNavigate={() => setMobileOpen(false)} />
       <div className="add-row">
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
@@ -210,25 +209,33 @@ export function TaskScreen({ account }: { account: Account }) {
     attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
 }
 
-export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
+/** Legacy sidebar account menu: Settings and Log out. */
+function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: () => void }) {
+  const navigate = useNavigate();
   const [pending, setPending] = useState(false);
+  return <Popover label="Account menu" role="menu" className="account-menu" triggerClassName="account-trigger"
+    trigger={<><span className="avatar">{account.user.name.slice(0, 1).toUpperCase()}</span><span>{account.user.name}</span><ChevronDown className="chevron" /></>}>
+    {close => <>
+      <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); navigate("/account"); }}>Settings</button>
+      <button type="button" role="menuitem" className="popover-item" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Log out"}</button>
+    </>}
+  </Popover>;
+}
+
+/** Legacy /settings: General, Keyboard shortcuts, Calendars in one centered column. */
+export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
   const [feel, setFeel] = useState(haptics.enabled);
   const dark = useSyncExternalStore(theme.subscribe, theme.dark);
-  return <section className="account-panel inline">
-    <header><h1>Your account</h1><p>Signed in to todalo.</p></header>
-    <dl><dt>Name</dt><dd>{account.user.name}</dd><dt>Email</dt><dd>{account.user.email}</dd></dl>
+  return <div className="settings-page">
     {error && <p className="error" role="alert">{error}</p>}
-    <SmartDatesSettingScreen userId={account.user.id} />
-    {hapticsSupported && <label className="setting">
-      <input type="checkbox" checked={feel} onChange={(event) => { haptics.set(event.target.checked); setFeel(event.target.checked); }} />
-      <span>Haptic feedback when completing a task</span>
-    </label>}
-    <label className="setting">
-      <input type="checkbox" checked={dark} onChange={(event) => theme.set(event.target.checked)} />
-      <span>Dark theme</span>
-    </label>
-    <CalendarSettingsScreen userId={account.user.id} />
+    <section className="settings-general" aria-labelledby="general-title">
+      <h1 id="general-title" className="settings-heading">General</h1>
+      <SmartDatesSettingScreen userId={account.user.id} />
+      <SettingSwitch title="Dark theme" hint="Use the dark color scheme." checked={dark} onChange={(on) => theme.set(on)} />
+      {hapticsSupported && <SettingSwitch title="Haptic feedback" hint="Feel a tap when you complete a task." checked={feel}
+        onChange={(on) => { haptics.set(on); setFeel(on); }} />}
+    </section>
     <ShortcutSettingsScreen userId={account.user.id} />
-    <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
-  </section>;
+    <CalendarSettingsScreen userId={account.user.id} />
+  </div>;
 }

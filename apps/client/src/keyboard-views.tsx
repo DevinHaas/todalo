@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RotateCcw, X } from "lucide-react";
+import { Plus, RotateCcw, Search, X } from "lucide-react";
 import { defaultPreferences, effectiveBindings, keyboardCommands, suggestBinding, validatePreferences, type KeyboardPreferences, type Platform } from "@todalo/ramble/keyboard";
 import { editKeyboardBindings } from "@todalo/ramble/keyboard-edit";
 import { matchesShortcut, matchesShortcutFilter, type ShortcutFilter } from "@todalo/ramble/keyboard-search";
 import { createShortcutRecorder } from "@todalo/ramble/keyboard-recorder";
 import { clientCommands } from "./keyboard";
 import { releaseFocus } from "./software-keyboard";
+import { Dropdown } from "./popover";
 
 // Pure views for ticket 19 (no runtime imports): the legacy shortcut help sheet
 // and Settings › Keyboard shortcuts, on the client's plain CSS.
@@ -62,6 +63,9 @@ export function ShortcutHelp({ bindings, onCustomize, onClose }: { bindings: (id
   </div>;
 }
 
+const profiles: { value: "portable" | Platform; label: string }[] = [
+  { value: "portable", label: "All platforms" }, { value: "mac", label: "macOS" }, { value: "windows", label: "Windows" }, { value: "linux", label: "Linux" },
+];
 const filters: { id: ShortcutFilter; label: string }[] = [
   { id: "all", label: "All" }, { id: "assigned", label: "Assigned" }, { id: "custom", label: "Custom" }, { id: "unassigned", label: "Unassigned" },
 ];
@@ -113,21 +117,22 @@ export function ShortcutSettings({ preferences: saved, platform, syncError, onRe
   const name = (id: string) => keyboardCommands.find(command => command.id === id)?.label ?? id;
 
   return <section id="keyboard-shortcuts" className="shortcut-settings" aria-labelledby="keyboard-shortcuts-title">
-    <div className="dialog-header"><h2 id="keyboard-shortcuts-title" className="setting-title">Keyboard shortcuts</h2>
-      <button type="button" className="button outline small" onClick={onHelp}>Shortcut help</button></div>
-    <p className="setting-hint">Choose a shortcut to record a new one, or add another with +. Every action also has a button. Save to sync shortcuts with your account.</p>
+    <div className="dialog-header"><h2 id="keyboard-shortcuts-title" className="settings-heading">Keyboard shortcuts</h2>
+      <button type="button" className="button outline" onClick={onHelp}>Shortcut help</button></div>
+    <p className="setting-hint">Choose a shortcut to change it, or add another with +. Remove every shortcut to leave an action unassigned. Save changes to sync with your account.</p>
     <div className="shortcut-filters">
-      <input aria-label="Search keyboard shortcuts" placeholder="Search shortcuts…" disabled={busy} value={query} onChange={(event) => setQuery(event.target.value)} />
-      <label>Platform <select aria-label="Binding profile" value={profile} disabled={busy} onChange={(event) => setProfile(event.target.value as typeof profile)}>
-        <option value="portable">All platforms</option><option value="mac">macOS</option><option value="windows">Windows</option><option value="linux">Linux</option>
-      </select></label>
+      <span className="search-field"><Search aria-hidden="true" />
+        <input aria-label="Search keyboard shortcuts" placeholder="Search shortcuts…" disabled={busy} value={query} onChange={(event) => setQuery(event.target.value)} /></span>
+      {/* ponytail: the Dropdown has no disabled state; recording ends on any outside pointerdown anyway. */}
+      <span className="platform-field">Platform <Dropdown<"portable" | Platform> label="Binding profile" value={profile} options={profiles} onChange={setProfile} /></span>
     </div>
-    <div className="shortcut-filters" role="group" aria-label="Filter shortcuts">
+    <div className="shortcut-chips" role="group" aria-label="Filter shortcuts">
       {[...filters, ...(conflicting.size || filter === "conflicts" ? [{ id: "conflicts" as const, label: `Conflicts${conflicting.size ? ` (${conflicting.size})` : ""}` }] : [])].map(item =>
-        <button key={item.id} type="button" className="button outline small" aria-pressed={filter === item.id} disabled={busy} onClick={() => setFilter(item.id)}>{item.label}</button>)}
+        <button key={item.id} type="button" className="filter-chip" aria-pressed={filter === item.id} disabled={busy} onClick={() => setFilter(item.id)}>{item.label}</button>)}
     </div>
+    <p className="shortcut-note">All platforms keeps each platform’s defaults when adding shortcuts. Choose one platform to change only its keys.</p>
     {syncError && <p role="alert" className="error">{syncError} <button type="button" className="text-action" onClick={onRetry}>Retry sync</button></p>}
-    {[...new Set(matches.map(command => command.group))].map(group => <div key={group}>
+    {[...new Set(matches.map(command => command.group))].map(group => <div key={group} className="shortcut-group">
       <h3 className="section-heading">{group}</h3>
       {matches.filter(command => command.group === group).map(command => {
         const bindings = effectiveBindings(command.id, preferences, shownPlatform);
@@ -135,7 +140,7 @@ export function ShortcutSettings({ preferences: saved, platform, syncError, onRe
         const suggestion = problems.length ? suggestBinding(command.id, preferences, shownPlatform) : null;
         const here = recording?.id === command.id;
         return <div key={command.id} className="shortcut-row">
-          <span>{command.label}</span>
+          <span className="shortcut-name">{command.label}</span>
           <span className="shortcut-actions">
             {bindings.map((binding, index) => <span key={`${binding}-${index}`} className="shortcut-chip">
               <button type="button" aria-label={`Change ${label(binding)} for ${command.label}`} disabled={busy} onClick={() => setRecording({ id: command.id, replace: index })}>
@@ -143,8 +148,8 @@ export function ShortcutSettings({ preferences: saved, platform, syncError, onRe
               </button>
               <button type="button" className="icon-button" aria-label={`Remove ${label(binding)} from ${command.label}`} disabled={busy} onClick={() => edit(command.id, { remove: index })}><X /></button>
             </span>)}
-            {!bindings.length && !here && <button type="button" className="button outline small" aria-label={`Assign shortcut to ${command.label}`} disabled={busy} onClick={() => setRecording({ id: command.id })}>Unassigned</button>}
-            {here && recording?.replace === undefined && <span data-shortcut-recording role="status" className="shortcut-chip">Press keys…</span>}
+            {!bindings.length && !here && <button type="button" className="unassigned" aria-label={`Assign shortcut to ${command.label}`} disabled={busy} onClick={() => setRecording({ id: command.id })}>Unassigned</button>}
+            {here && recording?.replace === undefined && <span data-shortcut-recording role="status" className="shortcut-chip recording">Press keys…</span>}
             <button type="button" className="icon-button" aria-label={`Add shortcut for ${command.label}`} disabled={busy} onClick={() => setRecording({ id: command.id })}><Plus /></button>
             <button type="button" className="icon-button" aria-label={`Restore defaults for ${command.label}`} disabled={busy} onClick={() => edit(command.id, { reset: true })}><RotateCcw /></button>
           </span>
@@ -158,7 +163,7 @@ export function ShortcutSettings({ preferences: saved, platform, syncError, onRe
     {matches.length === 0 && <p role="status" className="state">No shortcuts match this search and filter.</p>}
     {error && <p role="alert" className="error">{error} Your draft is kept; try Save again.</p>}
     {done && <p role="status" className="state">Shortcuts saved.</p>}
-    <div className="shortcut-filters">
+    <div className="shortcut-footer">
       <button type="button" className="button" disabled={!draft || errors.length > 0 || busy} onClick={async () => {
         setSaving(true); setError(null);
         try { await onSave(preferences); setDraft(null); setDone(true); }

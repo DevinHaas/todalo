@@ -9,6 +9,6 @@ export function GoogleButton({ intent, disabled }: { intent: GoogleIntent; disab
   if (waiting) return <p className="switch-mode" role="status">Continue in your browser, then return to todalo. <button className="text-button" onClick={() => void session.cancelGoogle()}>Cancel</button></p>;
   return <>
     {error && <p className="error" role="alert">{error}</p>}
-    <button type="button" disabled={disabled} onClick={() => void session.continueWithGoogle(intent)}>{intent === "link" ? "Link Google account" : "Continue with Google"}</button>
+    <button type="button" className={intent === "link" ? "button outline small" : undefined} disabled={disabled} onClick={() => void session.continueWithGoogle(intent)}>{intent === "link" ? "Link another Google account" : "Continue with Google"}</button>
   </>;
 }
