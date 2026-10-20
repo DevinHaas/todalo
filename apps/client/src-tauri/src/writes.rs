@@ -23,6 +23,36 @@ pub struct NewTask {
     due_date_end: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recurrence: Option<Recurrence>,
+    /// The composer's destination, Additional actions and insert position; omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    section_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    priority: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    deadline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label_ids: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    placement: Option<Placement>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum Edge {
+    Top,
+    Bottom,
+    Above,
+    Below,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Placement {
+    edge: Edge,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    anchor_id: Option<String>,
 }
 
 pub(crate) fn valid_operation_id(id: &str) -> bool {
@@ -37,6 +67,20 @@ fn task_body(task: &NewTask) -> Result<Value, &'static str> {
     if !valid_operation_id(&task.id)
         || task.title.trim().is_empty()
         || task.recurrence.as_ref().is_some_and(invalid_recurrence)
+        || task
+            .priority
+            .is_some_and(|priority| !(1..=4).contains(&priority))
+        || task.label_ids.as_deref().is_some_and(invalid_labels)
+        || [
+            &task.project_id,
+            &task.section_id,
+            &task
+                .placement
+                .as_ref()
+                .and_then(|placement| placement.anchor_id.clone()),
+        ]
+        .into_iter()
+        .any(|id| id.as_deref().is_some_and(|id| !valid_id(id)))
     {
         return Err(INVALID);
     }
@@ -194,7 +238,40 @@ mod tests {
             due_date: Some("2026-10-15T00:00:00.000Z".into()),
             due_date_end: None,
             recurrence: None,
+            project_id: None,
+            section_id: None,
+            priority: None,
+            deadline: None,
+            label_ids: None,
+            placement: None,
         }
+    }
+
+    #[test]
+    fn composer_bodies_carry_project_metadata_and_placement() {
+        let id = "6f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11";
+        let body = json!({
+            "id": id, "title": "Draft", "dueDate": null, "projectId": "qa-work", "sectionId": "qa-doing",
+            "priority": 2, "deadline": "2026-10-20T00:00:00.000Z", "labelIds": ["design"],
+            "placement": { "edge": "below", "anchorId": "undated" }
+        });
+        let parsed: NewTask = serde_json::from_value(body.clone()).unwrap();
+        assert_eq!(task_body(&parsed).unwrap(), body);
+        for bad in [
+            json!({ "priority": 5 }),
+            json!({ "projectId": "../account" }),
+            json!({ "labelIds": ["a/b"] }),
+            json!({ "placement": { "edge": "below", "anchorId": "../x" } }),
+        ] {
+            let mut input = json!({ "id": id, "title": "Draft", "dueDate": null });
+            input
+                .as_object_mut()
+                .unwrap()
+                .extend(bad.as_object().unwrap().clone());
+            let parsed: NewTask = serde_json::from_value(input).unwrap();
+            assert_eq!(task_body(&parsed), Err("Check your entry and try again."));
+        }
+        assert!(serde_json::from_value::<NewTask>(json!({ "id": id, "title": "Draft", "dueDate": null, "placement": { "edge": "middle" } })).is_err());
     }
 
     #[test]

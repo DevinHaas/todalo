@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { AudioLines, CalendarIcon, Inbox, Plus, Sun, X } from "lucide-react";
+import { AudioLines, CalendarIcon, Flag, Inbox, MoreHorizontal, Plus, Sun, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
@@ -7,9 +7,9 @@ import {
   spliceMatch, syncQuickAddFields, type QuickAddSyncState,
 } from "@todalo/ramble/quick-add-sync";
 import type { Recurrence } from "@todalo/ramble/recurrence";
-import { operationId, timeInputValue, type NewTask } from "./tasks";
+import { operationId, timeInputValue, type NewTask, type Placement } from "./tasks";
 import {
-  dateValue, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor, scheduleOf,
+  composerFields, dateValue, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor, scheduleOf,
 } from "./quick-add";
 import { releaseFocus } from "./software-keyboard";
 
@@ -22,6 +22,14 @@ const PARSE_DEBOUNCE_MS = 150;
  * user opted out of.
  */
 export const SmartDates = createContext(false);
+
+/**
+ * The account's projects and labels for every composer's project picker and
+ * Additional actions (ComposerChoicesProvider). Until they load the picker
+ * offers Inbox and the composer's own project, and labels show as loading.
+ */
+export interface Choice { id: string; name: string }
+export const ComposerChoices = createContext<{ projects?: Choice[]; labels?: Choice[] }>({});
 
 function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddSyncState {
   const start = dueDate ? new Date(dueDate) : undefined;
@@ -39,7 +47,7 @@ function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddS
  * the task to create is unchanged, so resubmitting after an unclear failure
  * cannot create a second copy of a task that was in fact saved.
  */
-export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, smartDates: override }: {
+export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, smartDates: override, projectId = null, sectionId = null, placement }: {
   /** Initial due date (with time for a schedule slot); null starts undated (Inbox). */
   dueDate: () => string | null;
   /** End of a schedule slot (ticket 16). */
@@ -51,8 +59,17 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   startOpen?: boolean;
   /** Overrides the SmartDates context (tests). */
   smartDates?: boolean;
+  /** The project view section it was opened in (legacy TaskComposer projectId/sectionId); null is the Inbox. */
+  projectId?: string | null; sectionId?: string | null;
+  /**
+   * Where the task goes in its project's manual order. Top/bottom composers
+   * show a position toggle; after each add the next draft goes below the task
+   * just added (or above it, with Save task and add above), as legacy did.
+   */
+  placement?: Placement;
 }) {
   const account = useContext(SmartDates);
+  const choices = useContext(ComposerChoices);
   const routed = useInRouterContext();
   const smartDates = override ?? account;
   const seed = () => seedState(dueDate(), dueDateEnd?.() ?? null);
@@ -67,6 +84,10 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const [customRepeat, setCustomRepeat] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [project, setProject] = useState(projectId);
+  const [position, setPosition] = useState(placement);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [metadata, setMetadata] = useState({ priority: 4, deadline: "", labelIds: [] as string[] });
   const operation = useRef<{ key: string; id: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
@@ -80,8 +101,11 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const segments = highlightSegments(title, live.matches);
   const schedule = scheduleOf(sync);
 
-  const reset = () => { setTitle(""); setParsedTitle(""); setDescription(""); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" }); operation.current = null; };
-  const close = () => { setOpen(false); reset(); setError(null); setScheduling(false); onCancel?.(); };
+  const reset = () => {
+    setTitle(""); setParsedTitle(""); setDescription(""); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
+    setMetadata({ priority: 4, deadline: "", labelIds: [] }); operation.current = null;
+  };
+  const close = () => { setOpen(false); reset(); setError(null); setScheduling(false); setActionsOpen(false); setPosition(placement); onCancel?.(); };
   if (!open) return <button type="button" className="composer" onClick={() => setOpen(true)}><Plus />Add task</button>;
 
   function reject(match: QuickAddMatch) {
@@ -109,19 +133,25 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   }
   const syncScroll = () => { if (backdrop.current && input.current) backdrop.current.scrollLeft = input.current.scrollLeft; };
 
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Save task and add above (keyboard) submits through the same Add task button.
+    const direction = event.currentTarget.dataset.direction === "above" ? "above" : "below";
+    delete event.currentTarget.dataset.direction;
     if (!title.trim() || pending) return;
     const fields = quickAddTask(title, sync, parseTitle(title, smartDates, rejected));
     const task = {
       title: fields.title, ...(description.trim() && { description: description.trim() }), dueDate: fields.dueDate,
       ...(fields.dueDateEnd && { dueDateEnd: fields.dueDateEnd }), ...(fields.recurrence && { recurrence: fields.recurrence }),
+      ...composerFields(metadata, project, { projectId, sectionId, placement: position }),
     };
     const key = JSON.stringify(task);
     if (operation.current?.key !== key) operation.current = { key, id: operationId() };
     setPending(true); setError(null);
     try {
-      await onCreate({ id: operation.current.id, ...task });
+      const created = operation.current.id;
+      await onCreate({ id: created, ...task });
+      if (task.placement) setPosition({ edge: direction, anchorId: created });
       reset(); setScheduling(false);
       input.current?.focus();
     } catch (reason) {
@@ -151,11 +181,19 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
           {today ? <Sun /> : <CalendarIcon />}{label}{time && ` ${time}`}
         </button>
         {schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}
+        <button type="button" className={metadata.priority !== 4 ? "button outline small set" : "button outline small"} onClick={() => setActionsOpen(true)}><Flag />Priority {metadata.priority}</button>
+        <button type="button" className="icon-button small" aria-label="Additional actions" aria-expanded={actionsOpen} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal /></button>
+        {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="button outline small" aria-label={`Position: ${position.edge}`}
+          onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
       </div>
+      {actionsOpen && <MetadataFields value={metadata} labels={choices.labels} onChange={(change) => setMetadata(current => ({ ...current, ...change }))} />}
       {scheduling && <SchedulePanel schedule={schedule} onDate={(date) => { changeDate(date); }} onStart={changeStart} onEnd={changeEnd}
         onRepeat={(recurrence) => { changeRepeat(recurrence); setScheduling(false); }} onCustom={() => { setCustomRepeat(true); setScheduling(false); }} onDone={() => setScheduling(false)} />}
       <div className="composer-footer">
-        <span className="pill project"><Inbox />Inbox</span>
+        <label className="pill project"><Inbox /><select aria-label="Project" value={project ?? ""} onChange={(event) => setProject(event.target.value || null)}>
+          <option value="">Inbox</option>
+          {projectOptions(choices.projects, projectId).map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}
+        </select></label>
         <div className="composer-actions">
           {/* Legacy composer waveform: Ramble with this draft's date as the default (ticket 21). */}
           {routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className="icon-button" aria-label="Open Ramble" onClick={close}><AudioLines /></Link>}
@@ -166,6 +204,28 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     </form>
     {customRepeat && <CustomRepeatDialog recurrence={schedule.recurrence} onClose={() => setCustomRepeat(false)} onConfirm={(recurrence) => { changeRepeat(recurrence); setCustomRepeat(false); }} />}
   </>;
+}
+
+// The composer's own project stays selectable while the list loads (or if it failed).
+const projectOptions = (projects: Choice[] | undefined, own: string | null): Choice[] =>
+  projects ?? (own ? [{ id: own, name: "This project" }] : []);
+
+/** The legacy composer's Additional actions (TaskMetadataFields): priority, deadline and labels. */
+function MetadataFields({ value, labels, onChange }: { value: { priority: number; deadline: string; labelIds: string[] }; labels?: Choice[]; onChange(change: Partial<typeof value>): void }) {
+  return <div className="schedule-panel" role="group" aria-label="Additional actions">
+    <label>Priority<select data-metadata-field="priority" autoFocus value={value.priority} onChange={(event) => onChange({ priority: Number(event.target.value) })}>
+      {[1, 2, 3, 4].map(priority => <option key={priority} value={priority}>Priority {priority}{priority === 1 ? " — highest" : priority === 4 ? " — normal" : ""}</option>)}
+    </select></label>
+    <div className="field-row">
+      <label>Deadline<input data-metadata-field="deadline" type="date" value={value.deadline} onChange={(event) => onChange({ deadline: event.target.value })} /></label>
+      <button type="button" className="text-action" disabled={!value.deadline} onClick={() => onChange({ deadline: "" })}>Clear deadline</button>
+    </div>
+    <fieldset className="label-choices"><legend>Labels</legend>
+      {!labels ? <p className="state" role="status">Loading labels…</p> : labels.length > 0 ? <div className="label-options">{labels.map(label => <label key={label.id} className="label-option">
+        <input type="checkbox" checked={value.labelIds.includes(label.id)} onChange={(event) => onChange({ labelIds: event.target.checked ? [...value.labelIds, label.id] : value.labelIds.filter(id => id !== label.id) })} />{label.name}
+      </label>)}</div> : <p className="state">Create labels in Labels.</p>}
+    </fieldset>
+  </div>;
 }
 
 /** The legacy date pill popover: quick dates, date, time range and Repeat. */

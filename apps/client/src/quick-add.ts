@@ -5,7 +5,7 @@
 import { parseQuickAddOrPlain, type ParseQuickAddResult } from "@todalo/ramble/quick-add";
 import { syncQuickAddFields, type QuickAddSyncState } from "@todalo/ramble/quick-add-sync";
 import type { Recurrence } from "@todalo/ramble/recurrence";
-import { dateInputValue, localInstant, type RecurrenceDto } from "./tasks";
+import { dateInputValue, localInstant, type NewTask, type Placement, type RecurrenceDto } from "./tasks";
 
 /** Rejected phrases are kept lower-cased for the whole draft (legacy click-to-reject). */
 export function parseTitle(title: string, enabled: boolean, rejected: ReadonlySet<string>, now?: Date): ParseQuickAddResult {
@@ -36,6 +36,28 @@ export function quickAddTask(title: string, state: QuickAddSyncState, parsed: Pa
     dueDate: day ? localInstant(day, start) : null,
     dueDateEnd: day && start && end ? localInstant(day, end) : null,
     recurrence: recurrence ? toRecurrenceDto(recurrence) : null,
+  };
+}
+
+/** The legacy composer's Additional actions as the draft holds them (deadline is a date input value). */
+export interface ComposerMetadata { priority: number; deadline: string; labelIds: string[] }
+/** Where a composer was opened: its project view section and, for inserts, the position. */
+export interface ComposerOrigin { projectId: string | null; sectionId: string | null; placement?: Placement }
+
+/**
+ * The create fields beyond the schedule. Defaults are omitted (as the legacy
+ * composer's createTask did), and the section and position only apply in the
+ * project the composer was opened in — the picker moving the task elsewhere drops them.
+ */
+export function composerFields(metadata: ComposerMetadata, projectId: string | null, origin: ComposerOrigin): Partial<NewTask> {
+  const home = projectId === origin.projectId;
+  return {
+    ...(projectId && { projectId }),
+    ...(home && origin.sectionId && { sectionId: origin.sectionId }),
+    ...(metadata.priority !== 4 && { priority: metadata.priority }),
+    ...(metadata.deadline && { deadline: localInstant(metadata.deadline) }),
+    ...(metadata.labelIds.length > 0 && { labelIds: metadata.labelIds }),
+    ...(home && origin.placement && { placement: origin.placement }),
   };
 }
 

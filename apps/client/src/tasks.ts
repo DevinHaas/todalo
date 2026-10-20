@@ -22,7 +22,17 @@ export interface NewTask {
   dueDateEnd?: string | null;
   /** Quick add's detected or picked repeat (ticket 12, ADR 0001). */
   recurrence?: RecurrenceDto | null;
+  /** The composer's destination (project view, project picker); omitted is the Inbox. */
+  projectId?: string | null;
+  sectionId?: string | null;
+  /** The legacy composer's Additional actions. */
+  priority?: number;
+  deadline?: string | null;
+  labelIds?: string[];
+  /** Where the new task goes in its project's manual order (add top/bottom, Save and add above/below). */
+  placement?: Placement;
 }
+export interface Placement { edge: "top" | "bottom" | "above" | "below"; anchorId?: string }
 
 export interface TaskTransport {
   today(): Promise<TodayDto>;

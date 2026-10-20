@@ -50,6 +50,33 @@ function clickAndRefocus(selector: string) {
   setTimeout(check, 100);
 }
 
+// Composer and editor keys press the buttons a tap uses in the form holding focus.
+const composerForm = () => document.activeElement?.closest<HTMLFormElement>("form.composer-form") ?? null;
+const inComposerTitle = () => Boolean(document.activeElement?.closest(".quick-add-title")) && composerForm();
+const editorForm = () => document.activeElement?.closest<HTMLFormElement>(".task-editor form") ?? null;
+function press(scope: ParentNode | null, selector: string) {
+  const control = scope?.querySelector<HTMLButtonElement>(selector);
+  if (!control || control.disabled) return false;
+  control.click();
+}
+/** Opens Additional actions (unless open) and focuses one of its fields. */
+function metadataField(field: "priority" | "deadline") {
+  const form = inComposerTitle();
+  if (!form) return false;
+  const toggle = form.querySelector<HTMLElement>('[aria-label="Additional actions"]');
+  if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
+  requestAnimationFrame(() => form.querySelector<HTMLElement>(`[data-metadata-field="${field}"]`)?.focus());
+}
+/** Add task in the focused row's section (else the page's first list), at the bottom or switched to the top. */
+function addTask(edge: "top" | "bottom") {
+  const scope = activeRow()?.closest("section") ?? document.querySelector("main");
+  const trigger = scope?.querySelector<HTMLElement>("button.composer") ?? document.querySelector<HTMLElement>("main button.composer");
+  if (!trigger) return false;
+  const section = trigger.closest("section") ?? document;
+  trigger.click();
+  if (edge === "top") requestAnimationFrame(() => section.querySelector<HTMLElement>('form.composer-form [aria-label="Position: bottom"]')?.click());
+}
+
 /**
  * Ticket 19: the legacy global key handler. Keys typed into fields, while a
  * dialog or menu is open, during IME composition, or already handled (dnd-kit)
@@ -91,6 +118,22 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         requestAnimationFrame(() => row.querySelector<HTMLElement>(".select-box")?.click());
       },
       "task.toolbar": () => { const button = document.querySelector<HTMLElement>('[role="toolbar"] button'); if (!button) return false; button.focus(); },
+      "task.add-bottom": () => addTask("bottom"), "task.add-top": () => addTask("top"),
+      // Enter in a composer title: Add task (the next draft goes below the task just added).
+      "editor.submit-below": () => { const form = inComposerTitle(); return form ? press(form, 'button[type="submit"]') : false; },
+      "editor.save-above": () => {
+        const editor = editorForm();
+        if (editor) return press(editor, '[data-insert="above"]');
+        const form = composerForm();
+        if (!form || form.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled) return false;
+        form.dataset.direction = "above";
+        return press(form, 'button[type="submit"]');
+      },
+      "editor.save-below": () => press(editorForm(), '[data-insert="below"]'),
+      "editor.save": () => press(editorForm(), 'button[type="submit"]'),
+      "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"]'); if (!field) return false; field.focus(); },
+      "quick-add.actions": () => metadataField("priority"),
+      "quick-add.deadline": () => metadataField("deadline"),
     };
     const commands = dispatchCommands(handlers, id => effectiveBindings(id, effective, platform));
     const onKey = (event: KeyboardEvent) => {

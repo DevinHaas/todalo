@@ -38,8 +38,8 @@ const recurrenceInput = z.object({
 
 /**
  * The task the shared client can create: Today or Inbox (ticket 5), plus the
- * end time and repeat smart quick add detects (ticket 12). An end time without
- * a due date is refused by the route.
+ * end time and repeat smart quick add detects (ticket 12) and the composer's
+ * project, metadata and placement. An end time without a due date is refused by the route.
  */
 export const basicTaskInput = z.object({
   id: z.uuid(),
@@ -48,6 +48,14 @@ export const basicTaskInput = z.object({
   dueDate: z.iso.datetime({ offset: true }).nullable().optional(),
   dueDateEnd: z.iso.datetime({ offset: true }).nullable().optional(),
   recurrence: recurrenceInput.nullable().optional(),
+  // Composer metadata and destination (legacy TaskComposer): project/section,
+  // the Additional actions fields, and where a keyboard or "Save and add" insert goes.
+  projectId: z.string().min(1).max(200).nullable().optional(),
+  sectionId: z.string().min(1).max(200).nullable().optional(),
+  priority: z.number().int().min(1).max(4).optional(),
+  deadline: z.iso.datetime({ offset: true }).nullable().optional(),
+  labelIds: z.array(z.string().min(1).max(200)).max(50).optional(),
+  placement: z.object({ edge: z.enum(["top", "bottom", "above", "below"]), anchorId: z.string().min(1).max(200).optional() }).strict().optional(),
 });
 export type BasicTaskInput = z.infer<typeof basicTaskInput>;
 

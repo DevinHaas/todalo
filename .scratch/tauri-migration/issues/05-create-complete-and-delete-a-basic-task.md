@@ -35,3 +35,15 @@ Verified:
 Not verified: the result in the legacy web app against a real database, real
 Google Calendar effects, software keyboard on a device (simulator had a hardware
 keyboard), physical iPhone and Mac app.
+
+2026-10-20 — Composer parity: the shared composer gains the legacy Additional actions
+(priority, deadline, labels; `quick-add.actions`/`quick-add.deadline` keys) and a real
+project picker (Inbox + the account's projects) in place of the fixed Inbox pill.
+`POST /api/v1/tasks` (`basicTaskInput`) now also takes `projectId`, `sectionId`,
+`priority`, `deadline`, `labelIds` and `placement`, passed to the unchanged shared
+`createTask`; missing/foreign project, section, labels or anchor answer 400. The
+operation ID still covers the whole draft (retry dedup unchanged). Native
+`create_task` validates the new fields. Evidence: `apps/api/src/task-routes.test.ts`,
+`apps/client/src/quick-add.test.ts` (`composerFields`), `composer.test.ts`, `cargo test`
+(writes); browser QA against the isolated QA API: priority 2 + deadline + Urgent label
+saved, picker moved a Today draft to Errands.

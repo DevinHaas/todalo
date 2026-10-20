@@ -131,11 +131,13 @@ const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Do
  * With `labels` (the user's list) it shows the label checkboxes and sends the
  * checked set, limited to labels that still exist; without it labels are kept.
  */
-export function TaskEditor({ task, labels, shareUrl, onSave, onClose }: {
+export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert }: {
   task: TaskDto; labels?: { id: string; name: string }[];
   /** The resolved https task link (ticket 18); the legacy "Task link · Copy link" row shows once known. */
   shareUrl?: string;
   onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
+  /** Legacy inline editor's Save and add above/below: called once the save succeeds. */
+  onInsert?: (edge: "above" | "below") => void;
 }) {
   const [base, setBase] = useState(task);
   const [draft, setDraft] = useState(() => draftOf(task));
@@ -149,8 +151,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose }: {
   const changed = error instanceof AccountTransportError && error.code === "TASK_CHANGED";
   const choice = repeatChoice(draft.recurrence);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(event: FormEvent) { event.preventDefault(); await save(); }
+  async function save(after?: "above" | "below") {
     if (!draft.title.trim() || pending) return;
     setPending(true); setError(null);
     try {
@@ -162,6 +164,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose }: {
         recurrence: draft.recurrence,
         ...(labels && { labelIds: draft.labelIds.filter(id => labels.some(label => label.id === id)) }),
       });
+      if (after) onInsert?.(after);
     } catch (reason) {
       setError(reason instanceof Error ? reason : new Error("Your changes could not be saved. Try again."));
     } finally { setPending(false); }
@@ -212,6 +215,10 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose }: {
           </select></label>
         </fieldset>
         <div className="composer-actions">
+          {onInsert && <>
+            <button type="button" className="button outline" data-insert="above" disabled={pending || !draft.title.trim()} onClick={() => void save("above")}>Save and add above</button>
+            <button type="button" className="button outline" data-insert="below" disabled={pending || !draft.title.trim()} onClick={() => void save("below")}>Save and add below</button>
+          </>}
           <button type="button" className="button outline" disabled={pending} onClick={onClose}>Cancel</button>
           <button type="submit" className="button" disabled={pending || !draft.title.trim()}>{pending ? "Saving…" : "Save"}</button>
         </div>

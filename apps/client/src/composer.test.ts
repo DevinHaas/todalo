@@ -3,7 +3,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient } from "@tanstack/react-query";
 import { AccountTransportError } from "./errors";
-import { Composer, CustomRepeatDialog } from "./composer";
+import { Composer, ComposerChoices, CustomRepeatDialog } from "./composer";
+import { ProjectView } from "./project-views";
+import { TaskEditor } from "./views";
+import type { TaskDto } from "./tasks";
 import { browserSettingsTransport, settingsKeys, settingsMutations, type SettingsTransport } from "./settings";
 import { SmartDatesSetting } from "./settings-views";
 
@@ -22,6 +25,35 @@ describe("smart quick add composer", () => {
     const slot = render(createElement(Composer, { startOpen: true, destination: "Fri 16 Oct", dueDate: () => new Date(2026, 9, 16, 9).toISOString(), dueDateEnd: () => new Date(2026, 9, 16, 10).toISOString(), onCreate: async () => {} }));
     expect(slot).toContain('aria-label="Date: Fri 16 Oct 09:00-10:00"');
     expect(render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }))).toContain('aria-label="Date: No Date"');
+  });
+
+  it("offers a real project picker (Inbox first) and the Additional actions and position controls", () => {
+    const choices = { projects: [{ id: "work", name: "Work" }, { id: "errands", name: "Errands" }], labels: [{ id: "design", name: "Design" }] };
+    const html = render(createElement(ComposerChoices.Provider, { value: choices }, createElement(Composer, { startOpen: true, dueDate: () => null, projectId: "work", sectionId: "doing", placement: { edge: "bottom" }, onCreate: async () => {} })));
+    expect(html).toMatch(/<select aria-label="Project"><option value="">Inbox<\/option><option value="work" selected="">Work<\/option><option value="errands">Errands<\/option>/);
+    expect(html).toContain('aria-label="Additional actions" aria-expanded="false"');
+    expect(html).toContain(">Priority 4<");
+    expect(html).toContain('aria-label="Position: bottom"');
+    // An insert next to a task has no top/bottom toggle; projects still loading keep the composer's own.
+    const insert = render(createElement(Composer, { startOpen: true, dueDate: () => null, projectId: "work", placement: { edge: "below", anchorId: "t" }, onCreate: async () => {} }));
+    expect(insert).not.toContain("Position:");
+    expect(insert).toContain('<option value="work" selected="">This project</option>');
+  });
+
+  it("activates Add task in every project section", () => {
+    const work = { id: "work", name: "Work", color: null } as never;
+    const props = { state: { status: "success" as const, data: { project: work, sections: [{ id: "doing", projectId: "work", name: "Doing", sortOrder: 0 }], tasks: [] }, error: null }, onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false, error: null } };
+    const html = render(createElement(ProjectView, { ...props, onCreate: async () => {} } as never));
+    expect(html.match(/<button type="button" class="composer">/g)).toHaveLength(2);
+    expect(render(createElement(ProjectView, props as never))).toContain('<span class="composer" aria-disabled="true">');
+  });
+
+  it("shows Save and add above/below in the editor only when it can insert", () => {
+    const task = { id: "t", title: "Plan", description: null, status: "todo", priority: 4, projectId: "work", sectionId: null, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: "2026-10-20T00:00:00.000Z" } as unknown as TaskDto;
+    const html = render(createElement(TaskEditor, { task, onSave: async () => {}, onClose: noop, onInsert: noop }));
+    expect(html).toContain('data-insert="above"');
+    expect(html).toContain(">Save and add below<");
+    expect(render(createElement(TaskEditor, { task, onSave: async () => {}, onClose: noop }))).not.toContain("Save and add");
   });
 
   it("opens the legacy custom repeat dialog seeded from the current rule", () => {

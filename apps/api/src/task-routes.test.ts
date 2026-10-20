@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TaskRecord } from "@todalo/server/task-dto";
 import { MissingReferenceError } from "@todalo/server/metadata-input";
-import { createTaskRoutes } from "./task-routes";
+import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
+import { createTaskRoutes, type TaskWrites } from "./task-routes";
 
 type Row = TaskRecord & { userId: string };
 const row = (id: string, userId: string, extra: Partial<TaskRecord> = {}): Row => ({
@@ -12,6 +13,7 @@ const row = (id: string, userId: string, extra: Partial<TaskRecord> = {}): Row =
 let rows: Row[] = [];
 const seen: string[] = [];
 const completions: { occurrence?: Date | null; operationId?: string }[] = [];
+const creates: Parameters<TaskWrites["create"]>[1][] = [];
 const edits: unknown[] = [];
 const VERSION = "2026-10-04T08:00:00.000Z";
 beforeEach(() => { rows = [row("alice-task", "alice", { updatedAt: new Date(VERSION) }), row("bob-task", "bob")]; completions.length = 0; edits.length = 0; });
@@ -25,6 +27,8 @@ const app = createTaskRoutes({
   allowedOrigins: new Set([ORIGIN]),
   // Operation-ID semantics of @todalo/server/tasks (covered against the database boundary there).
   create: async (userId, input) => {
+    creates.push(input);
+    if (input.projectId === "missing-project") throw new TaskOrganizationError("Project not found", "missing");
     const existing = rows.find(task => task.id === input.id);
     if (existing) return existing.userId === userId ? { task: existing, created: false } : null;
     const task = row(input.id, userId, { title: input.title, description: input.description ?? null, dueDate: input.dueDate ?? null, dueDateEnd: input.dueDateEnd ?? null, recurrence: input.recurrence ?? null, labelIds: [] });
@@ -129,6 +133,16 @@ describe("task write API", () => {
     });
   });
 
+  it("passes the composer's project, section, metadata and placement to the shared create", async () => {
+    creates.length = 0;
+    const body = { id: ID, title: "Draft", dueDate: null, projectId: "work", sectionId: "doing", priority: 2, deadline: "2026-10-20T00:00:00.000+02:00", labelIds: ["design"], placement: { edge: "below", anchorId: "alice-task" } };
+    expect((await send("POST", "/api/v1/tasks", { user: "alice", body })).status).toBe(201);
+    expect(creates[0]).toMatchObject({ projectId: "work", sectionId: "doing", priority: 2, deadline: "2026-10-20T00:00:00.000+02:00", labelIds: ["design"], placement: { edge: "below", anchorId: "alice-task" } });
+    // A missing or foreign project, section or anchor is refused like any bad reference.
+    const missing = await send("POST", "/api/v1/tasks", { user: "alice", body: { id: "8f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11", title: "Lost", projectId: "missing-project" } });
+    expect(missing.status).toBe(400);
+  });
+
   it("validates the basic task body", async () => {
     const repeat = { n: 1, unit: "day", basedOn: "scheduled", until: null };
     for (const body of [
@@ -136,6 +150,8 @@ describe("task write API", () => {
       { id: ID, title: "Plan", dueDate: null, dueDateEnd: "2026-10-15T09:30:00.000Z" }, { id: ID, title: "Plan", dueDateEnd: "2026-10-15T09:30:00.000Z" },
       { id: ID, title: "Plan", recurrence: { ...repeat, n: 0 } }, { id: ID, title: "Plan", recurrence: { ...repeat, unit: "fortnight" } },
       { id: ID, title: "Plan", recurrence: { ...repeat, userId: "bob" } }, { id: ID, title: "Plan", recurrence: { ...repeat, until: "soon" } },
+      { id: ID, title: "Plan", priority: 5 }, { id: ID, title: "Plan", deadline: "friday" }, { id: ID, title: "Plan", labelIds: "design" },
+      { id: ID, title: "Plan", placement: { edge: "middle" } }, { id: ID, title: "Plan", placement: { edge: "top", userId: "bob" } },
     ]) {
       const response = await send("POST", "/api/v1/tasks", { user: "alice", body });
       expect(response.status, JSON.stringify(body)).toBe(400);

@@ -39,7 +39,7 @@ function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) 
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog">
       <Composer startOpen dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
-      {added && <p role="status" className="state">Added “{added.title}” to Inbox. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
+      {added && <p role="status" className="state">Added “{added.title}”{added.projectId ? "" : " to Inbox"}. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
     </div>
   </div>;
 }
@@ -126,6 +126,8 @@ export function TaskScreen({ account }: { account: Account }) {
   const writes = useTaskWrites(account.user.id);
   // Legacy TaskDetailPage opens the edit dialog on arrival; closing it keeps the page.
   const [closedFor, setClosedFor] = useState<string | null>(null);
+  // Save and add above/below: the editor closes and a composer adds next to this task.
+  const [inserting, setInserting] = useState<{ edge: "above" | "below"; task: TaskDto } | null>(null);
   const actions: RowActions = {
     complete: writes.actions.complete,
     remove: (task) => writes.remove.mutate(task, { onSuccess: () => navigate("/today", { replace: true }) }),
@@ -134,8 +136,13 @@ export function TaskScreen({ account }: { account: Account }) {
   const labels = useQuery(metadataReads.list(account.user.id));
   // Resolved before the tap: WebKit only allows clipboard writes inside the gesture.
   const link = useQuery({ queryKey: ["user", account.user.id, "task-link", id], queryFn: () => taskUrl(id), staleTime: Infinity });
-  const editor = closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} shareUrl={link.data} onClose={() => setClosedFor(id)}
-    onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }} />;
+  const editor = inserting?.task.id === id ? <section className="task-insert" aria-label={`Add task ${inserting.edge} ${inserting.task.title}`}>
+    <Composer key={inserting.edge} startOpen projectId={inserting.task.projectId} sectionId={inserting.task.sectionId} placement={{ edge: inserting.edge, anchorId: id }}
+      dueDate={() => inserting.task.dueDate ? new Date(new Date(inserting.task.dueDate).setHours(0, 0, 0, 0)).toISOString() : null}
+      onCancel={() => setInserting(null)} onCreate={(task) => writes.create.mutateAsync(task)} />
+  </section> : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={labels.data?.labels} shareUrl={link.data} onClose={() => setClosedFor(id)}
+    onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }}
+    onInsert={(edge) => setInserting({ edge, task: query.data! })} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
     onEdit={() => setClosedFor(null)} editor={editor}
     organize={(task) => <TaskOrganizerScreen userId={account.user.id} task={task} />}

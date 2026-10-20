@@ -7,7 +7,7 @@ import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
 import { FilterScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
-import { SmartDatesProvider } from "./settings-screen";
+import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
 
 export default function App() {
@@ -45,7 +45,7 @@ export default function App() {
   // Signed-out screens leave the URL untouched, so a requested route opens after sign-in.
   if (state.status === "signed-in" && state.account) {
     const account = state.account;
-    return <BrowserRouter><SmartDatesProvider userId={account.user.id}><Routes>
+    return <BrowserRouter><SmartDatesProvider userId={account.user.id}><ComposerChoicesProvider userId={account.user.id}><Routes>
       <Route element={<Shell account={account} />}>
         <Route path="/today" element={<TodayScreen account={account} />} />
         <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
@@ -61,7 +61,7 @@ export default function App() {
         <Route path="/search" element={<SearchScreen account={account} />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
-    </Routes></SmartDatesProvider></BrowserRouter>;
+    </Routes></ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
   }
 
   return <main className="centered"><section className="account-panel" aria-busy={pending || state.status === "loading"}>

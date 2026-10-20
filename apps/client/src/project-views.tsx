@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
-import { treeOrder, type TaskDto } from "./tasks";
-import { Failure, TaskRow, type ReadState, type SelectionSlots } from "./views";
+import { treeOrder, type NewTask, type TaskDto } from "./tasks";
+import { Composer, Failure, TaskRow, type ReadState, type SelectionSlots } from "./views";
 import { SortableRow, SortableTasks } from "./bulk-views";
 import { reorderAnchor, type ReorderPosition } from "./bulk";
 import type { ProjectDetailDto, ProjectDto } from "./projects";
@@ -40,13 +40,15 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
 /** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
 export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout }: {
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate }: {
   state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
   sections?: SectionActions; now?: Date;
   /** Ticket 15: selection and bulk toolbar, and drag/keyboard reordering within a section. */
   selection?: SelectionSlots; reorder?: (task: TaskDto, anchorId: string, position: ReorderPosition) => void;
   /** Ticket 17: Board or Calendar from Display, over every project task, in place of the section list. */
   layout?: (tasks: TaskDto[]) => ReactNode;
+  /** Legacy per-section TaskComposer; without it "Add task" stays the inert placeholder. */
+  onCreate?: (task: NewTask) => Promise<unknown>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState<string | null>(null);
@@ -107,7 +109,9 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
           }}>{grouped.map(task => <SortableRow key={task.id} id={task.id} title={task.title}>{row(task)}</SortableRow>)}</SortableTasks>
           : grouped.map(row)}
         {!section && open.length === 0 && <p className="state">No open tasks in this project.</p>}
-        <span className="composer" aria-disabled="true"><Plus />Add task</span>
+        {onCreate
+          ? <Composer dueDate={() => null} projectId={project.id} sectionId={section?.id ?? null} placement={{ edge: "bottom" }} onCreate={onCreate} />
+          : <span className="composer" aria-disabled="true"><Plus />Add task</span>}
       </>}
     </section>)}</div>}
   </div>;

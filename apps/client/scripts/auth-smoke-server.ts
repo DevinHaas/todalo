@@ -139,8 +139,20 @@ const app = createAuthRoutes(auth).use(qaCalendarRoutes({ verify: verifySession,
     const created = task(input.id, userId, input.title, {
       description: input.description ?? null, dueDate: input.dueDate ? new Date(input.dueDate) : null, dueDateEnd: input.dueDateEnd ? new Date(input.dueDateEnd) : null,
       recurrence: input.recurrence ? { ...input.recurrence, until: input.recurrence.until ? new Date(input.recurrence.until) : null } : null,
+      projectId: input.projectId ?? null, sectionId: input.sectionId ?? null, priority: input.priority ?? 4,
+      deadline: input.deadline ? new Date(input.deadline) : null, labelIds: input.labelIds ?? [],
     });
-    tasks.push(created);
+    // Ownership as @todalo/server createTask: project, section (in that project), labels, anchor.
+    if (created.projectId && !projects.some(row => row.userId === userId && row.id === created.projectId)) throw new MissingReferenceError("Project not found");
+    if (created.sectionId && !sections.some(row => row.userId === userId && row.id === created.sectionId && row.projectId === created.projectId)) throw new MissingReferenceError("Section not found");
+    if (created.labelIds.some(label => !labels.some(row => row.userId === userId && row.id === label))) throw new MissingReferenceError();
+    // Array order is the manual order (qa-projects): top/bottom of the project, or next to the anchor.
+    const collection = tasks.filter(item => item.userId === userId && (item.projectId ?? null) === created.projectId);
+    const { edge, anchorId } = input.placement ?? { edge: "bottom" };
+    const anchor = collection.find(item => item.id === anchorId);
+    if ((edge === "above" || edge === "below") && !anchor) throw new MissingReferenceError("Task not found");
+    const at = edge === "top" ? collection[0] : edge === "above" ? anchor : edge === "below" ? tasks[tasks.indexOf(anchor!) + 1] : undefined;
+    tasks.splice(at ? tasks.indexOf(at) : tasks.length, 0, created);
     ambiguous(`create:${input.id}`);
     return { task: created, created: true };
   },

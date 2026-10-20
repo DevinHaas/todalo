@@ -27,6 +27,19 @@ describe("client keyboard commands", () => {
     expect(new KeyboardDispatcher().dispatch(key("j"), commands(), "today").consumed).toBe(false);
   });
 
+  it("runs composer and editor commands while typing in a dialog, and passes the key on when they decline", () => {
+    const save = vi.fn(); const submit = vi.fn(() => false); const details = vi.fn();
+    const editing = dispatchCommands({ "editor.save-below": save, "editor.submit-below": submit, "task.details": details, "general.capture": vi.fn() }, id => effectiveBindings(id, defaultPreferences(), "mac"));
+    const dispatcher = new KeyboardDispatcher();
+    expect(dispatcher.dispatch(key("Enter", { shiftKey: true }), editing, "task", 0, { typing: true, modal: true }).commandId).toBe("editor.save-below");
+    // Enter outside a composer title declines, so the focused row's Enter (details) still runs…
+    expect(dispatcher.dispatch(key("Enter"), editing, "today", 0).commandId).toBe("task.details");
+    // …and inside any other field it stays the field's own Enter.
+    expect(dispatcher.dispatch(key("Enter"), editing, "today", 0, { typing: true }).consumed).toBe(false);
+    expect(dispatcher.dispatch(key("q"), editing, "today", 0, { typing: true }).consumed).toBe(false);
+    expect(details).toHaveBeenCalledTimes(1);
+  });
+
   it("never fires in editable fields or behind an open dialog", () => {
     const dispatcher = new KeyboardDispatcher();
     expect(dispatcher.dispatch(key("q"), commands(), "today", 0, { typing: true }).consumed).toBe(false);

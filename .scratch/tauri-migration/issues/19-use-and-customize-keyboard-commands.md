@@ -16,3 +16,19 @@ Published from the approved implementation proposal on 2026-10-04. Eligibility r
 Evidence: `packages/ramble/src/keyboard.test.ts` (Mac-reserved keys), `packages/server/src/keyboard.test.ts`, `apps/api/src/settings-routes.test.ts` (ownership, 400/401/403), `apps/client/src/keyboard.test.ts` (binding matching, sequences, editable/dialog/IME guards, row movement, transport, view labels); `cargo test`; root `bun run typecheck` and `bun run test` green. Browser QA (isolated QA API, Chromium, Mac profile): j/X/comma on Today, ? help with focus into search and restore on Escape, q typed inside dialogs stays text, q opens Add task without typing into it, o then s opens settings, recording Cmd+H shows the macOS-reserved error and disables Save, recording g shows prefix conflicts, a saved custom key survives reload and works, E completes, Cmd+Backspace deletes and refocuses, Enter opens the task.
 
 Not verified / not wired: Mac app run (Tauri default menu interception), iPhone/iPad hardware keyboards, VoiceOver on device; legacy-only commands without a client feature or with their own dialogs (task date/priority/labels/deadline keys, move/nest, sorting, layout, Upcoming/calendar week keys, add top/bottom, inline editor keys) keep their touch controls but no keys yet — they remain listed in the legacy web settings.
+
+2026-10-20 — Wired (each presses the visible control a tap uses): `task.add-bottom` (A:
+the focused section's, else the page's, Add task), `task.add-top` (Shift+A: same, then the
+position toggle to top), `editor.submit-below` (Enter in a composer title: Add task, next
+draft below), `editor.save-above` (Ctrl+Enter: composer Add task with the next draft
+above / editor "Save and add above"), `editor.save-below` (Shift+Enter: "Save and add
+below"), `editor.save` (Cmd/Ctrl+Enter: Save), `quick-add.description` (ArrowDown),
+`quick-add.actions` (Shift+ArrowDown: Additional actions, focus Priority),
+`quick-add.deadline` ({: Additional actions, focus Deadline). Composer/editor commands are
+allowed in fields and dialogs and decline outside their form, so Enter elsewhere keeps its
+own meaning (`apps/client/src/keyboard.test.ts`). Browser QA (Chromium, Mac profile): all
+of the above on Today, a project and task pages.
+
+Still not wired: row-level date/priority/labels/deadline keys (t, y, 1–4, l, d, Shift+T/D),
+`editor.previous/next` (the client editor opens on the task page, not over a list),
+move/nest, sorting, layout and Upcoming/calendar week keys.

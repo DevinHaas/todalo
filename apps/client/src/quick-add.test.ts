@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialSyncState, syncQuickAddFields } from "@todalo/ramble/quick-add-sync";
-import { dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor } from "./quick-add";
+import { composerFields, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor } from "./quick-add";
 
 const now = new Date(2026, 9, 15, 10); // Thursday 15 Oct 2026
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
@@ -42,5 +42,21 @@ describe("smart quick add", () => {
     ]);
     expect(quickDateOptions(new Date(2026, 9, 17)).find(option => option.label === "This weekend")?.date.getDate()).toBe(24);
     expect(repeatPresetsFor(new Date(2026, 9, 22)).map(preset => preset.label)).toEqual(["Every day", "Every week on Thursday", "Every month on the 22nd"]);
+  });
+});
+
+describe("composer metadata and destination", () => {
+  const blank = { priority: 4, deadline: "", labelIds: [] };
+  it("omits the legacy defaults (Inbox, priority 4, no deadline or labels)", () => {
+    expect(composerFields(blank, null, { projectId: null, sectionId: null })).toEqual({});
+  });
+  it("sends the Additional actions and the composer's project, section and placement", () => {
+    expect(composerFields({ priority: 1, deadline: "2026-10-20", labelIds: ["design"] }, "work", { projectId: "work", sectionId: "doing", placement: { edge: "below", anchorId: "a" } })).toEqual({
+      projectId: "work", sectionId: "doing", priority: 1, deadline: new Date(2026, 9, 20).toISOString(), labelIds: ["design"], placement: { edge: "below", anchorId: "a" },
+    });
+  });
+  it("drops the section and position when the project picker moves the task elsewhere", () => {
+    expect(composerFields(blank, "errands", { projectId: "work", sectionId: "doing", placement: { edge: "top" } })).toEqual({ projectId: "errands" });
+    expect(composerFields(blank, null, { projectId: "work", sectionId: "doing", placement: { edge: "bottom" } })).toEqual({});
   });
 });

@@ -6,6 +6,7 @@ import { db } from "@todalo/db";
 import { taskLabels, tasks } from "@todalo/db/schema";
 import { assertTaskParent } from "@todalo/db/task-parent";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
+import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
 import { deleteTaskFromCalendar, pushTaskToCalendar } from "./calendar";
 import { assertOwnedLabels, replaceTaskLabels } from "./task-labels";
 import { createTaskInput, updateTaskInput, type CreateTaskInput, type UpdateTaskInput } from "./task-input";
@@ -51,7 +52,7 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
   if (placement) {
     const collection = await db.select({ id: tasks.id, sortOrder: tasks.sortOrder, projectId: tasks.projectId }).from(tasks).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`)).orderBy(asc(tasks.sortOrder));
     const anchor = collection.find(task => task.id === placement.anchorId);
-    if ((placement.edge === "above" || placement.edge === "below") && !anchor) throw new Error("Task not found");
+    if ((placement.edge === "above" || placement.edge === "below") && !anchor) throw new TaskOrganizationError("Task not found", "missing");
     sortOrder = placement.edge === "top" ? (collection[0]?.sortOrder ?? 0) - 1 : placement.edge === "bottom" ? (collection.at(-1)?.sortOrder ?? -1) + 1 : anchor!.sortOrder + (placement.edge === "below" ? 1 : 0);
     if (anchor) await db.update(tasks).set({ sortOrder: sql`${tasks.sortOrder} + 1` }).where(and(eq(tasks.userId, userId), data.projectId ? eq(tasks.projectId, data.projectId) : sql`${tasks.projectId} is null`, sql`${tasks.sortOrder} >= ${sortOrder}`));
   }

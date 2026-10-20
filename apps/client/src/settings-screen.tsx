@@ -1,14 +1,22 @@
 import { useMemo, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { settings, settingsReads } from "./runtime";
+import { metadataReads, projectReads, settings, settingsReads } from "./runtime";
 import { settingsMutations } from "./settings";
-import { SmartDates } from "./composer";
+import { ComposerChoices, SmartDates } from "./composer";
 import { SmartDatesSetting } from "./settings-views";
 
 /** Provides the signed-in account's smart date setting to every composer. */
 export function SmartDatesProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const query = useQuery(settingsReads.settings(userId));
   return <SmartDates.Provider value={query.data?.smartDateRecognition ?? false}>{children}</SmartDates.Provider>;
+}
+
+/** Provides the account's projects and labels to every composer's picker and Additional actions. */
+export function ComposerChoicesProvider({ userId, children }: { userId: string; children: ReactNode }) {
+  const projects = useQuery(projectReads.list(userId));
+  const metadata = useQuery(metadataReads.list(userId));
+  const value = useMemo(() => ({ projects: projects.data, labels: metadata.data?.labels }), [projects.data, metadata.data]);
+  return <ComposerChoices.Provider value={value}>{children}</ComposerChoices.Provider>;
 }
 
 export function SmartDatesSettingScreen({ userId }: { userId: string }) {

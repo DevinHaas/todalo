@@ -32,3 +32,11 @@ Verified:
 Not verified: the shell's software-keyboard handling with the software keyboard
 (Simulator UI control denied — steps in the QA doc), physical iPhone, Mac app, the
 legacy web app against a database, real Google Calendar.
+
+2026-10-20 — Save and add above/below (legacy inline editor `onInsert`): the task
+editor saves, closes, and opens a composer on the task page anchored above/below the
+task (its project, section and day), with the server's `placement` semantics; each
+add re-anchors the next draft below (Enter) or above (Ctrl+Enter) the task just added.
+Keys: Shift+Enter / Ctrl+Enter press the two buttons, Cmd/Ctrl+Enter presses Save.
+Browser QA: "Below future QA" landed right after "Future fixture task", "Above undated
+QA" right before "Undated fixture task".

@@ -71,6 +71,8 @@ export const clientCommandIds = [
   "navigation.settings", "navigation.account", "navigation.help", "navigation.theme",
   "task.previous", "task.next", "view.first", "view.last",
   "task.details", "task.edit", "task.complete", "task.delete", "task.select", "task.toolbar",
+  "task.add-bottom", "task.add-top", "editor.submit-below", "editor.save-below", "editor.save-above", "editor.save",
+  "quick-add.description", "quick-add.actions", "quick-add.deadline",
 ] as const;
 export type ClientCommandId = typeof clientCommandIds[number];
 export const clientCommands = keyboardCommands.filter(command => (clientCommandIds as readonly string[]).includes(command.id));
@@ -95,6 +97,8 @@ export function adjacentRow<T>(rows: T[], current: T | null, step: number): T | 
 export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () => void | boolean>>, bindings: (id: string) => string[]): DispatchCommand[] {
   return clientCommands.flatMap(command => {
     const handle = handlers[command.id as ClientCommandId];
-    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, handle }] : [];
+    // Composer and editor keys work in their fields and dialogs; their handlers decline elsewhere.
+    const owned = command.context === "editor" || command.context === "quick-add";
+    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned, allowInModal: owned, handle }] : [];
   });
 }

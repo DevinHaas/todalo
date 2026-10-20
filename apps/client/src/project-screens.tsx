@@ -12,6 +12,7 @@ import { treeOrder, type TaskDto } from "./tasks";
 import { useDisplay } from "./schedule-views";
 import { ProjectCalendar } from "./schedule-screens";
 import { BoardScreen } from "./board-screens";
+import { useTaskWrites } from "./task-writes";
 
 
 function useProjectMutations(userId: string) {
@@ -38,6 +39,7 @@ export function ProjectScreen({ account }: { account: Account }) {
   const removeSection = useMutation(organization.removeSection);
   const selection = useBulkSelection(account.user.id, query.data ? treeOrder(query.data.tasks.filter(task => task.status !== "done")) : []);
   const order = useReorder(account.user.id);
+  const tasks = useTaskWrites(account.user.id);
   const pending = rename.isPending || remove.isPending || createSection.isPending || removeSection.isPending;
   // Legacy ProjectView handed Board and Calendar the tasks Display shows (completed only when switched on).
   const display = useDisplay();
@@ -57,5 +59,6 @@ export function ProjectScreen({ account }: { account: Account }) {
     reorder={order.reorder}
     layout={layout}
     files={<ProjectFilesScreen userId={account.user.id} projectId={id} />}
+    onCreate={(task) => tasks.create.mutateAsync(task)}
   />;
 }

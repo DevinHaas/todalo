@@ -32,3 +32,9 @@ Verified:
 
 Not verified: native commands in the iOS Simulator or Mac app, physical devices, the
 legacy web app against a database, keyboard shortcuts (ticket 19), an Inbox list view.
+
+2026-10-20 — Add task inside a project and per section (legacy ProjectView
+`<TaskComposer projectId sectionId>`): every project group has a working composer
+that creates in that project/section at the bottom, with an "Add at bottom / Add at
+top" position toggle. Browser QA: a Doing draft landed last in Doing; Shift+A from a
+focused root row added "Top QA" first in Tasks.
