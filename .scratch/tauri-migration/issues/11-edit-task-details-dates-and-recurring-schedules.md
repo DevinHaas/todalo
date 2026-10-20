@@ -40,3 +40,18 @@ add re-anchors the next draft below (Enter) or above (Ctrl+Enter) the task just 
 Keys: Shift+Enter / Ctrl+Enter press the two buttons, Cmd/Ctrl+Enter presses Save.
 Browser QA: "Below future QA" landed right after "Future fixture task", "Above undated
 QA" right before "Undated fixture task".
+
+2026-10-20 — Edit dialog over the list (legacy TaskKeyboardProvider): a row title tap
+or Enter opens the editor over Today, Upcoming, Inbox, projects, labels, filters and
+search without changing the URL (`/tasks/:id` stays for links and modified clicks).
+Previous/Next and Cmd+↑/↓ walk the page's visible rows; Save and add above/below opens
+the composer inline next to the row and follows each task just added; closing (Escape,
+Cancel, Save) refocuses the row. Stale edits keep the Load current details / Keep my
+changes choice. Composer: description behind "Add description", disabled Reminders and
+Attachment pills (legacy stubs). Browser QA (isolated QA API, Chromium 1280 and 390×844):
+Inbox "Daily standup notes" → Next → Cmd+↑ → Escape (row focused, URL `/inbox`);
+Save and add below → "Chain one", "Chain two" landed in order under it; a second tab's
+`/tasks/overdue-review` save then this tab's save showed the TASK_CHANGED choice and Keep
+my changes saved. 390×844 with a simulated 336 px `--keyboard-inset`: the dialog scrolls
+and Save stays reachable. Screenshots: `docs/qa/tauri-task-editing/dialog-*.png`,
+`composer-add-description.png`. Not verified: a real iOS software keyboard.

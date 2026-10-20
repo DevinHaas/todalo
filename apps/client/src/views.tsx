@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronDown, Hash, Inbox, Plus, X } from "lucide-react";
 import {
@@ -40,23 +40,38 @@ export const collapsedTasks = {
   toggle(id: string) { const next = new Set(collapsed); if (!next.delete(id)) next.add(id); collapsedTasks.set(next); },
 };
 
+/**
+ * The edit dialog over the list (legacy TaskKeyboardProvider, shell.tsx): a
+ * title tap opens it without leaving the page, and `slot` places Save and
+ * add's composer above or below its row. Without it a title is a plain link.
+ */
+export interface TaskDialog { open(id: string): void; slot(id: string, edge: "above" | "below"): ReactNode }
+export const TaskDialogs = createContext<TaskDialog | null>(null);
+
 export function TaskRow({ task, now, projectName, actions, selection }: { task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection }) {
   const isCollapsed = () => Boolean(task.parentId && collapsed.has(task.parentId));
   const hidden = useSyncExternalStore(collapsedTasks.subscribe, isCollapsed, isCollapsed);
-  return <div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+  const dialog = useContext(TaskDialogs);
+  // A plain click (tap, Enter) opens the dialog; a modified click keeps the /tasks/:id link (new tab).
+  const open = dialog ? (event: MouseEvent) => {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    dialog.open(task.id);
+  } : undefined;
+  return <>{dialog?.slot(task.id, "above")}<div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" onClick={() => actions.complete(task)} />
       : <span className="checkbox" aria-hidden="true" />}
-    <Link to={`/tasks/${encodeURIComponent(task.id)}`} className="task-title">{task.title}</Link>
+    <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}</Link>
     {task.dueDate && <span className={isOverdue(task, now) ? "pill overdue" : "pill"}>{dueLabel(task.dueDate)}</span>}
     {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}>P{task.priority}</span>}
     {task.deadline && <span className="pill">Deadline {deadlineLabel(task.deadline)}</span>}
     {task.labelIds.length > 0 && <span className="pill">{task.labelIds.length} label{task.labelIds.length > 1 ? "s" : ""}</span>}
     <span className="pill project">{projectName ? <Hash /> : <Inbox />}{projectName ?? "Inbox"}</span>
     {actions && <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => actions.remove(task)}><X /></button>}
-  </div>;
+  </div>{dialog?.slot(task.id, "below")}</>;
 }
 
 // The task composer with smart quick add (tickets 5, 12) lives in composer.tsx.

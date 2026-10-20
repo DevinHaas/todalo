@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { AudioLines, CalendarIcon, Flag, Inbox, MoreHorizontal, Plus, Sun, X } from "lucide-react";
+import { AlarmClock, AudioLines, CalendarIcon, Flag, Inbox, MoreHorizontal, Paperclip, Plus, Sun, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
@@ -54,7 +54,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   dueDateEnd?: () => string | null;
   /** Date pill text while the seeded date is kept (Upcoming days, schedule slots). */
   destination?: string;
-  onCreate: (task: NewTask) => Promise<unknown>;
+  /** `direction`: where the next draft goes (below the task just added, or above it). */
+  onCreate: (task: NewTask, direction: "above" | "below") => Promise<unknown>;
   onCancel?: () => void;
   startOpen?: boolean;
   /** Overrides the SmartDates context (tests). */
@@ -77,6 +78,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const [title, setTitle] = useState("");
   const [parsedTitle, setParsedTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [describing, setDescribing] = useState(false);
   const [rejected, setRejected] = useState<ReadonlySet<string>>(new Set());
   const [sync, dispatch] = useReducer(syncQuickAddFields, undefined, seed);
   const [seeded] = useState(() => scheduleOf(sync).date);
@@ -102,7 +104,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const schedule = scheduleOf(sync);
 
   const reset = () => {
-    setTitle(""); setParsedTitle(""); setDescription(""); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
+    setTitle(""); setParsedTitle(""); setDescription(""); setDescribing(false); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
     setMetadata({ priority: 4, deadline: "", labelIds: [] }); operation.current = null;
   };
   const close = () => { setOpen(false); reset(); setError(null); setScheduling(false); setActionsOpen(false); setPosition(placement); onCancel?.(); };
@@ -150,7 +152,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     setPending(true); setError(null);
     try {
       const created = operation.current.id;
-      await onCreate({ id: created, ...task });
+      await onCreate({ id: created, ...task }, direction);
       if (task.placement) setPosition({ edge: direction, anchorId: created });
       reset(); setScheduling(false);
       input.current?.focus();
@@ -175,13 +177,18 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         <input ref={input} autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" autoComplete="off" value={title}
           onChange={(event) => setTitle(event.target.value)} onScroll={syncScroll} onSelect={syncScroll} />
       </div>
-      <input aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
+      {/* Legacy hides the description until asked for. */}
+      {describing ? <input autoFocus aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
+        : <button type="button" className="text-action add-description" onClick={() => setDescribing(true)}>Add description</button>}
       <div className="composer-pills">
         <button type="button" className={schedule.date ? "button outline small set" : "button outline small"} aria-expanded={scheduling} aria-label={`Date: ${label}${time ? ` ${time}` : ""}`} onClick={() => setScheduling(value => !value)}>
           {today ? <Sun /> : <CalendarIcon />}{label}{time && ` ${time}`}
         </button>
         {schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}
         <button type="button" className={metadata.priority !== 4 ? "button outline small set" : "button outline small"} onClick={() => setActionsOpen(true)}><Flag />Priority {metadata.priority}</button>
+        {/* ponytail: legacy stub pills, no feature behind them yet. */}
+        <button type="button" className="button outline small" disabled><AlarmClock />Reminders</button>
+        <button type="button" className="button outline small" disabled><Paperclip />Attachment</button>
         <button type="button" className="icon-button small" aria-label="Additional actions" aria-expanded={actionsOpen} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal /></button>
         {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="button outline small" aria-label={`Position: ${position.edge}`}
           onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}

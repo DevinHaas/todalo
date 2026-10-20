@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { ShortcutHelp, ShortcutSettings, TaskMenu } from "./keyboard-views";
-import { collapsedTasks, TaskRow } from "./views";
+import { collapsedTasks, TaskDialogs, TaskRow } from "./views";
 import { focusDialog } from "./organization-views";
 import type { TaskDto } from "./tasks";
 import { adjacentRow, browserKeyboardTransport, clientCommands, detectPlatform, dispatchCommands, isEditable } from "./keyboard";
@@ -152,6 +152,17 @@ describe("task menu, folding and dialog focus", () => {
     expect(row(task("parent"))).not.toContain(" hidden=\"\"");
     collapsedTasks.toggle("parent");
     expect(row(task("child", "parent"))).not.toContain(" hidden=\"\"");
+  });
+
+  it("renders Save and add's composer above/below its row and keeps the title's deep link", () => {
+    const dialog = { open() {}, slot: (id: string, edge: string) => id === "a" ? createElement("p", null, `composer ${edge}`) : null };
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(TaskDialogs.Provider, { value: dialog }, createElement(TaskRow, { task: task("a"), now: new Date() }))));
+    const at = html.indexOf('data-task-id="a"');
+    expect(html.indexOf("composer above")).toBeGreaterThan(-1);
+    expect(html.indexOf("composer above")).toBeLessThan(at);
+    expect(html.indexOf("composer below")).toBeGreaterThan(at);
+    expect(html).toContain('href="/tasks/a"');
+    expect(row(task("b"))).not.toContain("composer");
   });
 
   it("offers the legacy Task actions, the first one focused", () => {

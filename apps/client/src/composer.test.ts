@@ -40,6 +40,14 @@ describe("smart quick add composer", () => {
     expect(insert).toContain('<option value="work" selected="">This project</option>');
   });
 
+  it("hides the description behind Add description and shows the legacy disabled Reminders/Attachment pills", () => {
+    const html = render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }));
+    expect(html).not.toContain('aria-label="Description"');
+    expect(html).toContain(">Add description</button>");
+    expect(html).toMatch(/<button type="button" class="button outline small" disabled="">.*Reminders<\/button>/);
+    expect(html).toMatch(/<button type="button" class="button outline small" disabled="">.*Attachment<\/button>/);
+  });
+
   it("activates Add task in every project section", () => {
     const work = { id: "work", name: "Work", color: null } as never;
     const props = { state: { status: "success" as const, data: { project: work, sections: [{ id: "doing", projectId: "work", name: "Doing", sortOrder: 0 }], tasks: [] }, error: null }, onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false, error: null } };

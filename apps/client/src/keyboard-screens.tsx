@@ -142,16 +142,11 @@ function moveDialog() {
     afterDialogs(() => { if (start) document.querySelector<HTMLElement>("[data-selection-stop]")?.click(); requestAnimationFrame(() => refocus(row, index)); });
   })();
 }
-/** Previous/next task while editing: the task list the editor was opened from (row title taps and Enter record it). */
-let openedFrom: string[] = [];
-const recordList = (event: Event) => {
-  const title = (event.target as Element | null)?.closest?.(`main [data-task-id] :is(${TITLE})`);
-  if (title) openedFrom = visibleRows().map(row => row.dataset.taskId!);
-};
-/** The task before (-1) or after (1) `id` in that list, if any. */
+/** Previous/next task while editing: the task before (-1) or after (1) `id` among the page's visible rows (legacy editor over its list). */
 export const taskNeighbour = (id: string, step: -1 | 1): string | undefined => {
-  const index = openedFrom.indexOf(id);
-  return index < 0 ? undefined : openedFrom[index + step];
+  const rows = visibleRows();
+  const index = rows.findIndex(row => row.dataset.taskId === id);
+  return index < 0 ? undefined : rows[index + step]?.dataset.taskId;
 };
 
 /**
@@ -169,8 +164,20 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const handlers = useRef<Partial<Record<ClientCommandId, () => void | boolean>>>({});
   // Collapsed sub-tasks are page state (legacy provider per page).
-  const { pathname } = useLocation();
+  const { pathname, hash, key } = useLocation();
   useEffect(() => collapsedTasks.set(new Set()), [pathname]);
+  // A `#task-<id>` link (shared, or Shift+G) scrolls to and focuses that row once the list renders.
+  useEffect(() => {
+    if (!hash.startsWith("#task-")) return;
+    const selector = `main [data-task-id="${CSS.escape(hash.slice(6))}"]:not([hidden]) :is(${TITLE})`;
+    let live = true;
+    void waitFor(() => live ? document.querySelector<HTMLElement>(selector) : null, 10_000).then(title => {
+      if (!live || !title) return;
+      title.scrollIntoView?.({ block: "center" });
+      title.focus();
+    });
+    return () => { live = false; };
+  }, [key, hash]);
   useEffect(() => { if (!status) return; const id = setTimeout(() => setStatus(null), 4000); return () => clearTimeout(id); }, [status]);
   // The sidebar's Help & resources opens the same sheet as `?`.
   useEffect(() => {
@@ -251,7 +258,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       },
       "editor.save-below": () => press(editorForm(), '[data-insert="below"]'),
       "editor.save": () => press(editorForm(), 'button[type="submit"]'),
-      "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"]'); if (!field) return false; field.focus(); },
+      // Focuses the description, opening it first (Add description) as legacy did.
+      "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"], .add-description'); if (!field) return false; if (field.matches("button")) field.click(); else field.focus(); },
       "quick-add.actions": () => metadataField("priority"),
       "quick-add.deadline": () => metadataField("deadline"),
       "task.date": () => picker(null, "date"),
@@ -305,20 +313,13 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         setNotice(null);
         copyTaskLink(row.dataset.taskId!).then(() => setStatus("Task link copied."), (reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Could not copy task link"));
       },
-      // Shift+G: the task's project (else the Inbox), the row focused there.
+      // Shift+G: the task's project (else the Inbox); the `#task-` effect focuses its row there.
       "task.reveal": () => {
         const row = activeRow();
         if (!row) return false;
         write(async () => {
           const { task } = await focusedTask(row);
-          if (!task) return;
-          const path = task.projectId ? `/projects/${encodeURIComponent(task.projectId)}` : "/inbox";
-          const moving = location.pathname !== path;
-          await latest.current.navigate(`${path}#task-${task.id}`);
-          // The old page's copy of the row stays mounted until the new route renders.
-          const title = await waitFor(() => !(moving && row.isConnected) ? document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(task.id)}"]:not([hidden]) :is(${TITLE})`) : null);
-          title?.scrollIntoView?.({ block: "center" });
-          title?.focus();
+          if (task) await latest.current.navigate(`${task.projectId ? `/projects/${encodeURIComponent(task.projectId)}` : "/inbox"}#task-${task.id}`);
         });
       },
       "task.toggle-children": () => { const row = activeRow(); if (!row) return false; collapsedTasks.toggle(row.dataset.taskId!); },
@@ -344,8 +345,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
     window.addEventListener("keydown", onKey);
     window.addEventListener("blur", reset);
     document.addEventListener("focusin", reset);
-    document.addEventListener("click", recordList, true);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); document.removeEventListener("click", recordList, true); };
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); };
   }, [effective, userId]);
 
   const close = () => { setHelp(false); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); }); };

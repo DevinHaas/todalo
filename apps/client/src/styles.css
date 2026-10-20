@@ -144,6 +144,7 @@ button.composer:hover { color: var(--foreground); }
 .composer-form { gap: .5rem; padding: .75rem; border: 1px solid var(--border); border-radius: .5rem; }
 .composer-form input { min-height: 2rem; border: 0; box-shadow: none; padding: 0; outline: none; }
 .composer-form input[aria-label="Task name"] { font-weight: 500; }
+.composer-form .add-description { justify-self: start; min-height: 2rem; text-decoration: none; color: var(--muted-foreground); }
 .composer-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-top: .75rem; border-top: 1px solid var(--border); }
 .composer-actions, .task-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 /* Smart quick add (ticket 12, ADR 0002): a transparent input over a backdrop that

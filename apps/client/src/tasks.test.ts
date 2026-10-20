@@ -248,11 +248,11 @@ describe("task write controls", () => {
     expect(live).toMatch(/<button type="button" class="composer">/);
   });
 
-  it("opens the composer with title and description inputs filed to Today or the Inbox", () => {
+  it("opens the composer with a title input and Add description filed to Today or the Inbox", () => {
     const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
     const todayForm = render(createElement(Composer, { startOpen: true, dueDate: () => midnight.toISOString(), onCreate: async () => {} }));
     expect(todayForm).toContain('aria-label="Task name"');
-    expect(todayForm).toContain('aria-label="Description"');
+    expect(todayForm).toContain('>Add description<');
     expect(todayForm).toContain("Today");
     expect(render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }))).toContain("Inbox");
   });

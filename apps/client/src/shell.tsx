@@ -1,15 +1,15 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
 } from "lucide-react";
 import type { Account } from "./session";
 import { connection, projectReads, queries, reads, session } from "./runtime";
-import { todaySections, type TaskDto } from "./tasks";
+import { taskKeys, todaySections, type NewTask, type TaskDto, type TodayDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
-import { Composer, TaskEditor, TaskView, TodayView, type RowActions } from "./views";
+import { Composer, TaskDialogs, TaskEditor, TaskView, TodayView, type RowActions, type TaskDialog } from "./views";
 import { haptics, hapticsSupported } from "./feedback";
 import { theme } from "./theme";
 import { useEditorExtras, useTaskWrites } from "./task-writes";
@@ -52,6 +52,61 @@ function ConnectionStatus() {
     {connectionCopy[state]}
     {state === "unreachable" && <button type="button" className="text-action" onClick={() => void queries.refetchQueries({ type: "active" })}>Try again</button>}
   </>}</div>;
+}
+
+/** Save and add's composer, next to the task it was saved from (legacy creationSlot). */
+function InsertComposer({ edge, task, onCreate, onClose }: { edge: "above" | "below"; task: TaskDto; onCreate: (task: NewTask, direction: "above" | "below") => Promise<unknown>; onClose: () => void }) {
+  return <section className="task-insert" aria-label={`Add task ${edge} ${task.title}`}>
+    <Composer key={edge} startOpen projectId={task.projectId} sectionId={task.sectionId} placement={{ edge, anchorId: task.id }}
+      dueDate={() => task.dueDate ? new Date(new Date(task.dueDate).setHours(0, 0, 0, 0)).toISOString() : null}
+      onCancel={onClose} onCreate={onCreate} />
+  </section>;
+}
+
+/** Focuses a row's title once nothing else holds focus (the dialog or composer that had it closed). */
+function focusRow(id: string, fallback: HTMLElement | null) {
+  requestAnimationFrame(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    (document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(id)}"] .task-title`) ?? (fallback?.isConnected ? fallback : null))?.focus();
+  });
+}
+
+/**
+ * Legacy TaskKeyboardProvider's editor: a row title opens the edit dialog over
+ * the list and the URL stays (`/tasks/:id` is for links). Previous/Next walk the
+ * page's visible rows, Save and add opens a composer next to the row, and
+ * closing returns focus to the row.
+ */
+function TaskDialogHost({ userId, children }: { userId: string; children: ReactNode }) {
+  const cache = useQueryClient();
+  const [id, setId] = useState<string | null>(null);
+  const [inserting, setInserting] = useState<{ edge: "above" | "below"; task: TaskDto } | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const writes = useTaskWrites(userId);
+  const extras = useEditorExtras(userId, id);
+  // The row's copy shows at once (Today holds every owned task); the read keeps the editor current.
+  const query = useQuery({ ...reads.task(userId, id ?? ""), enabled: id !== null,
+    placeholderData: () => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id) });
+  const { pathname } = useLocation();
+  useEffect(() => { setId(null); setInserting(null); }, [pathname]);
+  const create = writes.create.mutateAsync;
+  const dialog = useMemo<TaskDialog>(() => ({
+    open(next) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setId(next); },
+    slot: (anchor, edge) => inserting?.task.id === anchor && inserting.edge === edge
+      ? <InsertComposer edge={edge} task={inserting.task} onClose={() => { setInserting(null); focusRow(anchor, opener.current); }}
+        // The composer follows the task just added, as the next draft does (legacy onCreated).
+        onCreate={async (task, direction) => { const created = await create(task); setInserting({ edge: direction, task: created }); }} /> : null,
+  }), [inserting, create]);
+  const close = () => { if (id) focusRow(id, opener.current); setId(null); };
+  const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
+  const task = id ? query.data : null;
+  return <TaskDialogs.Provider value={dialog}>
+    {children}
+    {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close}
+      navigation={{ previous: Boolean(neighbour(-1)), next: Boolean(neighbour(1)), go: (step) => { const next = neighbour(step); if (next) setId(next); } }}
+      onSave={async (details) => { await writes.update.mutateAsync({ id: task.id, details }); close(); }}
+      onInsert={(edge) => setInserting({ edge, task })} />}
+  </TaskDialogs.Provider>;
 }
 
 export function Shell({ account }: { account: Account }) {
@@ -103,7 +158,7 @@ export function Shell({ account }: { account: Account }) {
         <DisplayMenu />
       </div>
       <ConnectionStatus />
-      <main className="content"><Outlet /></main>
+      <main className="content"><TaskDialogHost userId={account.user.id}><Outlet /></TaskDialogHost></main>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
@@ -145,15 +200,8 @@ export function TaskScreen({ account }: { account: Account }) {
   };
   // The editor's label checkboxes (without the list it keeps the task's labels) and task link.
   const extras = useEditorExtras(account.user.id, id);
-  // Previous/Next: the list the task was opened from (legacy editor over a list).
-  const neighbours = { previous: taskNeighbour(id, -1), next: taskNeighbour(id, 1) };
-  const editor = inserting?.task.id === id ? <section className="task-insert" aria-label={`Add task ${inserting.edge} ${inserting.task.title}`}>
-    <Composer key={inserting.edge} startOpen projectId={inserting.task.projectId} sectionId={inserting.task.sectionId} placement={{ edge: inserting.edge, anchorId: id }}
-      dueDate={() => inserting.task.dueDate ? new Date(new Date(inserting.task.dueDate).setHours(0, 0, 0, 0)).toISOString() : null}
-      onCancel={() => setInserting(null)} onCreate={(task) => writes.create.mutateAsync(task)} />
-  </section> : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setClosedFor(id)}
-    navigation={neighbours.previous || neighbours.next ? { previous: Boolean(neighbours.previous), next: Boolean(neighbours.next),
-      go: (step) => { const next = step < 0 ? neighbours.previous : neighbours.next; if (next) navigate(`/tasks/${encodeURIComponent(next)}`); } } : undefined}
+  const editor = inserting?.task.id === id ? <InsertComposer edge={inserting.edge} task={inserting.task} onCreate={(task) => writes.create.mutateAsync(task)} onClose={() => setInserting(null)} />
+    : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setClosedFor(id)}
     onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }}
     onInsert={(edge) => setInserting({ edge, task: query.data! })} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}

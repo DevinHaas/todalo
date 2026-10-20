@@ -100,3 +100,10 @@ Select and Board/Calendar; search `x` then `l`; editor Next opens the next Today
 Still not wired: `task.paste-file` as a custom binding (default `Cmd/Ctrl+V` native paste works);
 opening a `#task-<id>` link directly does not reveal the row (only the key does); copy link in the
 Mac app is unverified.
+
+2026-10-20 — Enter/`e`/pickers open the edit dialog over the list; Cmd+↑/↓ in it walk
+the page's visible rows (no longer "the list the editor was opened from"). Shift+G now
+navigates to `<collection>#task-<id>` and the same hash effect that serves shared links
+focuses the row (QA: Today → `/inbox#task-overdue-review`, row focused). The
+"`#task-<id>` link does not reveal the row" gap is closed. Description key opens "Add
+description" first.
