@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialSyncState, syncQuickAddFields } from "@todalo/ramble/quick-add-sync";
-import { composerFields, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor } from "./quick-add";
+import { composerFields, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, quickDates, repeatPresetsFor } from "./quick-add";
 
 const now = new Date(2026, 9, 15, 10); // Thursday 15 Oct 2026
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
@@ -58,5 +58,13 @@ describe("composer metadata and destination", () => {
   it("drops the section and position when the project picker moves the task elsewhere", () => {
     expect(composerFields(blank, "errands", { projectId: "work", sectionId: "doing", placement: { edge: "top" } })).toEqual({ projectId: "errands" });
     expect(composerFields(blank, null, { projectId: "work", sectionId: "doing", placement: { edge: "bottom" } })).toEqual({});
+  });
+});
+
+describe("date popover quick dates", () => {
+  it("lists Today first, then the legacy quick dates", () => {
+    const [first, ...rest] = quickDates(now);
+    expect(first).toEqual({ label: "Today", day: "Thu", date: new Date(2026, 9, 15) });
+    expect(rest).toEqual(quickDateOptions(now));
   });
 });

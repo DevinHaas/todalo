@@ -45,8 +45,8 @@ export function TaskMenu({ title, onChoose, onClose }: { title: string; onChoose
 export function ShortcutHelp({ bindings, onCustomize, onClose }: { bindings: (id: string) => string[]; onCustomize: () => void; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const listed = clientCommands.filter(command => bindings(command.id).length && matchesShortcut(command, bindings(command.id), query));
-  return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="dialog shortcut-help" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+  return <div className="dialog-backdrop sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="dialog sheet shortcut-help" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
       <div className="dialog-header"><h2 id="shortcut-help-title" className="dialog-title">Keyboard shortcuts</h2>
         <button type="button" className="icon-button" aria-label="Close keyboard shortcuts" onClick={onClose}><X /></button></div>
       <button type="button" className="text-action" onClick={onCustomize}>Customize shortcuts in your account</button>

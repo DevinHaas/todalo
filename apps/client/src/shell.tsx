@@ -36,8 +36,8 @@ function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) 
   const { create } = useTaskWrites(userId);
   const [added, setAdded] = useState<TaskDto | null>(null);
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog">
-      <Composer startOpen dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
+    <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog quick-add">
+      <Composer startOpen quick dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
       {added && <p role="status" className="state">Added “{added.title}”{added.projectId ? "" : " to Inbox"}. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
     </div>
   </div>;

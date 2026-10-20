@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient } from "@tanstack/react-query";
 import { AccountTransportError } from "./errors";
-import { Composer, ComposerChoices, CustomRepeatDialog } from "./composer";
+import { MemoryRouter } from "react-router";
+import { Composer, ComposerChoices, CustomRepeatDialog, priorityOptions } from "./composer";
 import { ProjectView } from "./project-views";
 import { TaskEditor } from "./views";
 import type { TaskDto } from "./tasks";
@@ -27,25 +28,45 @@ describe("smart quick add composer", () => {
     expect(render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }))).toContain('aria-label="Date: No Date"');
   });
 
-  it("offers a real project picker (Inbox first) and the Additional actions and position controls", () => {
+  it("offers a custom project dropdown (not a native select) and the chips, with no more-actions button", () => {
     const choices = { projects: [{ id: "work", name: "Work" }, { id: "errands", name: "Errands" }], labels: [{ id: "design", name: "Design" }] };
     const html = render(createElement(ComposerChoices.Provider, { value: choices }, createElement(Composer, { startOpen: true, dueDate: () => null, projectId: "work", sectionId: "doing", placement: { edge: "bottom" }, onCreate: async () => {} })));
-    expect(html).toMatch(/<select aria-label="Project"><option value="">Inbox<\/option><option value="work" selected="">Work<\/option><option value="errands">Errands<\/option>/);
-    expect(html).toContain('aria-label="Additional actions" aria-expanded="false"');
+    expect(html).toContain('aria-label="Project: Work"');
+    expect(html).not.toContain("<select");
+    expect(html).not.toContain('aria-label="Additional actions"');
+    expect(html).toContain('aria-label="More options"');
+    expect(html).toContain('aria-label="Deadline: none"');
+    expect(html).toContain('aria-label="Priority: Priority 4 — normal"');
     expect(html).toContain(">Priority 4<");
     expect(html).toContain('aria-label="Position: bottom"');
     // An insert next to a task has no top/bottom toggle; projects still loading keep the composer's own.
     const insert = render(createElement(Composer, { startOpen: true, dueDate: () => null, projectId: "work", placement: { edge: "below", anchorId: "t" }, onCreate: async () => {} }));
     expect(insert).not.toContain("Position:");
-    expect(insert).toContain('<option value="work" selected="">This project</option>');
+    expect(insert).toContain('aria-label="Project: This project"');
   });
 
   it("hides the description behind Add description and shows the legacy disabled Reminders/Attachment pills", () => {
     const html = render(createElement(Composer, { startOpen: true, dueDate: () => null, onCreate: async () => {} }));
     expect(html).not.toContain('aria-label="Description"');
     expect(html).toContain(">Add description</button>");
-    expect(html).toMatch(/<button type="button" class="button outline small" disabled="">.*Reminders<\/button>/);
-    expect(html).toMatch(/<button type="button" class="button outline small" disabled="">.*Attachment<\/button>/);
+    expect(html).toMatch(/<button type="button" class="chip" disabled="">.*Reminders<\/button>/);
+    expect(html).toMatch(/<button type="button" class="chip" disabled="">.*Attachment<\/button>/);
+    // No divider line or text-less footer border: the footer is plain flex.
+    expect(html).toContain('class="composer-footer"');
+  });
+
+  it("quick add: chips, Inbox chip, and Ramble (empty) with no description/Cancel/Add task text buttons", () => {
+    const html = render(createElement(MemoryRouter, null, createElement(Composer, { startOpen: true, quick: true, dueDate: () => new Date(new Date().setHours(0, 0, 0, 0)).toISOString(), onCreate: async () => {} })));
+    expect(html).toContain('class="composer-form quick"');
+    for (const name of ["More options", "Date: Today", "Clear date", "Deadline: none", "Priority: Priority 4 — normal", "Project: Inbox", "Close", "Open Ramble"]) expect(html).toContain(`aria-label="${name}"`);
+    for (const chip of [">Deadline<", ">Priority<", "Reminders</button>"]) expect(html).toContain(chip);
+    for (const gone of ["Add description", "Cancel", "Attachment", ">Add task<", 'type="submit"']) expect(html).not.toContain(gone);
+  });
+
+  it("offers priority choices with colored flags, highest first", () => {
+    expect(priorityOptions.map(option => option.value)).toEqual([1, 2, 3, 4]);
+    expect(priorityOptions[0]!.label).toBe("Priority 1 — highest");
+    expect(render(createElement("div", null, priorityOptions[0]!.icon))).toContain('data-priority="1"');
   });
 
   it("activates Add task in every project section", () => {
@@ -66,7 +87,7 @@ describe("smart quick add composer", () => {
 
   it("opens the legacy custom repeat dialog seeded from the current rule", () => {
     const html = render(createElement(CustomRepeatDialog, { recurrence: { n: 3, unit: "week", basedOn: "completed", until: new Date(2026, 11, 31) }, onClose: noop, onConfirm: noop }));
-    for (const fragment of ["Custom repeat", 'value="3"', '<option value="week" selected="">weeks</option>', 'aria-pressed="true">Completed date', 'aria-pressed="true">On date', 'value="2026-12-31"']) {
+    for (const fragment of ["Custom repeat", 'value="3"', 'aria-label="Repeat unit: weeks"', 'aria-pressed="true">Completed date', 'aria-pressed="true">On date', 'value="2026-12-31"']) {
       expect(html).toContain(fragment);
     }
   });

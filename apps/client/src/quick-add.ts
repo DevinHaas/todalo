@@ -97,6 +97,12 @@ export function quickDateOptions(now = new Date()) {
   ];
 }
 
+/** The date popovers' list: Today first, then the legacy quick dates. */
+export function quickDates(now = new Date()) {
+  const today = startOfDay(now);
+  return [{ label: "Today", day: weekday.format(today), date: today }, ...quickDateOptions(now)];
+}
+
 const ordinal = (n: number) => {
   const suffixes = ["th", "st", "nd", "rd"]; const v = n % 100;
   return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;

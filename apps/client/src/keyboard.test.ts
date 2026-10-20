@@ -207,6 +207,9 @@ describe("keyboard preference transport", () => {
 describe("shortcut views", () => {
   it("speaks each binding and lists only wired commands in help", () => {
     const html = renderToStaticMarkup(createElement(ShortcutHelp, { bindings: (id: string) => effectiveBindings(id, defaultPreferences(), "mac"), onCustomize: () => {}, onClose: () => {} }));
+    // A right-edge sheet, not a centered modal.
+    expect(html).toContain("dialog-backdrop sheet-backdrop");
+    expect(html).toContain("dialog sheet shortcut-help");
     expect(html).toContain('aria-label="Close keyboard shortcuts"');
     expect(html).toContain('aria-label="Command plus k"');
     expect(html).toContain('aria-label="g then t"');

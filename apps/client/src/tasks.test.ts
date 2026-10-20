@@ -283,12 +283,12 @@ describe("task editor", () => {
       task: task("t", { title: "Plan", description: "Notes", priority: 2, dueDate: local(5, 9), dueDateEnd: local(5, 10, 30), deadline: local(9), recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: null }, updatedAt: "v1" }),
       onSave: async () => {}, onClose: noop,
     }));
-    for (const fragment of ['role="dialog"', 'value="Plan"', ">Notes</textarea>", 'value="2026-10-05"', 'value="09:00"', 'value="10:30"', 'value="2026-10-09"', ">Every 2 weeks</option>", ">Does not repeat</option>", "Priority 1 — highest", ">Save</button>"]) {
+    for (const fragment of ['role="dialog"', 'value="Plan"', ">Notes</textarea>", 'value="2026-10-05"', 'value="09:00"', 'value="10:30"', 'value="2026-10-09"', 'aria-label="Repeat: Every 2 weeks"', 'aria-label="Priority: Priority 2"', ">Save</button>"]) {
       expect(html).toContain(fragment);
     }
     const allDay = render(createElement(TaskEditor, { task: task("t", { recurrence: { n: 1, unit: "day", basedOn: "scheduled", until: null } }), onSave: async () => {}, onClose: noop }));
     expect(allDay).not.toContain('aria-label="Start time"');
-    expect(allDay).not.toContain("Every day</option>");
+    expect(allDay).toContain('aria-label="Repeat: Daily"');
   });
 
   it("offers editing on the task page and shows the repeat rule", () => {

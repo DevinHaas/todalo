@@ -27,12 +27,15 @@ function useShortcuts(userId: string) {
 
 // Task rows are found in the page (legacy data-task-id), so every list view
 // (Today, Upcoming, projects, labels, filters, search, board) shares one handler.
-const visibleRows = () => [...document.querySelectorAll<HTMLElement>("main [data-task-id]")].filter(row => row.querySelector(TITLE) && row.getClientRects().length);
+const ROWS = "main [data-task-id], main button.composer";
+const visibleTasks = () => [...document.querySelectorAll<HTMLElement>("main [data-task-id]")].filter(row => row.querySelector(TITLE) && row.getClientRects().length);
 const activeRow = () => document.activeElement?.closest<HTMLElement>("main [data-task-id]") ?? null;
+// j/k also land on each list's Add task row (legacy tab order), where Enter opens the composer.
+const navigable = () => [...document.querySelectorAll<HTMLElement>(ROWS)].filter(row => row.getClientRects().length && (row.matches("button") || row.querySelector(TITLE)));
 function moveRow(step: number) {
-  const row = adjacentRow(visibleRows(), activeRow(), step);
+  const row = adjacentRow(navigable(), document.activeElement?.closest<HTMLElement>(ROWS) ?? null, step);
   if (!row) return false;
-  row.querySelector<HTMLElement>(TITLE)!.focus();
+  (row.matches("button") ? row : row.querySelector<HTMLElement>(TITLE)!).focus();
   row.scrollIntoView?.({ block: "nearest" });
 }
 /** Clicks the focused row's own control, so keys and taps share one write path. */
@@ -44,13 +47,13 @@ function clickInRow(selector: string) {
 /** Complete/delete: when the row leaves the list, focus moves to the row that took its place (legacy remove()). */
 function clickAndRefocus(selector: string) {
   const row = activeRow();
-  const index = row ? visibleRows().indexOf(row) : -1;
+  const index = row ? visibleTasks().indexOf(row) : -1;
   if (clickInRow(selector) === false) return false;
   const started = Date.now();
   const check = () => {
     if (row!.isConnected && Date.now() - started < 3000) return void setTimeout(check, 100);
     if (row!.isConnected || document.activeElement !== document.body) return;
-    const rows = visibleRows();
+    const rows = visibleTasks();
     rows[Math.min(index, rows.length - 1)]?.querySelector<HTMLElement>(TITLE)?.focus();
   };
   setTimeout(check, 100);
@@ -65,13 +68,11 @@ function press(scope: ParentNode | null, selector: string) {
   if (!control || control.disabled) return false;
   control.click();
 }
-/** Opens Additional actions (unless open) and focuses one of its fields. */
+/** Opens the composer's Priority or Deadline popover (its button carries the field name). */
 function metadataField(field: "priority" | "deadline") {
-  const form = inComposerTitle();
-  if (!form) return false;
-  const toggle = form.querySelector<HTMLElement>('[aria-label="Additional actions"]');
-  if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
-  requestAnimationFrame(() => form.querySelector<HTMLElement>(`[data-metadata-field="${field}"]`)?.focus());
+  const trigger = inComposerTitle() && composerForm()?.querySelector<HTMLElement>(`[data-metadata-field="${field}"]`);
+  if (!trigger) return false;
+  trigger.click();
 }
 /** Add task in the focused row's section (else the page's first list), at the bottom or switched to the top. */
 function addTask(edge: "top" | "bottom") {
@@ -102,7 +103,7 @@ function afterDialogs(then: () => void) {
 /** Focuses the row again, or the row that took its place when it left the list. */
 function refocus(row: HTMLElement, index: number) {
   if (document.activeElement && document.activeElement !== document.body) return;
-  const rows = visibleRows();
+  const rows = visibleTasks();
   (row.isConnected ? row : rows[Math.min(index, rows.length - 1)])?.querySelector<HTMLElement>(TITLE)?.focus();
 }
 const bulkButton = (name: string) => document.querySelector<HTMLButtonElement>(`main [role="toolbar"] [data-bulk="${name}"]:not(:disabled)`);
@@ -132,7 +133,7 @@ function moveDialog() {
   const row = activeRow();
   const start = document.querySelector<HTMLElement>("[data-selection-start]");
   if (!row || (!start && !row.querySelector(".select-box"))) return false;
-  const index = visibleRows().indexOf(row);
+  const index = visibleTasks().indexOf(row);
   start?.click();
   void (async () => {
     (await waitFor(() => row.querySelector<HTMLInputElement>(".select-box")))?.click();
@@ -144,7 +145,7 @@ function moveDialog() {
 }
 /** Previous/next task while editing: the task before (-1) or after (1) `id` among the page's visible rows (legacy editor over its list). */
 export const taskNeighbour = (id: string, step: -1 | 1): string | undefined => {
-  const rows = visibleRows();
+  const rows = visibleTasks();
   const index = rows.findIndex(row => row.dataset.taskId === id);
   return index < 0 ? undefined : rows[index + step]?.dataset.taskId;
 };
@@ -259,7 +260,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "editor.save-below": () => press(editorForm(), '[data-insert="below"]'),
       "editor.save": () => press(editorForm(), 'button[type="submit"]'),
       // Focuses the description, opening it first (Add description) as legacy did.
-      "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"], .add-description'); if (!field) return false; if (field.matches("button")) field.click(); else field.focus(); },
+      "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"], .add-description, [data-composer-more]'); if (!field) return false; if (field.matches("button")) field.click(); else field.focus(); },
       "quick-add.actions": () => metadataField("priority"),
       "quick-add.deadline": () => metadataField("deadline"),
       "task.date": () => picker(null, "date"),
@@ -278,7 +279,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         const row = activeRow();
         if (!row) return false;
         if (!sortable()) return void setNotice("Switch Sort to Manual to nest tasks.");
-        const above = visibleRows()[visibleRows().indexOf(row) - 1];
+        const above = visibleTasks()[visibleTasks().indexOf(row) - 1];
         write(async () => {
           const { tasks, task } = await focusedTask(row);
           const previous = tasks.find(item => item.id === above?.dataset.taskId);
@@ -302,7 +303,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "view.layout": () => {
         const was = document.activeElement;
         if (press(document, '[aria-label="Next layout"]') === false) return false;
-        requestAnimationFrame(() => { if (was instanceof HTMLElement && !was.isConnected) (visibleRows()[0]?.querySelector<HTMLElement>(TITLE) ?? document.querySelector<HTMLElement>("main"))?.focus(); });
+        requestAnimationFrame(() => { if (was instanceof HTMLElement && !was.isConnected) (visibleTasks()[0]?.querySelector<HTMLElement>(TITLE) ?? document.querySelector<HTMLElement>("main"))?.focus(); });
       },
       // Legacy task menu, copy link, reveal and sub-task folding (no row control in legacy either).
       "task.menu": () => { const row = activeRow(); if (!row) return false; setMenu(row); },

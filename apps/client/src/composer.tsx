@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { AlarmClock, AudioLines, CalendarIcon, Flag, Inbox, MoreHorizontal, Paperclip, Plus, Sun, X } from "lucide-react";
+import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Flag, Goal, Hash, Inbox, Paperclip, Plus, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
@@ -9,8 +9,9 @@ import {
 import type { Recurrence } from "@todalo/ramble/recurrence";
 import { operationId, timeInputValue, type NewTask, type Placement } from "./tasks";
 import {
-  composerFields, dateValue, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, repeatPresetsFor, scheduleOf,
+  composerFields, dateValue, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDates, repeatPresetsFor, scheduleOf,
 } from "./quick-add";
+import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
 
 const PARSE_DEBOUNCE_MS = 150;
@@ -47,7 +48,7 @@ function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddS
  * the task to create is unchanged, so resubmitting after an unclear failure
  * cannot create a second copy of a task that was in fact saved.
  */
-export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, smartDates: override, projectId = null, sectionId = null, placement }: {
+export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, quick = false, smartDates: override, projectId = null, sectionId = null, placement }: {
   /** Initial due date (with time for a schedule slot); null starts undated (Inbox). */
   dueDate: () => string | null;
   /** End of a schedule slot (ticket 16). */
@@ -58,6 +59,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   onCreate: (task: NewTask, direction: "above" | "below") => Promise<unknown>;
   onCancel?: () => void;
   startOpen?: boolean;
+  /** The quick add dialog's layout: title, chips, then a Ramble/submit button (no footer text buttons). */
+  quick?: boolean;
   /** Overrides the SmartDates context (tests). */
   smartDates?: boolean;
   /** The project view section it was opened in (legacy TaskComposer projectId/sectionId); null is the Inbox. */
@@ -82,16 +85,15 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const [rejected, setRejected] = useState<ReadonlySet<string>>(new Set());
   const [sync, dispatch] = useReducer(syncQuickAddFields, undefined, seed);
   const [seeded] = useState(() => scheduleOf(sync).date);
-  const [scheduling, setScheduling] = useState(false);
-  const [customRepeat, setCustomRepeat] = useState(false);
+    const [customRepeat, setCustomRepeat] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState(projectId);
   const [position, setPosition] = useState(placement);
-  const [actionsOpen, setActionsOpen] = useState(false);
   const [metadata, setMetadata] = useState({ priority: 4, deadline: "", labelIds: [] as string[] });
   const operation = useRef<{ key: string; id: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
 
   useEffect(() => { const timer = setTimeout(() => setParsedTitle(title), PARSE_DEBOUNCE_MS); return () => clearTimeout(timer); }, [title]);
@@ -107,8 +109,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     setTitle(""); setParsedTitle(""); setDescription(""); setDescribing(false); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
     setMetadata({ priority: 4, deadline: "", labelIds: [] }); operation.current = null;
   };
-  const close = () => { setOpen(false); reset(); setError(null); setScheduling(false); setActionsOpen(false); setPosition(placement); onCancel?.(); };
-  if (!open) return <button type="button" className="composer" onClick={() => setOpen(true)}><Plus />Add task</button>;
+  const close = () => { setOpen(false); reset(); setError(null); setPosition(placement); onCancel?.(); requestAnimationFrame(() => trigger.current?.focus()); };
+  if (!open) return <button ref={trigger} type="button" className="composer" onClick={() => setOpen(true)}><Plus />Add task</button>;
 
   function reject(match: QuickAddMatch) {
     setRejected(previous => new Set(previous).add(match.text.toLowerCase()));
@@ -154,7 +156,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       const created = operation.current.id;
       await onCreate({ id: created, ...task }, direction);
       if (task.placement) setPosition({ edge: direction, anchorId: created });
-      reset(); setScheduling(false);
+      reset();
       input.current?.focus();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.");
@@ -165,8 +167,45 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const sameAsSeed = schedule.date && seeded && schedule.date.getTime() === seeded.getTime();
   const time = schedule.start && schedule.end ? `${schedule.start}-${schedule.end}` : schedule.start;
   const label = (sameAsSeed && destination) || dueDateLabel(schedule.date);
+  const deadline = fromDateValue(metadata.deadline);
+  const projects: Option<string>[] = [{ value: "", label: "Inbox", icon: <Inbox /> },
+    ...projectOptions(choices.projects, projectId).map(choice => ({ value: choice.id, label: choice.name, icon: <Hash /> }))];
+  const priorityName = metadata.priority === 4 && quick ? "Priority" : `Priority ${metadata.priority}`;
+  const chips = <div className="composer-pills">
+    {/* The + menu holds what the chips do not: the description and labels. */}
+    <Popover label="More options" triggerClassName="chip chip-square" trigger={<Plus />} data={{ "data-composer-more": "" }}>
+      {close => <>
+        {!describing && <button type="button" className="popover-item add-description" onClick={() => { setDescribing(true); close(false); }}>Add description</button>}
+        <p className="panel-heading">Labels</p>
+        {!choices.labels ? <p className="state" role="status">Loading labels…</p> : choices.labels.length > 0 ? choices.labels.map(choice => <label key={choice.id} className="popover-item label-option">
+          <input type="checkbox" checked={metadata.labelIds.includes(choice.id)} onChange={(event) => setMetadata(current => ({ ...current, labelIds: event.target.checked ? [...current.labelIds, choice.id] : current.labelIds.filter(id => id !== choice.id) }))} />{choice.name}
+        </label>) : <p className="state">Create labels in Labels.</p>}
+      </>}
+    </Popover>
+    <Popover className={schedule.date ? "chip-group set" : "chip-group"} label={`Date: ${label}${time ? ` ${time}` : ""}`} data={{ "data-tone": today ? "today" : "date" }}
+      trigger={<>{today ? <Calendar1 /> : <CalendarIcon />}{label}{time && ` ${time}`}</>}
+      after={schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}>
+      {close => <SchedulePanel schedule={schedule} onDate={(date) => { changeDate(date); close(); }} onStart={changeStart} onEnd={changeEnd}
+        onRepeat={(recurrence) => { changeRepeat(recurrence); close(); }} onCustom={() => { setCustomRepeat(true); close(false); }} />}
+    </Popover>
+    <Popover className={deadline ? "chip-group set" : "chip-group"} label={`Deadline: ${deadline ? dueDateLabel(deadline) : "none"}`} data={{ "data-metadata-field": "deadline" }}
+      trigger={<><Goal />{deadline ? dueDateLabel(deadline) : "Deadline"}</>}
+      after={deadline && <button type="button" className="icon-button small" aria-label="Clear deadline" onClick={() => setMetadata(current => ({ ...current, deadline: "" }))}><X /></button>}>
+      {close => <DatePanel value={deadline} none="No deadline" onPick={(date) => { setMetadata(current => ({ ...current, deadline: dateValue(date) })); close(); }} />}
+    </Popover>
+    <Dropdown label="Priority" value={metadata.priority} options={priorityOptions} className={metadata.priority !== 4 ? "chip set" : "chip"} data={{ "data-metadata-field": "priority" }}
+      onChange={(priority) => setMetadata(current => ({ ...current, priority }))} triggerContent={<><Flag data-priority={metadata.priority} />{priorityName}</>} />
+    {/* ponytail: legacy stub pills, no feature behind them yet. */}
+    <button type="button" className="chip" disabled><AlarmClock />Reminders</button>
+    {!quick && <button type="button" className="chip" disabled><Paperclip />Attachment</button>}
+    {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="chip" aria-label={`Position: ${position.edge}`}
+      onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
+  </div>;
+  const projectPicker = <Dropdown label="Project" value={project ?? ""} options={projects} onChange={(value) => setProject(value || null)} className={quick ? "chip" : "chip project-picker"} chevron={!quick} />;
+  // Legacy composer waveform: Ramble with this draft's date as the default (ticket 21).
+  const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={close}><AudioLines /></Link>;
   return <>
-    <form ref={releaseFocus} className="composer-form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    <form ref={releaseFocus} className={quick ? "composer-form quick" : "composer-form"} onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
         <div ref={backdrop} className="quick-add-backdrop" aria-hidden="true">
@@ -177,37 +216,24 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         <input ref={input} autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" autoComplete="off" value={title}
           onChange={(event) => setTitle(event.target.value)} onScroll={syncScroll} onSelect={syncScroll} />
       </div>
-      {/* Legacy hides the description until asked for. */}
       {describing ? <input autoFocus aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
-        : <button type="button" className="text-action add-description" onClick={() => setDescribing(true)}>Add description</button>}
-      <div className="composer-pills">
-        <button type="button" className={schedule.date ? "button outline small set" : "button outline small"} aria-expanded={scheduling} aria-label={`Date: ${label}${time ? ` ${time}` : ""}`} onClick={() => setScheduling(value => !value)}>
-          {today ? <Sun /> : <CalendarIcon />}{label}{time && ` ${time}`}
-        </button>
-        {schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}
-        <button type="button" className={metadata.priority !== 4 ? "button outline small set" : "button outline small"} onClick={() => setActionsOpen(true)}><Flag />Priority {metadata.priority}</button>
-        {/* ponytail: legacy stub pills, no feature behind them yet. */}
-        <button type="button" className="button outline small" disabled><AlarmClock />Reminders</button>
-        <button type="button" className="button outline small" disabled><Paperclip />Attachment</button>
-        <button type="button" className="icon-button small" aria-label="Additional actions" aria-expanded={actionsOpen} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal /></button>
-        {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="button outline small" aria-label={`Position: ${position.edge}`}
-          onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
-      </div>
-      {actionsOpen && <MetadataFields value={metadata} labels={choices.labels} onChange={(change) => setMetadata(current => ({ ...current, ...change }))} />}
-      {scheduling && <SchedulePanel schedule={schedule} onDate={(date) => { changeDate(date); }} onStart={changeStart} onEnd={changeEnd}
-        onRepeat={(recurrence) => { changeRepeat(recurrence); setScheduling(false); }} onCustom={() => { setCustomRepeat(true); setScheduling(false); }} onDone={() => setScheduling(false)} />}
-      <div className="composer-footer">
-        <label className="pill project"><Inbox /><select aria-label="Project" value={project ?? ""} onChange={(event) => setProject(event.target.value || null)}>
-          <option value="">Inbox</option>
-          {projectOptions(choices.projects, projectId).map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}
-        </select></label>
+        : !quick && <button type="button" className="text-action add-description" onClick={() => setDescribing(true)}>Add description</button>}
+      {chips}
+      {quick ? <div className="composer-footer">
+        {projectPicker}
         <div className="composer-actions">
-          {/* Legacy composer waveform: Ramble with this draft's date as the default (ticket 21). */}
-          {routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className="icon-button" aria-label="Open Ramble" onClick={close}><AudioLines /></Link>}
+          <button type="button" className="icon-button quick-close" aria-label="Close" onClick={close}><X /></button>
+          {title.trim() ? <button type="submit" className="quick-primary" aria-label="Add task" disabled={pending}><ArrowUp /></button>
+            : ramble("quick-primary") || <button type="submit" className="quick-primary" aria-label="Add task" disabled><AudioLines /></button>}
+        </div>
+      </div> : <div className="composer-footer">
+        {projectPicker}
+        <div className="composer-actions">
+          {ramble("icon-button")}
           <button type="button" className="button outline" onClick={close}>Cancel</button>
           <button type="submit" className="button" disabled={!title.trim() || pending}>{pending ? "Adding…" : "Add task"}</button>
         </div>
-      </div>
+      </div>}
     </form>
     {customRepeat && <CustomRepeatDialog recurrence={schedule.recurrence} onClose={() => setCustomRepeat(false)} onConfirm={(recurrence) => { changeRepeat(recurrence); setCustomRepeat(false); }} />}
   </>;
@@ -217,41 +243,34 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
 const projectOptions = (projects: Choice[] | undefined, own: string | null): Choice[] =>
   projects ?? (own ? [{ id: own, name: "This project" }] : []);
 
-/** The legacy composer's Additional actions (TaskMetadataFields): priority, deadline and labels. */
-function MetadataFields({ value, labels, onChange }: { value: { priority: number; deadline: string; labelIds: string[] }; labels?: Choice[]; onChange(change: Partial<typeof value>): void }) {
-  return <div className="schedule-panel" role="group" aria-label="Additional actions">
-    <label>Priority<select data-metadata-field="priority" autoFocus value={value.priority} onChange={(event) => onChange({ priority: Number(event.target.value) })}>
-      {[1, 2, 3, 4].map(priority => <option key={priority} value={priority}>Priority {priority}{priority === 1 ? " — highest" : priority === 4 ? " — normal" : ""}</option>)}
-    </select></label>
-    <div className="field-row">
-      <label>Deadline<input data-metadata-field="deadline" type="date" value={value.deadline} onChange={(event) => onChange({ deadline: event.target.value })} /></label>
-      <button type="button" className="text-action" disabled={!value.deadline} onClick={() => onChange({ deadline: "" })}>Clear deadline</button>
+/** Priority choices with the legacy flag colors (red, orange, blue, none). */
+export const priorityOptions: Option<number>[] = [1, 2, 3, 4].map(priority => ({
+  value: priority, label: `Priority ${priority}${priority === 1 ? " — highest" : priority === 4 ? " — normal" : ""}`, icon: <Flag data-priority={priority} />,
+}));
+
+/** Quick dates, "none", and a month grid: the Date and Deadline popovers' shared top half. */
+function DatePanel({ value, none, onPick }: { value?: Date; none: string; onPick(date: Date | undefined): void }) {
+  return <>
+    <div className="panel-list">
+      {quickDates().map(({ label, day, date }) => <button key={label} type="button" onClick={() => onPick(date)}>{label}<span>{day}</span></button>)}
+      <button type="button" onClick={() => onPick(undefined)}>{none}</button>
     </div>
-    <fieldset className="label-choices"><legend>Labels</legend>
-      {!labels ? <p className="state" role="status">Loading labels…</p> : labels.length > 0 ? <div className="label-options">{labels.map(label => <label key={label.id} className="label-option">
-        <input type="checkbox" checked={value.labelIds.includes(label.id)} onChange={(event) => onChange({ labelIds: event.target.checked ? [...value.labelIds, label.id] : value.labelIds.filter(id => id !== label.id) })} />{label.name}
-      </label>)}</div> : <p className="state">Create labels in Labels.</p>}
-    </fieldset>
-  </div>;
+    <Calendar selected={value} onSelect={onPick} />
+  </>;
 }
 
-/** The legacy date pill popover: quick dates, date, time range and Repeat. */
-function SchedulePanel({ schedule, onDate, onStart, onEnd, onRepeat, onCustom, onDone }: {
+/** The legacy date pill popover: quick dates, calendar, time range and Repeat. */
+function SchedulePanel({ schedule, onDate, onStart, onEnd, onRepeat, onCustom }: {
   schedule: ReturnType<typeof scheduleOf>;
   onDate(date: Date | undefined): void; onStart(time: string): void; onEnd(time: string): void;
-  onRepeat(recurrence: Recurrence | undefined): void; onCustom(): void; onDone(): void;
+  onRepeat(recurrence: Recurrence | undefined): void; onCustom(): void;
 }) {
   const [everyDays, setEveryDays] = useState("1");
   const anchor = schedule.date ?? new Date();
-  const pick = (date: Date | undefined) => { onDate(date); onDone(); };
   const setEvery = () => { const n = parseInt(everyDays, 10); if (n > 0) onRepeat({ n, unit: "day", basedOn: "scheduled" }); };
   const current = schedule.recurrence;
   return <div className="schedule-panel" role="group" aria-label="Date and repeat">
-    <div className="panel-list">
-      {quickDateOptions().map(({ label, day, date }) => <button key={label} type="button" onClick={() => pick(date)}>{label}<span>{day}</span></button>)}
-      <button type="button" onClick={() => pick(undefined)}>No Date</button>
-    </div>
-    <label>Date<input type="date" value={dateValue(schedule.date)} onChange={(event) => onDate(fromDateValue(event.target.value))} /></label>
+    <DatePanel value={schedule.date} none="No Date" onPick={onDate} />
     {schedule.date && <div className="time-range">
       <input type="time" aria-label="Start time" value={schedule.start} onChange={(event) => onStart(event.target.value)} />
       <span>to</span>
@@ -298,9 +317,7 @@ export function CustomRepeatDialog({ recurrence, onClose, onConfirm }: { recurre
         <div className="every-n">
           <span>Every</span>
           <input autoFocus type="number" min={1} max={1000} inputMode="numeric" aria-label="Repeat every" value={n} onChange={(event) => setN(event.target.value)} />
-          <select aria-label="Repeat unit" value={unit} onChange={(event) => setUnit(event.target.value as Recurrence["unit"])}>
-            {UNITS.map(value => <option key={value} value={value}>{(count || 1) === 1 ? value : `${value}s`}</option>)}
-          </select>
+          <Dropdown<Recurrence["unit"]> label="Repeat unit" value={unit} onChange={setUnit} options={UNITS.map(value => ({ value, label: (count || 1) === 1 ? value : `${value}s` }))} />
         </div>
         <p className="panel-heading">Ends</p>
         <div className="segmented">

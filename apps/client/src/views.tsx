@@ -11,6 +11,8 @@ import { eventDayKey, type CalendarEventDto } from "./calendar";
 import { EventRow } from "./calendar-views";
 import { dayKey } from "./schedule";
 import { copyText, taskPath } from "./links";
+import { Dropdown, type Option } from "./popover";
+import { priorityOptions } from "./composer";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -154,6 +156,7 @@ const draftOf = (task: TaskDto): Draft => ({
   labelIds: task.labelIds,
 });
 const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Does not repeat", daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
+const repeatOptions: Option<RepeatChoice>[] = (Object.keys(repeatNames) as (keyof typeof repeatNames)[]).map(value => ({ value, label: repeatNames[value] }));
 
 /**
  * The legacy task edit dialog (ticket 11, labels ticket 14). It saves every
@@ -218,9 +221,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
         <fieldset disabled={pending}>
           <label>Task name<input autoFocus value={draft.title} enterKeyHint="done" onChange={(event) => edit({ title: event.target.value })} /></label>
           <label>Description<textarea value={draft.description} rows={3} onChange={(event) => edit({ description: event.target.value })} /></label>
-          <label>Priority<select data-field="priority" value={draft.priority} onChange={(event) => edit({ priority: Number(event.target.value) })}>
-            {[1, 2, 3, 4].map(value => <option key={value} value={value}>Priority {value}{value === 1 ? " — highest" : value === 4 ? " — normal" : ""}</option>)}
-          </select></label>
+          <div className="field">Priority<Dropdown label="Priority" value={draft.priority} options={priorityOptions} data={{ "data-field": "priority" }} onChange={(priority) => edit({ priority })} /></div>
           <div className="field-row">
             <label>Deadline<input data-field="deadline" type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
             <button type="button" className="text-action" disabled={!draft.deadline} onClick={() => edit({ deadline: "" })}>Clear deadline</button>
@@ -246,13 +247,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
             <span>to</span>
             <input type="time" aria-label="End time" value={draft.end} onChange={(event) => edit({ end: event.target.value })} />
           </div>}
-          <label>Repeat<select value={choice} onChange={(event) => {
-            const value = event.target.value as RepeatChoice;
-            if (value !== "custom") edit({ recurrence: value === "none" ? null : repeatPresets[value] });
-          }}>
-            {(Object.keys(repeatNames) as (keyof typeof repeatNames)[]).map(value => <option key={value} value={value}>{repeatNames[value]}</option>)}
-            {choice === "custom" && draft.recurrence && <option value="custom">{repeatLabel(draft.recurrence)}</option>}
-          </select></label>
+          <div className="field">Repeat<Dropdown label="Repeat" value={choice} options={choice === "custom" && draft.recurrence ? [...repeatOptions, { value: "custom", label: repeatLabel(draft.recurrence) }] : repeatOptions} data={{ "data-field": "repeat" }}
+            onChange={(value) => { if (value !== "custom") edit({ recurrence: value === "none" ? null : repeatPresets[value] }); }} /></div>
         </fieldset>
         <div className="composer-actions">
           {navigation && <>
