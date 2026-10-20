@@ -136,6 +136,8 @@ pub fn run() {
             feedback::feedback,
             settings::settings,
             settings::update_settings,
+            settings::keyboard_preferences,
+            settings::update_keyboard_preferences,
             links::next_link,
             links::task_link,
             search::search_tasks,

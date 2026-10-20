@@ -15,7 +15,7 @@ import { AccountTransportError } from "./errors";
 // tasks with X and acted on the selection from a toolbar (Complete, Delete,
 // Priority, Labels, Deadline; Move and Clear date by shortcut). Touch has no X,
 // so a Select button shows a checkbox per row; the toolbar adds Move and Clear
-// date. Shortcuts (X, the toolbar focus key) are ticket 19: they call `toggle`.
+// date. Shortcuts (X, the toolbar focus key) press these same controls (keyboard-screens.tsx).
 
 /** The selection of a task collection; IDs no longer shown drop out (legacy setVisible). */
 export interface Selection {
@@ -49,7 +49,7 @@ export function useSelection(visible: string[]): Selection {
 export function SelectionControl({ selection }: { selection: Selection }) {
   return selection.active
     ? <button type="button" className="button outline" onClick={selection.stop}>Done</button>
-    : <button type="button" className="button outline" onClick={selection.start}>Select</button>;
+    : <button type="button" className="button outline" data-selection-start onClick={selection.start}>Select</button>;
 }
 
 /** Bulk writes for a selection (bulkMutations behind the screen). */

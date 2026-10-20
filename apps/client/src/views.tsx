@@ -28,7 +28,7 @@ export interface RowSelection { selected: boolean; toggle(): void }
 export interface SelectionSlots { control: ReactNode; toolbar: ReactNode; row(task: TaskDto): RowSelection | undefined }
 
 export function TaskRow({ task, now, projectName, actions, selection }: { task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection }) {
-  return <div className={task.parentId ? "task-row child" : "task-row"} data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
+  return <div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" onClick={() => actions.complete(task)} />

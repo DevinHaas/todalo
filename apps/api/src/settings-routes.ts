@@ -1,5 +1,7 @@
 import { Elysia } from "elysia";
 import { settingsInput, type SettingsDto } from "@todalo/server/settings-input";
+import type { KeyboardPreferences } from "@todalo/ramble/keyboard";
+import { KeyboardPreferencesError } from "@todalo/ramble/keyboard-account-preferences";
 import { writeUser } from "./project-routes";
 
 export interface SettingsStore {
@@ -9,6 +11,10 @@ export interface SettingsStore {
   allowedOrigins: ReadonlySet<string>;
   get(userId: string): Promise<SettingsDto>;
   setSmartDateRecognition(userId: string, enabled: boolean): Promise<SettingsDto>;
+  /** Ticket 19: account keyboard shortcuts (unreadable rows load as defaults plus an error). */
+  loadKeyboard(userId: string): Promise<{ preferences: KeyboardPreferences; error?: string }>;
+  /** Validates (shape, conflicts, reserved keys) before writing; throws KeyboardPreferencesError. */
+  saveKeyboard(userId: string, input: unknown): Promise<KeyboardPreferences>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -33,5 +39,23 @@ export function createSettingsRoutes(store: SettingsStore) {
       if (!input.success) return status(400, INVALID);
       const settings = await store.setSmartDateRecognition(userId, input.data.smartDateRecognition);
       return { settings: { smartDateRecognition: settings.smartDateRecognition } satisfies SettingsDto };
+    })
+    .get("/settings/keyboard", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return store.loadKeyboard(userId);
+    })
+    // The whole preference document is replaced; the shared validator is the trust boundary.
+    .put("/settings/keyboard", async ({ request, body, status }) => {
+      const userId = await writeUser(store, request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = (body as { preferences?: unknown } | null)?.preferences;
+      if (input === undefined) return status(400, INVALID);
+      try { return { preferences: await store.saveKeyboard(userId, input) }; }
+      catch (error) {
+        if (error instanceof KeyboardPreferencesError) return status(400, { code: "INVALID_INPUT", message: error.message });
+        throw error;
+      }
     });
 }

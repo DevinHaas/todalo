@@ -445,3 +445,24 @@ button.nav-item { width: 100%; border: 0; background: none; font: inherit; text-
 .board-cards .drag-handle { position: absolute; top: .125rem; right: .125rem; z-index: 1; height: 2.5rem; }
 .board-cards .sortable-row .board-card { padding-right: 2rem; }
 .board-card-overlay .board-card { margin: 0; box-shadow: 0 4px 12px #0000001f; cursor: grabbing; }
+
+/* Ticket 19: keyboard shortcut help and settings. */
+kbd { display: inline-block; min-width: 1.25rem; margin-left: .125rem; padding: .125rem .25rem; border: 1px solid var(--border); border-radius: .25rem; background: var(--accent); font: inherit; font-size: .75rem; line-height: 1; text-align: center; }
+.shortcut-keys { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .375rem; }
+.dialog-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.shortcut-help { padding: 1rem; gap: .75rem; }
+.shortcut-list { max-height: 60vh; overflow-y: auto; }
+.shortcut-list section { padding-top: .75rem; }
+.shortcut-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .5rem 0; border-bottom: 1px solid var(--border); font-size: .875rem; }
+.shortcut-settings { display: grid; gap: .75rem; padding-top: 1rem; border-top: 1px solid var(--border); text-align: left; }
+.shortcut-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.shortcut-filters input { flex: 1 1 12rem; width: auto; }
+.shortcut-filters label { display: flex; align-items: center; gap: .5rem; font-size: .875rem; }
+.shortcut-filters select { width: auto; }
+.shortcut-filters [aria-pressed="true"] { background: var(--foreground); color: var(--background); }
+.shortcut-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .25rem; }
+.shortcut-chip { display: inline-flex; align-items: center; min-height: 2.25rem; border: 1px solid var(--border); border-radius: .375rem; padding-left: .25rem; }
+.shortcut-chip > button:first-child { min-height: 2.25rem; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.shortcut-actions .icon-button { width: 2.25rem; height: 2.25rem; }
+.shortcut-actions svg { width: 1rem; height: 1rem; }
+.shortcut-problems { flex-basis: 100%; font-size: .8125rem; }

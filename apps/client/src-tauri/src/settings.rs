@@ -3,7 +3,7 @@
 use crate::auth::NativeAuth;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 const INVALID_RESPONSE: &str = "The server returned an invalid response.";
 const UNAVAILABLE: &str = "Your preferences could not be loaded. Try again.";
@@ -34,6 +34,34 @@ pub async fn update_settings(
     let body = serde_json::to_value(&settings).map_err(|_| INVALID_RESPONSE.to_owned())?;
     state
         .write(Method::PATCH, "/api/v1/settings", Some(body))
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+// Ticket 19: account keyboard shortcuts. The preference document is opaque
+// here; the API's shared validator is the trust boundary and the body is
+// rebuilt with the single `preferences` key.
+#[tauri::command]
+pub async fn keyboard_preferences(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    match state.read("/api/v1/settings/keyboard").await {
+        Ok(Some(value)) => Ok(value),
+        Ok(None) => Err(INVALID_RESPONSE.to_owned()),
+        Err(READ_FAILED) => Err(UNAVAILABLE.to_owned()),
+        Err(error) => Err(error.to_owned()),
+    }
+}
+
+#[tauri::command]
+pub async fn update_keyboard_preferences(
+    state: tauri::State<'_, NativeAuth>,
+    preferences: Value,
+) -> Result<Value, String> {
+    state
+        .write(
+            Method::PUT,
+            "/api/v1/settings/keyboard",
+            Some(json!({ "preferences": preferences })),
+        )
         .await?
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }

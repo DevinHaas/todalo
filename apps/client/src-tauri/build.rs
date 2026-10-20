@@ -91,6 +91,8 @@ fn main() {
             "feedback",
             "settings",
             "update_settings",
+            "keyboard_preferences",
+            "update_keyboard_preferences",
             "next_link",
             "task_link",
             "search_tasks",

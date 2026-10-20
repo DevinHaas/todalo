@@ -14,6 +14,7 @@ import { createProjectRoutes } from "./project-routes";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createSettingsRoutes } from "./settings-routes";
 import * as settings from "@todalo/server/settings";
+import * as keyboard from "@todalo/server/keyboard";
 import * as attachments from "@todalo/server/attachments";
 import * as metadata from "@todalo/server/metadata";
 import { createMetadataRoutes } from "./metadata-routes";
@@ -69,6 +70,8 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   allowedOrigins: dependencies.allowedOrigins,
   get: settings.getSettings,
   setSmartDateRecognition: settings.setSmartDateRecognition,
+  loadKeyboard: keyboard.loadKeyboardPreferences,
+  saveKeyboard: keyboard.saveKeyboardPreferences,
 })).use(createMetadataRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

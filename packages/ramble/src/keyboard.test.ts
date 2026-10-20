@@ -53,6 +53,14 @@ describe("account keyboard preferences", () => {
       expect(effectiveBindings("navigation.home", saved, platform)).toEqual([]);
     }
   });
+  it("reserves the macOS app and window keys the Mac app's menu handles", () => {
+    for (const binding of ["Meta+h", "Meta+Alt+h", "Meta+m", "Meta+,", "Meta+`", "Meta+q", "Meta+w"]) {
+      const errors = validatePreferences({ ...defaultPreferences(), platforms: { mac: { "general.help": [binding] } } });
+      expect(errors.some(error => error.platform === "mac" && error.commandId === "general.help" && /reserved/i.test(error.message)), binding).toBe(true);
+    }
+    // Control+H stays available on Windows and Linux.
+    expect(validatePreferences({ ...defaultPreferences(), platforms: { windows: { "general.help": ["Ctrl+h"] } } })).toEqual([]);
+  });
   it("still rejects other unknown saved shortcut actions", () => {
     const preferences = parsePreferences({ ...defaultPreferences(), overrides: { "navigation.unknown": ["Alt+Shift+9"] } });
     expect(validatePreferences(preferences).some(error => error.commandId === "navigation.unknown" && /Unknown action/.test(error.message))).toBe(true);

@@ -21,6 +21,7 @@ import { SmartDatesSettingScreen } from "./settings-screen";
 import { CalendarSettingsScreen, LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { taskUrl } from "./links";
+import { KeyboardCommands, ShortcutSettingsScreen } from "./keyboard-screens";
 
 // ponytail: controls without a migrated backend (inbox)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -70,8 +71,7 @@ export function Shell({ account }: { account: Account }) {
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       <nav><ul className="nav">
-        {/* data-quick-find: the legacy hook keyboard commands click (ticket 19). */}
-        <li><button type="button" className="nav-item" data-quick-find onClick={() => { setFinding(true); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
+        <li><button type="button" className="nav-item" onClick={() => { setFinding(true); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <Inert icon={<Layers />} label="Inbox" />
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
@@ -96,6 +96,8 @@ export function Shell({ account }: { account: Account }) {
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
     {finding && <QuickFind userId={account.user.id} onClose={() => setFinding(false)} />}
+    <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)} onFind={() => setFinding(true)}
+      onSidebar={() => window.matchMedia("(max-width: 767px)").matches ? setMobileOpen(open => !open) : setCollapsed(closed => !closed)} />
   </div></DisplayProvider>;
 }
 
@@ -152,6 +154,7 @@ export function AccountScreen({ account, error }: { account: Account; error: str
       <span>Haptic feedback when completing a task</span>
     </label>}
     <CalendarSettingsScreen userId={account.user.id} />
+    <ShortcutSettingsScreen userId={account.user.id} />
     <button disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Sign out"}</button>
   </section>;
 }

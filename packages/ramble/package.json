@@ -10,7 +10,12 @@
     "./quick-add-sync": "./src/quick-add-sync.ts",
     "./recurrence": "./src/recurrence.ts",
     "./audio": "./src/audio.ts",
-    "./commit": "./src/commit.ts"
+    "./commit": "./src/commit.ts",
+    "./keyboard": "./src/keyboard.ts",
+    "./keyboard-recorder": "./src/keyboard-recorder.ts",
+    "./keyboard-search": "./src/keyboard-search.ts",
+    "./keyboard-edit": "./src/keyboard-edit.ts",
+    "./keyboard-account-preferences": "./src/keyboard-account-preferences.ts"
   },
   "scripts": {
     "test": "vitest run --root ../.. packages/ramble",
