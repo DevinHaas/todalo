@@ -22,7 +22,11 @@ export const semanticOperationSchema = z.object({
   dueDate: day.nullable(), startTime: time.nullable(), endTime: time.nullable(),
   projectId: z.string().max(100).nullable(),
   recurrence: recurrence.nullable(),
-  clearFields: z.array(z.enum(["dueDate", "startTime", "endTime", "projectId", "recurrence"])).max(5),
+  description: z.string().max(4000).nullable(),
+  priority: z.number().int().min(1).max(4).nullable(),
+  deadline: day.nullable(),
+  labelIds: z.array(z.string().max(100)).max(20).nullable(),
+  clearFields: z.array(z.enum(["dueDate", "startTime", "endTime", "projectId", "recurrence", "description", "priority", "deadline", "labelIds"])).max(9),
 }).strict();
 export const semanticResponseSchema = z.object({ operations: z.array(semanticOperationSchema).max(20) }).strict();
 export type SemanticOperation = z.infer<typeof semanticOperationSchema>;
@@ -32,10 +36,13 @@ export interface SemanticInput {
   state: RambleSessionState;
   timeZone: string;
   projects: SemanticProject[];
+  labels: SemanticProject[];
   recentSpeech: string[];
 }
 export interface SemanticProcessor {
   assertConfigured(): void;
+  /** Open the provider connection ahead of the first phrase; never throws. */
+  warm?(): void;
   process(input: SemanticInput, signal: AbortSignal): Promise<SemanticOperation[]>;
 }
 
@@ -66,6 +73,7 @@ function taskFields(operation: SemanticOperation, state: RambleSessionState, pre
   const todo: RambleTodo = previous ? { ...previous } : {
     id: `ramble-${state.nextId}`, title: "", parentId: state.mode === "sub-task" ? state.parentId : null,
     dueDate: state.defaultDueDate, startTime: null, endTime: null, projectId: state.projectId, recurrence: null,
+    description: null, priority: 4, deadline: null, labelIds: [],
   };
   if (operation.text !== null) {
     todo.title = parsed?.strippedTitle.trim() ?? "";
@@ -82,7 +90,15 @@ function taskFields(operation: SemanticOperation, state: RambleSessionState, pre
       until: operation.recurrence.until ? `${operation.recurrence.until}T00:00:00.000Z` : null };
   }
   if (operation.projectId !== null) todo.projectId = operation.projectId;
-  for (const field of operation.clearFields) todo[field] = null;
+  if (operation.description !== null) todo.description = operation.description.trim() || null;
+  if (operation.priority !== null) todo.priority = operation.priority;
+  if (operation.deadline !== null) todo.deadline = operation.deadline;
+  if (operation.labelIds !== null) todo.labelIds = [...new Set(operation.labelIds)];
+  for (const field of operation.clearFields) {
+    if (field === "priority") todo.priority = 4;
+    else if (field === "labelIds") todo.labelIds = [];
+    else todo[field] = null;
+  }
   if (operation.clearFields.includes("dueDate")) { todo.startTime = null; todo.endTime = null; }
   if (!todo.dueDate && todo.startTime) todo.dueDate = state.referenceDate.slice(0, 10);
   if (todo.endTime && !todo.startTime) throw new Error("An end time requires a start time");
@@ -91,12 +107,13 @@ function taskFields(operation: SemanticOperation, state: RambleSessionState, pre
 }
 
 /** Validate and apply the whole model batch immutably, or reject all of it. */
-export function applySemanticOperations(input: unknown, initial: RambleSessionState, projectIds: Set<string>): RambleSessionState {
+export function applySemanticOperations(input: unknown, initial: RambleSessionState, projectIds: Set<string>, labelIds = new Set<string>()): RambleSessionState {
   const { operations } = semanticResponseSchema.parse({ operations: input });
   let state = initial;
   for (const operation of operations) {
     if (state.readyToCommit) throw new Error("Operations after session end are invalid");
     if (operation.projectId && !projectIds.has(operation.projectId)) throw new Error("Unknown project");
+    if (operation.labelIds?.some((id) => !labelIds.has(id))) throw new Error("Unknown label");
     if (operation.type === "ignore") continue;
     if (["undo", "sub-task", "top-level", "end"].includes(operation.type)) {
       const command = operation.type === "end" ? "done" : operation.type === "top-level" ? "top level" : operation.type;

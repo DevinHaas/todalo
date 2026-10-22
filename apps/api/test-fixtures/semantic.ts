@@ -3,7 +3,8 @@ import type { SemanticOperation, SemanticProcessor } from "@todalo/ramble/semant
 
 export function operation(fields: Partial<SemanticOperation>): SemanticOperation {
   return { type: "ignore", targetId: null, text: null, parentId: null, dueDate: null,
-    startTime: null, endTime: null, projectId: null, recurrence: null, clearFields: [], ...fields };
+    startTime: null, endTime: null, projectId: null, recurrence: null,
+    description: null, priority: null, deadline: null, labelIds: null, clearFields: [], ...fields };
 }
 
 // Only a deterministic injected provider for transport/lifecycle tests. This

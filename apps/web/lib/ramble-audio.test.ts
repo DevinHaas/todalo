@@ -41,6 +41,7 @@ function browserMocks() {
     audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
     createMediaStreamSource: () => node,
     createGain: () => ({ ...node, gain: { value: 1 } }), destination: node,
+    createAnalyser: () => ({ ...node, fftSize: 2048 }),
   };
   const getUserMedia = vi.fn().mockResolvedValue(stream);
   const AudioContext = vi.fn(function () { return context; });

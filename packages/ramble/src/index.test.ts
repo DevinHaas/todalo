@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRambleSession, interpretSegment, removeStagedTodo, type RambleSessionState } from "./index";
+import { createRambleSession, interpretSegment, localTaskTitle, previewSegments, removeStagedTodo, type RambleSessionState } from "./index";
 
 const referenceDate = new Date(2026, 9, 3, 23, 45);
 const fresh = () => createRambleSession({ referenceDate });
@@ -137,7 +137,7 @@ describe("quick-add fields on staged cards", () => {
     const state = capture(session, "Plan trip", "sub-task", "Review itinerary tomorrow from 4pm to 5pm every 2 weeks");
     expect(state.todos[1]).toEqual({
       id: "ramble-2", title: "Review itinerary", parentId: "ramble-1", dueDate: "2026-10-04",
-      startTime: "16:00", endTime: "17:00", projectId: "project-trip",
+      startTime: "16:00", endTime: "17:00", projectId: "project-trip", description: null, priority: 4, deadline: null, labelIds: [],
       recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: null },
     });
   });
@@ -162,5 +162,31 @@ describe("quick-add fields on staged cards", () => {
     const next = capture(JSON.parse(JSON.stringify(before)) as RambleSessionState, "Buy bread tomorrow");
     expect(next.todos[1]).toMatchObject({ parentId: "ramble-1", dueDate: "2026-10-04" });
     expect(JSON.parse(JSON.stringify(next))).toEqual(next);
+  });
+});
+
+describe("local preview", () => {
+  it.each([
+    ["Call Anna tomorrow.", "Call Anna tomorrow"],
+    ["I need to buy milk", "Buy milk"],
+    ["remember to water the plants at 4:30pm", "Water the plants at 4:30pm"],
+  ])("guesses an obvious single task: %s", (text, title) => {
+    expect(localTaskTitle(text)).toBe(title);
+  });
+
+  it.each([
+    "Buy milk and send the invoice", "Actually make that Friday", "I called Anna yesterday",
+    "Should I call Anna?", "Um call Anna", "Put it in the Work project", "Call", "done",
+    "The button says done", "Call Anna, then email Bob",
+  ])("leaves anything ambiguous to the model: %s", (text) => {
+    expect(localTaskTitle(text)).toBeNull();
+  });
+
+  it("stages guesses in order and stops at the first ambiguous phrase", () => {
+    const confirmed = capture(fresh(), "Plan trip");
+    const { state, provisionalIds } = previewSegments(confirmed, ["Book hotel tomorrow", "and the flights", "Pack bags"]);
+    expect(provisionalIds).toEqual(["ramble-2"]);
+    expect(state.todos[1]).toMatchObject({ id: "ramble-2", title: "Book hotel", dueDate: "2026-10-04" });
+    expect(confirmed.todos).toHaveLength(1);
   });
 });

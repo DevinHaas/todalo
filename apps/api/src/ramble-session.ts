@@ -1,5 +1,5 @@
 import {
-  createRambleSession, removeStagedTodo,
+  createRambleSession, previewSegments, removeStagedTodo,
   type RambleSessionState, type RambleTodo,
 } from "@todalo/ramble";
 import type { SpeechCallbacks, SpeechConnection } from "./elevenlabs";
@@ -13,6 +13,7 @@ export interface SessionDependencies {
   smartRecognition: boolean;
   projectIds: Set<string>;
   projects: SemanticProject[];
+  labels: SemanticProject[];
 }
 
 export class RambleConnection {
@@ -26,15 +27,27 @@ export class RambleConnection {
   private segmentsSeen = 0;
   private recentSpeech: string[] = [];
   private failedSegments: string[] = [];
+  // Final phrases the model has not applied yet, in spoken order.
+  private unresolved: string[] = [];
   private processingAbort?: AbortController;
 
   constructor(private readonly dependencies: SessionDependencies) {
     this.state = createRambleSession({ smartRecognition: dependencies.smartRecognition });
     this.publish();
+    dependencies.semantic.warm?.();
   }
 
+  // Clients see confident local guesses immediately; only `this.state`, which
+  // the model confirmed, is ever committed.
   private publish() {
-    if (this.phase !== "closed") this.dependencies.send({ type: "state", state: this.state });
+    if (this.phase === "closed") return;
+    const { state, provisionalIds } = previewSegments(this.state, this.unresolved);
+    this.dependencies.send({ type: "state", state, provisionalIds });
+  }
+
+  private resolve(text: string) {
+    const index = this.unresolved.indexOf(text);
+    if (index >= 0) this.unresolved.splice(index, 1);
   }
 
   private error(code: string, message: string) {
@@ -48,6 +61,8 @@ export class RambleConnection {
     if (text.length > 4000) { this.error("segment_limit", "That phrase was too long. Try a shorter task."); return Promise.resolve(); }
     this.dependencies.send({ type: "transcript", text, final });
     if (!final || !text.trim()) return Promise.resolve();
+    this.unresolved.push(text);
+    this.publish();
     if (this.pendingCount >= 8 || ++this.segmentsSeen > 240) {
       this.acceptingTranscripts = false;
       if (this.phase === "capturing") this.phase = "idle";
@@ -64,20 +79,22 @@ export class RambleConnection {
     this.pendingCount += 1;
     this.dependencies.send({ type: "processing", pending: this.pendingCount });
     this.pending = this.pending.then(async () => {
-      if (this.phase === "closed" || this.phase === "saved" || this.state.readyToCommit) return;
+      if (this.phase === "closed" || this.phase === "saved" || this.state.readyToCommit) { this.resolve(text); this.publish(); return; }
       if (this.failedSegments.length) { this.failedSegments.push(text); return; }
       const controller = new AbortController();
       this.processingAbort = controller;
       try {
         const operations = await this.dependencies.semantic.process({
           text, state: this.state, timeZone: this.timeZone,
-          projects: this.dependencies.projects, recentSpeech: this.recentSpeech,
+          projects: this.dependencies.projects, labels: this.dependencies.labels, recentSpeech: this.recentSpeech,
         }, controller.signal);
         if (controller.signal.aborted || (this.phase as string) === "closed") return;
         const endAllowed = ["done", "stop", "that's all"].includes(text.trim().toLowerCase().replace(/[’‘]/g, "'").replace(/[.!?,;:]+$/g, "").trim());
         if (operations.some((operation) => operation.type === "end") && !endAllowed) throw new Error("Unexpected end command");
-        this.state = applySemanticOperations(operations, this.state, this.dependencies.projectIds);
+        this.state = applySemanticOperations(operations, this.state, this.dependencies.projectIds,
+          new Set(this.dependencies.labels.map((label) => label.id)));
         this.recentSpeech = [...this.recentSpeech.slice(-3), text];
+        this.resolve(text);
         this.publish();
         if (this.state.readyToCommit) {
           this.acceptingTranscripts = false;
@@ -212,6 +229,7 @@ export class RambleConnection {
     this.acceptingTranscripts = false;
     this.processingAbort?.abort();
     this.failedSegments = [];
+    this.unresolved = [];
     this.recentSpeech = [];
     this.speech?.close();
     this.state = createRambleSession();

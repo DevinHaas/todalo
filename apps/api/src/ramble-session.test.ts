@@ -14,7 +14,7 @@ function harness() {
   const process = vi.fn(fixtureSemanticProcessor.process);
   const assertConfigured = vi.fn();
   const session = new RambleConnection({
-    send, commit, smartRecognition: true, projectIds: new Set(["owned"]), projects: [{ id: "owned", name: "Work" }],
+    send, commit, smartRecognition: true, projectIds: new Set(["owned"]), projects: [{ id: "owned", name: "Work" }], labels: [],
     semantic: { process, assertConfigured },
     speech: (events) => { callbacks = events; return { audio, close, finish }; },
   });
@@ -25,6 +25,21 @@ function harness() {
 }
 
 describe("connection staging", () => {
+  it("shows a confident local guess before the model answers and confirms it in place", async () => {
+    const h = harness(); await h.start();
+    let answer!: () => void;
+    h.process.mockImplementationOnce(async (input, signal) => {
+      await new Promise<void>((resolve) => { answer = resolve; });
+      return fixtureSemanticProcessor.process(input, signal);
+    });
+    const done = h.events().transcript("Call Anna tomorrow", true);
+    const lastState = () => h.send.mock.calls.map(([message]) => message).filter((message) => message.type === "state").at(-1);
+    expect(lastState()).toMatchObject({ provisionalIds: ["ramble-1"], state: { todos: [{ id: "ramble-1", title: "Call Anna", dueDate: "2026-10-04" }] } });
+    expect(h.session.state.todos).toEqual([]);
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    answer(); await done;
+    expect(lastState()).toMatchObject({ provisionalIds: [], state: { todos: [{ id: "ramble-1", title: "Call Anna" }] } });
+  });
   it("keeps sessions independent and writes only after explicit commit", async () => {
     const h = harness(); const other = harness();
     await h.start(); h.events().ready();

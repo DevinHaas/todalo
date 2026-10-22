@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { auth } from "@todalo/auth";
 import { db } from "@todalo/db";
-import { projects, userSettings } from "@todalo/db/schema";
+import { labels, projects, userSettings } from "@todalo/db/schema";
 import { eq } from "drizzle-orm";
 import { connectSpeech } from "./speech";
 import { commitRambleTodos } from "./commit";
@@ -11,7 +11,7 @@ import type { SemanticProcessor, SemanticProject } from "@todalo/ramble/semantic
 
 export interface ApiDependencies {
   verify(headers: Headers): Promise<string | null>;
-  preferences(userId: string): Promise<{ smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[] }>;
+  preferences(userId: string): Promise<{ smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[]; labels: SemanticProject[] }>;
   speech: typeof connectSpeech;
   semantic: SemanticProcessor;
   commit: typeof commitRambleTodos;
@@ -19,8 +19,10 @@ export interface ApiDependencies {
 }
 
 export function createApi(dependencies: ApiDependencies) {
-  const connections = new Map<string, RambleConnection>();
-  const authenticated = new WeakMap<Request, { userId: string; smartRecognition: boolean; projectIds: Set<string>; projects: SemanticProject[] }>();
+  type Preferences = Awaited<ReturnType<ApiDependencies["preferences"]>>;
+  // A connection resolves once its preferences load; messages wait for it.
+  const connections = new Map<string, Promise<RambleConnection | undefined>>();
+  const authenticated = new WeakMap<Request, { userId: string; preferences: Promise<Preferences> }>();
   return new Elysia({ websocket: { maxPayloadLength: 64_000, idleTimeout: 120, backpressureLimit: 512_000, closeOnBackpressureLimit: true } })
     .get("/api/ramble/health", () => ({ ok: true }))
     .get("/api/ramble/session", async ({ request, status }) => {
@@ -33,34 +35,40 @@ export function createApi(dependencies: ApiDependencies) {
         // cross-site page opening a socket with the user's ambient cookie.
         const origin = request.headers.get("origin");
         if (!origin || !dependencies.allowedOrigins.has(origin)) return status(403, "Origin not allowed");
+        const started = performance.now();
         const userId = await dependencies.verify(request.headers);
+        console.log(`[ramble] upgrade verify ${Math.round(performance.now() - started)}ms user=${userId ? "yes" : "no"}`);
         if (!userId) return status(401, "Not authenticated");
-        authenticated.set(request, { userId, ...await dependencies.preferences(userId) });
+        // Load preferences while the browser starts its microphone, instead of
+        // holding the upgrade open for them; a cold database link costs seconds.
+        const preferences = dependencies.preferences(userId);
+        preferences.catch(() => {});
+        authenticated.set(request, { userId, preferences });
       },
       open(ws) {
+        console.log(`[ramble] socket ${ws.id} open`);
         const context = authenticated.get(ws.data.request);
         if (!context) { ws.close(1008, "Not authenticated"); return; }
         authenticated.delete(ws.data.request);
-        connections.set(ws.id, new RambleConnection({
+        connections.set(ws.id, context.preferences.then((preferences) => new RambleConnection({
           send: (message) => { ws.send(JSON.stringify(message)); },
           speech: dependencies.speech,
           semantic: dependencies.semantic,
           commit: (todos, zone) => dependencies.commit(context.userId, todos, zone),
-          smartRecognition: context.smartRecognition,
-          projectIds: context.projectIds,
-          projects: context.projects,
-        }));
+          ...preferences,
+        }), () => { ws.close(1011, "Preferences unavailable"); return undefined; }));
       },
       async message(ws, message) {
         try {
-          await connections.get(ws.id)?.message(message);
+          await (await connections.get(ws.id))?.message(message);
           if (typeof message === "object" && message !== null && "type" in message && message.type === "discard") ws.close(1000);
         } catch {
           ws.send(JSON.stringify({ type: "error", code: "session_error", message: "The capture could not continue. Try again." }));
         }
       },
-      close(ws) {
-        connections.get(ws.id)?.close();
+      close(ws, code, reason) {
+        console.log(`[ramble] socket ${ws.id} closed code=${code} reason=${reason || "-"}`);
+        void connections.get(ws.id)?.then((connection) => connection?.close());
         connections.delete(ws.id);
       },
     });
@@ -73,11 +81,12 @@ export function productionDependencies(): ApiDependencies {
     allowedOrigins: new Set(origins),
     verify: async (headers) => (await auth.api.getSession({ headers }))?.user.id ?? null,
     preferences: async (userId) => {
-      const [settings, owned] = await Promise.all([
+      const [settings, owned, ownedLabels] = await Promise.all([
         db.select().from(userSettings).where(eq(userSettings.userId, userId)),
         db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.userId, userId)),
+        db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.userId, userId)),
       ]);
-      return { smartRecognition: settings[0]?.smartDateRecognitionEnabled ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned };
+      return { smartRecognition: settings[0]?.smartDateRecognitionEnabled ?? true, projectIds: new Set(owned.map((project) => project.id)), projects: owned, labels: ownedLabels };
     },
     speech: connectSpeech,
     semantic: createSemanticProcessor(),

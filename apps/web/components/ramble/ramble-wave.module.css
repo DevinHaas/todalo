@@ -1,26 +1,10 @@
-/* A listening indicator, independent of PCM callbacks and React rendering. */
+/* Bar heights are a scrolling history of live microphone loudness. */
 .bar {
   height: 20px;
-  transform: scaleY(0.2);
+  transform: scaleY(0.15);
   opacity: 0.3;
 }
 
 [data-active="true"] > .bar {
-  animation-name: ramble-wave;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
   opacity: 0.8;
-}
-
-@keyframes ramble-wave {
-  from { transform: scaleY(0.2); }
-  to { transform: scaleY(0.85); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-active="true"] > .bar {
-    animation: none;
-    transform: scaleY(0.5);
-  }
 }

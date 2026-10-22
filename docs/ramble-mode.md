@@ -30,15 +30,25 @@ request until finalized speech arrives.
 Run `bun install`, `bun run db:migrate`, then `bun run dev` from the repository
 root. The root `.env` configures the web app and API. Set `DATABASE_URL`,
 `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=http://localhost:3000`, and
-`FISH_API_KEY` and `GEMINI_API_KEY`. The API runs on port 3001 and Next on port 3000.
+`ELEVENLABS_API_KEY` and `GEMINI_API_KEY`. The API runs on port 3001 and Next on port 3000.
 
 Only the API uses the speech and LLM credentials. The browser sends mono PCM16 audio at
 16 kHz to `/api/ramble/ws`; the API authenticates the Better Auth cookie and checks
-the browser Origin before upgrading. Fish receives bounded WAV utterances after
-one second of silence (25-second maximum clips); it does not stream partial text.
-For ElevenLabs realtime, set `RAMBLE_STT_PROVIDER=elevenlabs` and `ELEVENLABS_API_KEY`.
+the browser Origin before upgrading. ElevenLabs realtime is the default and commits a
+phrase after `RAMBLE_VAD_SILENCE_SECS` (0.6) of silence. With
+`RAMBLE_STT_PROVIDER=fish` and `FISH_API_KEY`, Fish receives bounded WAV utterances
+after one second of silence (25-second maximum clips); it does not stream partial text.
 Partial transcripts are hints; each
-finalized task segment passes through a serialized text LLM request. Exact standalone
+finalized task segment passes through a serialized text LLM request. For the lowest
+latency, set `RAMBLE_LLM_PROVIDER=openrouter` and `OPENROUTER_API_KEY`: requests go to
+Cerebras, falling back only to Groq, and only to a host that honors the strict JSON
+schema. Measured on 2026-10-15 with a 14-phrase eval: about 490ms median, all correct.
+Each Ramble socket pre-warms the provider connection, because a cold connection
+adds 1–2.5s to the first phrase. While that request
+runs, an obvious single imperative ("Call Anna tomorrow") is shown at once as a
+tentative card from the local quick-add parser (`previewSegments`). Anything with
+conjunctions, corrections, filler, questions or project names waits for the model, so
+guesses are rarely retracted. Only model-confirmed tasks are committed. Exact standalone
 mode/undo/end commands use the existing protocol directly to remain reliable and save
 inference requests. Its structured
 operations are validated and applied atomically to staged state. The server applies the user's

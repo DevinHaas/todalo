@@ -33,6 +33,8 @@ export function createPcm16Encoder(inputRate: number, outputRate = 16000, frameS
 export interface RambleCapture {
   stop: () => void;
   deviceId: string;
+  /** Live microphone signal, for drawing a level meter. */
+  analyser: AnalyserNode;
 }
 
 /** Acquires only on a user gesture; every async step respects cancellation. */
@@ -54,6 +56,7 @@ export async function startRambleCapture({ deviceId, signal, onAudio, onEnded }:
   let source: MediaStreamAudioSourceNode | undefined;
   let processor: AudioWorkletNode | undefined;
   let gain: GainNode | undefined;
+  let analyser: AnalyserNode | undefined;
   let stopped = false;
   const stop = () => {
     if (stopped) return;
@@ -63,6 +66,7 @@ export async function startRambleCapture({ deviceId, signal, onAudio, onEnded }:
     processor?.disconnect();
     source?.disconnect();
     gain?.disconnect();
+    analyser?.disconnect();
     stream?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
     void context.close().catch(() => {});
   };
@@ -113,8 +117,12 @@ registerProcessor('ramble-pcm16', RambleProcessor);`;
     gain = context.createGain();
     gain.gain.value = 0;
     source.connect(processor).connect(gain).connect(context.destination);
+    analyser = context.createAnalyser();
+    // ~43 ms window at 48 kHz: one loudness sample per wave tick.
+    analyser.fftSize = 2048;
+    source.connect(analyser);
     stream.getAudioTracks().forEach((track) => { track.onended = () => { stop(); onEnded(); }; });
-    return { stop, deviceId: stream.getAudioTracks()[0]?.getSettings().deviceId ?? "" };
+    return { stop, deviceId: stream.getAudioTracks()[0]?.getSettings().deviceId ?? "", analyser };
   } catch (error) {
     stop();
     throw error;

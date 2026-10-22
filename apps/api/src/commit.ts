@@ -1,5 +1,5 @@
 import { db } from "@todalo/db";
-import { projects, tasks } from "@todalo/db/schema";
+import { labels, projects, taskLabels, tasks } from "@todalo/db/schema";
 import type { RambleTodo } from "@todalo/ramble";
 import { and, eq, inArray } from "drizzle-orm";
 import { zonedTaskDate } from "./dates";
@@ -11,6 +11,7 @@ export function prepareTaskRows(todos: RambleTodo[], userId: string, timeZone: s
   const ids = new Map(todos.map((todo) => [todo.id, crypto.randomUUID()]));
   return todos.map((todo, sortOrder) => {
     if (!todo.title.trim() || todo.title.length > 4000) throw new Error("Invalid title");
+    if ((todo.description?.length ?? 0) > 4000 || ![1, 2, 3, 4].includes(todo.priority)) throw new Error("Invalid task details");
     const parent = todo.parentId ? byId.get(todo.parentId) : null;
     if (todo.parentId && (!parent || parent.parentId || parent.id === todo.id)) throw new Error("Invalid sub-task parent");
     const dueDate = zonedTaskDate(todo.dueDate, todo.startTime, timeZone);
@@ -24,6 +25,9 @@ export function prepareTaskRows(todos: RambleTodo[], userId: string, timeZone: s
       id: ids.get(todo.id)!, userId, title: todo.title.trim(),
       parentId: todo.parentId ? ids.get(todo.parentId)! : null,
       projectId: todo.projectId, dueDate, dueDateEnd,
+      description: todo.description?.trim() || null, priority: todo.priority,
+      // Matches the task editor, which stores a deadline as local midnight.
+      deadline: zonedTaskDate(todo.deadline, null, timeZone),
       recurrence: todo.recurrence ? { ...todo.recurrence, until: todo.recurrence.until ? new Date(todo.recurrence.until) : null } : null, sortOrder,
     };
   });
@@ -38,8 +42,17 @@ export async function commitRambleTodos(userId: string, todos: RambleTodo[], tim
       .where(and(eq(projects.userId, userId), inArray(projects.id, projectIds)));
     if (owned.length !== projectIds.length) throw new Error("Project unavailable");
   }
-  // A single INSERT is atomic even with Neon's HTTP driver, which does not
-  // support interactive transactions. Parent IDs are allocated beforehand.
-  await db.insert(tasks).values(rows);
+  const labelRows = todos.flatMap((todo, index) => [...new Set(todo.labelIds)].map((labelId) => ({ userId, taskId: rows[index].id, labelId })));
+  const labelIds = [...new Set(labelRows.map((row) => row.labelId))];
+  if (labelIds.length) {
+    const owned = await db.select({ id: labels.id }).from(labels)
+      .where(and(eq(labels.userId, userId), inArray(labels.id, labelIds)));
+    if (owned.length !== labelIds.length) throw new Error("Label unavailable");
+  }
+  // Neon's HTTP driver has no interactive transactions; a batch runs as one
+  // non-interactive transaction. Parent IDs are allocated beforehand.
+  const insertTasks = db.insert(tasks).values(rows);
+  if (labelRows.length) await db.batch([insertTasks, db.insert(taskLabels).values(labelRows)]);
+  else await insertTasks;
   return rows.length;
 }

@@ -5,10 +5,24 @@ import { applySemanticOperations, semanticJsonSchema, type SemanticOperation } f
 const projects = new Set(["work"]);
 function op(fields: Partial<SemanticOperation>): SemanticOperation {
   return { type: "ignore", text: null, targetId: null, parentId: null, dueDate: null, startTime: null,
-    endTime: null, projectId: null, recurrence: null, clearFields: [], ...fields };
+    endTime: null, projectId: null, recurrence: null, description: null, priority: null, deadline: null, labelIds: null,
+    clearFields: [], ...fields };
 }
 const initial = () => createRambleSession({ referenceDate: new Date("2026-10-03T14:30:00"), projectId: "work" });
 const apply = (operations: SemanticOperation[], state = initial()) => applySemanticOperations(operations, state, projects);
+
+describe("task details", () => {
+  it("sets, edits, and clears description, priority, deadline, and labels", () => {
+    const created = applySemanticOperations([op({ type: "create", text: "Renew passport", description: "Bring the old one",
+      priority: 1, deadline: "2026-10-20", labelIds: ["errand", "errand"] })], initial(), projects, new Set(["errand"]));
+    expect(created.todos[0]).toMatchObject({ description: "Bring the old one", priority: 1, deadline: "2026-10-20", labelIds: ["errand"] });
+    const cleared = applySemanticOperations([op({ type: "edit", targetId: "$last", clearFields: ["priority", "labelIds", "deadline", "description"] })],
+      created, projects, new Set(["errand"]));
+    expect(cleared.todos[0]).toMatchObject({ description: null, priority: 4, deadline: null, labelIds: [] });
+    expect(() => applySemanticOperations([op({ type: "create", text: "Task", labelIds: ["someone-else"] })], initial(), projects, new Set(["errand"])))
+      .toThrow("Unknown label");
+  });
+});
 
 describe("validated semantic operations", () => {
   it("ignores filler and splits actions without interpreting titles as commands", () => {
