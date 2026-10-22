@@ -4,6 +4,12 @@ Updated: 5 October 2026. Continue the existing migration to one shared React cli
 for web, macOS and iOS, packaged natively with Tauri 2. “Tower application” in the
 handoff request refers to this Tauri migration.
 
+**Scope update (22 October 2026):** the user chose **Mac + browser first**.
+iPhone is deferred; it may later reuse this Tauri client or be written natively
+in Swift against the same `/api/v1`. Tickets 07 (haptics) and 23 (iPhone
+release) are deferred, and physical-iPhone/iOS-simulator checks no longer gate
+tickets 02–22 or 26. Keep API and auth choices mobile-compatible.
+
 ## Start here
 
 1. Work in `/Users/devinhasler/.codex/worktrees/tauri-migration/todalo`, branch

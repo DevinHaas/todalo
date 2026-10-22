@@ -1,6 +1,6 @@
 # 23. Prepare an installable iPhone release candidate
 
-Status: ready-for-agent
+Status: deferred (Mac-first scope, 22 Oct 2026)
 Type: task
 
 **Blocked by:** 22.

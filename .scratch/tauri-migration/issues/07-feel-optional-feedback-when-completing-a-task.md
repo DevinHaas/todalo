@@ -1,6 +1,6 @@
 # 7. Feel optional feedback when completing a task
 
-Status: in-progress (code-complete; physical-iPhone haptic and Reduce Motion check pending)
+Status: deferred (Mac-first scope, 22 Oct 2026)
 Type: task
 
 **Blocked by:** 5.
