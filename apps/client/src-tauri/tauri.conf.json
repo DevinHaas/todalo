@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "category": "Productivity",
     "targets": ["app"],
     "macOS": { "minimumSystemVersion": "12.0" },
     "iOS": { "minimumSystemVersion": "15.4" },
