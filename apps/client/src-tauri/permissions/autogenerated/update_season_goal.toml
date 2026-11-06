@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-season-goal"
+description = "Enables the update_season_goal command without any pre-configured scope."
+commands.allow = ["update_season_goal"]
+
+[[permission]]
+identifier = "deny-update-season-goal"
+description = "Denies the update_season_goal command without any pre-configured scope."
+commands.deny = ["update_season_goal"]

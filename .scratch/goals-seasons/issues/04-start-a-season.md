@@ -4,15 +4,15 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Create a season with start date and length (12 weeks, 4 weeks, custom days)
-- [ ] Only one current season at a time
-- [ ] Add goals to the season with tier (primary/secondary) and target text
-- [ ] Move a goal's target mid-season
-- [ ] Warn when more than three primary goals are set
-- [ ] Season page shows 'Day X of Y' and days left
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Create a season with start date and length (12 weeks, 4 weeks, custom days)
+- [x] Only one current season at a time
+- [x] Add goals to the season with tier (primary/secondary) and target text
+- [x] Move a goal's target mid-season
+- [x] Warn when more than three primary goals are set
+- [x] Season page shows 'Day X of Y' and days left
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

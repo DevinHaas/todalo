@@ -8,6 +8,7 @@ import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
 import type { TaskDto } from "./tasks";
+import { goalKeys, type GoalsDto } from "./goals";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
 import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
 import { collapsedTasks } from "./views";
@@ -337,6 +338,12 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "project.menu": () => press(document.querySelector("main"), '[data-project-action="menu"]'),
       // Absent while Goals is hidden: the key passes on.
       "project.goals": () => press(document.querySelector("main"), '[data-project-action="goals"]'),
+      // Goals ticket 04: the Season page's buttons; elsewhere (or with Goals hidden) the key passes on.
+      "navigation.season": () => { if (latest.current.cache.getQueryData<GoalsDto>(goalKeys.list(userId))?.hidden !== false) return false; latest.current.navigate("/season"); },
+      "season.start": () => press(document.querySelector("main"), '[data-season-action="start"]'),
+      "season.add-goal": () => press(document.querySelector("main"), '[data-season-action="add-goal"]'),
+      "season.move-target": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="target"]'),
+      "season.toggle-tier": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="tier"]'),
       // d: a focused row's deadline wins; focus the page (Escape) to sort.
       "project.sort-date": () => sort("date", true), "project.sort-name": () => sort("name"), "project.sort-priority": () => sort("priority"),
       // Next layout (the toolbar arrow); focus returns to the list when the focused element left with the old layout.

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, NavLink } from "react-router";
-import { Hash, Plus, Target, X } from "lucide-react";
+import { CalendarRange, Hash, Plus, Target, X } from "lucide-react";
 import type { GoalDetailDto, GoalDto, GoalLinkKind, GoalPatch } from "./goals";
 import { taskPath } from "./links";
 import { Popover } from "./popover";
@@ -32,6 +32,8 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
       <button type="submit" className="button" disabled={write.pending || !title.trim()}>Add</button>
     </form>}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
+    {/* Goals ticket 04: hidden with Goals, like the rest of this section. */}
+    <NavLink to="/season" className="nav-item"><CalendarRange /><span>Season</span></NavLink>
     <SortableTasks ids={goals.map(goal => goal.id)} label={(id) => goals.find(goal => goal.id === id)?.title ?? "goal"} onReorder={onReorder}>
       {goals.map(goal => <SortableRow key={goal.id} id={goal.id} title={goal.title}>
         <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className="nav-item"><Target /><span>{goal.title}</span></NavLink>

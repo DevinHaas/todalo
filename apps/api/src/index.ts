@@ -12,6 +12,8 @@ import { taskOperations } from "./task-operations";
 import { createBulkRoutes } from "./bulk-routes";
 import { createProjectRoutes } from "./project-routes";
 import { createGoalRoutes } from "./goal-routes";
+import { createSeasonRoutes } from "./season-routes";
+import * as seasons from "@todalo/server/seasons";
 import * as goals from "@todalo/server/goals";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createCommentRoutes } from "./comment-routes";
@@ -88,6 +90,13 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   tasks: (userId) => getTasksForUser(userId),
   dismissed: goals.getDismissedGoals,
   dismiss: goals.dismissGoalSuggestion,
+})).use(createSeasonRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  current: seasons.getCurrentSeason,
+  start: seasons.startSeason,
+  addGoal: seasons.addSeasonGoal,
+  updateGoal: seasons.updateSeasonGoal,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

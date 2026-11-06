@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { goalReads, goals } from "./runtime";
+import { goalReads, goals, seasonReads, seasons } from "./runtime";
+import { seasonMutations, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { SeasonView } from "./season-views";
 import { goalMutations, linkedGoalIds, type GoalLinkKind, type GoalPatch } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { GoalPicker, GoalsNav, GoalView, type GoalSlots } from "./goal-views";
@@ -85,4 +87,22 @@ export function GoalsHiddenSettingScreen({ userId }: { userId: string }) {
       disabled={update.isPending} onChange={(shown) => update.mutate(!shown)} />
     {update.error && <p className="error" role="alert">{update.error.message} The setting was not changed.</p>}
   </>;
+}
+
+/** Goals ticket 04: the current season, or the form that starts one. */
+export function SeasonScreen({ account }: { account: Account }) {
+  const userId = account.user.id;
+  const cache = useQueryClient();
+  const query = useQuery(seasonReads.current(userId));
+  const list = useQuery(goalReads.list(userId));
+  const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
+  const seasonId = query.data?.season?.id ?? "";
+  const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays) });
+  const add = useMutation({ mutationFn: ({ goalId, tier, target }: { goalId: string; tier: SeasonTier; target: string }) => writes.addGoal(seasonId, goalId, tier, target) });
+  const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch) });
+  return <SeasonView state={query} goals={list.data?.goals ?? []} onRetry={() => void query.refetch()}
+    onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
+    onAdd={(goalId, tier, target) => add.mutateAsync({ goalId, tier, target })}
+    onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
+    write={{ pending: start.isPending || add.isPending || update.isPending, error: (start.error ?? add.error ?? update.error)?.message ?? null }} />;
 }

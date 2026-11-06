@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-season-goal"
+description = "Enables the add_season_goal command without any pre-configured scope."
+commands.allow = ["add_season_goal"]
+
+[[permission]]
+identifier = "deny-add-season-goal"
+description = "Denies the add_season_goal command without any pre-configured scope."
+commands.deny = ["add_season_goal"]

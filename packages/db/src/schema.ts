@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   pgTable,
@@ -10,6 +10,7 @@ import {
   integer,
   jsonb,
   pgEnum,
+  date,
 } from "drizzle-orm/pg-core";
 import type { Recurrence } from "@todalo/ramble/recurrence";
 
@@ -246,6 +247,35 @@ export const goalSuggestionDismissals = pgTable("goal_suggestion_dismissals", {
   taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [uniqueIndex("goal_suggestion_dismissals_task_goal_idx").on(table.taskId, table.goalId), index("goal_suggestion_dismissals_userId_idx").on(table.userId)]);
+
+// Goals ticket 04: a season is a time box of lengthDays calendar days from
+// startDate (a date in the user's zone). It is current until endedAt is set
+// (ticket 05); the partial unique index allows one current season per user.
+export const seasons = pgTable("seasons", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  lengthDays: integer("length_days").notNull(),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [index("seasons_userId_idx").on(table.userId), uniqueIndex("seasons_one_current_idx").on(table.userId).where(sql`${table.endedAt} is null`)]);
+
+export const seasonGoalTier = pgEnum("season_goal_tier", ["primary", "secondary"]);
+
+// A goal's tier and target text within one season. carriedFromId points at the
+// earlier season's row it continued from (ticket 05); ended seasons keep their rows as history.
+export const seasonGoals = pgTable("season_goals", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  seasonId: text("season_id").notNull().references(() => seasons.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  tier: seasonGoalTier("tier").notNull(),
+  target: text("target").notNull(),
+  carriedFromId: text("carried_from_id").references((): AnyPgColumn => seasonGoals.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [uniqueIndex("season_goals_season_goal_idx").on(table.seasonId, table.goalId), index("season_goals_userId_idx").on(table.userId)]);
 
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

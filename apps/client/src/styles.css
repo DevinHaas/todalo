@@ -842,3 +842,16 @@ button.property-value:hover { background: var(--accent); }
 .goal-suggestion { grid-column: 1 / -1; display: flex; align-items: center; gap: .375rem; margin: 0; padding-top: .25rem; font-size: .8125rem; color: var(--muted-foreground); }
 .goal-suggestion > svg { width: .875rem; height: .875rem; flex: none; }
 .goal-suggestion > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Goals ticket 04: the season page. */
+.season-days { margin: 0 0 1rem; color: var(--muted-foreground); }
+.season-days strong { color: var(--foreground); font-weight: 600; }
+.season-warning { margin: 0 0 1rem; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: .5rem; font-size: .875rem; }
+.season-lengths { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 0; padding: 0; border: 0; }
+.season-lengths legend { margin-bottom: .25rem; padding: 0; }
+.season-lengths label { display: inline-flex; align-items: center; gap: .375rem; }
+.season-lengths input[type="number"] { width: 5rem; }
+.season-goals li { align-items: flex-start; padding: .5rem 0; }
+.season-goal { display: grid; gap: .125rem; min-width: 0; flex: 1; }
+.season-target { margin: 0; color: var(--muted-foreground); font-size: .875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.season-add { margin-top: 1.5rem; }

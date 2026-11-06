@@ -16,6 +16,7 @@ mod projects;
 mod ramble;
 mod reads;
 mod search;
+mod seasons;
 mod settings;
 mod writes;
 use auth::{Account, Credentials, NativeAuth};
@@ -125,6 +126,10 @@ pub fn run() {
             goals::link_goal,
             goals::goal_suggestions,
             goals::dismiss_goal_suggestion,
+            seasons::current_season,
+            seasons::start_season,
+            seasons::add_season_goal,
+            seasons::update_season_goal,
             organization::destinations,
             organization::create_section,
             organization::delete_section,
