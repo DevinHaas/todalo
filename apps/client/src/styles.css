@@ -283,7 +283,7 @@ button.composer:hover { color: var(--foreground); }
 .label-options { display: flex; flex-wrap: wrap; gap: .75rem; }
 .label-option { display: flex; align-items: center; gap: .375rem; font-weight: 400; cursor: pointer; }
 /* Native checkbox: undo the global field box and the composer panel's appearance: none (which hid it), matching .select-box in both themes. */
-.label-option input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; width: 1rem; height: 1rem; min-height: 0; flex: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; accent-color: var(--primary); }
+.label-option input[type="checkbox"], .import-option input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; width: 1rem; height: 1rem; min-height: 0; flex: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; accent-color: var(--primary); }
 
 /* Display settings, Upcoming and calendar/schedule layouts (ticket 16): legacy
    display-settings, upcoming-list-view, calendar-view and schedule-grid. */
@@ -613,3 +613,14 @@ svg[data-priority="3"] { color: oklch(0.62 0.16 255); }
 @media (max-width: 767px) { .popover { max-width: calc(100vw - 1.5rem); } .composer-form.quick .composer-pills { gap: .375rem; } }
 input:focus-visible, textarea:focus-visible, .dropdown-trigger:focus-visible, .chip:focus-visible, .composer-form .quick-add-title input:focus-visible { outline: none; background-color: var(--row-tint); }
 .composer-form .quick-add-title input:focus-visible { background-color: transparent; }
+
+/* Settings › Import from Todoist */
+.import-card { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; justify-items: start; }
+.import-card fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: .375rem; width: 100%; }
+.import-card legend { margin-bottom: .375rem; }
+.import-option { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .5rem; font-weight: 400; cursor: pointer; }
+.import-actions { display: flex; align-items: center; gap: 1rem; }
+.import-prompt { max-width: 26rem; padding: 1.5rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--background, Canvas); color: inherit; }
+.import-prompt::backdrop { background: rgb(0 0 0 / .35); }
+.import-prompt h2 { margin: 0 0 .5rem; font-size: 1.125rem; }
+.import-prompt .import-actions { margin-top: 1rem; }

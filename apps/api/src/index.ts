@@ -23,6 +23,9 @@ import { createCalendarRoutes } from "./calendar-routes";
 import * as calendar from "@todalo/server/calendar-connections";
 import { handleCalendarWebhook } from "@todalo/server/calendar-sync";
 import * as live from "@todalo/server/live";
+import { createImportRoutes } from "./import-routes";
+import { todoistClient } from "./todoist";
+import * as todoistImport from "@todalo/server/todoist-import-run";
 import { db } from "@todalo/db";
 import { sql } from "drizzle-orm";
 
@@ -110,6 +113,18 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   // The webhook and the stream share this process's bus (see live.ts).
   subscribe: live.subscribe,
   publish: live.publish,
+})).use(createImportRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  todoist: todoistClient({
+    clientId: process.env.TODOIST_CLIENT_ID ?? "",
+    clientSecret: process.env.TODOIST_CLIENT_SECRET ?? "",
+    redirectUri: `${process.env.BETTER_AUTH_URL}/api/v1/imports/todoist/callback`,
+  }),
+  context: todoistImport.loadImportContext,
+  apply: todoistImport.applyImportPlan,
+  promptDue: todoistImport.importPromptDue,
+  promptSeen: todoistImport.markImportPromptSeen,
 })).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",

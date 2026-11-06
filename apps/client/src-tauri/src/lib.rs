@@ -5,6 +5,7 @@ mod calendar;
 mod credentials;
 mod endpoint;
 mod feedback;
+mod imports;
 mod links;
 mod metadata;
 mod oauth;
@@ -138,6 +139,11 @@ pub fn run() {
             settings::update_settings,
             settings::keyboard_preferences,
             settings::update_keyboard_preferences,
+            imports::import_status,
+            imports::import_connect,
+            imports::import_run,
+            imports::import_disconnect,
+            imports::import_prompt_seen,
             links::next_link,
             links::task_link,
             search::search_tasks,

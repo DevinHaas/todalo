@@ -9,6 +9,7 @@ import { ProjectScreen, ProjectsScreen } from "./project-screens";
 import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
+import { ImportPrompt } from "./import-screen";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -64,7 +65,7 @@ export default function App() {
         <Route path="/settings" element={<Navigate to={{ pathname: "/account", hash: location.hash }} replace />} />
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
-    </Routes></ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
+    </Routes><ImportPrompt userId={account.user.id} /></ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
   }
 
   return <main className="centered"><section className="account-panel" aria-busy={pending || state.status === "loading"}>

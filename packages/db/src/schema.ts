@@ -301,12 +301,27 @@ export const userSettings = pgTable("user_settings", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   smartDateRecognitionEnabled: boolean("smart_date_recognition_enabled").default(true).notNull(),
+  // Set once the post-sign-up "Import from Todoist?" prompt was answered.
+  importPromptSeenAt: timestamp("import_prompt_seen_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
 });
+
+// Which external item (e.g. a Todoist task) became which local row, so a
+// re-run import skips what it already brought in. localId is polymorphic by
+// `kind` (no FK); an import treats a mapping whose local row is gone as unmapped.
+export const importMappings = pgTable("import_mappings", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  kind: text("kind").$type<"project" | "section" | "task" | "label">().notNull(),
+  externalId: text("external_id").notNull(),
+  localId: text("local_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("import_mappings_external_idx").on(table.userId, table.provider, table.kind, table.externalId)]);
 
 export const userKeyboardPreferences = pgTable("user_keyboard_preferences", {
   userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),

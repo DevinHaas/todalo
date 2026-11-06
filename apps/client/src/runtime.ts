@@ -12,6 +12,7 @@ import { organizationQueries, organizationTransport } from "./organization";
 import { bulkTransport } from "./bulk";
 import { calendarQueries, calendarTransport, liveTransport } from "./calendar";
 import { searchQueries, searchTransport } from "./search";
+import { importTransport } from "./imports";
 
 // A read or write that finds the session revoked re-checks the account, which
 // signs the UI out (and clears every user-scoped query) when the server agrees.
@@ -38,3 +39,4 @@ export const searchReads = searchQueries(searchTransport());
 export const calendar = calendarTransport();
 export const calendarReads = calendarQueries(calendar);
 export const live = liveTransport();
+export const imports = importTransport();

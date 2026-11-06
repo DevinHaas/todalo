@@ -2,7 +2,48 @@
   "name": "@todalo/server",
   "version": "0.1.0",
   "private": true,
-  "exports": { "./today": "./src/today.ts", "./search": "./src/search.ts", "./task-dto": "./src/task-dto.ts", "./projects": "./src/projects.ts", "./project-dto": "./src/project-dto.ts", "./settings": "./src/settings.ts", "./settings-input": "./src/settings-input.ts", "./keyboard": "./src/keyboard.ts", "./tasks": "./src/tasks.ts", "./task-rules": "./src/task-rules.ts", "./task-input": "./src/task-input.ts", "./task-labels": "./src/task-labels.ts", "./metadata": "./src/metadata.ts", "./metadata-input": "./src/metadata-input.ts", "./organization": "./src/organization.ts", "./organization-input": "./src/organization-input.ts", "./bulk": "./src/bulk.ts", "./bulk-input": "./src/bulk-input.ts","./calendar": "./src/calendar.ts", "./calendar-input": "./src/calendar-input.ts", "./calendar-sync": "./src/calendar-sync.ts", "./calendar-connections": "./src/calendar-connections.ts", "./live": "./src/live.ts", "./attachments": "./src/attachments.ts", "./attachment-limits": "./src/attachment-limits.ts", "./attachment-http": "./src/attachment-http.ts" },
-  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run --root ../.. packages/server" },
-  "dependencies": { "@todalo/auth": "*", "@todalo/db": "*", "@todalo/ramble": "*", "date-fns": "^4.4.0", "drizzle-orm": "^0.45.2", "googleapis": "^173.0.0", "zod": "^4.4.3" }
+  "exports": {
+    "./today": "./src/today.ts",
+    "./search": "./src/search.ts",
+    "./task-dto": "./src/task-dto.ts",
+    "./projects": "./src/projects.ts",
+    "./project-dto": "./src/project-dto.ts",
+    "./settings": "./src/settings.ts",
+    "./settings-input": "./src/settings-input.ts",
+    "./keyboard": "./src/keyboard.ts",
+    "./tasks": "./src/tasks.ts",
+    "./task-rules": "./src/task-rules.ts",
+    "./task-input": "./src/task-input.ts",
+    "./task-labels": "./src/task-labels.ts",
+    "./metadata": "./src/metadata.ts",
+    "./metadata-input": "./src/metadata-input.ts",
+    "./organization": "./src/organization.ts",
+    "./organization-input": "./src/organization-input.ts",
+    "./bulk": "./src/bulk.ts",
+    "./bulk-input": "./src/bulk-input.ts",
+    "./calendar": "./src/calendar.ts",
+    "./calendar-input": "./src/calendar-input.ts",
+    "./calendar-sync": "./src/calendar-sync.ts",
+    "./calendar-connections": "./src/calendar-connections.ts",
+    "./live": "./src/live.ts",
+    "./attachments": "./src/attachments.ts",
+    "./attachment-limits": "./src/attachment-limits.ts",
+    "./attachment-http": "./src/attachment-http.ts",
+    "./dates": "./src/dates.ts",
+    "./todoist-import": "./src/todoist-import.ts",
+    "./todoist-import-run": "./src/todoist-import-run.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. packages/server"
+  },
+  "dependencies": {
+    "@todalo/auth": "*",
+    "@todalo/db": "*",
+    "@todalo/ramble": "*",
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
+    "googleapis": "^173.0.0",
+    "zod": "^4.4.3"
+  }
 }

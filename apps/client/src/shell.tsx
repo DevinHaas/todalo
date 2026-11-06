@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ImportSettingsScreen } from "./import-screen";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -237,5 +238,6 @@ export function AccountScreen({ account, error }: { account: Account; error: str
     </section>
     <ShortcutSettingsScreen userId={account.user.id} />
     <CalendarSettingsScreen userId={account.user.id} />
+    <ImportSettingsScreen userId={account.user.id} />
   </div>;
 }
