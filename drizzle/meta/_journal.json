@@ -85,6 +85,13 @@
       "when": 1793967476500,
       "tag": "0011_todoist_import",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793973492111,
+      "tag": "0012_task_comments",
+      "breakpoints": true
     }
   ]
 }

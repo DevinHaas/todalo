@@ -18,6 +18,9 @@ pub struct Include {
     recurring: bool,
     comments: bool,
     completed: bool,
+    // "quarter" | "year" | "all"; the server validates it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    completed_range: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]

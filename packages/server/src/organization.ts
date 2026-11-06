@@ -2,10 +2,12 @@
 // the legacy organization Server Actions, which now only add revalidatePath).
 // Callers authenticate first and pass the session's userId; every query is
 // owner-scoped, so a foreign ID behaves exactly like a missing one.
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { sections, tasks } from "@todalo/db/schema";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
+import { ownedTaskTree } from "@todalo/db/task-parent";
+import { subtreeIds, taskTree } from "@todalo/db/task-parent-validation";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
 import { getProjectsForUser } from "./projects";
 import { updateTask } from "./tasks";
@@ -55,8 +57,11 @@ export async function moveTasks(userId: string, ids: string[], input: TaskDestin
   const destination = await db.select({ id: tasks.id, sortOrder: tasks.sortOrder }).from(tasks).where(and(eq(tasks.userId, userId), inCollection(data.projectId)));
   const start = Math.max(-1, ...destination.filter(task => !targets.includes(task.id)).map(task => task.sortOrder)) + 1;
   const detached = owned.filter(task => task.parentId && !targets.includes(task.parentId)).map(task => task.id);
+  // Every descendant of a moved task goes with it (sub-tasks nest up to MAX_SUBTASK_DEPTH).
+  const tree = taskTree(await ownedTaskTree(userId));
+  const carried = [...new Set(targets.flatMap(id => subtreeIds(id, tree)))];
   await atomically([
-    db.update(tasks).set({ ...data, updatedAt: new Date() }).where(and(eq(tasks.userId, userId), or(inArray(tasks.id, targets), inArray(tasks.parentId, targets)))),
+    db.update(tasks).set({ ...data, updatedAt: new Date() }).where(and(eq(tasks.userId, userId), inArray(tasks.id, carried))),
     ...(detached.length ? [db.update(tasks).set({ parentId: null }).where(and(eq(tasks.userId, userId), inArray(tasks.id, detached)))] : []),
     ...owned.map((task, index) => db.update(tasks).set({ sortOrder: start + index }).where(and(eq(tasks.id, task.id), eq(tasks.userId, userId)))),
   ]);

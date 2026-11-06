@@ -112,7 +112,7 @@ describe("project screens", () => {
     expect(html).toContain("2 tasks");
     expect(html.indexOf(">parent<")).toBeLessThan(html.indexOf(">child<"));
     expect(html).not.toContain(">done<");
-    expect(html).toContain("</svg>Work</span>");
+    expect(html).toContain("<span class=\"pill project\">Work<svg");
   });
 
   it("offers the legacy Project sort and lists rows in the chosen order, sub-tasks under parents", () => {
@@ -139,7 +139,7 @@ describe("project screens", () => {
     const now = new Date(2026, 9, 4, 10);
     const due = new Date(2026, 9, 4, 9).toISOString();
     const html = render(createElement(TodayView, { now, onRetry: noop, projectNames: { work: "Work" }, state: success({ openCount: 2, tasks: [task("a", { dueDate: due }), task("b", { dueDate: due, projectId: null })] }) }));
-    expect(html).toContain("</svg>Work</span>");
-    expect(html).toContain("</svg>Inbox</span>");
+    expect(html).toContain("<span class=\"pill project\">Work<svg");
+    expect(html).toContain("<span class=\"pill project\">Inbox<svg");
   });
 });

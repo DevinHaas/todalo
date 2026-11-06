@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { useOpenSettings } from "./settings-nav";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
 import { reads, shortcutReads, shortcuts } from "./runtime";
@@ -10,6 +11,7 @@ import type { TaskDto } from "./tasks";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
 import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
 import { collapsedTasks } from "./views";
+import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
 import { theme } from "./theme";
 
@@ -38,6 +40,30 @@ function moveRow(step: number) {
   (row.matches("button") ? row : row.querySelector<HTMLElement>(TITLE)!).focus();
   row.scrollIntoView?.({ block: "nearest" });
 }
+/**
+ * The task sheet owns j/k, e and Enter while focus is in it (not in a field,
+ * not in one of its popovers): they walk its sub-task rows, complete the
+ * focused sub-task (else the task itself) and open the focused sub-task.
+ */
+const SUBTASK = ".task-sheet .sheet-subtask-title";
+const inSheet = () => Boolean(document.activeElement?.closest(".task-sheet")) && !document.querySelector(".task-sheet .popover");
+function sheetRow(step: number) {
+  const rows = [...document.querySelectorAll<HTMLElement>(SUBTASK)].filter(row => row.getClientRects().length);
+  const row = adjacentRow(rows, document.activeElement?.closest<HTMLElement>(SUBTASK) ?? null, step);
+  if (!row) return false;
+  row.focus();
+  row.scrollIntoView?.({ block: "nearest" });
+}
+const sheetComplete = () => {
+  const control = document.activeElement?.closest(".sheet-subtask")?.querySelector<HTMLElement>('button[role="checkbox"]')
+    ?? document.querySelector<HTMLElement>('.task-sheet .sheet-title-row button[role="checkbox"]');
+  if (!control) return false;
+  control.click();
+};
+const sheetOpen = () => { const title = document.activeElement?.closest<HTMLElement>(SUBTASK); if (!title) return false; title.click(); };
+/** A list key: the sheet's version while it has focus, nothing behind another dialog, else the list's. */
+const listOrSheet = (sheet: () => void | boolean, list: () => void | boolean) => () => inSheet() ? sheet() : modalOpen() ? false : list();
+
 /** Clicks the focused row's own control, so keys and taps share one write path. */
 function clickInRow(selector: string) {
   const control = activeRow()?.querySelector<HTMLElement>(selector);
@@ -62,7 +88,7 @@ function clickAndRefocus(selector: string) {
 // Composer and editor keys press the buttons a tap uses in the form holding focus.
 const composerForm = () => document.activeElement?.closest<HTMLFormElement>("form.composer-form") ?? null;
 const inComposerTitle = () => Boolean(document.activeElement?.closest(".quick-add-title")) && composerForm();
-const editorForm = () => document.activeElement?.closest<HTMLFormElement>(".task-editor form") ?? null;
+const editorForm = () => document.activeElement?.closest<HTMLElement>(".task-editor :is(form, .sheet-form)") ?? null;
 function press(scope: ParentNode | null, selector: string) {
   const control = scope?.querySelector<HTMLButtonElement>(selector);
   if (!control || control.disabled) return false;
@@ -123,7 +149,7 @@ function picker(toolbar: string | null, field: string) {
   const title = activeRow()?.querySelector<HTMLElement>(TITLE);
   if (!title) return false;
   title.click();
-  void waitFor(() => document.querySelector<HTMLElement>(`.task-editor form [data-field="${field}"]`)).then(target =>
+  void waitFor(() => document.querySelector<HTMLElement>(`.task-editor :is(form, .sheet-form) [data-field="${field}"]`)).then(target =>
     (target?.matches("fieldset") ? target.querySelector<HTMLElement>("input") ?? target : target)?.focus());
 }
 /** Move: the toolbar's Move (its dialog takes focus); with nothing selected, the focused row is selected first (Select, its checkbox) and the selection ends after the dialog. */
@@ -193,8 +219,9 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
   const metadata = useMutation(bulk.metadata);
   const clearDates = useMutation(bulk.clearDates);
   const organize = useMutation(useOrganizationMutations(userId).organize);
-  const latest = useRef({ navigate, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize });
-  latest.current = { navigate, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize };
+  const openSettings = useOpenSettings();
+  const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize });
+  latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize };
   useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(id); }, [notice]);
 
   useEffect(() => {
@@ -227,12 +254,14 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
       "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
-      "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": go("/account#keyboard-shortcuts"), "navigation.account": go("/account"), "navigation.theme": () => theme.toggle(),
-      "task.previous": () => moveRow(-1), "task.next": () => moveRow(1), "view.first": () => moveRow(-Infinity), "view.last": () => moveRow(Infinity),
+      "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": () => latest.current.openSettings(), "navigation.account": () => latest.current.openSettings("account"), "navigation.theme": () => theme.toggle(),
+      "task.previous": listOrSheet(() => sheetRow(-1), () => moveRow(-1)), "task.next": listOrSheet(() => sheetRow(1), () => moveRow(1)),
+      "view.first": () => moveRow(-Infinity), "view.last": () => moveRow(Infinity),
       // Enter on the title opens it; Enter on the row's buttons keeps their own action.
-      "task.details": () => { const title = activeRow()?.querySelector<HTMLElement>(TITLE); if (!title || document.activeElement !== title) return false; title.click(); },
-      "task.edit": () => clickInRow(TITLE),
-      "task.complete": () => clickAndRefocus('button[role="checkbox"]'),
+      "task.details": listOrSheet(sheetOpen, () => { const title = activeRow()?.querySelector<HTMLElement>(TITLE); if (!title || document.activeElement !== title) return false; title.click(); }),
+      // ⌘E: the quick add editor in place of the row (the sheet where there is none); in the sheet, its title.
+      "task.edit": listOrSheet(() => { document.querySelector<HTMLElement>(".task-sheet .sheet-title")?.focus(); }, () => clickInRow(activeRow()?.querySelector("[data-edit]") ? "[data-edit]" : TITLE)),
+      "task.complete": listOrSheet(sheetComplete, () => clickAndRefocus('button[role="checkbox"]')),
       "task.delete": () => clickAndRefocus(".row-delete"),
       // Starts selection mode (the touch Select button) when needed, then toggles the row.
       "task.select": () => {
@@ -258,7 +287,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         return press(form, 'button[type="submit"]');
       },
       "editor.save-below": () => press(editorForm(), '[data-insert="below"]'),
-      "editor.save": () => press(editorForm(), 'button[type="submit"]'),
+      "editor.save": () => press(editorForm(), '[data-save], button[type="submit"]'),
       // Focuses the description, opening it first (Add description) as legacy did.
       "quick-add.description": () => { const form = inComposerTitle(); const field = form && form.querySelector<HTMLElement>('[aria-label="Description"], .add-description, [data-composer-more]'); if (!field) return false; if (field.matches("button")) field.click(); else field.focus(); },
       "quick-add.actions": () => metadataField("priority"),
@@ -274,7 +303,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       "task.deadline": () => picker("deadline", "deadline"),
       "task.clear-deadline": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { deadline: null } })),
       "task.move": moveDialog,
-      // Legacy nest: under the row above (or that row's parent), only in Manual sort.
+      // Indent: under the previous sibling (the nearest row above at the same level), only in Manual sort.
       "task.nest": () => {
         const row = activeRow();
         if (!row) return false;
@@ -282,9 +311,10 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         const above = visibleTasks()[visibleTasks().indexOf(row) - 1];
         write(async () => {
           const { tasks, task } = await focusedTask(row);
-          const previous = tasks.find(item => item.id === above?.dataset.taskId);
-          const parent = previous?.parentId ? tasks.find(item => item.id === previous.parentId) : previous;
-          if (!task || !parent || !parentCandidates(task, tasks).includes(parent)) throw new Error("Choose a task below the task you want to nest under.");
+          const byId = new Map(tasks.map(item => [item.id, item]));
+          let parent = above ? byId.get(above.dataset.taskId!) : undefined;
+          while (parent && task && parent.parentId !== task.parentId) parent = parent.parentId ? byId.get(parent.parentId) : undefined;
+          if (!task || !parent || !parentCandidates(task, tasks).includes(parent)) throw new Error(`Choose a task below the task you want to nest under (up to ${MAX_SUBTASK_DEPTH} levels).`);
           await latest.current.organize.mutateAsync({ task, change: { parentId: parent.id } });
         });
       },
@@ -292,7 +322,11 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
         const row = activeRow();
         if (!row) return false;
         if (!sortable()) return void setNotice("Switch Sort to Manual to nest tasks.");
-        write(async () => { const { task } = await focusedTask(row); if (task?.parentId) await latest.current.organize.mutateAsync({ task, change: { parentId: null } }); });
+        // Outdent one level: the task becomes a sibling of its parent.
+        write(async () => {
+          const { tasks, task } = await focusedTask(row);
+          if (task?.parentId) await latest.current.organize.mutateAsync({ task, change: { parentId: tasks.find(item => item.id === task.parentId)?.parentId ?? null } });
+        });
       },
       "editor.previous": () => editAdjacent(-1), "editor.next": () => editAdjacent(1),
       "project.section": () => press(document.querySelector("main"), '[data-project-action="section"]'),
@@ -368,19 +402,18 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
   return <>
     {notice && <p role="alert" className="keyboard-notice">{notice}</p>}
     {status && <p role="status" className="keyboard-notice">{status}</p>}
-    {syncError && <div role="status" className="shortcut-sync">{syncError} <button type="button" className="text-action" onClick={() => navigate("/account#keyboard-shortcuts")}>Shortcut settings</button></div>}
+    {syncError && <div role="status" className="shortcut-sync">{syncError} <button type="button" className="text-action" onClick={() => openSettings("keyboard-shortcuts")}>Shortcut settings</button></div>}
     {menu && <TaskMenu title={menu.querySelector(TITLE)?.textContent ?? ""} onChoose={closeMenu} onClose={() => closeMenu()} />}
     {help && <ShortcutHelp bindings={id => effectiveBindings(id, effective, platform)} onClose={close}
-      onCustomize={() => { setHelp(false); navigate("/account#keyboard-shortcuts"); }} />}
+      onCustomize={() => { setHelp(false); openSettings("keyboard-shortcuts"); }} />}
   </>;
 }
 
-/** Account › Keyboard shortcuts; a save replaces the account document and refreshes every open screen. */
+/** Settings › Keyboard shortcuts; a save replaces the account document and refreshes every open screen. */
 export function ShortcutSettingsScreen({ userId }: { userId: string }) {
   const cache = useQueryClient();
   const { query, preferences, effective, syncError } = useShortcuts(userId);
   const [help, setHelp] = useState(false);
-  useEffect(() => { if (location.hash === "#keyboard-shortcuts") document.getElementById("keyboard-shortcuts")?.scrollIntoView(); }, []);
   if (query.status === "pending") return <p className="state" role="status">Loading shortcuts…</p>;
   return <>
     <ShortcutSettings preferences={preferences} platform={platform} syncError={syncError} onRetry={() => void query.refetch()} onHelp={() => setHelp(true)}

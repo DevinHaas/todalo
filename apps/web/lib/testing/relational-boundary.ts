@@ -42,7 +42,8 @@ export async function relationalBoundary(boundary: { rows: Record<string, Record
             result.forEach(row => Object.assign(row, fresh, set));
           }
           if (kind === "delete") boundary.rows[key] = rows.filter(row => !result.includes(row));
-          if (fields) result = result.map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, row[column.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())]])));
+          // A computed `sql` field (no column name, e.g. a counted sub-select) reads the row's own value, else 0.
+          if (fields) result = result.map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, column.name === undefined ? row[name] ?? 0 : row[column.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())]])));
           return Promise.resolve(result).then(resolve, reject);
         } catch (error) { return Promise.reject(error).then(resolve, reject); }
       },

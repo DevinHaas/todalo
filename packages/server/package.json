@@ -6,6 +6,8 @@
     "./today": "./src/today.ts",
     "./search": "./src/search.ts",
     "./task-dto": "./src/task-dto.ts",
+    "./comments": "./src/comments.ts",
+    "./comment-dto": "./src/comment-dto.ts",
     "./projects": "./src/projects.ts",
     "./project-dto": "./src/project-dto.ts",
     "./settings": "./src/settings.ts",

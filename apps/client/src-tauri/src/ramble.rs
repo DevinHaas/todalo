@@ -16,6 +16,20 @@ pub struct RambleSocket {
     url: String,
 }
 
+/// The system's microphone privacy settings (Ramble's "Open System Settings").
+/// A fixed URL per platform; this is not a general URL opener.
+#[tauri::command]
+pub fn open_microphone_settings(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    #[cfg(target_os = "ios")]
+    let url = "app-settings:";
+    #[cfg(not(target_os = "ios"))]
+    let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "System Settings could not be opened.".to_owned())
+}
+
 #[tauri::command]
 pub async fn ramble_socket(state: tauri::State<'_, NativeAuth>) -> Result<RambleSocket, String> {
     let (base, ticket) = state.ramble_ticket().await?;

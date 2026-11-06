@@ -62,6 +62,15 @@ describe("schedule date rules match the legacy date-fns views", () => {
     process.env.TZ = "America/New_York";
     expect([...tasksByDay([task("late", { dueDate: "2026-10-05T02:30:00.000Z" })], false).keys()]).toEqual(["2026-10-04"]);
   });
+
+  it("keeps done tasks with a time range on calendars even with completed tasks hidden", () => {
+    const slot = { dueDate: "2026-10-05T17:00:00.000Z", dueDateEnd: "2026-10-05T17:45:00.000Z" };
+    const ids = (showCompleted: boolean) => [...tasksByDay([
+      task("done-slot", { ...slot, status: "done" }), task("done-day", { dueDate: "2026-10-05T00:00:00.000Z", status: "done" }), task("open", slot),
+    ], showCompleted).values()].flat().map(item => item.id);
+    expect(ids(false)).toEqual(["done-slot", "open"]);
+    expect(ids(true)).toEqual(["done-slot", "done-day", "open"]);
+  });
 });
 
 describe("Upcoming sections", () => {

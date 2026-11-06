@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Local (hardened runtime, not sandboxed) builds. Without this the
+	     hardened runtime blocks the microphone even when System Settings allows it.
+	     App Store builds use Entitlements.plist (tauri.appstore.conf.json). -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

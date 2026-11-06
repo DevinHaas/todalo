@@ -3,7 +3,9 @@ import { AccountTransportError, nativeAccountError } from "./errors";
 
 // Todoist import (.scratch/todoist-import). The server holds the Todoist token;
 // clients only open the authorize page and read status/preview.
-export interface ImportInclude { sections: boolean; subtasks: boolean; labels: boolean; recurring: boolean; comments: boolean; completed: boolean }
+export interface ImportInclude { sections: boolean; subtasks: boolean; labels: boolean; recurring: boolean; comments: boolean; completed: boolean; completedRange?: CompletedRange }
+/** How far back completed tasks are imported. */
+export type CompletedRange = "quarter" | "year" | "all";
 export interface ImportSelection { projectIds: string[]; include: ImportInclude; timeZone: string }
 export interface ImportPreview {
   projects: { id: string; name: string; inbox: boolean; tasks: number; imported: number }[];
@@ -25,7 +27,7 @@ export interface ImportTransport {
   promptSeen(): Promise<void>;
 }
 
-export const defaultInclude: ImportInclude = { sections: true, subtasks: true, labels: true, recurring: true, comments: true, completed: false };
+export const defaultInclude: ImportInclude = { sections: true, subtasks: true, labels: true, recurring: true, comments: true, completed: false, completedRange: "quarter" };
 
 export function browserImportTransport(fetcher: typeof fetch = fetch, location: Pick<Location, "assign"> = window.location): ImportTransport {
   async function request<T>(method: string, path = "", body?: unknown): Promise<T> {

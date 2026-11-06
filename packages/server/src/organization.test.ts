@@ -72,13 +72,25 @@ describe("one task's organization through updateTask", () => {
 
   it("refuses cycles and depth as invalid, foreign or mismatched destinations as missing", async () => {
     expect(await reason(edit("loose", { parentId: "loose" }))).toBe("invalid");
-    expect(await reason(edit("loose", { parentId: "child" }))).toBe("invalid");
-    expect(await reason(edit("parent", { parentId: "loose" }))).toBe("invalid");
+    expect(await reason(edit("parent", { parentId: "child" }))).toBe("invalid");
     expect(await reason(edit("loose", { parentId: "bob-task" }))).toBe("missing");
     expect(await reason(edit("loose", { projectId: "bob-project", sectionId: null }))).toBe("missing");
     expect(await reason(edit("loose", { projectId: "home", sectionId: "doing" }))).toBe("missing");
     expect(await reason(edit("loose", { projectId: "work", sectionId: "bob-section" }))).toBe("missing");
     expect(task("loose")).toMatchObject({ projectId: "work", sectionId: "doing", parentId: null });
+  });
+
+  it("nests up to three levels and carries the whole subtree on a move", async () => {
+    expect(await edit("loose", { parentId: "child" })).toBe("updated");
+    expect(await edit("inbox", { parentId: "loose" })).toBe("updated");
+    expect(task("inbox")).toMatchObject({ parentId: "loose", projectId: "work" });
+    // parent > child > loose > inbox is the deepest tree; one more level is refused.
+    boundary.rows.tasks.push(row("extra"));
+    expect(await reason(edit("extra", { parentId: "inbox" }))).toBe("invalid");
+    expect(await edit("parent", { projectId: "home", sectionId: "garden" })).toBe("updated");
+    expect(["child", "loose", "inbox"].map(id => task(id)?.projectId)).toEqual(["home", "home", "home"]);
+    await moveTasks("alice", ["parent"], { projectId: null, sectionId: null });
+    expect(["child", "loose", "inbox"].map(id => task(id)?.projectId)).toEqual([null, null, null]);
   });
 
   it("refuses a move from a stale copy unless it already applied", async () => {

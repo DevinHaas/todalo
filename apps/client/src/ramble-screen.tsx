@@ -6,10 +6,11 @@ import { ArrowUp, Hash, Inbox, LoaderCircle, Mic, MicOff, Repeat2, X } from "luc
 import type { RambleTodo } from "@todalo/ramble";
 import { startRambleCapture } from "@todalo/ramble/audio";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { commitStaged, createRambleRecorder, type RambleRecorderDependencies, type RambleView } from "./ramble";
+import { commitStaged, createRambleRecorder, detailsAsTodo, PERMISSION_DENIED, todoAsTask, type RambleRecorderDependencies, type RambleView } from "./ramble";
 import { projectReads, queries, session } from "./runtime";
 import { dueLabel, operationId } from "./tasks";
-import { SmartDates } from "./composer";
+import { Composer, SmartDates } from "./composer";
+import { playCue } from "./sounds";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const localDateTime = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
@@ -92,6 +93,8 @@ export function RambleScreen() {
   const projects = useQuery({ ...projectReads.list(userId), enabled: Boolean(userId) }).data ?? [];
   const [view, setView] = useState<RambleView | null>(null);
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  // The staged card being edited by hand, with its draft text.
+  const [editing, setEditing] = useState<string | null>(null);
   // ponytail: options are read once per screen visit; the setting changes elsewhere.
   const recorder = useMemo(() => createRambleRecorder(platform({ defaultDueDate, smartRecognition }), setView), []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -122,6 +125,18 @@ export function RambleScreen() {
     return () => { disposed = true; media?.removeEventListener("devicechange", enumerate); };
   }, [listening]);
 
+  // Sound cues: the microphone is ready, a task was added, the tasks were saved.
+  const phase = view?.status;
+  const staged = view?.state?.todos.length ?? 0;
+  const seen = useRef({ phase, staged });
+  useEffect(() => {
+    const before = seen.current;
+    if (phase === "listening" && before.phase !== "listening" && before.phase !== "paused") playCue("ramble-ready");
+    else if (phase === "committed" && before.phase !== "committed") playCue("ramble-saved");
+    else if (staged > before.staged) playCue("ramble-added");
+    seen.current = { phase, staged };
+  }, [phase, staged]);
+
   const committed = view?.status === "committed";
   useEffect(() => {
     if (!committed) return;
@@ -149,12 +164,21 @@ export function RambleScreen() {
     const due = todo.dueDate ? new Date(`${todo.dueDate}T${todo.startTime ?? "00:00"}:00`) : null;
     // A local guess the model has not confirmed yet: dimmed and not removable.
     const provisional = view!.provisionalIds.includes(todo.id);
+    const editable = !busy && view!.connected && !provisional;
+    // The quick add card, as ⌘E edits a task; ✓ sends the whole card back to the session.
+    if (editing === todo.id) return <li key={todo.id} className={`ramble-card-edit${nested ? " nested" : ""}`}>
+      <div className="dialog quick-add inline-quick-add" aria-label={`Edit ${todo.title}`}>
+        <Composer startOpen quick editing={todoAsTask(todo)} dueDate={() => todoAsTask(todo).dueDate} projectId={todo.projectId}
+          onCancel={() => setEditing(null)} onUpdate={async (details, projectId) => { recorder.edit(detailsAsTodo(todo, details, projectId)); }} />
+      </div>
+    </li>;
     return <li key={todo.id} aria-busy={provisional} className={`ramble-card${nested ? " nested" : ""}${provisional ? " provisional" : ""}`}>
       <div className="ramble-card-title">
-        <div>
+        <button type="button" className="ramble-card-text" disabled={!editable} aria-label={`Edit ${todo.title}`}
+          onClick={() => setEditing(todo.id)}>
           <p>{todo.title}</p>
           {todo.description && <p className="ramble-card-description">{todo.description}</p>}
-        </div>
+        </button>
         <button type="button" className="icon-button" disabled={busy || !view!.connected || provisional} aria-label={`Remove ${todo.title}`} onClick={() => recorder.remove(todo.id)}><X /></button>
       </div>
       <div className="task-meta">
@@ -189,6 +213,7 @@ export function RambleScreen() {
     <span role="status" aria-live="polite" className="sr-only">{status}</span>
     {view.error && <div className="ramble-error">
       <p role="alert">{view.error}</p>
+      {view.error === PERMISSION_DENIED && isTauri() && <button type="button" className="button outline" onClick={() => void invoke("open_microphone_settings")}>Open System Settings</button>}
       {view.understandingFailed && view.connected
         ? <button type="button" className="button outline" disabled={view.pending > 0} onClick={() => recorder.retryUnderstanding()}>Retry understanding</button>
         : !view.connected && !busy && <button type="button" className="button outline" onClick={() => recorder.open()}>Start a new session</button>}

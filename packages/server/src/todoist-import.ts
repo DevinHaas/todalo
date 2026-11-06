@@ -3,9 +3,26 @@
 // Rules: .scratch/todoist-import/spec.md ("Mapping rules").
 import { parseQuickAdd } from "@todalo/ramble/quick-add";
 import type { Recurrence } from "@todalo/ramble/recurrence";
+import { MAX_SUBTASK_DEPTH } from "@todalo/db/task-parent-validation";
 import { zonedTaskDate } from "./dates";
 
 export const TODOIST = "todoist";
+
+/**
+ * Splits a description written by the earlier importer (notes appended after a
+ * `---` line, one per blank-line-separated paragraph) into the description and
+ * its comments. Used once by scripts/backfill-imported-comments.ts. A note that
+ * itself held a blank line comes back as two comments (the old format lost that).
+ */
+export function splitImportedComments(description: string | null): { description: string | null; comments: string[] } | null {
+  if (!description) return null;
+  const at = description.startsWith("---\n") ? 0 : description.lastIndexOf("\n\n---\n");
+  if (at < 0) return null;
+  const block = description.slice(at === 0 ? 4 : at + 6);
+  const comments = block.split("\n\n").map((comment) => comment.trim()).filter(Boolean);
+  if (!comments.length) return null;
+  return { description: at === 0 ? null : description.slice(0, at).trim() || null, comments };
+}
 
 // Subset of Todoist API v1 sync resources that the import reads.
 export interface TodoistDue { date: string; timezone?: string | null; string?: string | null; is_recurring?: boolean }
@@ -19,8 +36,8 @@ export interface TodoistItem {
   labels?: string[]; checked?: boolean; is_deleted?: boolean; completed_at?: string | null;
 }
 export interface TodoistLabel { id: string; name: string; color?: string | null; is_deleted?: boolean }
-export interface TodoistNote { id: string; item_id: string; content?: string | null; is_deleted?: boolean; file_attachment?: { file_name?: string | null; file_url?: string | null } | null }
-export interface TodoistSnapshot { projects: TodoistProject[]; sections: TodoistSection[]; items: TodoistItem[]; labels: TodoistLabel[]; notes: TodoistNote[] }
+export interface TodoistNote { id: string; item_id: string; content?: string | null; posted_at?: string | null; is_deleted?: boolean; file_attachment?: { file_name?: string | null; file_url?: string | null } | null }
+export interface TodoistSnapshot { projects: TodoistProject[]; sections: TodoistSection[]; items: TodoistItem[]; labels: TodoistLabel[]; notes: TodoistNote[]; user?: { joined_at?: string | null } }
 
 export interface ImportSelection {
   projectIds: string[];
@@ -47,6 +64,8 @@ export interface ImportPlan {
   labels: { id: string; name: string; color: string | null }[];
   tasks: PlannedTask[];
   taskLabels: { taskId: string; labelId: string }[];
+  /** Todoist notes of newly imported tasks, as task_comments rows. */
+  comments: { id: string; taskId: string; body: string; createdAt: Date }[];
   mappings: { kind: MappingKind; externalId: string; localId: string }[];
   skipped: number;
   warnings: string[];
@@ -80,7 +99,7 @@ export function todoistRecurrence(text: string): Recurrence | null {
 
 export function planTodoistImport(snapshot: TodoistSnapshot, selection: ImportSelection, context: ImportContext): ImportPlan {
   const { include } = selection;
-  const plan: ImportPlan = { projects: [], sections: [], labels: [], tasks: [], taskLabels: [], mappings: [], skipped: 0, warnings: [] };
+  const plan: ImportPlan = { projects: [], sections: [], labels: [], tasks: [], taskLabels: [], comments: [], mappings: [], skipped: 0, warnings: [] };
   const known = (kind: MappingKind, id: string) => context.mapped.get(`${kind}:${id}`);
   const record = (kind: MappingKind, externalId: string, localId: string) => {
     context.mapped.set(`${kind}:${externalId}`, localId);
@@ -142,41 +161,41 @@ export function planTodoistImport(snapshot: TodoistSnapshot, selection: ImportSe
 
   const items = snapshot.items.filter((i) => !i.is_deleted && localProject.has(i.project_id) && (include.completed || !i.checked));
   const byId = new Map(items.map((i) => [i.id, i]));
-  const notes = new Map<string, string[]>();
+  const notes = new Map<string, { body: string; createdAt: Date }[]>();
   if (include.comments) {
     for (const note of snapshot.notes) {
       if (note.is_deleted) continue;
       const file = note.file_attachment;
       const text = [note.content?.trim(), file?.file_name && [file.file_name, file.file_url].filter(Boolean).join(" ")].filter(Boolean).join("\n");
-      if (text) notes.set(note.item_id, [...(notes.get(note.item_id) ?? []), text]);
+      const posted = note.posted_at ? new Date(note.posted_at) : null;
+      const createdAt = posted && !Number.isNaN(posted.getTime()) ? posted : new Date();
+      if (text) notes.set(note.item_id, [...(notes.get(note.item_id) ?? []), { body: text, createdAt }]);
     }
   }
 
-  // Top-level ancestor among imported items; todalo sub-tasks are one level deep.
+  // Imported ancestors, nearest first. todalo keeps MAX_SUBTASK_DEPTH levels;
+  // a deeper item attaches to its ancestor at the deepest allowed level.
   const parentOf = (item: TodoistItem) => (item.parent_id ? byId.get(item.parent_id) : undefined);
-  const depthOf = (item: TodoistItem) => {
-    let depth = 0;
-    for (let parent = parentOf(item); parent; parent = parentOf(parent)) depth++;
-    return depth;
-  };
-  const rootOf = (item: TodoistItem): TodoistItem | null => {
-    let root: TodoistItem | null = null;
-    for (let parent = parentOf(item); parent; parent = parentOf(parent)) root = parent;
-    return root;
+  const ancestorsOf = (item: TodoistItem) => {
+    const chain: TodoistItem[] = [];
+    for (let parent = parentOf(item); parent && !chain.includes(parent); parent = parentOf(parent)) chain.push(parent);
+    return chain;
   };
 
-  // Roots first so a sub-task can reference its parent's local ID.
-  const depth = new Map(items.map((i) => [i.id, depthOf(i)]));
-  const ordered = [...items].sort((a, b) => Math.min(1, depth.get(a.id)!) - Math.min(1, depth.get(b.id)!));
+  // Shallower first so a sub-task can reference its parent's local ID.
+  const ancestors = new Map(items.map((i) => [i.id, ancestorsOf(i)]));
+  const depthOf = (item: TodoistItem) => Math.min(MAX_SUBTASK_DEPTH, ancestors.get(item.id)!.length);
+  const ordered = [...items].sort((a, b) => depthOf(a) - depthOf(b));
   const localTask = new Map<string, string>();
   let recurringDropped = 0;
   let flattened = 0;
   for (const item of ordered) {
     const existing = known("task", item.id);
     if (existing) { localTask.set(item.id, existing); plan.skipped++; continue; }
-    const root = include.subtasks ? rootOf(item) : null;
-    if (root && depth.get(item.id)! > 1) flattened++;
-    const parentId = root ? localTask.get(root.id) ?? known("task", root.id) ?? null : null;
+    const chain = include.subtasks ? ancestors.get(item.id)! : [];
+    if (chain.length > MAX_SUBTASK_DEPTH) flattened++;
+    const parent = chain[Math.max(0, chain.length - MAX_SUBTASK_DEPTH)];
+    const parentId = parent ? localTask.get(parent.id) ?? known("task", parent.id) ?? null : null;
     const id = crypto.randomUUID();
     const due = item.due ? todoistInstant(item.due.date, item.due.timezone ?? context.timeZone) : null;
     let dueDateEnd: Date | null = null;
@@ -189,8 +208,8 @@ export function planTodoistImport(snapshot: TodoistSnapshot, selection: ImportSe
       recurrence = todoistRecurrence(item.due.string ?? "");
       if (!recurrence) recurringDropped++;
     }
-    const comments = notes.get(item.id);
-    const description = [item.description?.trim() || null, comments?.length ? `---\n${comments.join("\n\n")}` : null].filter(Boolean).join("\n\n") || null;
+    const description = item.description?.trim() || null;
+    for (const note of notes.get(item.id) ?? []) plan.comments.push({ id: crypto.randomUUID(), taskId: id, ...note });
     plan.tasks.push({
       id, projectId: localProject.get(item.project_id) ?? null,
       sectionId: (item.section_id && localSection.get(item.section_id)) || null,
@@ -208,7 +227,7 @@ export function planTodoistImport(snapshot: TodoistSnapshot, selection: ImportSe
     if (include.labels) for (const name of item.labels ?? []) plan.taskLabels.push({ taskId: id, labelId: labelId(name) });
   }
 
-  if (flattened) plan.warnings.push(`${flattened} nested sub-task${flattened === 1 ? " was moved under its top-level task" : "s were moved under their top-level tasks"} (todalo has one sub-task level).`);
+  if (flattened) plan.warnings.push(`${flattened} nested sub-task${flattened === 1 ? " was" : "s were"} moved up to the deepest level (todalo nests sub-tasks ${MAX_SUBTASK_DEPTH} levels deep).`);
   if (recurringDropped) plan.warnings.push(`${recurringDropped} recurring schedule${recurringDropped === 1 ? "" : "s"} could not be converted and kept only the next date.`);
   return plan;
 }

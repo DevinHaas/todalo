@@ -57,6 +57,7 @@ export type RambleAction =
   | { type: "enter-sub-task" | "exit-sub-task" }
   | { type: "undo"; undone: RambleUndoEntry }
   | { type: "remove"; removedIds: string[] }
+  | { type: "edit"; todo: RambleTodo }
   | { type: "end" }
   | { type: "noop"; reason: "empty" | "empty-title" | "empty-undo" | "no-parent" | "already-in-mode" | "session-ended" | "unknown-todo" };
 
@@ -119,6 +120,20 @@ export function removeStagedTodo(id: string, state: RambleSessionState): RambleR
   return {
     action: { type: "remove", removedIds },
     nextState: { ...state, ...validMode(state, todos), todos, undoStack },
+  };
+}
+
+/** A card edited by hand (the quick add card: text, schedule, priority, labels, project); "undo" restores it. Nesting stays. */
+export function editStagedTodo(id: string, changes: Partial<Omit<RambleTodo, "id" | "parentId">>, state: RambleSessionState): RambleResult {
+  const previous = state.todos.find((todo) => todo.id === id);
+  if (!previous) return noop(state, "unknown-todo");
+  const title = (changes.title ?? previous.title).trim();
+  if (!title) return noop(state, "empty-title");
+  const description = changes.description === undefined ? previous.description : changes.description?.trim() || null;
+  const todo: RambleTodo = { ...previous, ...changes, id, parentId: previous.parentId, title, description };
+  return {
+    action: { type: "edit", todo },
+    nextState: { ...state, todos: state.todos.map((item) => item.id === id ? todo : item), undoStack: [...state.undoStack, { type: "edit-todo", todoId: id, previous }] },
   };
 }
 

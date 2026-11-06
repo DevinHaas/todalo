@@ -1,10 +1,11 @@
 // Server-only task commands shared by the legacy Server Actions and /api/v1.
 // Callers authenticate first and pass the session's userId; nothing here reads
 // request context or Next caches (callers revalidate their own views).
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { taskLabels, tasks } from "@todalo/db/schema";
-import { assertTaskParent } from "@todalo/db/task-parent";
+import { assertTaskParent, ownedTaskTree } from "@todalo/db/task-parent";
+import { subtreeIds, taskTree } from "@todalo/db/task-parent-validation";
 import { assertTaskOrganization } from "@todalo/db/task-organization";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
 import { deleteTaskFromCalendar, pushTaskToCalendar } from "./calendar";
@@ -159,7 +160,11 @@ export async function updateTask(userId: string, input: UpdateTaskInput, options
     .set({ ...data, updatedAt: new Date() })
     .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   if (labelIds !== undefined) await replaceTaskLabels(userId, id, labelIds);
-  if (organizationChanged) await db.update(tasks).set({ projectId, sectionId }).where(and(eq(tasks.parentId, id), eq(tasks.userId, userId)));
+  // The whole subtree follows its root into the new project and section.
+  if (organizationChanged) {
+    const descendants = subtreeIds(id, taskTree(await ownedTaskTree(userId))).slice(1);
+    if (descendants.length) await db.update(tasks).set({ projectId, sectionId }).where(and(inArray(tasks.id, descendants), eq(tasks.userId, userId)));
+  }
   if ("dueDate" in data) await syncToCalendar(userId, id);
   return "updated";
 }

@@ -178,6 +178,16 @@ export const taskAttachments = pgTable("task_attachments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [index("task_attachments_taskId_idx").on(table.taskId)]);
 
+// Task comments (author is the task's owner; tasks are single-user). Imported
+// Todoist notes land here too, with the note's posted time as createdAt.
+export const taskComments = pgTable("task_comments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("task_comments_taskId_idx").on(table.taskId)]);
+
 export const projectRelations = relations(projects, ({ many }) => ({
   tasks: many(tasks),
 }));

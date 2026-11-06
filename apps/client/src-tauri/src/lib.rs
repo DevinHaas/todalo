@@ -2,6 +2,7 @@ mod attachments;
 mod auth;
 mod bulk;
 mod calendar;
+mod comments;
 mod credentials;
 mod endpoint;
 mod feedback;
@@ -118,6 +119,9 @@ pub fn run() {
             organization::delete_section,
             organization::organize_task,
             attachments::attachments,
+            comments::comments,
+            comments::add_comment,
+            comments::delete_comment,
             attachments::upload_files,
             attachments::save_attachment,
             calendar::calendar_events,
@@ -133,6 +137,7 @@ pub fn run() {
             oauth::google_finish,
             oauth::google_cancel,
             ramble::ramble_socket,
+            ramble::open_microphone_settings,
             ramble::ramble_commit,
             feedback::feedback,
             settings::settings,

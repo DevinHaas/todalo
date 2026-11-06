@@ -90,7 +90,8 @@ removed after an account response returns 401.
   query error triggers `session.refresh()`, which signs out when the server agrees.
   Mutations (ticket 5) must invalidate `taskKeys.today(userId)` (it also feeds the
   sidebar count) and the affected `taskKeys.task(userId, id)`.
-- **Routes:** React Router `/today`, `/tasks/:id`, `/account`; unknown paths go to
+- **Routes:** React Router `/today`, `/tasks/:id`, `/settings/:section` (a modal over
+  the screen it opened from; old `/account` links redirect); unknown paths go to
   `/today`. Signed-out screens keep the URL so the route opens after sign-in.
 
 ## Task writes (ticket 5 conventions)
@@ -555,6 +556,10 @@ TAURI_TODALO_API_BASE_URL=http://127.0.0.1:3009 bun tauri ios build --debug --ta
 ```
 
 The resulting app lives under `src-tauri/target/debug/bundle/macos/todalo.app`.
+Unsigned (ad-hoc) Mac builds get a new code hash on every build, so Keychain asks for
+the login password again each time. Add `APPLE_SIGNING_IDENTITY="Apple Development: …"`
+(any Apple Development identity from `security find-identity -v -p codesigning`) to
+keep one "Always Allow" across rebuilds.
 It uses bundled assets. This is a local unsigned development artifact; no release
 has been signed, notarized or published.
 

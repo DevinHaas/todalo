@@ -1,10 +1,10 @@
 import {
-  createRambleSession, previewSegments, removeStagedTodo,
+  createRambleSession, editStagedTodo, previewSegments, removeStagedTodo,
   type RambleSessionState, type RambleTodo,
 } from "@todalo/ramble";
 import type { SpeechCallbacks, SpeechConnection } from "./elevenlabs";
 import { applySemanticOperations, type SemanticProcessor, type SemanticProject } from "@todalo/ramble/semantic";
-import { rambleOperationId } from "@todalo/ramble/commit";
+import { rambleOperationId, rambleTodoInput } from "@todalo/ramble/commit";
 
 export interface SessionDependencies {
   send(message: unknown): void;
@@ -147,6 +147,18 @@ export class RambleConnection {
       this.pending = this.pending.then(() => {
         if (this.phase === "closed" || this.phase === "saved") return;
         this.state = removeStagedTodo(input.id as string, this.state).nextState;
+        this.publish();
+      });
+      await this.pending;
+    } else if (input.type === "edit") {
+      // The whole card as the quick add edited it, checked like a commit's staged todo.
+      const parsed = rambleTodoInput.safeParse(input.todo);
+      if (!parsed.success) { this.error("invalid_edit", "That change could not be applied."); return; }
+      const { id, parentId: _parentId, ...changes } = parsed.data;
+      if (changes.projectId && !this.dependencies.projectIds.has(changes.projectId)) { this.error("invalid_project", "That project is not available."); return; }
+      this.pending = this.pending.then(() => {
+        if (this.phase === "closed" || this.phase === "saved") return;
+        this.state = editStagedTodo(id, changes, this.state).nextState;
         this.publish();
       });
       await this.pending;

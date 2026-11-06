@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { imports } from "./runtime";
-import { defaultInclude, importKeys, type ImportInclude, type ImportPreview, type ImportResult } from "./imports";
+import { useOpenSettings } from "./settings-nav";
+import { defaultInclude, importKeys, type CompletedRange, type ImportInclude, type ImportPreview, type ImportResult } from "./imports";
 
 const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -18,7 +18,7 @@ const useImportStatus = (userId: string) => useQuery({
 export function ImportPrompt({ userId }: { userId: string }) {
   const query = useImportStatus(userId);
   const cache = useQueryClient();
-  const navigate = useNavigate();
+  const openSettings = useOpenSettings();
   const dialog = useRef<HTMLDialogElement>(null);
   const [answered, setAnswered] = useState(false);
   const open = Boolean(query.data?.prompt) && !answered;
@@ -29,7 +29,7 @@ export function ImportPrompt({ userId }: { userId: string }) {
     dialog.current?.close();
     // A failed save only means the prompt may show once more.
     void imports.promptSeen().finally(() => cache.invalidateQueries({ queryKey: importKeys.status(userId) }));
-    if (importNow) navigate({ pathname: "/account", hash: "import" });
+    if (importNow) openSettings("integrations");
   };
   // Native <dialog>: focus moves in and is restored, Escape cancels (counts as Skip).
   return <dialog ref={dialog} className="import-prompt" aria-labelledby="import-prompt-title" onCancel={(event) => { event.preventDefault(); answer(false); }}>
@@ -42,7 +42,7 @@ export function ImportPrompt({ userId }: { userId: string }) {
   </dialog>;
 }
 
-/** Settings › Import from Todoist (`/account#import`). */
+/** Settings › Integrations › Import from Todoist (`/settings/integrations`). */
 export function ImportSettingsScreen({ userId }: { userId: string }) {
   const cache = useQueryClient();
   const key = importKeys.status(userId);
@@ -59,8 +59,6 @@ export function ImportSettingsScreen({ userId }: { userId: string }) {
     },
     onError: refresh,
   });
-
-  useEffect(() => { if (location.hash === "#import") document.getElementById("import")?.scrollIntoView({ block: "start" }); }, [query.isPending]);
 
   const error = connect.error ?? disconnect.error ?? run.error;
   const state = query.data;
@@ -92,13 +90,17 @@ export function ImportSettingsScreen({ userId }: { userId: string }) {
   </section>;
 }
 
-const categories: { key: keyof ImportInclude; label: string; count?: keyof ImportPreview["counts"] }[] = [
+const ranges: { value: CompletedRange; label: string }[] = [
+  { value: "quarter", label: "Last 3 months" }, { value: "year", label: "Last year" }, { value: "all", label: "Everything" },
+];
+
+const categories: { key: "sections" | "subtasks" | "labels" | "recurring" | "comments" | "completed"; label: string; count?: keyof ImportPreview["counts"] }[] = [
   { key: "sections", label: "Sections", count: "sections" },
   { key: "subtasks", label: "Sub-tasks", count: "subtasks" },
   { key: "labels", label: "Labels", count: "labels" },
   { key: "recurring", label: "Recurring schedules", count: "recurring" },
-  { key: "comments", label: "Comments (added to the task description)", count: "comments" },
-  { key: "completed", label: "Completed tasks from the last 3 months" },
+  { key: "comments", label: "Comments", count: "comments" },
+  { key: "completed", label: "Completed tasks" },
 ];
 
 export function ImportChooser({ preview, onImport, onCancel }: {
@@ -123,8 +125,13 @@ export function ImportChooser({ preview, onImport, onCancel }: {
         <input type="checkbox" checked={include[key]} onChange={(event) => setInclude({ ...include, [key]: event.target.checked })} />
         <span>{label}</span>
         {count && <span className="setting-hint">{preview.counts[count]}</span>}
+        {key === "completed" && include.completed && <select aria-label="Completed tasks from" value={include.completedRange ?? "quarter"}
+          onChange={(event) => setInclude({ ...include, completedRange: event.target.value as CompletedRange })}>
+          {ranges.map((range) => <option key={range.value} value={range.value}>{range.label}</option>)}
+        </select>}
       </label>)}
     </fieldset>
+    {include.completed && include.completedRange === "all" && <p className="setting-hint">Everything reaches back to when you joined Todoist, so a long history can take a few minutes.</p>}
     {imported > 0 && <p className="setting-hint">{plural(imported, "task")} were imported before and will be skipped.</p>}
     <div className="import-actions">
       <button type="submit" className="button" disabled={selected.size === 0}>Import</button>

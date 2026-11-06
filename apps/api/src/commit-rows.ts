@@ -1,6 +1,7 @@
 // Pure Ramble commit rules, shared by the database commit and the QA memory API.
 import { createHash } from "node:crypto";
 import type { RambleTodo } from "@todalo/ramble";
+import { taskTree, validateTaskParent } from "@todalo/db/task-parent-validation";
 import { zonedTaskDate } from "./dates";
 
 /** "invalid": the batch breaks a rule (400); "missing": a project is not the user's (404). */
@@ -28,11 +29,13 @@ export function prepareTaskRows(todos: RambleTodo[], userId: string, timeZone: s
   const byId = new Map(todos.map((todo) => [todo.id, todo]));
   if (byId.size !== todos.length) throw new RambleCommitError("invalid", "Duplicate staged ID");
   const id = (stagedId: string) => rambleTaskId(userId, operationId, stagedId);
+  const tree = taskTree(todos.map(todo => ({ id: todo.id, parentId: todo.parentId ?? null })));
   return todos.map((todo, sortOrder) => {
     if (!todo.title.trim() || todo.title.length > 4000) throw new RambleCommitError("invalid", "Invalid title");
     if ((todo.description?.length ?? 0) > 4000 || ![1, 2, 3, 4].includes(todo.priority)) throw new RambleCommitError("invalid", "Invalid task details");
-    const parent = todo.parentId ? byId.get(todo.parentId) : null;
-    if (todo.parentId && (!parent || parent.parentId || parent.id === todo.id)) throw new RambleCommitError("invalid", "Invalid sub-task parent");
+    // Staged parents follow the persisted rules (no cycles, MAX_SUBTASK_DEPTH).
+    try { validateTaskParent({ userId, taskId: todo.id, parentId: todo.parentId }, tree); }
+    catch { throw new RambleCommitError("invalid", "Invalid sub-task parent"); }
     let dueDate: Date | null, dueDateEnd: Date | null, deadline: Date | null;
     try {
       // Matches the task editor, which stores a deadline as local midnight.

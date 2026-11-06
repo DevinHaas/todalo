@@ -25,6 +25,8 @@ export interface NewTask {
   /** The composer's destination (project view, project picker); omitted is the Inbox. */
   projectId?: string | null;
   sectionId?: string | null;
+  /** "Add sub-task" in the task sheet: nests under this task (its project and section). */
+  parentId?: string;
   /** The legacy composer's Additional actions. */
   priority?: number;
   deadline?: string | null;
@@ -219,10 +221,32 @@ export const isDueToday = (task: Pick<TaskDto, "dueDate">, now = new Date()) => 
 export const isOverdue = (task: Pick<TaskDto, "dueDate">, now = new Date()) =>
   task.dueDate !== null && new Date(task.dueDate) < startOfDay(now) && !isDueToday(task, now);
 
-// Copy of apps/web/lib/task-keyboard.ts taskTreeOrder: children follow their visible parent.
+/** Depth-first: every task follows its visible parent, at any depth (MAX_SUBTASK_DEPTH). */
 export function treeOrder<T extends { id: string; parentId: string | null }>(tasks: T[]): T[] {
   const ids = new Set(tasks.map(task => task.id));
-  return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(task => [task, ...tasks.filter(child => child.parentId === task.id)]);
+  const seen = new Set<string>();
+  const visit = (task: T): T[] => {
+    if (seen.has(task.id)) return [];
+    seen.add(task.id);
+    return [task, ...tasks.filter(child => child.parentId === task.id).flatMap(visit)];
+  };
+  return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(visit);
+}
+
+/** Indent level of each row in a list: 0 unless its parent is in the same list. */
+export function treeDepths(tasks: readonly { id: string; parentId: string | null }[]): Map<string, number> {
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const depths = new Map<string, number>();
+  const depth = (id: string, guard = 0): number => {
+    const known = depths.get(id);
+    if (known !== undefined) return known;
+    const parent = byId.get(id)?.parentId;
+    const value = parent && byId.has(parent) && guard < 10 ? depth(parent, guard + 1) + 1 : 0;
+    depths.set(id, value);
+    return value;
+  };
+  for (const task of tasks) depth(task.id);
+  return depths;
 }
 
 /** Today list groups; completed tasks are hidden unless Display shows them (legacy default off). */
@@ -240,6 +264,24 @@ export function dueLabel(value: string) {
   const day = `${date.getDate()} ${month.format(date)}`;
   return date.getHours() || date.getMinutes() ? `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}` : day;
 }
+const clock = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/**
+ * The row's and the task sheet's date: "Today", "Tomorrow", "Yesterday", a
+ * weekday within the coming week, else "6 Nov"; then the time or time range
+ * ("19:00-19:45"). With `inToday` (the Today page) an all-day today is implied:
+ * "" or just the time.
+ */
+export function shortDateLabel(task: Pick<TaskDto, "dueDate" | "dueDateEnd">, now = new Date(), inToday = false) {
+  if (!task.dueDate) return "";
+  const date = new Date(task.dueDate);
+  const days = Math.round((startOfDay(date).getTime() - startOfDay(now).getTime()) / 86_400_000);
+  const day = days === 0 ? "Today" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday" : days > 1 && days < 7 ? weekday.format(date) : `${date.getDate()} ${month.format(date)}`;
+  const timed = date.getHours() || date.getMinutes();
+  const end = task.dueDateEnd ? new Date(task.dueDateEnd) : null;
+  const time = timed ? clock(date) + (end && end > date ? `-${clock(end)}` : "") : "";
+  return [inToday && days === 0 ? "" : day, time].filter(Boolean).join(" ");
+}
+
 /** Legacy Today heading: "4 Oct · Today · Sunday". */
 export const todayHeading = (now = new Date()) => `${now.getDate()} ${month.format(now)} · Today · ${weekday.format(now)}`;
 /** Legacy taskDateLabel in the viewer's zone, used for deadlines. */

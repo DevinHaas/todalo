@@ -9,7 +9,7 @@ import {
   type NewTask, type TaskDetails, type TaskDto, type TaskTransport, type TodayDto,
 } from "./tasks";
 import { Composer, TaskEditor, TaskView, TodayView } from "./views";
-import { dateInputValue, localInstant, repeatChoice, repeatLabel, timeInputValue } from "./tasks";
+import { dateInputValue, localInstant, repeatChoice, repeatLabel, timeInputValue, treeDepths, treeOrder } from "./tasks";
 
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
 const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
@@ -25,6 +25,15 @@ const details: TaskDetails = {
   updatedAt: "2026-10-04T08:00:00.000Z", title: "Plan", description: "", priority: 2, deadline: null,
   dueDate: local(5, 9), dueDateEnd: local(5, 10), recurrence: { n: 1, unit: "week", basedOn: "scheduled" },
 };
+
+describe("task trees", () => {
+  it("orders every sub-task level depth-first under its visible parent and indents it", () => {
+    const n = (id: string, parentId: string | null = null) => ({ id, parentId });
+    const list = [n("c", "b"), n("x"), n("b", "a"), n("a"), n("d", "c"), n("orphan", "hidden")];
+    expect(treeOrder(list).map(item => item.id)).toEqual(["x", "a", "b", "c", "d", "orphan"]);
+    expect(Object.fromEntries(treeDepths(list))).toEqual({ a: 0, b: 1, c: 2, d: 3, x: 0, orphan: 0 });
+  });
+});
 
 describe("Today read model", () => {
   it("groups open tasks into overdue and today in the viewer's local day, keeping subtasks under parents", () => {
@@ -283,12 +292,13 @@ describe("task editor", () => {
       task: task("t", { title: "Plan", description: "Notes", priority: 2, dueDate: local(5, 9), dueDateEnd: local(5, 10, 30), deadline: local(9), recurrence: { n: 2, unit: "week", basedOn: "scheduled", until: null }, updatedAt: "v1" }),
       onSave: async () => {}, onClose: noop,
     }));
-    for (const fragment of ['role="dialog"', 'value="Plan"', ">Notes</textarea>", 'value="2026-10-05"', 'value="09:00"', 'value="10:30"', 'value="2026-10-09"', 'aria-label="Repeat: Every 2 weeks"', 'aria-label="Priority: Priority 2"', ">Save</button>"]) {
+    for (const fragment of ['role="dialog"', ">Plan</textarea>", ">Notes</textarea>", "09:00-10:30</span>", 'aria-label="Deadline: 9 Oct 2026"', 'aria-label="Every 2 weeks"', 'aria-label="Priority: Priority 2"', ">Save</button>"]) {
       expect(html).toContain(fragment);
     }
-    const allDay = render(createElement(TaskEditor, { task: task("t", { recurrence: { n: 1, unit: "day", basedOn: "scheduled", until: null } }), onSave: async () => {}, onClose: noop }));
-    expect(allDay).not.toContain('aria-label="Start time"');
-    expect(allDay).toContain('aria-label="Repeat: Daily"');
+    const allDay = render(createElement(TaskEditor, { task: task("t", { dueDate: local(5), recurrence: { n: 1, unit: "day", basedOn: "scheduled", until: null } }), onSave: async () => {}, onClose: noop }));
+    expect(allDay).not.toContain("09:00");
+    expect(allDay).toContain(`aria-label="${repeatLabel({ n: 1, unit: "day", basedOn: "scheduled", until: null })}"`);
+    expect(render(createElement(TaskEditor, { task: task("t"), onSave: async () => {}, onClose: noop }))).toContain('aria-label="Add date"');
   });
 
   it("offers editing on the task page and shows the repeat rule", () => {

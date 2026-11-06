@@ -1,8 +1,9 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { session } from "./runtime";
 import { GoogleButton } from "./google";
-import { AccountScreen, Shell, TaskScreen, TodayScreen } from "./shell";
+import { Shell, TaskScreen, TodayScreen } from "./shell";
+import type { Account } from "./session";
 import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
@@ -10,6 +11,8 @@ import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metada
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
 import { ImportPrompt } from "./import-screen";
+import { isSettingsPath, legacySettingsPath, settingsBackground } from "./settings-nav";
+import { SettingsDialog } from "./settings-dialog";
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -46,26 +49,9 @@ export default function App() {
   // Signed-out screens leave the URL untouched, so a requested route opens after sign-in.
   if (state.status === "signed-in" && state.account) {
     const account = state.account;
-    return <BrowserRouter><SmartDatesProvider userId={account.user.id}><ComposerChoicesProvider userId={account.user.id}><Routes>
-      <Route element={<Shell account={account} />}>
-        <Route path="/inbox" element={<InboxScreen account={account} />} />
-        <Route path="/today" element={<TodayScreen account={account} />} />
-        <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
-        <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
-        <Route path="/projects" element={<ProjectsScreen account={account} />} />
-        <Route path="/projects/:id" element={<ProjectScreen account={account} />} />
-        <Route path="/labels" element={<MetadataScreen account={account} mode="labels" />} />
-        <Route path="/labels/:id" element={<LabelScreen account={account} />} />
-        <Route path="/filters" element={<MetadataScreen account={account} mode="filters" />} />
-        <Route path="/filters/:id" element={<FilterScreen account={account} />} />
-        <Route path="/account" element={<AccountScreen account={account} error={state.error} />} />
-        <Route path="/ramble" element={<RambleScreen />} />
-        <Route path="/search" element={<SearchScreen account={account} />} />
-        {/* Legacy /settings lives in Account; /home and unknown routes redirect to Today. */}
-        <Route path="/settings" element={<Navigate to={{ pathname: "/account", hash: location.hash }} replace />} />
-        <Route path="*" element={<Navigate to="/today" replace />} />
-      </Route>
-    </Routes><ImportPrompt userId={account.user.id} /></ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
+    return <BrowserRouter><SmartDatesProvider userId={account.user.id}><ComposerChoicesProvider userId={account.user.id}>
+      <SignedIn account={account} error={state.error} />
+    </ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
   }
 
   return <main className="centered"><section className="account-panel" aria-busy={pending || state.status === "loading"}>
@@ -85,4 +71,37 @@ export default function App() {
       <p className="switch-mode">{mode === "signIn" ? "Don't have an account? " : "Already have an account? "}<button className="text-button" disabled={pending} onClick={() => { session.clearError(); setMode(mode === "signIn" ? "signUp" : "signIn"); }}>{mode === "signIn" ? "Sign up" : "Sign in"}</button></p>
     </>}
   </section></main>;
+}
+
+/** The app's screens; `/settings/*` opens the settings modal over the screen it came from. */
+function SignedIn({ account, error }: { account: Account; error: string | null }) {
+  const location = useLocation();
+  const settings = isSettingsPath(location.pathname);
+  return <>
+    <Routes location={settings ? settingsBackground(location) : location}>
+      <Route element={<Shell account={account} />}>
+        <Route path="/inbox" element={<InboxScreen account={account} />} />
+        <Route path="/today" element={<TodayScreen account={account} />} />
+        <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
+        <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
+        <Route path="/projects" element={<ProjectsScreen account={account} />} />
+        <Route path="/projects/:id" element={<ProjectScreen account={account} />} />
+        <Route path="/labels" element={<MetadataScreen account={account} mode="labels" />} />
+        <Route path="/labels/:id" element={<LabelScreen account={account} />} />
+        <Route path="/filters" element={<MetadataScreen account={account} mode="filters" />} />
+        <Route path="/filters/:id" element={<FilterScreen account={account} />} />
+        {/* Legacy /account (and its #import, #keyboard-shortcuts anchors) is now Settings. */}
+        <Route path="/account" element={<Navigate to={legacySettingsPath(location.hash)} replace />} />
+        <Route path="/ramble" element={<RambleScreen />} />
+        <Route path="/search" element={<SearchScreen account={account} />} />
+        {/* /home and unknown routes redirect to Today. */}
+        <Route path="*" element={<Navigate to="/today" replace />} />
+      </Route>
+    </Routes>
+    {settings && <Routes>
+      <Route path="/settings/:section?" element={<SettingsDialog account={account} error={error} />} />
+      <Route path="*" element={null} />
+    </Routes>}
+    <ImportPrompt userId={account.user.id} />
+  </>;
 }

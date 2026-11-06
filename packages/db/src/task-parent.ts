@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "./index";
 import { tasks } from "./schema";
 import { validateTaskParent, type TaskParentInput } from "./task-parent-validation";
@@ -6,14 +6,11 @@ import { validateTaskParent, type TaskParentInput } from "./task-parent-validati
 export { validateTaskParent };
 export type { TaskParentInput, TaskParentRecord } from "./task-parent-validation";
 
+/** ponytail: loads the user's (id, parentId) pairs, one narrow query; a recursive CTE if task counts grow large. */
+export const ownedTaskTree = (userId: string) =>
+  db.select({ id: tasks.id, userId: tasks.userId, parentId: tasks.parentId }).from(tasks).where(eq(tasks.userId, userId));
+
 export async function assertTaskParent(input: TaskParentInput): Promise<void> {
   if (input.parentId === null) return;
-  const [parent] = await db.select({ id: tasks.id, userId: tasks.userId, parentId: tasks.parentId })
-    .from(tasks)
-    .where(and(eq(tasks.id, input.parentId), eq(tasks.userId, input.userId)))
-    .limit(1);
-  const children = input.taskId
-    ? await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.parentId, input.taskId)).limit(1)
-    : [];
-  validateTaskParent(input, parent, children.length > 0);
+  validateTaskParent(input, await ownedTaskTree(input.userId));
 }

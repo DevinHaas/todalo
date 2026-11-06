@@ -80,7 +80,7 @@ export function qaOrganize(options: { projects: Project[]; sections: QaSection[]
       let sectionId = owned.sectionId ?? null;
       if ("parentId" in change) {
         const parent = tasks.find(task => task.id === change.parentId);
-        validateTaskParent({ userId, taskId: id, parentId: change.parentId }, parent, tasks.some(task => task.parentId === id));
+        validateTaskParent({ userId, taskId: id, parentId: change.parentId }, tasks.filter(task => task.userId === userId));
         if (parent) { projectId = parent.projectId; sectionId = parent.sectionId ?? null; }
         parentId = change.parentId;
       } else ({ projectId, sectionId } = change);

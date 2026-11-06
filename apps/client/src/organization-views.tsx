@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
+import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { parentCandidates, type DestinationsDto, type OrganizationChange, type SectionDto } from "./organization";
 import { treeOrder, type TaskDto } from "./tasks";
 import { Failure, type ReadState } from "./views";
@@ -34,9 +35,9 @@ export function TaskOrganizer({ task, tasks, destinations, onRetryDestinations, 
     {error && !open && <p role="alert" className="form-error">{error}</p>}
     <div className="task-actions">
       <button type="button" className="button outline" disabled={pending} onClick={() => { setError(null); setOpen("move"); }}>Move task</button>
-      {task.parentId
-        ? <button type="button" className="button outline" disabled={pending} onClick={() => void run({ parentId: null })}>Unnest task</button>
-        : <button type="button" className="button outline" disabled={pending} onClick={() => { setError(null); setOpen("nest"); }}>Nest task</button>}
+      <button type="button" className="button outline" disabled={pending} onClick={() => { setError(null); setOpen("nest"); }}>Nest task</button>
+      {/* One level up: the task becomes a sibling of its parent. */}
+      {task.parentId && <button type="button" className="button outline" disabled={pending} onClick={() => void run({ parentId: parent?.parentId ?? null })}>Unnest task</button>}
     </div>
     {open === "move" && <MoveDialog task={task} destinations={destinations} onRetry={onRetryDestinations} pending={pending} error={error} onSubmit={run} onClose={() => setOpen(null)} />}
     {open === "nest" && <NestDialog task={task} tasks={tasks} pending={pending} error={error} onSubmit={run} onClose={() => setOpen(null)} />}
@@ -94,12 +95,10 @@ function NestDialog({ task, tasks, pending, error, onSubmit, onClose }: {
 }) {
   const candidates = tasks ? parentCandidates(task, tasks) : [];
   const [parentId, setParentId] = useState("");
-  const hasChildren = tasks?.some(item => item.parentId === task.id);
   return <Dialog title="Nest task" pending={pending} onClose={onClose}>
     {error && <p role="alert" className="form-error">{error}</p>}
     {!tasks ? <p role="status" className="state">Loading tasks…</p>
-      : hasChildren ? <p className="state">A task with sub-tasks cannot become a sub-task.</p>
-      : candidates.length === 0 ? <p className="state">There is no other open task here to nest under.</p>
+      : candidates.length === 0 ? <p className="state">There is no other open task here to nest under (sub-tasks nest at most {MAX_SUBTASK_DEPTH} levels deep).</p>
       : <form ref={releaseFocus} onSubmit={(event) => { event.preventDefault(); if (parentId) void onSubmit({ parentId }); }}><fieldset disabled={pending}>
         <label>Parent task<select aria-label="Parent task" value={parentId} onChange={(event) => setParentId(event.target.value)}>
           <option value="" disabled>Choose a task</option>
@@ -110,7 +109,7 @@ function NestDialog({ task, tasks, pending, error, onSubmit, onClose }: {
           <button type="submit" className="button" disabled={!parentId}>{pending ? "Nesting…" : "Nest task"}</button>
         </div>
       </fieldset></form>}
-    {(!tasks || hasChildren || candidates.length === 0) && <div className="composer-actions"><button type="button" className="button outline" onClick={onClose}>Close</button></div>}
+    {(!tasks || candidates.length === 0) && <div className="composer-actions"><button type="button" className="button outline" onClick={onClose}>Close</button></div>}
   </Dialog>;
 }
 

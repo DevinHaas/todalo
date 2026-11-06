@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { treeOrder, type NewTask, type TaskDto } from "./tasks";
-import { Composer, Failure, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
+import { Composer, Failure, listTree, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
 import { SortableRow, SortableTasks } from "./bulk-views";
 import { reorderAnchor, type ReorderPosition } from "./bulk";
 import { sortProjectTasks, type ProjectDetailDto, type ProjectDto, type ProjectSort } from "./projects";
@@ -76,7 +76,8 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   // Sub-tasks stay under their parents in every sort (legacy tree); only Manual allows reordering and nesting.
   const open = treeOrder(sortProjectTasks(tasks.filter(task => showCompleted || task.status !== "done"), sort));
   const manual = sort === "manual";
-  const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} actions={actions} selection={selection?.row(task)} />;
+  const tree = listTree(open);
+  const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} actions={actions} selection={selection?.row(task)} {...tree(task)} />;
   const toggle = (id: string) => setCollapsed(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   async function rename(event: FormEvent) {
     event.preventDefault();

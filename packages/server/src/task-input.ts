@@ -52,6 +52,8 @@ export const basicTaskInput = z.object({
   // the Additional actions fields, and where a keyboard or "Save and add" insert goes.
   projectId: z.string().min(1).max(200).nullable().optional(),
   sectionId: z.string().min(1).max(200).nullable().optional(),
+  /** "Add sub-task": the new task joins this parent's project and section. */
+  parentId: z.string().min(1).max(200).nullable().optional(),
   priority: z.number().int().min(1).max(4).optional(),
   deadline: z.iso.datetime({ offset: true }).nullable().optional(),
   labelIds: z.array(z.string().min(1).max(200)).max(50).optional(),
