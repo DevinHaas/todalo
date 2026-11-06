@@ -28,6 +28,9 @@ pub struct NewTask {
     project_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     section_id: Option<String>,
+    /// "Add sub-task": the parent the new task nests under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     priority: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,6 +77,7 @@ fn task_body(task: &NewTask) -> Result<Value, &'static str> {
         || [
             &task.project_id,
             &task.section_id,
+            &task.parent_id,
             &task
                 .placement
                 .as_ref()
@@ -240,6 +244,7 @@ mod tests {
             recurrence: None,
             project_id: None,
             section_id: None,
+            parent_id: None,
             priority: None,
             deadline: None,
             label_ids: None,
@@ -251,7 +256,7 @@ mod tests {
     fn composer_bodies_carry_project_metadata_and_placement() {
         let id = "6f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11";
         let body = json!({
-            "id": id, "title": "Draft", "dueDate": null, "projectId": "qa-work", "sectionId": "qa-doing",
+            "id": id, "title": "Draft", "dueDate": null, "projectId": "qa-work", "sectionId": "qa-doing", "parentId": "qa-parent",
             "priority": 2, "deadline": "2026-10-20T00:00:00.000Z", "labelIds": ["design"],
             "placement": { "edge": "below", "anchorId": "undated" }
         });
@@ -260,6 +265,7 @@ mod tests {
         for bad in [
             json!({ "priority": 5 }),
             json!({ "projectId": "../account" }),
+            json!({ "parentId": "../account" }),
             json!({ "labelIds": ["a/b"] }),
             json!({ "placement": { "edge": "below", "anchorId": "../x" } }),
         ] {

@@ -67,19 +67,17 @@ describe("search views", () => {
     expect(html).toContain("1 results");
     expect(html).toContain("Plan trip");
   });
-  it("show Task link and Copy link in the editor once the shareable URL is known", () => {
+  it("offer Task link and Copy link in the sheet's More actions menu once the shareable URL is known", () => {
     const props = { task: task("a/b", { updatedAt: "2026-10-01T00:00:00.000Z" }), onSave: async () => {}, onClose: noop };
-    expect(render(createElement(TaskEditor, props))).not.toContain("Copy link");
-    const html = render(createElement(TaskEditor, { ...props, shareUrl: "https://todalo.example/tasks/a%2Fb" }));
-    expect(html).toContain('href="/tasks/a%2Fb"');
-    expect(html).toContain("Copy link");
+    expect(render(createElement(TaskEditor, props))).not.toContain('aria-label="More actions"');
+    expect(render(createElement(TaskEditor, { ...props, shareUrl: "https://todalo.example/tasks/a%2Fb" }))).toContain('aria-label="More actions"');
   });
   it("show Previous and Next in the editor when it was opened from a list, disabled at its ends", () => {
     const props = { task: task("a", { updatedAt: "2026-10-01T00:00:00.000Z" }), onSave: async () => {}, onClose: noop };
-    expect(render(createElement(TaskEditor, props))).not.toContain(">Previous</button>");
+    expect(render(createElement(TaskEditor, props))).not.toContain("data-navigate");
     const html = render(createElement(TaskEditor, { ...props, navigation: { previous: false, next: true, go: noop } }));
-    expect(html).toMatch(/data-navigate="-1" disabled="">Previous<\/button>/);
-    expect(html).toMatch(/data-navigate="1">Next<\/button>/);
+    expect(html).toMatch(/data-navigate="-1" aria-label="Previous task" title="Previous task" disabled=""/);
+    expect(html).toMatch(/data-navigate="1" aria-label="Next task" title="Next task">/);
   });
   it("link the task page to its collection: the project, else the Inbox", () => {
     expect(render(createElement(TaskView, { state: success(task("a")), onRetry: noop }))).toMatch(/href="\/inbox"[^>]*>Open task collection/);

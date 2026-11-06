@@ -1,15 +1,23 @@
 // Server-only query boundary. Transports authenticate before supplying userId.
 // Do not import this package into client components except through type imports.
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks, taskLabels } from "@todalo/db/schema";
+
+// List indicators: comments counted in the task select itself, so each list stays one task query.
+const withCommentCount = {
+  ...getTableColumns(tasks),
+  // Qualified by hand: drizzle renders bare column names inside select fields, and an
+  // unqualified "id" here would bind to task_comments.id instead of the outer task.
+  commentCount: sql<number>`(select count(*) from "task_comments" where "task_comments"."task_id" = "tasks"."id")`.mapWith(Number),
+};
 
 /** Manual order (ticket 15 reorders renumber it); ties broken so every read and the reorder planner agree. */
 export const manualOrder = [asc(tasks.sortOrder), asc(tasks.createdAt), asc(tasks.id)] as const;
 
 export async function getTasksForUser(userId: string, projectId?: string) {
   const [rows, associations] = await Promise.all([
-    db.select().from(tasks).where(projectId
+    db.select(withCommentCount).from(tasks).where(projectId
       ? and(eq(tasks.userId, userId), eq(tasks.projectId, projectId))
       : eq(tasks.userId, userId)).orderBy(...manualOrder),
     db.select().from(taskLabels).where(eq(taskLabels.userId, userId)),
@@ -22,7 +30,7 @@ export async function getTasksForUser(userId: string, projectId?: string) {
 
 /** Returns null for missing and other users' tasks alike, so callers cannot probe IDs. */
 export async function getOwnedTask(userId: string, id: string) {
-  const [task] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
+  const [task] = await db.select(withCommentCount).from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
   if (!task) return null;
   const associations = await db.select().from(taskLabels).where(and(eq(taskLabels.userId, userId), eq(taskLabels.taskId, id)));
   return { ...task, labelIds: associations.map(link => link.labelId) };

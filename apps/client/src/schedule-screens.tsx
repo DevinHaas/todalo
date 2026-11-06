@@ -6,9 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { projectReads, reads } from "./runtime";
 import { useEditorExtras, useTaskWrites } from "./task-writes";
-import { Composer, Failure, TaskEditor, TaskRow, type SelectionSlots } from "./views";
+import { Composer, Failure, listTree, TaskEditor, TaskRow, type SelectionSlots } from "./views";
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type ScheduleSlots } from "./schedule-views";
-import { labels, startOfDay } from "./schedule";
+import { dayKey, labels, startOfDay } from "./schedule";
 import type { TaskDto } from "./tasks";
 import { useCalendarEvents } from "./calendar-screens";
 import { BoardScreen } from "./board-screens";
@@ -22,8 +22,12 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
   const [editing, setEditing] = useState<string | null>(null);
   const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
   const now = new Date();
+  // Indent a sub-task under its parent when both are listed on the same day.
+  const day = (task: TaskDto) => task.dueDate ? dayKey(new Date(task.dueDate)) : "";
+  const trees = new Map<string, ReturnType<typeof listTree>>();
+  const treeOf = (task: TaskDto) => { const key = day(task); if (!trees.has(key)) trees.set(key, listTree(tasks.filter(item => day(item) === key))); return trees.get(key)!(task); };
   const slots: ScheduleSlots = {
-    row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} selection={selection?.row(task)} />,
+    row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} selection={selection?.row(task)} {...treeOf(task)} />,
     open: task => setEditing(task.id),
     complete: writes.actions.complete,
     remove: writes.actions.remove,

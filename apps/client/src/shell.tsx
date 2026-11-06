@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ImportSettingsScreen } from "./import-screen";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
@@ -10,21 +9,19 @@ import type { Account } from "./session";
 import { connection, projectReads, queries, reads, session } from "./runtime";
 import { taskKeys, todaySections, type NewTask, type TaskDto, type TodayDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
-import { Composer, TaskDialogs, TaskEditor, TaskView, TodayView, type RowActions, type TaskDialog } from "./views";
-import { haptics, hapticsSupported } from "./feedback";
-import { theme } from "./theme";
+import { Composer, TaskDialogs, TaskEditor, TaskTree, TaskView, TodayView, type RowActions, type TaskDialog } from "./views";
 import { useEditorExtras, useTaskWrites } from "./task-writes";
+import { useTaskSheet } from "./task-sheet-screen";
 import { DisplayMenu, DisplayProvider, LayoutSwitcher, useDisplay } from "./schedule-views";
 import { TodayCalendar } from "./schedule-screens";
 import { BoardScreen } from "./board-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
-import { TaskOrganizerScreen } from "./organization-screens";
-import { SmartDatesSettingScreen } from "./settings-screen";
-import { SettingSwitch } from "./settings-views";
+import { TaskOrganizerScreen, useOrganizationMutations } from "./organization-screens";
 import { Popover } from "./popover";
-import { CalendarSettingsScreen, LiveUpdates, useCalendarEvents } from "./calendar-screens";
+import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
-import { KeyboardCommands, ShortcutSettingsScreen, taskNeighbour } from "./keyboard-screens";
+import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
+import { useOpenSettings } from "./settings-nav";
 
 // ponytail: controls legacy also left without a feature (Goals, Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -80,36 +77,59 @@ function focusRow(id: string, fallback: HTMLElement | null) {
  * page's visible rows, Save and add opens a composer next to the row, and
  * closing returns focus to the row.
  */
-function TaskDialogHost({ userId, children }: { userId: string; children: ReactNode }) {
+function TaskDialogHost({ account, children }: { account: Account; children: ReactNode }) {
+  const userId = account.user.id;
   const cache = useQueryClient();
   const [id, setId] = useState<string | null>(null);
   const [inserting, setInserting] = useState<{ edge: "above" | "below"; task: TaskDto } | null>(null);
+  // ⌘E: the row whose quick add editor replaces it.
+  const [editing, setEditing] = useState<string | null>(null);
+  const organize = useMutation(useOrganizationMutations(userId).organize);
   const opener = useRef<HTMLElement | null>(null);
   const writes = useTaskWrites(userId);
   const extras = useEditorExtras(userId, id);
   // The row's copy shows at once (Today holds every owned task); the read keeps the editor current.
   const query = useQuery({ ...reads.task(userId, id ?? ""), enabled: id !== null,
     placeholderData: () => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id) });
+  // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
+  const all = useQuery(reads.today(userId)).data?.tasks ?? null;
   const { pathname } = useLocation();
-  useEffect(() => { setId(null); setInserting(null); }, [pathname]);
+  useEffect(() => { setId(null); setInserting(null); setEditing(null); }, [pathname]);
   const create = writes.create.mutateAsync;
   const dialog = useMemo<TaskDialog>(() => ({
-    open(next) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setId(next); },
+    open(next) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next); },
+    edit(next) { setInserting(null); setEditing(next); },
+    editor: (task) => editing === task.id ? <div className="dialog quick-add inline-quick-add row-edit" aria-label={`Edit ${task.title}`}>
+      <Composer key={task.id} startOpen quick editing={task} dueDate={() => task.dueDate} projectId={task.projectId} sectionId={task.sectionId}
+        onCancel={() => { setEditing(null); focusRow(task.id, null); }}
+        onUpdate={async (details, projectId) => {
+          await writes.update.mutateAsync({ id: task.id, details });
+          if (projectId !== task.projectId) await organize.mutateAsync({ task, change: { projectId, sectionId: null } });
+        }} />
+    </div> : null,
     slot: (anchor, edge) => inserting?.task.id === anchor && inserting.edge === edge
       ? <InsertComposer edge={edge} task={inserting.task} onClose={() => { setInserting(null); focusRow(anchor, opener.current); }}
         // The composer follows the task just added, as the next draft does (legacy onCreated).
         onCreate={async (task, direction) => { const created = await create(task); setInserting({ edge: direction, task: created }); }} /> : null,
-  }), [inserting, create]);
+  }), [inserting, create, editing, writes.update, organize]);
   const close = () => { if (id) focusRow(id, opener.current); setId(null); };
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
-  return <TaskDialogs.Provider value={dialog}>
+  const sheet = useTaskSheet(account, task, close);
+  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}>
     {children}
-    {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close}
+    {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
+    {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
       navigation={{ previous: Boolean(neighbour(-1)), next: Boolean(neighbour(1)), go: (step) => { const next = neighbour(step); if (next) setId(next); } }}
-      onSave={async (details) => { await writes.update.mutateAsync({ id: task.id, details }); close(); }}
-      onInsert={(edge) => setInserting({ edge, task })} />}
-  </TaskDialogs.Provider>;
+      onSave={(details) => writes.update.mutateAsync({ id: task.id, details })}
+      onOpen={setId}
+      onInsert={(edge) => { close(); setInserting({ edge, task }); }} />}
+  </TaskTree.Provider></TaskDialogs.Provider>;
+}
+
+/** The page column: lists keep a readable width; board and calendar layouts use the full width. */
+function Content({ children }: { children: ReactNode }) {
+  return <main className="content" data-layout={useDisplay().layout}>{children}</main>;
 }
 
 export function Shell({ account }: { account: Account }) {
@@ -158,7 +178,7 @@ export function Shell({ account }: { account: Account }) {
         <DisplayMenu />
       </div>
       <ConnectionStatus />
-      <main className="content"><TaskDialogHost userId={account.user.id}><Outlet /></TaskDialogHost></main>
+      <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
@@ -200,10 +220,12 @@ export function TaskScreen({ account }: { account: Account }) {
   };
   // The editor's label checkboxes (without the list it keeps the task's labels) and task link.
   const extras = useEditorExtras(account.user.id, id);
+  const sheet = useTaskSheet(account, query.data, () => navigate("/today", { replace: true }));
   const editor = inserting?.task.id === id ? <InsertComposer edge={inserting.edge} task={inserting.task} onCreate={(task) => writes.create.mutateAsync(task)} onClose={() => setInserting(null)} />
-    : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setClosedFor(id)}
-    onSave={async (details) => { await writes.update.mutateAsync({ id, details }); setClosedFor(id); }}
-    onInsert={(edge) => setInserting({ edge, task: query.data! })} />;
+    : closedFor !== id && query.data && <TaskEditor key={id} task={query.data} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setClosedFor(id)} {...sheet}
+    onSave={(details) => writes.update.mutateAsync({ id, details })}
+    onOpen={(other) => navigate(`/tasks/${encodeURIComponent(other)}`)}
+    onInsert={(edge) => { setClosedFor(id); setInserting({ edge, task: query.data! }); }} />;
   return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
     onEdit={() => setClosedFor(null)} editor={editor}
     organize={(task) => <TaskOrganizerScreen userId={account.user.id} task={task} />}
@@ -212,32 +234,13 @@ export function TaskScreen({ account }: { account: Account }) {
 
 /** Legacy sidebar account menu: Settings and Log out. */
 function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: () => void }) {
-  const navigate = useNavigate();
+  const openSettings = useOpenSettings();
   const [pending, setPending] = useState(false);
   return <Popover label="Account menu" role="menu" className="account-menu" triggerClassName="account-trigger"
     trigger={<><span className="avatar">{account.user.name.slice(0, 1).toUpperCase()}</span><span>{account.user.name}</span><ChevronDown className="chevron" /></>}>
     {close => <>
-      <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); navigate("/account"); }}>Settings</button>
+      <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); openSettings(); }}>Settings</button>
       <button type="button" role="menuitem" className="popover-item" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Log out"}</button>
     </>}
   </Popover>;
-}
-
-/** Legacy /settings: General, Keyboard shortcuts, Calendars in one centered column. */
-export function AccountScreen({ account, error }: { account: Account; error: string | null }) {
-  const [feel, setFeel] = useState(haptics.enabled);
-  const dark = useSyncExternalStore(theme.subscribe, theme.dark);
-  return <div className="settings-page">
-    {error && <p className="error" role="alert">{error}</p>}
-    <section className="settings-general" aria-labelledby="general-title">
-      <h1 id="general-title" className="settings-heading">General</h1>
-      <SmartDatesSettingScreen userId={account.user.id} />
-      <SettingSwitch title="Dark theme" hint="Use the dark color scheme." checked={dark} onChange={(on) => theme.set(on)} />
-      {hapticsSupported && <SettingSwitch title="Haptic feedback" hint="Feel a tap when you complete a task." checked={feel}
-        onChange={(on) => { haptics.set(on); setFeel(on); }} />}
-    </section>
-    <ShortcutSettingsScreen userId={account.user.id} />
-    <CalendarSettingsScreen userId={account.user.id} />
-    <ImportSettingsScreen userId={account.user.id} />
-  </div>;
 }

@@ -1,31 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { validateTaskParent } from "./task-parent-validation";
+import { MAX_SUBTASK_DEPTH, ancestorIds, subtreeHeight, subtreeIds, taskTree, validateTaskParent } from "./task-parent-validation";
 
 const owner = "owner";
-const parent = { id: "parent", userId: owner, parentId: null };
+const t = (id: string, parentId: string | null = null, userId = owner) => ({ id, userId, parentId });
+// a > b > c > d (d at depth 3), plus a free root x with child y.
+const tasks = [t("a"), t("b", "a"), t("c", "b"), t("d", "c"), t("x"), t("y", "x")];
 
-describe("single-level task parent validation", () => {
-  it("preserves ordinary task creation and allows clearing a parent", () => {
-    expect(() => validateTaskParent({ userId: owner, parentId: null }, undefined)).not.toThrow();
-    expect(() => validateTaskParent({ userId: owner, taskId: "child", parentId: null }, undefined, true)).not.toThrow();
+describe("task parent validation", () => {
+  it("keeps the limit at three sub-task levels", () => {
+    expect(MAX_SUBTASK_DEPTH).toBe(3);
   });
-  it("accepts a top-level parent owned by the user", () => {
-    expect(() => validateTaskParent({ userId: owner, parentId: "parent" }, parent)).not.toThrow();
+  it("allows clearing a parent and nesting under an owned root", () => {
+    expect(() => validateTaskParent({ userId: owner, taskId: "b", parentId: null }, tasks)).not.toThrow();
+    expect(() => validateTaskParent({ userId: owner, parentId: "a" }, tasks)).not.toThrow();
   });
-  it("rejects self-parenting", () => {
-    expect(() => validateTaskParent({ userId: owner, taskId: "parent", parentId: "parent" }, parent)).toThrow("own parent");
+  it("allows a new task at the deepest level and refuses one below it", () => {
+    expect(() => validateTaskParent({ userId: owner, parentId: "c" }, tasks)).not.toThrow();
+    expect(() => validateTaskParent({ userId: owner, parentId: "d" }, tasks)).toThrow("at most 3 levels");
   });
-  it("rejects missing or mismatched parents", () => {
-    expect(() => validateTaskParent({ userId: owner, parentId: "missing" }, undefined)).toThrow("not found");
-    expect(() => validateTaskParent({ userId: owner, parentId: "different" }, parent)).toThrow("not found");
+  it("counts the moved subtree's own height", () => {
+    // x>y is two levels: under b (depth 1) it reaches depth 3, under c depth 4.
+    expect(() => validateTaskParent({ userId: owner, taskId: "x", parentId: "b" }, tasks)).not.toThrow();
+    expect(() => validateTaskParent({ userId: owner, taskId: "x", parentId: "c" }, tasks)).toThrow("at most 3 levels");
   });
-  it("rejects another user's parent", () => {
-    expect(() => validateTaskParent({ userId: "other", parentId: "parent" }, parent)).toThrow("not found");
+  it("refuses self-parenting and cycles", () => {
+    expect(() => validateTaskParent({ userId: owner, taskId: "a", parentId: "a" }, tasks)).toThrow("own parent");
+    expect(() => validateTaskParent({ userId: owner, taskId: "a", parentId: "c" }, tasks)).toThrow("its own sub-task");
   });
-  it("rejects a parent which is already a sub-task", () => {
-    expect(() => validateTaskParent({ userId: owner, parentId: "parent" }, { ...parent, parentId: "grandparent" })).toThrow("cannot have");
+  it("refuses missing and other users' parents alike", () => {
+    expect(() => validateTaskParent({ userId: owner, parentId: "missing" }, tasks)).toThrow("not found");
+    expect(() => validateTaskParent({ userId: "other", parentId: "a" }, tasks)).toThrow("not found");
   });
-  it("rejects moving an existing parent under another task", () => {
-    expect(() => validateTaskParent({ userId: owner, taskId: "has-children", parentId: "parent" }, parent, true)).toThrow("cannot become");
+  it("walks ancestors, heights and subtrees", () => {
+    const tree = taskTree(tasks);
+    expect(ancestorIds("d", tree)).toEqual(["c", "b", "a"]);
+    expect(subtreeHeight("a", tree)).toBe(3);
+    expect(subtreeHeight("d", tree)).toBe(0);
+    expect(subtreeIds("b", tree)).toEqual(["b", "c", "d"]);
+    // A corrupt loop never hangs.
+    expect(ancestorIds("p", taskTree([t("p", "q"), t("q", "p")]))).toEqual(["q"]);
   });
 });

@@ -71,10 +71,13 @@ export const labels = {
 
 const visible = (tasks: TaskDto[], showCompleted: boolean) => showCompleted ? tasks : tasks.filter(task => task.status !== "done");
 
-/** Dated tasks by local day key, in collection order (legacy calendar/week maps). */
+/** A done task with a time range still shows in calendars: the time was spent on it. */
+export const onCalendar = (task: TaskDto, showCompleted: boolean) => showCompleted || task.status !== "done" || (task.dueDate !== null && task.dueDateEnd !== null);
+
+/** Dated tasks by local day key, in collection order (legacy calendar/week maps); calendars keep done tasks with a duration. */
 export function tasksByDay(tasks: TaskDto[], showCompleted: boolean) {
   const days = new Map<string, TaskDto[]>();
-  for (const task of visible(tasks, showCompleted)) {
+  for (const task of tasks.filter(item => onCalendar(item, showCompleted))) {
     if (!task.dueDate) continue;
     const key = dayKey(new Date(task.dueDate));
     days.set(key, [...(days.get(key) ?? []), task]);

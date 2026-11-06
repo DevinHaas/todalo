@@ -100,6 +100,18 @@ describe("client keyboard commands", () => {
     expect(clientCommands.map(command => command.id)).toEqual(expect.arrayContaining(ids));
   });
 
+  it("lets j/k, e and Enter reach an open dialog (the task sheet's sub-tasks), never a field", () => {
+    const handled = { "task.next": vi.fn(), "task.previous": vi.fn(), "task.complete": vi.fn(), "task.details": vi.fn(), "task.delete": vi.fn() };
+    const sheet = dispatchCommands(handled, id => effectiveBindings(id, defaultPreferences(), "mac"));
+    const run = (input: ReturnType<typeof key>, environment: object) => new KeyboardDispatcher().dispatch(input, sheet, "task", 0, environment).commandId;
+    expect(run(key("j"), { modal: true })).toBe("task.next");
+    expect(run(key("k"), { modal: true })).toBe("task.previous");
+    expect(run(key("e"), { modal: true })).toBe("task.complete");
+    expect(run(key("Enter"), { modal: true })).toBe("task.details");
+    expect(run(key("j"), { modal: true, typing: true })).toBeUndefined();
+    expect(run(key("Backspace", { metaKey: true }), { modal: true })).toBeUndefined();
+  });
+
   it("never fires in editable fields or behind an open dialog", () => {
     const dispatcher = new KeyboardDispatcher();
     expect(dispatcher.dispatch(key("q"), commands(), "today", 0, { typing: true }).consumed).toBe(false);

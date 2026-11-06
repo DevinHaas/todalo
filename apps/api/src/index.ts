@@ -12,6 +12,8 @@ import { taskOperations } from "./task-operations";
 import { createBulkRoutes } from "./bulk-routes";
 import { createProjectRoutes } from "./project-routes";
 import { createAttachmentRoutes } from "./attachment-routes";
+import { createCommentRoutes } from "./comment-routes";
+import * as comments from "@todalo/server/comments";
 import { createSettingsRoutes } from "./settings-routes";
 import * as settings from "@todalo/server/settings";
 import * as keyboard from "@todalo/server/keyboard";
@@ -73,6 +75,12 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   createFileTasks: attachments.createFileTasks,
   list: attachments.listTaskAttachments,
   read: attachments.readAttachment,
+})).use(createCommentRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  list: comments.listComments,
+  add: comments.addComment,
+  remove: comments.deleteComment,
 })).use(createSettingsRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

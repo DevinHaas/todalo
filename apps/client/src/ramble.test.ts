@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RambleSessionState, RambleTodo } from "@todalo/ramble";
 import { AccountTransportError } from "./errors";
 import {
+  detailsAsTodo, todoAsTask,
   BACKGROUNDED, CONNECTION_LOST, INTERRUPTED, LOST_WITH_SPEECH, LOST_WITH_TASKS, PERMISSION_DENIED, SAVE_UNCONFIRMED,
   commitStaged, createRambleRecorder, type RambleCommit, type RambleSocket, type RambleView,
 } from "./ramble";
@@ -267,5 +268,18 @@ describe("Ramble HTTP save", () => {
       await expect(commitStaged(input, answer(status))).rejects.toMatchObject({ code });
     }
     await expect(commitStaged(input, vi.fn(async () => { throw new TypeError("offline"); }))).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
+  });
+});
+
+describe("editing a staged card in the quick add card", () => {
+  it("round-trips its schedule, deadline, priority, labels and project", () => {
+    const todo: RambleTodo = { id: "t", title: "Clean", parentId: "p", dueDate: "2026-11-06", startTime: "19:00", endTime: "19:45",
+      recurrence: { n: 1, unit: "week", basedOn: "scheduled", until: null }, projectId: null, description: null, priority: 4, deadline: "2026-11-10", labelIds: ["l"] };
+    const task = todoAsTask(todo);
+    expect(new Date(task.dueDate!).getHours()).toBe(19);
+    const details = { updatedAt: "", title: "Clean bathroom", description: "  ", priority: 2, deadline: task.deadline, dueDate: task.dueDate, dueDateEnd: task.dueDateEnd, recurrence: task.recurrence, labelIds: [] };
+    expect(detailsAsTodo(todo, details, "work")).toEqual({ ...todo, title: "Clean bathroom", priority: 2, projectId: "work", labelIds: [] });
+    const allDay = todoAsTask({ ...todo, startTime: null, endTime: null });
+    expect(detailsAsTodo(todo, { ...details, dueDate: allDay.dueDate, dueDateEnd: null }, null)).toMatchObject({ dueDate: "2026-11-06", startTime: null, endTime: null });
   });
 });

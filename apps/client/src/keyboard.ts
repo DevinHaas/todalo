@@ -98,12 +98,19 @@ export function adjacentRow<T>(rows: T[], current: T | null, step: number): T | 
   return rows[Math.max(0, Math.min(rows.length - 1, index + step))]!;
 }
 
+/**
+ * List keys that also work inside the task sheet (j/k, e, Enter on its
+ * sub-tasks). They pass an open dialog; their handlers decline behind any other.
+ */
+export const SHEET_COMMANDS: readonly ClientCommandId[] = ["task.previous", "task.next", "task.complete", "task.details", "task.edit"];
+
 /** Handlers become dispatcher commands with the account's effective bindings. */
 export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () => void | boolean>>, bindings: (id: string) => string[]): DispatchCommand[] {
   return clientCommands.flatMap(command => {
     const handle = handlers[command.id as ClientCommandId];
     // Composer and editor keys work in their fields and dialogs; their handlers decline elsewhere.
     const owned = command.context === "editor" || command.context === "quick-add";
-    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned, allowInModal: owned, handle }] : [];
+    const sheet = SHEET_COMMANDS.includes(command.id as ClientCommandId);
+    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned, allowInModal: owned || sheet, handle }] : [];
   });
 }

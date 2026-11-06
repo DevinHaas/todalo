@@ -67,7 +67,8 @@ describe("authenticated organization actions", () => {
   it("nests into the parent's organization and rejects depth or foreign parents", async () => {
     await setTaskParent("other", "parent");
     expect((await getTasksForUser("alice")).find(task => task.id === "other")).toMatchObject({ parentId: "parent", projectId: "work", sectionId: "todo" });
-    await expect(setTaskParent("other", "child")).rejects.toThrow("Sub-tasks cannot have sub-tasks");
+    // Nesting is allowed up to MAX_SUBTASK_DEPTH; a task can't go under its own sub-task.
+    await expect(setTaskParent("parent", "other")).rejects.toThrow("its own sub-task");
     await expect(setTaskParent("other", "foreign-task")).rejects.toThrow("Parent task not found");
     await setTaskParent("other", null);
     expect((await getTasksForUser("alice")).find(task => task.id === "other")?.parentId).toBeNull();

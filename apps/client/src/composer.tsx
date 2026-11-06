@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Flag, Goal, Hash, Inbox, Paperclip, Plus, X } from "lucide-react";
+import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Check, Flag, Goal, Hash, Inbox, Paperclip, Plus, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
@@ -7,9 +7,9 @@ import {
   spliceMatch, syncQuickAddFields, type QuickAddSyncState,
 } from "@todalo/ramble/quick-add-sync";
 import type { Recurrence } from "@todalo/ramble/recurrence";
-import { operationId, timeInputValue, type NewTask, type Placement } from "./tasks";
+import { dateInputValue, localInstant, operationId, timeInputValue, type NewTask, type Placement, type TaskDetails, type TaskDto } from "./tasks";
 import {
-  composerFields, dateValue, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDates, repeatPresetsFor, scheduleOf,
+  composerFields, dateValue, dueDateLabel, fromDateValue, fromRecurrenceDto, parseTitle, quickAddTask, quickDates, repeatPresetsFor, scheduleOf,
 } from "./quick-add";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
@@ -48,7 +48,7 @@ function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddS
  * the task to create is unchanged, so resubmitting after an unclear failure
  * cannot create a second copy of a task that was in fact saved.
  */
-export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, quick = false, smartDates: override, projectId = null, sectionId = null, placement }: {
+export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, quick = false, smartDates: override, projectId = null, sectionId = null, placement, parentId, editing, onUpdate }: {
   /** Initial due date (with time for a schedule slot); null starts undated (Inbox). */
   dueDate: () => string | null;
   /** End of a schedule slot (ticket 16). */
@@ -56,7 +56,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   /** Date pill text while the seeded date is kept (Upcoming days, schedule slots). */
   destination?: string;
   /** `direction`: where the next draft goes (below the task just added, or above it). */
-  onCreate: (task: NewTask, direction: "above" | "below") => Promise<unknown>;
+  onCreate?: (task: NewTask, direction: "above" | "below") => Promise<unknown>;
   onCancel?: () => void;
   startOpen?: boolean;
   /** The quick add dialog's layout: title, chips, then a Ramble/submit button (no footer text buttons). */
@@ -71,18 +71,31 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
    * just added (or above it, with Save task and add above), as legacy did.
    */
   placement?: Placement;
+  /** Adds a sub-task: it joins the parent's project and section (pass them), so no project picker. */
+  parentId?: string;
+  /**
+   * Edits this task instead of adding one (⌘E on a row): the draft starts from it
+   * (pass its dueDate, project and section too), and ✓ hands the changes and the
+   * picked project to onUpdate, then closes.
+   */
+  editing?: TaskDto;
+  onUpdate?: (details: TaskDetails, projectId: string | null) => Promise<unknown>;
 }) {
   const account = useContext(SmartDates);
   const choices = useContext(ComposerChoices);
   const routed = useInRouterContext();
   const smartDates = override ?? account;
-  const seed = () => seedState(dueDate(), dueDateEnd?.() ?? null);
+  const seed = () => {
+    const state = seedState(dueDate(), editing ? editing.dueDateEnd : dueDateEnd?.() ?? null);
+    return editing?.recurrence ? syncQuickAddFields(state, { type: "manualRecurrence", recurrence: fromRecurrenceDto(editing.recurrence), matchText: null }) : state;
+  };
   const [open, setOpen] = useState(startOpen);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(editing?.title ?? "");
   const [parsedTitle, setParsedTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [describing, setDescribing] = useState(false);
-  const [rejected, setRejected] = useState<ReadonlySet<string>>(new Set());
+  const [description, setDescription] = useState(editing?.description ?? "");
+  const [describing, setDescribing] = useState(Boolean(editing?.description));
+  // Editing: date words already in the title keep their meaning as text; only new ones set the date.
+  const [rejected, setRejected] = useState<ReadonlySet<string>>(() => new Set(editing ? parseTitle(editing.title, smartDates, new Set()).matches.map(match => match.text.toLowerCase()) : []));
   const [sync, dispatch] = useReducer(syncQuickAddFields, undefined, seed);
   const [seeded] = useState(() => scheduleOf(sync).date);
     const [customRepeat, setCustomRepeat] = useState(false);
@@ -90,7 +103,9 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState(projectId);
   const [position, setPosition] = useState(placement);
-  const [metadata, setMetadata] = useState({ priority: 4, deadline: "", labelIds: [] as string[] });
+  const [metadata, setMetadata] = useState(() => editing
+    ? { priority: editing.priority, deadline: editing.deadline ? dateInputValue(editing.deadline) : "", labelIds: [...editing.labelIds] }
+    : { priority: 4, deadline: "", labelIds: [] as string[] });
   const operation = useRef<{ key: string; id: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -144,17 +159,31 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     delete event.currentTarget.dataset.direction;
     if (!title.trim() || pending) return;
     const fields = quickAddTask(title, sync, parseTitle(title, smartDates, rejected));
+    if (editing) {
+      setPending(true); setError(null);
+      try {
+        await onUpdate?.({
+          updatedAt: editing.updatedAt ?? "", title: fields.title, description: description.trim(), priority: metadata.priority,
+          deadline: metadata.deadline ? localInstant(metadata.deadline) : null, dueDate: fields.dueDate, dueDateEnd: fields.dueDateEnd, recurrence: fields.recurrence,
+          ...(choices.labels && { labelIds: metadata.labelIds.filter(id => choices.labels!.some(label => label.id === id)) }),
+        }, project);
+        close();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.");
+      } finally { setPending(false); }
+      return;
+    }
     const task = {
       title: fields.title, ...(description.trim() && { description: description.trim() }), dueDate: fields.dueDate,
       ...(fields.dueDateEnd && { dueDateEnd: fields.dueDateEnd }), ...(fields.recurrence && { recurrence: fields.recurrence }),
-      ...composerFields(metadata, project, { projectId, sectionId, placement: position }),
+      ...composerFields(metadata, project, { projectId, sectionId, placement: position }), ...(parentId && { parentId }),
     };
     const key = JSON.stringify(task);
     if (operation.current?.key !== key) operation.current = { key, id: operationId() };
     setPending(true); setError(null);
     try {
       const created = operation.current.id;
-      await onCreate({ id: created, ...task }, direction);
+      await onCreate?.({ id: created, ...task }, direction);
       if (task.placement) setPosition({ edge: direction, anchorId: created });
       reset();
       input.current?.focus();
@@ -201,11 +230,14 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="chip" aria-label={`Position: ${position.edge}`}
       onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
   </div>;
-  const projectPicker = <Dropdown label="Project" value={project ?? ""} options={projects} onChange={(value) => setProject(value || null)} className={quick ? "chip" : "chip project-picker"} chevron={!quick} />;
+  // A sub-task's project is its parent's: shown, not picked.
+  const projectPicker = parentId ? <span className="chip">{projectId ? <Hash /> : <Inbox />}{projectId ? choices.projects?.find(item => item.id === projectId)?.name ?? "Project" : "Inbox"}</span>
+    : <Dropdown label="Project" value={project ?? ""} options={projects} onChange={(value) => setProject(value || null)} className={quick ? "chip" : "chip project-picker"} chevron={!quick} />;
   // Legacy composer waveform: Ramble with this draft's date as the default (ticket 21).
   const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={close}><AudioLines /></Link>;
   return <>
-    <form ref={releaseFocus} className={quick ? "composer-form quick" : "composer-form"} onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
+    <form ref={releaseFocus} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
         <div ref={backdrop} className="quick-add-backdrop" aria-hidden="true">
@@ -223,7 +255,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         {projectPicker}
         <div className="composer-actions">
           <button type="button" className="icon-button quick-close" aria-label="Close" onClick={close}><X /></button>
-          {title.trim() ? <button type="submit" className="quick-primary" aria-label="Add task" disabled={pending}><ArrowUp /></button>
+          {editing ? <button type="submit" className="quick-primary" aria-label="Save task" disabled={pending || !title.trim()}><Check /></button>
+            : title.trim() ? <button type="submit" className="quick-primary" aria-label="Add task" disabled={pending}><ArrowUp /></button>
             : ramble("quick-primary") || <button type="submit" className="quick-primary" aria-label="Add task" disabled><AudioLines /></button>}
         </div>
       </div> : <div className="composer-footer">

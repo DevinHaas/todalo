@@ -92,10 +92,13 @@ describe("organization cache", () => {
     await expect(run(writes.organize, { task: task("gone"), change: { parentId: null } })).rejects.toBeInstanceOf(AccountTransportError);
   });
 
-  it("offers open root tasks of the same collection as parents, none for a task with sub-tasks", () => {
-    const tasks = [task("t"), task("root"), task("done", { status: "done" }), task("sub", { parentId: "root" }), task("inbox", { projectId: null }), task("kid", { parentId: "parent" }), task("parent")];
-    expect(parentCandidates(tasks[0], tasks).map(item => item.id)).toEqual(["root", "parent"]);
-    expect(parentCandidates(tasks[6], tasks)).toEqual([]);
+  it("offers open tasks of the same collection that keep the tree within three levels and acyclic", () => {
+    const tasks = [task("t"), task("root"), task("done", { status: "done" }), task("sub", { parentId: "root" }), task("inbox", { projectId: null }),
+      task("kid", { parentId: "parent" }), task("parent"), task("deep", { parentId: "sub" }), task("deepest", { parentId: "deep" })];
+    // "deepest" is already at depth 3, so nothing can go under it.
+    expect(parentCandidates(tasks[0], tasks).map(item => item.id)).toEqual(["root", "sub", "kid", "parent", "deep"]);
+    // parent > kid is two levels: it fits under root (depth 0) or sub (depth 1), not under deep (2); never under its own kid.
+    expect(parentCandidates(tasks[6], tasks).map(item => item.id)).toEqual(["t", "root", "sub"]);
   });
 });
 
@@ -115,12 +118,13 @@ describe("organization views", () => {
       .toContain('<span class="button outline" aria-disabled="true">Add section</span>');
   });
 
-  it("offers Move and Nest for a root task and Unnest for a sub-task", () => {
+  it("offers Move and Nest for every task and Unnest for a sub-task", () => {
     const view = (target: TaskDto) => render(createElement(TaskOrganizer, { task: target, tasks: [task("parent"), target], destinations: success({ projects: [work], sections: [doing] }), onRetryDestinations: noop, onOrganize: async () => {} }));
     expect(view(task("t"))).toContain(">Nest task<");
     const sub = view(task("t", { parentId: "parent" }));
     expect(sub).toContain("Sub-task of parent");
     expect(sub).toContain(">Unnest task<");
+    expect(sub).toContain(">Nest task<");
     expect(sub).toContain(">Move task<");
   });
 });

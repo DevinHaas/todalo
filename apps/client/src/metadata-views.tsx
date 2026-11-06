@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { operationId, treeOrder, type TaskDto } from "./tasks";
-import { Failure, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
+import { Failure, listTree, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
 import { blankDefinition, type FilterDefinition, type FilterFields, type LabelFields, type MetadataDto } from "./metadata";
 import type { ProjectDto } from "./projects";
 import { releaseFocus } from "./software-keyboard";
@@ -131,11 +131,17 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.g
 /** Legacy ListView buckets (completed tasks included): Today, Upcoming (any other date), No date. */
 export function listBuckets(tasks: TaskDto[], now = new Date()) {
   const today = (task: TaskDto) => task.dueDate !== null && sameDay(new Date(task.dueDate), now);
-  return [
+  const ids = new Set(tasks.map(task => task.id));
+  const buckets = [
     { label: "Today", items: tasks.filter(today) },
     { label: "Upcoming", items: tasks.filter(task => task.dueDate !== null && !today(task)) },
     { label: "No date", items: tasks.filter(task => task.dueDate === null) },
-  ].filter(bucket => bucket.items.length > 0).map(bucket => ({ ...bucket, items: treeOrder(bucket.items) }));
+  ];
+  // A sub-task stays under its listed parent (its row chevron shows it) instead of a bucket of its own.
+  return buckets.map(bucket => {
+    const inBucket = new Set(bucket.items.map(task => task.id));
+    return { ...bucket, items: treeOrder(bucket.items.filter(task => !task.parentId || !ids.has(task.parentId) || inBucket.has(task.parentId))) };
+  }).filter(bucket => bucket.items.length > 0);
 }
 
 /** What every legacy ViewSwitcher collection takes: row writes, the selection (list only) and another Display layout. */
@@ -151,10 +157,10 @@ export interface CollectionSlots {
 export function CollectionBody({ tasks, projectNames = {}, actions, now = new Date(), selection, layout }: CollectionSlots & { tasks: TaskDto[] }) {
   if (layout) return <>{layout(tasks)}</>;
   return <>{selection?.toolbar}<div className="sections">
-    {listBuckets(tasks, now).map(bucket => <section key={bucket.label}>
+    {listBuckets(tasks, now).map(bucket => { const tree = listTree(bucket.items); return <section key={bucket.label}>
       <h2 className="section-heading muted">{bucket.label}</h2>
-      {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} />)}
-    </section>)}
+      {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
+    </section>; })}
   </div></>;
 }
 

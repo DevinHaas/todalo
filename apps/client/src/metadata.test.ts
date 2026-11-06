@@ -132,13 +132,13 @@ describe("label and filter screens", () => {
     expect(missing).toContain("This label does not exist or you do not have access to it.");
   });
 
-  it("shows the editor's label checkboxes only once the list is known", () => {
+  it("shows the sheet's Labels row (chips of known labels) only once the list is known", () => {
     const labeled = task("t", { labelIds: ["urgent"], updatedAt: "2026-10-15T08:00:00.000Z" });
     const html = render(createElement(TaskEditor, { task: labeled, labels: [urgent, { id: "home", name: "Home" }], onSave: async () => {}, onClose: noop }));
-    expect(html).toContain("<legend>Labels</legend>");
-    expect(html).toMatch(/<input type="checkbox" checked=""\/>Urgent/);
-    expect(html).toMatch(/<input type="checkbox"\/>Home/);
-    expect(render(createElement(TaskEditor, { task: labeled, labels: [], onSave: async () => {}, onClose: noop }))).toContain('href="/labels"');
-    expect(render(createElement(TaskEditor, { task: labeled, onSave: async () => {}, onClose: noop }))).not.toContain("<legend>Labels</legend>");
+    expect(html).toContain('aria-label="Labels: Urgent"');
+    expect(html).toContain('data-field="labels"');
+    expect(html).not.toContain(">Home<");
+    expect(render(createElement(TaskEditor, { task: labeled, labels: [], onSave: async () => {}, onClose: noop }))).toContain('aria-label="Add labels"');
+    expect(render(createElement(TaskEditor, { task: labeled, onSave: async () => {}, onClose: noop }))).not.toContain('data-field="labels"');
   });
 });

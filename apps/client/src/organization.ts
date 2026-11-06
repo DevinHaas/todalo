@@ -5,6 +5,7 @@ import type { TaskOrganizationInput } from "../../../packages/server/src/organiz
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { projectKeys } from "./projects";
 import { taskKeys, type TaskDto } from "./tasks";
+import { taskTree, validateTaskParent } from "../../../packages/db/src/task-parent-validation";
 
 export type { DestinationsDto, SectionDto };
 /** One task's move (project + section) or parent change, with the copy it started from. */
@@ -128,10 +129,15 @@ export function organizationMutations(transport: OrganizationTransport, cache: Q
 }
 
 /**
- * Parents a task may nest under (legacy single level): open root tasks of the
- * same collection, never itself; none when the task has sub-tasks.
+ * Parents a task may nest under: open tasks of the same collection that pass
+ * the server's rules (no cycles, the moved subtree within MAX_SUBTASK_DEPTH).
  */
 export function parentCandidates(task: TaskDto, tasks: TaskDto[]): TaskDto[] {
-  if (tasks.some(item => item.parentId === task.id)) return [];
-  return tasks.filter(item => item.id !== task.id && item.parentId === null && item.status !== "done" && item.projectId === task.projectId);
+  const tree = taskTree(tasks);
+  return tasks.filter(item => item.id !== task.id && item.status !== "done" && item.projectId === task.projectId && fits(task, item.id, tree));
+}
+
+function fits(task: TaskDto, parentId: string, tree: ReturnType<typeof taskTree>) {
+  try { validateTaskParent({ userId: "", taskId: task.id, parentId }, tree); return true; }
+  catch { return false; }
 }

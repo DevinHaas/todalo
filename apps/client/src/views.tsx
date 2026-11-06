@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { ChevronDown, Hash, Inbox, Plus, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Flag, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
 import {
-  dateInputValue, deadlineLabel, dueLabel, isOverdue, localInstant, repeatChoice, repeatLabel, repeatPresets, timeInputValue,
-  todayHeading, todaySections, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto, type TodayDto,
+  dateInputValue, deadlineLabel, dueLabel, isDueToday, isOverdue, localInstant, repeatChoice, repeatLabel, repeatPresets, shortDateLabel, timeInputValue,
+  todayHeading, todaySections, treeDepths, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto, type TodayDto,
 } from "./tasks";
 import { AccountTransportError } from "./errors";
 import { releaseFocus } from "./software-keyboard";
@@ -12,7 +12,8 @@ import { EventRow } from "./calendar-views";
 import { dayKey } from "./schedule";
 import { copyText, taskPath } from "./links";
 import { Dropdown, type Option } from "./popover";
-import { priorityOptions } from "./composer";
+import { ComposerChoices } from "./composer";
+import { TaskTree, subtasksOf } from "./task-tree";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -47,33 +48,86 @@ export const collapsedTasks = {
  * title tap opens it without leaving the page, and `slot` places Save and
  * add's composer above or below its row. Without it a title is a plain link.
  */
-export interface TaskDialog { open(id: string): void; slot(id: string, edge: "above" | "below"): ReactNode }
+export interface TaskDialog {
+  open(id: string): void;
+  slot(id: string, edge: "above" | "below"): ReactNode;
+  /** ⌘E: edit the task in place with the quick add editor; `editor` is that editor while it is open (else null). */
+  edit?(id: string): void;
+  editor?(task: TaskDto): ReactNode;
+}
 export const TaskDialogs = createContext<TaskDialog | null>(null);
 
-export function TaskRow({ task, now, projectName, actions, selection }: { task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection }) {
-  const isCollapsed = () => Boolean(task.parentId && collapsed.has(task.parentId));
-  const hidden = useSyncExternalStore(collapsedTasks.subscribe, isCollapsed, isCollapsed);
+export { TaskTree, subtasksOf } from "./task-tree";
+
+/** A list's rows with their indent (`depth`) and whether their sub-tasks are rows of the same list (`nested`). */
+export function listTree(tasks: readonly TaskDto[]) {
+  const depths = treeDepths(tasks);
+  const parents = new Set(tasks.map(task => task.parentId));
+  return (task: TaskDto) => ({ depth: depths.get(task.id) ?? 0, nested: parents.has(task.id) });
+}
+
+/** Hidden while any ancestor is collapsed (Shift+E, the row chevron). */
+function hiddenBy(task: TaskDto, tasks: readonly TaskDto[] | null, closed: ReadonlySet<string>) {
+  const byId = new Map((tasks ?? []).map(item => [item.id, item]));
+  for (let parent = task.parentId, guard = 0; parent && guard < 10; parent = byId.get(parent)?.parentId ?? null, guard++) if (closed.has(parent)) return true;
+  return false;
+}
+
+export function TaskRow({ task, now, projectName, actions, selection, depth = 0, nested = false, inToday = false }: {
+  task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection;
+  /** Indent level in its list (listTree). */
+  depth?: number;
+  /** Its sub-tasks are rows of the same list: the chevron collapses them instead of expanding them inline. */
+  nested?: boolean;
+  /** On the Today page an all-day today date is implied and not shown. */
+  inToday?: boolean;
+}) {
+  const tree = useContext(TaskTree);
+  const closed = useSyncExternalStore(collapsedTasks.subscribe, collapsedTasks.get, collapsedTasks.get);
+  const hidden = hiddenBy(task, tree, closed);
+  const [expanded, setExpanded] = useState(false);
   const dialog = useContext(TaskDialogs);
-  // A plain click (tap, Enter) opens the dialog; a modified click keeps the /tasks/:id link (new tab).
+  const { labels } = useContext(ComposerChoices);
+  const subtasks = subtasksOf(task.id, tree);
   const open = dialog ? (event: MouseEvent) => {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     dialog.open(task.id);
   } : undefined;
+  const showing = nested ? !closed.has(task.id) : expanded;
+  const date = shortDateLabel(task, now, inToday);
+  const labelNames = task.labelIds.map(id => labels?.find(label => label.id === id)?.name).filter(Boolean);
+  const editor = dialog?.editor?.(task);
+  if (editor && !hidden) return <>{editor}</>;
   return <>{dialog?.slot(task.id, "above")}<div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+    data-depth={depth || undefined} style={depth ? { "--depth": depth } as CSSProperties : undefined}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
-      ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" onClick={() => actions.complete(task)} />
-      : <span className="checkbox" aria-hidden="true" />}
-    <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}</Link>
-    {task.dueDate && <span className={isOverdue(task, now) ? "pill overdue" : "pill"}>{dueLabel(task.dueDate)}</span>}
-    {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}>P{task.priority}</span>}
-    {task.deadline && <span className="pill">Deadline {deadlineLabel(task.deadline)}</span>}
-    {task.labelIds.length > 0 && <span className="pill">{task.labelIds.length} label{task.labelIds.length > 1 ? "s" : ""}</span>}
-    <span className="pill project">{projectName ? <Hash /> : <Inbox />}{projectName ?? "Inbox"}</span>
+      ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} onClick={() => actions.complete(task)} />
+      : <span className="checkbox" data-priority={task.priority} aria-hidden="true" />}
+    <div className="row-body">
+      <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}</Link>
+      {dialog?.edit && <button type="button" hidden data-edit onClick={() => dialog.edit!(task.id)}>Edit {task.title}</button>}
+      <div className="row-meta">
+        {date && <span className={isOverdue(task, now) ? "pill due overdue" : isDueToday(task, now) ? "pill due today" : "pill due"}><CalendarDays />{date}</span>}
+        {task.recurrence && <span className="pill" aria-label={repeatLabel(task.recurrence)}><Repeat /></span>}
+        {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}><Flag data-priority={task.priority} />P{task.priority}</span>}
+        {task.deadline && <span className="pill"><Goal />Deadline {deadlineLabel(task.deadline)}</span>}
+        {task.labelIds.length > 0 && <span className="pill"><Tag />{labelNames.length === task.labelIds.length ? labelNames.join(", ") : `${task.labelIds.length} label${task.labelIds.length > 1 ? "s" : ""}`}</span>}
+        {subtasks.total > 0 && <button type="button" className="pill subtasks" aria-expanded={showing}
+          aria-label={`Sub-tasks ${subtasks.done.length} of ${subtasks.total} done, ${showing ? "hide" : "show"}`}
+          onClick={() => nested ? collapsedTasks.toggle(task.id) : setExpanded(value => !value)}>
+          <GitBranch />{subtasks.done.length}/{subtasks.total}<ChevronRight className="chevron" />
+        </button>}
+        {(task.commentCount ?? 0) > 0 && <span className="pill comments" aria-label={`${task.commentCount} comment${task.commentCount! > 1 ? "s" : ""}`}><MessageSquare />{task.commentCount}</span>}
+        <span className="pill project">{projectName ?? "Inbox"}{projectName ? <Hash /> : <Inbox />}</span>
+      </div>
+    </div>
     {actions && <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => actions.remove(task)}><X /></button>}
-  </div>{dialog?.slot(task.id, "below")}</>;
+  </div>
+  {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}
+  {dialog?.slot(task.id, "below")}</>;
 }
 
 // The task composer with smart quick add (tickets 5, 12) lives in composer.tsx.
@@ -95,6 +149,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   if (!state.data) return <div>{header}<Failure error={state.error} onRetry={onRetry} /></div>;
   if (calendar) return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{calendar(state.data.tasks)}</div>;
   const { overdue, today } = todaySections(state.data.tasks, now, showCompleted);
+  const tree = listTree([...overdue, ...today]);
   const todayEvents = events.filter(event => eventDayKey(event) === dayKey(now));
   // A failed refetch keeps the last list (and an open composer's draft) on screen.
   return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{writeError && <p role="alert" className="form-error">{writeError}</p>}{selection?.toolbar}<div className="sections">
@@ -102,12 +157,12 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
       <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
         <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>
       </button>
-      {overdueOpen && overdue.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} />)}
+      {overdueOpen && overdue.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
     </section>}
     <section>
       <h2 className="section-heading">{todayHeading(now)}</h2>
       {todayEvents.map(event => <EventRow key={event.id} event={event} />)}
-      {today.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} />)}
+      {today.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} inToday {...tree(task)} />)}
       {today.length === 0 && overdue.length === 0 && todayEvents.length === 0 && <p className="state">Nothing is due today.</p>}
       {composer ?? <span className="composer" aria-disabled="true"><Plus />Add task</span>}
     </section>
@@ -149,120 +204,5 @@ export function TaskView({ state, onRetry, actions, writeError, attachments, onE
   return <article className="task-detail">{body}{collection && <Link className="text-action" to={collection}>Open task collection</Link>}<Link className="text-action" to="/today">Back to Today</Link></article>;
 }
 
-type Draft = { title: string; description: string; priority: number; deadline: string; date: string; start: string; end: string; recurrence: RecurrenceDto | null; labelIds: string[] };
-const draftOf = (task: TaskDto): Draft => ({
-  title: task.title, description: task.description ?? "", priority: task.priority, deadline: dateInputValue(task.deadline),
-  date: dateInputValue(task.dueDate), start: timeInputValue(task.dueDate), end: timeInputValue(task.dueDateEnd, false), recurrence: task.recurrence,
-  labelIds: task.labelIds,
-});
-const repeatNames: Record<Exclude<RepeatChoice, "custom">, string> = { none: "Does not repeat", daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
-const repeatOptions: Option<RepeatChoice>[] = (Object.keys(repeatNames) as (keyof typeof repeatNames)[]).map(value => ({ value, label: repeatNames[value] }));
-
-/**
- * The legacy task edit dialog (ticket 11, labels ticket 14). It saves every
- * field with the version it was opened from. A pristine form follows newer
- * copies of the task; a draft is never replaced silently — if another device
- * changed the task, saving fails with TASK_CHANGED and the user chooses: load
- * the current details, or keep the draft on top of the newer version and save
- * again (ticket 22). A custom repeat (from quick add) is kept unless replaced.
- * With `labels` (the user's list) it shows the label checkboxes and sends the
- * checked set, limited to labels that still exist; without it labels are kept.
- */
-export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation }: {
-  task: TaskDto; labels?: { id: string; name: string }[];
-  /** The resolved https task link (ticket 18); the legacy "Task link · Copy link" row shows once known. */
-  shareUrl?: string;
-  onSave: (details: TaskDetails) => Promise<unknown>; onClose: () => void;
-  /** Legacy inline editor's Save and add above/below: called once the save succeeds. */
-  onInsert?: (edge: "above" | "below") => void;
-  /** Legacy Previous/Next: save, then open the adjacent task of the list it was opened from. */
-  navigation?: { previous: boolean; next: boolean; go(step: -1 | 1): void };
-}) {
-  const [base, setBase] = useState(task);
-  const [draft, setDraft] = useState(() => draftOf(task));
-  const [dirty, setDirty] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [copied, setCopied] = useState(false);
-  const load = (copy: TaskDto) => { setBase(copy); setDraft(draftOf(copy)); setDirty(false); setError(null); };
-  useEffect(() => { if (!dirty && task.updatedAt !== base.updatedAt) load(task); }, [task, dirty, base.updatedAt]);
-  const edit = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setDirty(true); };
-  const changed = error instanceof AccountTransportError && error.code === "TASK_CHANGED";
-  const choice = repeatChoice(draft.recurrence);
-
-  async function submit(event: FormEvent) { event.preventDefault(); await save(); }
-  async function save(after?: "above" | "below" | -1 | 1) {
-    if (!draft.title.trim() || pending) return;
-    setPending(true); setError(null);
-    try {
-      await onSave({
-        updatedAt: base.updatedAt ?? "", title: draft.title.trim(), description: draft.description, priority: draft.priority,
-        deadline: draft.deadline ? localInstant(draft.deadline) : null,
-        dueDate: draft.date ? localInstant(draft.date, draft.start) : null,
-        dueDateEnd: draft.date && draft.end ? localInstant(draft.date, draft.end) : null,
-        recurrence: draft.recurrence,
-        ...(labels && { labelIds: draft.labelIds.filter(id => labels.some(label => label.id === id)) }),
-      });
-      if (after === "above" || after === "below") onInsert?.(after);
-      else if (after) navigation?.go(after);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason : new Error("Your changes could not be saved. Try again."));
-    } finally { setPending(false); }
-  }
-
-  return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="task-editor-title" className="dialog task-editor">
-      <h2 id="task-editor-title" className="dialog-title">{base.title}</h2>
-      <form ref={releaseFocus} onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-        {error && <p role="alert" className="form-error">{error.message}{changed && (task.updatedAt === base.updatedAt ? " Loading current details…" : <>
-          {" "}<button type="button" className="text-action" onClick={() => load(task)}>Load current details</button>
-          {" "}<button type="button" className="text-action" onClick={() => { setBase(task); setError(null); }}>Keep my changes</button>
-        </>)}</p>}
-        <fieldset disabled={pending}>
-          <label>Task name<input autoFocus value={draft.title} enterKeyHint="done" onChange={(event) => edit({ title: event.target.value })} /></label>
-          <label>Description<textarea value={draft.description} rows={3} onChange={(event) => edit({ description: event.target.value })} /></label>
-          <div className="field">Priority<Dropdown label="Priority" value={draft.priority} options={priorityOptions} data={{ "data-field": "priority" }} onChange={(priority) => edit({ priority })} /></div>
-          <div className="field-row">
-            <label>Deadline<input data-field="deadline" type="date" value={draft.deadline} onChange={(event) => edit({ deadline: event.target.value })} /></label>
-            <button type="button" className="text-action" disabled={!draft.deadline} onClick={() => edit({ deadline: "" })}>Clear deadline</button>
-          </div>
-          {labels && <fieldset className="label-choices" data-field="labels"><legend>Labels</legend>
-            {labels.length > 0 && <div className="label-options">{labels.map(label => <label key={label.id} className="label-option">
-              <input type="checkbox" checked={draft.labelIds.includes(label.id)} onChange={(event) => edit({ labelIds: event.target.checked ? [...draft.labelIds, label.id] : draft.labelIds.filter(id => id !== label.id) })} />{label.name}
-            </label>)}</div>}
-            {!labels.length && <p className="state">Create labels in <Link to="/labels" onClick={onClose}>Labels</Link>.</p>}
-          </fieldset>}
-          {shareUrl && <div className="task-links">
-            <Link to={taskPath(base.id)} className="text-action" onClick={onClose}>Task link</Link>
-            <button type="button" className="text-action" onClick={() => copyText(shareUrl).then(() => setCopied(true), (reason: Error) => setError(reason))}>Copy link</button>
-            {copied && <span role="status">Task link copied.</span>}
-          </div>}
-          <div className="field-row">
-            <label>Due date<input data-field="date" type="date" value={draft.date} onChange={(event) => edit({ date: event.target.value })} /></label>
-            <button type="button" className="text-action" disabled={!draft.date} onClick={() => edit({ date: "", start: "", end: "" })}>Clear date</button>
-          </div>
-          {/* Shown once a date is set; leaving both empty keeps the task all-day. */}
-          {draft.date && <div className="time-range">
-            <input type="time" aria-label="Start time" value={draft.start} onChange={(event) => edit({ start: event.target.value })} />
-            <span>to</span>
-            <input type="time" aria-label="End time" value={draft.end} onChange={(event) => edit({ end: event.target.value })} />
-          </div>}
-          <div className="field">Repeat<Dropdown label="Repeat" value={choice} options={choice === "custom" && draft.recurrence ? [...repeatOptions, { value: "custom", label: repeatLabel(draft.recurrence) }] : repeatOptions} data={{ "data-field": "repeat" }}
-            onChange={(value) => { if (value !== "custom") edit({ recurrence: value === "none" ? null : repeatPresets[value] }); }} /></div>
-        </fieldset>
-        <div className="composer-actions">
-          {navigation && <>
-            <button type="button" className="button outline" data-navigate="-1" disabled={pending || !navigation.previous || !draft.title.trim()} onClick={() => void save(-1)}>Previous</button>
-            <button type="button" className="button outline" data-navigate="1" disabled={pending || !navigation.next || !draft.title.trim()} onClick={() => void save(1)}>Next</button>
-          </>}
-          {onInsert && <>
-            <button type="button" className="button outline" data-insert="above" disabled={pending || !draft.title.trim()} onClick={() => void save("above")}>Save and add above</button>
-            <button type="button" className="button outline" data-insert="below" disabled={pending || !draft.title.trim()} onClick={() => void save("below")}>Save and add below</button>
-          </>}
-          <button type="button" className="button outline" disabled={pending} onClick={onClose}>Cancel</button>
-          <button type="submit" className="button" disabled={pending || !draft.title.trim()}>{pending ? "Saving…" : "Save"}</button>
-        </div>
-      </form>
-    </div>
-  </div>;
-}
+// The task sheet (detail and edit dialog) lives in task-sheet.tsx.
+export { TaskEditor } from "./task-sheet";

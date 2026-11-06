@@ -8,8 +8,9 @@ Simulator where noted) against the branch API on the real database.
 - API: `cd apps/api && RAMBLE_PORT=3000 bun --env-file=../../.env src/index.ts`
   (port 3000 matches `BETTER_AUTH_URL` and the registered Google callback; stop
   the legacy Next app first, it also uses 3000).
-- Mac: `cd apps/client && TODALO_API_BASE_URL=http://127.0.0.1:3000 bun tauri build --debug --bundles app --ci`,
-  open `src-tauri/target/debug/bundle/macos/todalo.app`.
+- Mac: `cd apps/client && APPLE_SIGNING_IDENTITY="Apple Development: Devin Hasler (P7326S38S4)" TODALO_API_BASE_URL=http://127.0.0.1:3000 bun tauri build --debug --bundles app --ci`,
+  open `src-tauri/target/debug/bundle/macos/todalo.app`. Signing with a stable identity keeps the
+  Keychain "Always Allow" across rebuilds (an ad-hoc build is a new app to Keychain every time).
 - Simulator: `TAURI_TODALO_API_BASE_URL=http://127.0.0.1:3000 bun tauri ios build --debug --target aarch64-sim --ci`,
   then `xcrun simctl install booted src-tauri/gen/apple/build/arm64-sim/todalo.app`.
 

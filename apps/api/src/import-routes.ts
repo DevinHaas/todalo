@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 import { planTodoistImport, type ImportContext, type ImportPlan, type TodoistSnapshot } from "@todalo/server/todoist-import";
 import { writeUser } from "./project-routes";
-import type { TodoistClient } from "./todoist";
+import { completedSince, type TodoistClient } from "./todoist";
 
 // Todoist import (.scratch/todoist-import). The OAuth exchange, the token and
 // the import all stay server-side; clients only open the authorize URL.
@@ -30,7 +30,7 @@ export interface ImportResult { created: { projects: number; sections: number; t
 
 const runInput = z.object({
   projectIds: z.array(z.string().min(1)).min(1).max(1000),
-  include: z.object({ sections: z.boolean(), subtasks: z.boolean(), labels: z.boolean(), recurring: z.boolean(), comments: z.boolean(), completed: z.boolean() }).strict(),
+  include: z.object({ sections: z.boolean(), subtasks: z.boolean(), labels: z.boolean(), recurring: z.boolean(), comments: z.boolean(), completed: z.boolean(), completedRange: z.enum(["quarter", "year", "all"]).optional() }).strict(),
   timeZone: z.string().refine((zone) => { try { new Intl.DateTimeFormat("en", { timeZone: zone }); return true; } catch { return false; } }),
 }).strict();
 
@@ -139,7 +139,8 @@ export function createImportRoutes(store: ImportStore) {
         session.snapshot = snapshot;
         const known = new Set(snapshot.projects.filter((p) => !p.is_deleted).map((p) => p.id));
         if (input.data.projectIds.some((id) => !known.has(id))) { session.status = "connected"; return status(400, INVALID); }
-        const items = input.data.include.completed ? [...snapshot.items, ...await store.todoist.completed(session.token)] : snapshot.items;
+        const { completed, completedRange = "quarter" } = input.data.include;
+        const items = completed ? [...snapshot.items, ...await store.todoist.completed(session.token, completedSince(completedRange, snapshot.user?.joined_at))] : snapshot.items;
         const plan = planTodoistImport({ ...snapshot, items }, input.data, await store.context(userId, input.data.timeZone));
         await store.apply(userId, plan);
         const result: ImportResult = {

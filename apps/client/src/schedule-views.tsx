@@ -7,18 +7,32 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Layou
 import { isDueToday, isOverdue, type TaskDto } from "./tasks";
 import {
   HOUR_HEIGHT, addDays, addMonths, blockFor, dayKey, defaultDisplay, extendWindow, isTimed, labels, monthGrid, navigateViewDate,
-  nextLayout, offsetFor, parseDayKey, sameDay, slotAt, startOfDay, startOfWeek, tasksByDay, upcomingSections, upcomingWindow, weekOf,
+  nextLayout, offsetFor, onCalendar, parseDayKey, sameDay, slotAt, startOfDay, startOfWeek, tasksByDay, upcomingSections, upcomingWindow, weekOf,
   type DisplaySettings, type ViewDateAction,
 } from "./schedule";
 import { eventsByDay, type CalendarEventDto } from "./calendar";
+import { useLocation } from "react-router";
 import { EventBlock, EventChip, EventRow } from "./calendar-views";
 
 type Display = DisplaySettings & { set(change: Partial<DisplaySettings>): void };
 const DisplayContext = createContext<Display>({ ...defaultDisplay, set() {} });
-/** Shell-wide, in memory: the legacy provider sat in the app layout, so settings survive navigation but not reloads. */
+const DISPLAY_KEY = "todalo.display";
+const savedDisplays = (): Record<string, Partial<DisplaySettings>> => {
+  try { return JSON.parse(localStorage.getItem(DISPLAY_KEY) ?? "{}") ?? {}; } catch { return {}; }
+};
+/**
+ * Per page (path): Today can stay a list while Upcoming is a calendar. Kept in
+ * localStorage, so each page's layout also survives reloads and app restarts.
+ */
 export function DisplayProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState(defaultDisplay);
-  return <DisplayContext.Provider value={{ ...settings, set: change => setSettings(current => ({ ...current, ...change })) }}>{children}</DisplayContext.Provider>;
+  const { pathname } = useLocation();
+  const [pages, setPages] = useState(savedDisplays);
+  const set = (change: Partial<DisplaySettings>) => setPages(current => {
+    const next = { ...current, [pathname]: { ...current[pathname], ...change } };
+    try { localStorage.setItem(DISPLAY_KEY, JSON.stringify(next)); } catch { /* private mode: in memory only */ }
+    return next;
+  });
+  return <DisplayContext.Provider value={{ ...defaultDisplay, ...pages[pathname], set }}>{children}</DisplayContext.Provider>;
 }
 export const useDisplay = () => useContext(DisplayContext);
 
@@ -210,7 +224,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
           {(eventDays.get(dayKey(day)) ?? []).filter(event => !event.allDay).map(event => <EventBlock key={event.id} event={event} />)}
           {(byDay.get(dayKey(day)) ?? []).filter(isTimed).map(task => {
             const block = blockFor(task.dueDate!, task.dueDateEnd);
-            return <button key={task.id} type="button" className="timed-block" style={{ top: block.top, height: block.height }}
+            return <button key={task.id} type="button" className="timed-block" data-done={task.status === "done" || undefined} style={{ top: block.top, height: block.height }}
               onClick={(event) => { event.stopPropagation(); slots.open(task); }}>
               <span className="timed-title">{task.title}</span><span className="timed-range">{labels.time(block.start)}–{labels.time(block.end)}</span>
             </button>;
@@ -225,9 +239,9 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
 /** Today's calendar layout (legacy TodayScheduleView): overdue and all-day tasks above the hours. */
 export function TodaySchedule({ tasks, events = [], slots, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; now?: Date }) {
   const { showCompleted } = useDisplay();
-  const shown = showCompleted ? tasks : tasks.filter(task => task.status !== "done");
+  const shown = tasks.filter(task => onCalendar(task, showCompleted));
   const today = shown.filter(task => isDueToday(task, now));
-  const allDay = [...shown.filter(task => isOverdue(task, now)), ...today.filter(task => !isTimed(task))];
+  const allDay = [...shown.filter(task => isOverdue(task, now) && (showCompleted || task.status !== "done")), ...today.filter(task => !isTimed(task))];
   const todayEvents = eventsByDay(events).get(dayKey(now)) ?? [];
   return <ScheduleGrid days={[startOfDay(now)]} byDay={new Map([[dayKey(now), today]])} eventDays={new Map([[dayKey(now), todayEvents]])} slots={slots} header={
     <div className="all-day single"><span className="all-day-label">All day</span><div className="all-day-cell">

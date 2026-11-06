@@ -21,12 +21,16 @@ describe("atomic commit row preparation", () => {
     expect(rows.every((row) => row.userId === "user")).toBe(true);
     expect(rows[0].dueDate?.toISOString()).toBe("2026-10-04T14:00:00.000Z");
   });
-  it("rejects orphan, duplicate, self and deep child references", () => {
+  it("rejects orphan, duplicate, self, cyclic and too-deep child references", () => {
     const todos = capture(["parent", "sub task", "child"]);
     expect(() => prepareTaskRows([{ ...todos[1], parentId: "missing" }], "user", "UTC", OP)).toThrow();
     expect(() => prepareTaskRows([todos[0], todos[0]], "user", "UTC", OP)).toThrow();
     expect(() => prepareTaskRows([{ ...todos[0], parentId: todos[0].id }], "user", "UTC", OP)).toThrow();
-    expect(() => prepareTaskRows([...todos, { ...todos[1], id: "grandchild", parentId: todos[1].id }], "user", "UTC", OP)).toThrow();
+    // Three staged sub-task levels are fine; a fourth, or a loop, is refused.
+    const deep = [...todos, { ...todos[1], id: "l2", parentId: todos[1].id }, { ...todos[1], id: "l3", parentId: "l2" }];
+    expect(prepareTaskRows(deep, "user", "UTC", OP).at(-1)!.parentId).toBe(rambleTaskId("user", OP, "l2"));
+    expect(() => prepareTaskRows([...deep, { ...todos[1], id: "l4", parentId: "l3" }], "user", "UTC", OP)).toThrow();
+    expect(() => prepareTaskRows([{ ...todos[0], parentId: todos[1].id }, todos[1]], "user", "UTC", OP)).toThrow();
   });
   it("preserves overnight end times and recurrence", () => {
     const rows = prepareTaskRows(capture(["work tomorrow from 23:00 to 01:00 every day"]), "user", "Europe/Zurich", OP);

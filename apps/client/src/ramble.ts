@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { createRambleAudioQueue } from "@todalo/ramble/audio";
 import type { RambleSessionState, RambleTodo } from "@todalo/ramble";
 import { AccountTransportError, nativeAccountError } from "./errors";
+import { dateInputValue, localInstant, timeInputValue, type TaskDetails, type TaskDto } from "./tasks";
 
 /** Legacy modal phases (apps/web ramble-modal.tsx) plus the finished save. */
 export type RambleStatus = "connecting" | "starting" | "listening" | "paused" | "error" | "committing" | "committed";
@@ -299,6 +300,8 @@ export function createRambleRecorder(dependencies: RambleRecorderDependencies, o
       if (view.connected && (view.status === "listening" || view.status === "error")) void listen();
     },
     remove(id: string) { if (!committing) send(JSON.stringify({ type: "remove", id })); },
+    /** A card edited in the quick add card (the server's state stays the source of truth). */
+    edit(todo: RambleTodo) { if (!committing) send(JSON.stringify({ type: "edit", todo })); },
     retryUnderstanding() { send(JSON.stringify({ type: "retry-understanding" })); },
     /** Add tasks: over the socket while it is open (it flushes pending speech first), else over HTTP. */
     commit() {
@@ -343,4 +346,28 @@ export async function commitStaged(input: RambleCommit, fetcher: typeof fetch = 
   const body = await response.json().catch(() => null) as { count?: unknown } | null;
   if (typeof body?.count !== "number") throw new AccountTransportError("INVALID_RESPONSE");
   return body.count;
+}
+
+/** A staged card as the quick add card edits it (its ⌘E mode takes a task). */
+export function todoAsTask(todo: RambleTodo): TaskDto {
+  const at = (time: string | null) => todo.dueDate ? localInstant(todo.dueDate, time ?? "") : null;
+  return {
+    id: todo.id, title: todo.title, description: todo.description, status: "todo", priority: todo.priority,
+    projectId: todo.projectId, sectionId: null, parentId: todo.parentId,
+    dueDate: at(todo.startTime), dueDateEnd: todo.endTime ? at(todo.endTime) : null,
+    deadline: todo.deadline ? localInstant(todo.deadline) : null, completedAt: null, labelIds: todo.labelIds,
+    recurrence: todo.recurrence, updatedAt: null,
+  };
+}
+
+/** The quick add card's result back as the staged card (local days and "HH:mm" times, as Ramble stages them). */
+export function detailsAsTodo(todo: RambleTodo, details: TaskDetails, projectId: string | null): RambleTodo {
+  return {
+    ...todo, title: details.title, description: details.description.trim() || null, priority: details.priority, projectId,
+    dueDate: details.dueDate ? dateInputValue(details.dueDate) : null,
+    startTime: details.dueDate ? timeInputValue(details.dueDate) || null : null,
+    endTime: details.dueDateEnd ? timeInputValue(details.dueDateEnd, false) : null,
+    deadline: details.deadline ? dateInputValue(details.deadline) : null,
+    recurrence: details.recurrence && { ...details.recurrence, until: details.recurrence.until ?? null }, labelIds: details.labelIds ?? todo.labelIds,
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRambleSession, interpretSegment, localTaskTitle, previewSegments, removeStagedTodo, type RambleSessionState } from "./index";
+import { createRambleSession, editStagedTodo, interpretSegment, localTaskTitle, previewSegments, removeStagedTodo, type RambleSessionState } from "./index";
 
 const referenceDate = new Date(2026, 9, 3, 23, 45);
 const fresh = () => createRambleSession({ referenceDate });
@@ -188,5 +188,17 @@ describe("local preview", () => {
     expect(provisionalIds).toEqual(["ramble-2"]);
     expect(state.todos[1]).toMatchObject({ id: "ramble-2", title: "Book hotel", dueDate: "2026-10-04" });
     expect(confirmed.todos).toHaveLength(1);
+  });
+});
+
+describe("editing a staged card by hand", () => {
+  it("changes title and description, and undo restores them", () => {
+    const state = capture(fresh(), "Plan trip");
+    const id = state.todos[0].id;
+    const edited = editStagedTodo(id, { title: "  Plan Rome trip ", description: "flights" }, state).nextState;
+    expect(edited.todos[0]).toMatchObject({ title: "Plan Rome trip", description: "flights" });
+    expect(interpretSegment("undo", edited).nextState.todos[0]).toMatchObject({ title: "Plan trip", description: null });
+    expect(editStagedTodo(id, { title: "  ", description: null }, state).nextState).toBe(state);
+    expect(editStagedTodo("missing", { title: "x", description: null }, state).nextState).toBe(state);
   });
 });
