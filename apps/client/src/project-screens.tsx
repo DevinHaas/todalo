@@ -13,6 +13,7 @@ import { useDisplay } from "./schedule-views";
 import { ProjectCalendar } from "./schedule-screens";
 import { BoardScreen } from "./board-screens";
 import { useTaskWrites } from "./task-writes";
+import { ProjectGoals } from "./goal-screens";
 
 
 function useProjectMutations(userId: string) {
@@ -59,6 +60,7 @@ export function ProjectScreen({ account }: { account: Account }) {
     reorder={order.reorder}
     layout={layout}
     files={<ProjectFilesScreen userId={account.user.id} projectId={id} />}
+    goals={<ProjectGoals userId={account.user.id} projectId={id} />}
     onCreate={(task) => tasks.create.mutateAsync(task)}
     actions={tasks.actions}
     showCompleted={display.showCompleted}

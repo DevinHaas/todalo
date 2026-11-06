@@ -5,7 +5,13 @@ import { createGoalRoutes } from "./goal-routes";
 type Row = { id: string; userId: string; title: string; description: string | null; sortOrder: number; archivedAt: Date | null };
 let goals: Row[] = [];
 let hidden: Map<string, boolean>;
+// Projects and tasks the links point at; unlinking must never remove these.
+const projects = [{ id: "alice-run", userId: "alice", name: "Run marathon", color: null }, { id: "alice-meals", userId: "alice", name: "Meal prep", color: null }, { id: "bob-books", userId: "bob", name: "Books", color: null }];
+const task = (id: string, userId: string, title: string) => ({ id, userId, title, description: null, status: "todo" as const, priority: 4, projectId: null, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [] });
+const tasks = [task("alice-protein", "alice", "Eat enough protein"), task("alice-stretch", "alice", "Stretch"), task("bob-page", "bob", "Read a page")];
+let links: { goalId: string; kind: "projects" | "tasks"; targetId: string }[] = [];
 beforeEach(() => {
+  links = [];
   goals = [
     { id: "alice-fit", userId: "alice", title: "Become fit", description: "Run a marathon", sortOrder: 0, archivedAt: null },
     { id: "alice-v2", userId: "alice", title: "Ship v2", description: null, sortOrder: 1, archivedAt: null },
@@ -41,6 +47,24 @@ const app = createGoalRoutes({
   },
   hidden: async (userId) => hidden.get(userId) ?? false,
   setHidden: async (userId, value) => { hidden.set(userId, value); return value; },
+  work: async (userId, goalId) => {
+    const linked = (kind: string) => new Set(links.filter(link => link.goalId === goalId && link.kind === kind).map(link => link.targetId));
+    return { projects: projects.filter(project => project.userId === userId && linked("projects").has(project.id)), tasks: tasks.filter(item => item.userId === userId && linked("tasks").has(item.id)) };
+  },
+  links: async (userId) => {
+    const mine = links.filter(link => find(userId, link.goalId));
+    return { projects: mine.filter(link => link.kind === "projects").map(link => ({ goalId: link.goalId, projectId: link.targetId })), tasks: mine.filter(link => link.kind === "tasks").map(link => ({ goalId: link.goalId, taskId: link.targetId })) };
+  },
+  link: async (userId, goalId, kind, targetId) => {
+    if (!find(userId, goalId) || !(kind === "projects" ? projects : tasks).some(row => row.userId === userId && row.id === targetId)) return false;
+    if (!links.some(link => link.goalId === goalId && link.kind === kind && link.targetId === targetId)) links.push({ goalId, kind, targetId });
+    return true;
+  },
+  unlink: async (userId, goalId, kind, targetId) => {
+    if (!find(userId, goalId)) return false;
+    links = links.filter(link => !(link.goalId === goalId && link.kind === kind && link.targetId === targetId));
+    return true;
+  },
 });
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
   const headers = new Headers();
@@ -55,7 +79,8 @@ const sidebar = async (user = "alice") => (await (await call("GET", "/goals", { 
 describe("goal API", () => {
   it("rejects every unauthenticated operation with the shared envelope", async () => {
     for (const [method, path, body] of [["GET", "/goals"], ["GET", "/goals/alice-fit"], ["POST", "/goals", { title: "x" }], ["PATCH", "/goals/alice-fit", { title: "x" }],
-      ["POST", "/goals/alice-fit/reorder", { anchorId: "alice-v2", position: "after" }], ["PUT", "/goals-visibility", { hidden: true }]] as const) {
+      ["POST", "/goals/alice-fit/reorder", { anchorId: "alice-v2", position: "after" }], ["PUT", "/goals-visibility", { hidden: true }],
+      ["GET", "/goal-links"], ["PUT", "/goals/alice-fit/tasks/alice-protein"], ["DELETE", "/goals/alice-fit/projects/alice-run"]] as const) {
       const response = await call(method, path, { origin: "http://localhost:5173", body });
       expect(response.status, `${method} ${path}`).toBe(401);
       expect(await response.json()).toEqual({ code: "UNAUTHENTICATED", message: "Please sign in again." });
@@ -72,7 +97,7 @@ describe("goal API", () => {
   });
 
   it("opens a goal page (archived ones too); foreign and missing IDs share one 404", async () => {
-    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", archived: false } });
+    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", archived: false }, projects: [], tasks: [] });
     expect((await (await call("GET", "/goals/alice-old", { user: "alice" })).json() as { goal: { archived: boolean } }).goal.archived).toBe(true);
     const foreign = await call("GET", "/goals/bob-read", { user: "alice" });
     const missing = await call("GET", "/goals/nope", { user: "alice" });
@@ -142,5 +167,68 @@ describe("goal API", () => {
     expect((await call("POST", "/goals", { cookie: "alice", origin: "http://localhost:5173", body: { title: "A" } })).status).toBe(201);
     expect((await call("POST", "/goals", { user: "bob", cookie: "alice", body: { title: "B" } })).status).toBe(201);
     expect(goals.at(-1)?.userId).toBe("bob");
+  });
+
+  describe("links", () => {
+    const linked = async (goal: string) => (await (await call("GET", `/goals/${goal}`, { user: "alice" })).json()) as { projects: { id: string; name: string }[]; tasks: { id: string; title: string }[] };
+
+    it("links one goal to many projects and one project to many goals", async () => {
+      for (const [goal, project] of [["alice-fit", "alice-run"], ["alice-fit", "alice-meals"], ["alice-v2", "alice-run"]]) {
+        const response = await call("PUT", `/goals/${goal}/projects/${project}`, { user: "alice" });
+        expect(await response.json()).toEqual({ goalId: goal, kind: "projects", targetId: project });
+      }
+      expect((await linked("alice-fit")).projects).toEqual([{ id: "alice-run", name: "Run marathon", color: null }, { id: "alice-meals", name: "Meal prep", color: null }]);
+      expect((await linked("alice-v2")).projects.map(project => project.id)).toEqual(["alice-run"]);
+    });
+
+    it("links one task to several goals; the goal page lists it as a task DTO", async () => {
+      await call("PUT", "/goals/alice-fit/tasks/alice-protein", { user: "alice" });
+      await call("PUT", "/goals/alice-v2/tasks/alice-protein", { user: "alice" });
+      await call("PUT", "/goals/alice-fit/tasks/alice-stretch", { user: "alice" });
+      expect((await linked("alice-fit")).tasks).toMatchObject([{ id: "alice-protein", title: "Eat enough protein", labelIds: [] }, { id: "alice-stretch" }]);
+      expect((await linked("alice-fit")).tasks[0]).not.toHaveProperty("userId");
+      expect((await linked("alice-v2")).tasks.map(item => item.id)).toEqual(["alice-protein"]);
+      expect(await (await call("GET", "/goal-links", { user: "alice" })).json()).toEqual({ projects: [], tasks: [
+        { goalId: "alice-fit", taskId: "alice-protein" }, { goalId: "alice-v2", taskId: "alice-protein" }, { goalId: "alice-fit", taskId: "alice-stretch" },
+      ] });
+    });
+
+    it("linking twice keeps one link", async () => {
+      await call("PUT", "/goals/alice-fit/tasks/alice-protein", { user: "alice" });
+      expect((await call("PUT", "/goals/alice-fit/tasks/alice-protein", { user: "alice" })).status).toBe(200);
+      expect((await linked("alice-fit")).tasks).toHaveLength(1);
+    });
+
+    it("unlinking removes only the link, never the task or project", async () => {
+      await call("PUT", "/goals/alice-fit/tasks/alice-protein", { user: "alice" });
+      await call("PUT", "/goals/alice-fit/projects/alice-run", { user: "alice" });
+      await call("PUT", "/goals/alice-v2/tasks/alice-protein", { user: "alice" });
+      expect((await call("DELETE", "/goals/alice-fit/tasks/alice-protein", { user: "alice" })).status).toBe(200);
+      expect((await call("DELETE", "/goals/alice-fit/projects/alice-run", { user: "alice" })).status).toBe(200);
+      expect(await linked("alice-fit")).toMatchObject({ projects: [], tasks: [] });
+      expect((await linked("alice-v2")).tasks.map(item => item.id)).toEqual(["alice-protein"]);
+      expect(tasks.map(item => item.id)).toContain("alice-protein");
+      expect(projects.map(project => project.id)).toContain("alice-run");
+      // Already unlinked: still a success.
+      expect((await call("DELETE", "/goals/alice-fit/tasks/alice-protein", { user: "alice" })).status).toBe(200);
+    });
+
+    it("refuses foreign or missing goals, projects and tasks with one 404, and unknown kinds", async () => {
+      for (const [method, path] of [["PUT", "/goals/bob-read/tasks/alice-protein"], ["PUT", "/goals/alice-fit/tasks/bob-page"], ["PUT", "/goals/alice-fit/projects/bob-books"],
+        ["PUT", "/goals/alice-fit/tasks/nope"], ["PUT", "/goals/alice-fit/labels/alice-protein"], ["DELETE", "/goals/bob-read/tasks/bob-page"], ["DELETE", "/goals/nope/projects/alice-run"]] as const) {
+        const response = await call(method, path, { user: "alice" });
+        expect(response.status, `${method} ${path}`).toBe(404);
+        expect(await response.json()).toEqual({ code: "NOT_FOUND", message: "This goal does not exist or you do not have access to it." });
+      }
+      expect(links).toEqual([]);
+      expect(await (await call("GET", "/goal-links", { user: "bob" })).json()).toEqual({ projects: [], tasks: [] });
+    });
+
+    it("requires an allowed Origin for cookie-authenticated link writes", async () => {
+      expect((await call("PUT", "/goals/alice-fit/tasks/alice-protein", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+      expect((await call("DELETE", "/goals/alice-fit/tasks/alice-protein", { cookie: "alice" })).status).toBe(403);
+      expect(links).toEqual([]);
+      expect((await call("PUT", "/goals/alice-fit/tasks/alice-protein", { cookie: "alice", origin: "http://localhost:5173" })).status).toBe(200);
+    });
   });
 });

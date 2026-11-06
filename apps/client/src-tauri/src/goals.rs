@@ -110,6 +110,38 @@ pub async fn set_goals_hidden(
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
+#[tauri::command]
+pub async fn goal_links(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .read("/api/v1/goal-links")
+        .await?
+        .ok_or_else(|| UNAVAILABLE.to_owned())
+}
+
+/// Links a goal to a project or task (ticket 02); `linked: false` removes only the link.
+#[tauri::command]
+pub async fn link_goal(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+    kind: String,
+    target_id: String,
+    linked: bool,
+) -> Result<Option<Value>, String> {
+    let path = link_path(&id, &kind, &target_id)?;
+    let Some(path) = path else { return Ok(None) };
+    let method = if linked { Method::PUT } else { Method::DELETE };
+    Ok(state.write(method, &path, None).await?)
+}
+
+/// Only the two link kinds reach the server; an invalid ID is the server's 404 (None).
+fn link_path(id: &str, kind: &str, target_id: &str) -> Result<Option<String>, &'static str> {
+    if !matches!(kind, "projects" | "tasks") {
+        return Err(INVALID);
+    }
+    Ok((valid_id(id) && valid_id(target_id))
+        .then(|| format!("/api/v1/goals/{id}/{kind}/{target_id}")))
+}
+
 /// Mirrors the server rules (trimmed title of 1–200 characters, description up
 /// to 10,000) so oversized input never leaves; an empty patch is refused.
 fn patch_body(mut patch: GoalPatch) -> Result<Value, &'static str> {
@@ -136,8 +168,22 @@ fn patch_body(mut patch: GoalPatch) -> Result<Value, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GoalPatch, patch_body};
+    use super::{GoalPatch, link_path, patch_body};
     use serde_json::json;
+
+    #[test]
+    fn link_paths_allow_only_the_two_kinds_and_valid_ids() {
+        assert_eq!(
+            link_path("g1", "tasks", "t1").unwrap().as_deref(),
+            Some("/api/v1/goals/g1/tasks/t1")
+        );
+        assert_eq!(
+            link_path("g1", "labels", "t1"),
+            Err("Check your entry and try again.")
+        );
+        assert_eq!(link_path("../x", "projects", "p1"), Ok(None));
+        assert_eq!(link_path("g1", "projects", "p1/../../tasks"), Ok(None));
+    }
 
     #[test]
     fn goal_bodies_carry_only_typed_validated_fields() {

@@ -121,6 +121,8 @@ pub fn run() {
             goals::update_goal,
             goals::reorder_goal,
             goals::set_goals_hidden,
+            goals::goal_links,
+            goals::link_goal,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

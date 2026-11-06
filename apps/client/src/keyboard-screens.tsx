@@ -300,6 +300,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "task.priority-4": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 4 } })),
       "task.priority": () => picker("priority", "priority"),
       "task.labels": () => picker("labels", "labels"),
+      "task.goals": () => picker(null, "goals"),
       "task.deadline": () => picker("deadline", "deadline"),
       "task.clear-deadline": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { deadline: null } })),
       "task.move": moveDialog,
@@ -331,6 +332,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "editor.previous": () => editAdjacent(-1), "editor.next": () => editAdjacent(1),
       "project.section": () => press(document.querySelector("main"), '[data-project-action="section"]'),
       "project.menu": () => press(document.querySelector("main"), '[data-project-action="menu"]'),
+      // Absent while Goals is hidden: the key passes on.
+      "project.goals": () => press(document.querySelector("main"), '[data-project-action="goals"]'),
       // d: a focused row's deadline wins; focus the page (Escape) to sort.
       "project.sort-date": () => sort("date", true), "project.sort-name": () => sort("name"), "project.sort-priority": () => sort("priority"),
       // Next layout (the toolbar arrow); focus returns to the list when the focused element left with the old layout.

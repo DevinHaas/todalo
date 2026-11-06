@@ -81,6 +81,10 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   reorder: goals.reorderGoal,
   hidden: goals.getGoalsHidden,
   setHidden: goals.setGoalsHidden,
+  work: goals.getGoalWork,
+  links: goals.getGoalLinks,
+  link: goals.linkGoal,
+  unlink: goals.unlinkGoal,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

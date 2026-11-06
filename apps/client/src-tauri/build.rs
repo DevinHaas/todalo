@@ -73,6 +73,8 @@ fn main() {
             "update_goal",
             "reorder_goal",
             "set_goals_hidden",
+            "goal_links",
+            "link_goal",
             "destinations",
             "create_section",
             "delete_section",

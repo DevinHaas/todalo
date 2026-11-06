@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, NavLink } from "react-router";
-import { Plus, Target } from "lucide-react";
-import type { GoalDto, GoalPatch } from "./goals";
+import { Hash, Plus, Target, X } from "lucide-react";
+import type { GoalDetailDto, GoalDto, GoalLinkKind, GoalPatch } from "./goals";
+import { taskPath } from "./links";
+import { Popover } from "./popover";
 import type { ReorderPosition } from "./bulk";
 import { SortableRow, SortableTasks } from "./bulk-views";
 import { Failure, type ReadState } from "./views";
@@ -38,9 +40,36 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
   </section>;
 }
 
-/** A goal's page: title and description, edited in place; archiving keeps its data. */
-export function GoalView({ state, onRetry, onSave, onArchive, write }: {
-  state: ReadState<GoalDto | null>; onRetry: () => void; onSave: (patch: GoalPatch) => Promise<unknown>; onArchive: (archived: boolean) => void; write: Write;
+/** Linking from a task sheet or project page (ticket 02): the active goals, and which this task or project links to. */
+export interface GoalSlots { goals: GoalDto[]; linked: string[]; onToggle(goalId: string, linked: boolean): void; error: string | null }
+
+/**
+ * Checkboxes over the active goals; each tick links or unlinks at once.
+ * `property` is the task sheet's chip row, `button` the project header's button.
+ */
+export function GoalPicker({ slots, variant, data }: { slots: GoalSlots; variant: "property" | "button"; data?: Partial<Record<`data-${string}`, string>> }) {
+  const chosen = slots.goals.filter(goal => slots.linked.includes(goal.id));
+  const chips = <span className="label-chips">{chosen.map(goal => <span key={goal.id} className="label-chip"><Target />{goal.title}</span>)}</span>;
+  return <>
+    <Popover label={chosen.length ? `Goals: ${chosen.map(goal => goal.title).join(", ")}` : "Link goals"} data={data}
+      triggerClassName={variant === "button" ? "button outline" : chosen.length ? "property-value" : "icon-button property-add"}
+      trigger={variant === "button" ? <><Target />{chosen.length ? `Goals · ${chosen.length}` : "Goals"}</> : chosen.length ? chips : <Plus />}>
+      {() => <fieldset className="label-choices property-panel"><legend>Goals</legend>
+        {slots.goals.length > 0 && <div className="label-options">{slots.goals.map(goal => <label key={goal.id} className="label-option">
+          <input type="checkbox" checked={slots.linked.includes(goal.id)} onChange={(event) => slots.onToggle(goal.id, event.target.checked)} />{goal.title}
+        </label>)}</div>}
+        {!slots.goals.length && <p className="state">Create a goal with + next to Goals in the sidebar.</p>}
+      </fieldset>}
+    </Popover>
+    {slots.error && <p className="form-error" role="alert">{slots.error}</p>}
+  </>;
+}
+
+/** A goal's page: title and description, edited in place; archiving keeps its data. Lists its linked projects and tasks. */
+export function GoalView({ state, onRetry, onSave, onArchive, onUnlink, write }: {
+  state: ReadState<GoalDetailDto | null>; onRetry: () => void; onSave: (patch: GoalPatch) => Promise<unknown>; onArchive: (archived: boolean) => void;
+  /** Removes only the link; the project or task stays. */
+  onUnlink: (kind: GoalLinkKind, targetId: string) => void; write: Write;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -48,7 +77,7 @@ export function GoalView({ state, onRetry, onSave, onArchive, write }: {
   if (state.status === "pending") return <p className="state" role="status">Loading goal…</p>;
   if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div><h1 className="page-title">Goal not found</h1><p className="state">This goal does not exist or you do not have access to it.</p><Link className="text-action" to="/today">Back to Today</Link></div>;
-  const goal = state.data;
+  const { goal, projects, tasks } = state.data;
   const edit = () => { setTitle(goal.title); setDescription(goal.description ?? ""); setEditing(true); };
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -72,5 +101,19 @@ export function GoalView({ state, onRetry, onSave, onArchive, write }: {
       </div>
     </form> : goal.description ? <p className="goal-description">{goal.description}</p> : !goal.archived && <p className="state">No description yet. <button type="button" className="text-action" onClick={edit}>Add one</button></p>}
     {write.error && <p className="form-error" role="alert">{write.error}</p>}
+    <section className="goal-links" aria-label="Linked projects">
+      <h2 className="section-heading">Projects</h2>
+      {projects.length ? <ul className="goal-link-list">{projects.map(project => <li key={project.id}>
+        <Link to={`/projects/${encodeURIComponent(project.id)}`}><Hash />{project.name}</Link>
+        <button type="button" className="icon-button" aria-label={`Unlink ${project.name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink("projects", project.id)}><X /></button>
+      </li>)}</ul> : <p className="state">No linked projects. Link one from its project page.</p>}
+    </section>
+    <section className="goal-links" aria-label="Linked tasks">
+      <h2 className="section-heading">Tasks</h2>
+      {tasks.length ? <ul className="goal-link-list">{tasks.map(task => <li key={task.id} data-done={task.status === "done" || undefined}>
+        <Link to={taskPath(task.id)}>{task.title}</Link>
+        <button type="button" className="icon-button" aria-label={`Unlink ${task.title}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink("tasks", task.id)}><X /></button>
+      </li>)}</ul> : <p className="state">No linked tasks. Link one from its task details.</p>}
+    </section>
   </div>;
 }

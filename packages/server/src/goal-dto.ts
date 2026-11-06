@@ -1,10 +1,20 @@
 // Client-safe JSON contract and input rules for goals (zod only, no database
 // imports, so the shared client may import these).
 import { z } from "zod";
+import type { ProjectDto } from "./project-dto";
+import type { TaskDto } from "./task-dto";
 
 export interface GoalDto { id: string; title: string; description: string | null; archived: boolean }
 /** The sidebar read: active goals in the user's order, and whether Goals is hidden. */
 export interface GoalsDto { goals: GoalDto[]; hidden: boolean }
+
+/** A goal's page: the goal and the work explicitly linked to it (ticket 02). */
+export interface GoalDetailDto { goal: GoalDto; projects: ProjectDto[]; tasks: TaskDto[] }
+/** Every link of the signed-in user, for the task sheet and project page pickers. */
+export interface GoalLinksDto { projects: { goalId: string; projectId: string }[]; tasks: { goalId: string; taskId: string }[] }
+/** What a goal links to; also the URL segment (/goals/:id/projects/:projectId). */
+export type GoalLinkKind = "projects" | "tasks";
+export const goalLinkKinds: readonly GoalLinkKind[] = ["projects", "tasks"];
 
 export interface GoalRecord { id: string; title: string; description: string | null; archivedAt: Date | null }
 

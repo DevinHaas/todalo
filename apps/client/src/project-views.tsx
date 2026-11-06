@@ -40,8 +40,10 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
 /** Ticket 13 section writes; without them "Add section" stays the inert placeholder. */
 export interface SectionActions { create(name: string): Promise<unknown>; remove(section: SectionDto): void }
 
-export function ProjectView({ state, onRetry, onRename, onDelete, write, files, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate, initialSort = "manual", actions, showCompleted = false }: {
+export function ProjectView({ state, onRetry, onRename, onDelete, write, files, goals, sections: sectionActions, now = new Date(), selection, reorder, layout, onCreate, initialSort = "manual", actions, showCompleted = false }: {
   state: ReadState<ProjectDetailDto | null>; onRetry: () => void; onRename: (name: string) => Promise<unknown>; onDelete: () => void; write: Write; files?: ReactNode;
+  /** Goals ticket 02: the Goals picker in the header (absent while Goals is hidden). */
+  goals?: ReactNode;
   sections?: SectionActions; now?: Date;
   /** Ticket 15: selection and bulk toolbar, and drag/keyboard reordering within a section. */
   selection?: SelectionSlots; reorder?: (task: TaskDto, anchorId: string, position: ReorderPosition) => void;
@@ -88,6 +90,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
       <h1 className="page-title">{project.name}</h1>
       <div className="project-actions">
         {!layout && selection?.control}
+        {goals}
         {sectionActions
           ? <button type="button" className="button outline" data-project-action="section" aria-expanded={adding} onClick={() => setAdding(value => !value)}>Add section</button>
           : <span className="button outline" aria-disabled="true">Add section</span>}

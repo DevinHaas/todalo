@@ -52,6 +52,8 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("view.layout", "Switch layout", "Views", "view", ["Shift+v"], 4, { availability: "available" }),
   command("project.section", "Create section", "Projects", "project", ["s"], 2, { availability: "available" }),
   command("goal.create", "Create goal", "Goals", "global", ["Shift+q"], 5, { availability: "available", note: "Goals ticket 01; passes on while Goals is hidden in Settings." }),
+  command("task.goals", "Link task to goals", "Goals", "task", ["Shift+l"], 5, { availability: "available", note: "Goals ticket 02: opens the task's details on its Goals field." }),
+  command("project.goals", "Link project to goals", "Goals", "project", ["Shift+w"], 5, { availability: "available", note: "Goals ticket 02; passes on while Goals is hidden in Settings." }),
   command("project.sort-date", "Sort by date", "Projects", "project", ["d"], 2, { availability: "available", note: "Uses web project baseline D; macOS sorting subsection contradicts with Option+D. Focused task deadline takes precedence; focus the project header to sort." }),
   command("project.sort-priority", "Sort by priority", "Projects", "project", ["p"], 3, { note: "Web project baseline; macOS Option+P entry is disputed." }),
   command("project.sort-name", "Sort by name", "Projects", "project", ["n"], 2, { availability: "available", note: "Web project baseline; macOS Option+N entry is disputed." }),

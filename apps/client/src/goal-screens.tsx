@@ -3,9 +3,9 @@ import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, goals } from "./runtime";
-import { goalMutations, type GoalPatch } from "./goals";
+import { goalMutations, linkedGoalIds, type GoalLinkKind, type GoalPatch } from "./goals";
 import type { ReorderPosition } from "./bulk";
-import { GoalsNav, GoalView } from "./goal-views";
+import { GoalPicker, GoalsNav, GoalView, type GoalSlots } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
 
 function useGoalMutations(userId: string) {
@@ -37,9 +37,30 @@ export function GoalScreen({ account }: { account: Account }) {
   const query = useQuery(goalReads.detail(account.user.id, id));
   const writes = useGoalMutations(account.user.id);
   const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch) });
+  const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false) });
   return <GoalView key={id} state={query} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
-    write={{ pending: update.isPending, error: update.error?.message ?? null }} />;
+    onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
+    write={{ pending: update.isPending || unlink.isPending, error: (update.error ?? unlink.error)?.message ?? null }} />;
+}
+
+/**
+ * The goal picker's data for one project or task: undefined while goals load,
+ * while Goals is hidden in Settings, or without a target.
+ */
+export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: string | null | undefined): GoalSlots | undefined {
+  const list = useQuery(goalReads.list(userId));
+  const links = useQuery({ ...goalReads.links(userId), enabled: Boolean(targetId) && list.data?.hidden === false });
+  const writes = useGoalMutations(userId);
+  const toggle = useMutation({ mutationFn: ({ goalId, linked }: { goalId: string; linked: boolean }) => writes.link(goalId, kind, targetId!, linked) });
+  if (!targetId || !list.data || list.data.hidden || !links.data) return undefined;
+  return { goals: list.data.goals, linked: linkedGoalIds(links.data, kind, targetId), onToggle: (goalId, linked) => toggle.mutate({ goalId, linked }), error: toggle.error?.message ?? null };
+}
+
+/** The project page's Goals button (hidden with Goals). */
+export function ProjectGoals({ userId, projectId }: { userId: string; projectId: string }) {
+  const slots = useGoalSlots(userId, "projects", projectId);
+  return slots ? <GoalPicker slots={slots} variant="button" data={{ "data-project-action": "goals" }} /> : null;
 }
 
 /** Settings › General: hiding Goals only changes the sidebar. */

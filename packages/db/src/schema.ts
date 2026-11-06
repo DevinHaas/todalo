@@ -220,6 +220,24 @@ export const taskLabels = pgTable("task_labels", {
   labelId: text("label_id").notNull().references(() => labels.id, { onDelete: "cascade" }),
 }, table => [uniqueIndex("task_labels_task_label_idx").on(table.taskId, table.labelId), index("task_labels_userId_idx").on(table.userId)]);
 
+// Goals ticket 02: explicit many-to-many links. Deleting a goal, project or
+// task drops only its links; unlinking deletes only the link row.
+export const goalProjects = pgTable("goal_projects", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("goal_projects_goal_project_idx").on(table.goalId, table.projectId), index("goal_projects_userId_idx").on(table.userId)]);
+
+export const goalTasks = pgTable("goal_tasks", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("goal_tasks_goal_task_idx").on(table.goalId, table.taskId), index("goal_tasks_userId_idx").on(table.userId)]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

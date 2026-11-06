@@ -4,14 +4,14 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Goal ↔ project links are many-to-many
-- [ ] Goal ↔ task links are many-to-many
-- [ ] Goals can be linked from the task editor and from the project page
-- [ ] The goal page lists linked projects and linked tasks
-- [ ] Unlinking removes only the link, never the task or project
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Goal ↔ project links are many-to-many
+- [x] Goal ↔ task links are many-to-many
+- [x] Goals can be linked from the task editor and from the project page
+- [x] The goal page lists linked projects and linked tasks
+- [x] Unlinking removes only the link, never the task or project
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.
