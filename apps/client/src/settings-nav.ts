@@ -5,7 +5,7 @@ import { hapticsSupported } from "./feedback";
 /** Settings categories; `terms` are the settings inside, matched by the nav search. */
 export const settingsSections = [
   { id: "account", name: "Account", terms: ["Photo", "Name", "Email", "Log out"] },
-  { id: "general", name: "General", terms: ["Smart date recognition", ...(hapticsSupported ? ["Haptic feedback"] : [])] },
+  { id: "general", name: "General", terms: ["Smart date recognition", "Show goals", ...(hapticsSupported ? ["Haptic feedback"] : [])] },
   { id: "theme", name: "Theme", terms: ["Dark theme"] },
   { id: "keyboard-shortcuts", name: "Keyboard shortcuts", terms: ["Shortcut help"] },
   { id: "calendars", name: "Calendars", terms: ["Google Calendar", "Show events"] },

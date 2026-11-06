@@ -11,6 +11,8 @@ import { createTaskRoutes } from "./task-routes";
 import { taskOperations } from "./task-operations";
 import { createBulkRoutes } from "./bulk-routes";
 import { createProjectRoutes } from "./project-routes";
+import { createGoalRoutes } from "./goal-routes";
+import * as goals from "@todalo/server/goals";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createCommentRoutes } from "./comment-routes";
 import * as comments from "@todalo/server/comments";
@@ -69,6 +71,16 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
     .catch((error: unknown) => { if (error instanceof TaskOrganizationError) return null; throw error; }),
   removeSection: organization.deleteSection,
   destinations: organization.getOrganizationDestinations,
+})).use(createGoalRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  list: goals.getGoalsForUser,
+  get: goals.getOwnedGoal,
+  create: goals.createGoal,
+  update: goals.updateGoal,
+  reorder: goals.reorderGoal,
+  hidden: goals.getGoalsHidden,
+  setHidden: goals.setGoalsHidden,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

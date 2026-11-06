@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "reac
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
-  LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search, Star,
+  LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search,
 } from "lucide-react";
 import type { Account } from "./session";
 import { connection, projectReads, queries, reads, session } from "./runtime";
@@ -22,8 +22,9 @@ import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
 import { useOpenSettings } from "./settings-nav";
+import { GoalsSidebar, useGoalsShown } from "./goal-screens";
 
-// ponytail: controls legacy also left without a feature (Goals, Reporting, More)
+// ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
@@ -137,6 +138,8 @@ export function Shell({ account }: { account: Account }) {
   const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [finding, setFinding] = useState<"find" | "sections" | null>(null);
+  const [addingGoal, setAddingGoal] = useState(false);
+  const goalsShown = useGoalsShown(account.user.id);
   const today = useQuery(reads.today(account.user.id));
   useEffect(() => {
     if (!mobileOpen) return;
@@ -156,14 +159,13 @@ export function Shell({ account }: { account: Account }) {
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
-      <nav><ul className="nav">
+      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><ul className="nav">
         <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
         <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
         <li><NavLink to="/upcoming" className="nav-item"><Layers /><span>Upcoming</span></NavLink></li>
         <li><NavLink to="/filters" className={({ isActive }) => isActive || pathname.startsWith("/labels") ? "nav-item active" : "nav-item"}><ListFilter /><span>Filters & Labels</span></NavLink></li>
-        <Inert icon={<Star />} label="Goals" badge="BETA" muted />
         <Inert icon={<LineChart />} label="Reporting" muted />
         <Inert icon={<MoreHorizontal />} label="More" muted />
       </ul></nav>
@@ -183,7 +185,9 @@ export function Shell({ account }: { account: Account }) {
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
     {finding && <QuickFind userId={account.user.id} sectionsOnly={finding === "sections"} onClose={() => setFinding(null)} />}
-    <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)} onFind={(sectionsOnly) => setFinding(sectionsOnly ? "sections" : "find")}
+    <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)}
+      // Hidden Goals: the key passes on.
+      onNewGoal={() => { if (!goalsShown) return false; setCollapsed(false); setMobileOpen(true); setAddingGoal(true); }} onFind={(sectionsOnly) => setFinding(sectionsOnly ? "sections" : "find")}
       onSidebar={() => window.matchMedia("(max-width: 767px)").matches ? setMobileOpen(open => !open) : setCollapsed(closed => !closed)} />
   </div></DisplayProvider>;
 }

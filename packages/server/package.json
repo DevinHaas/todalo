@@ -10,6 +10,8 @@
     "./comment-dto": "./src/comment-dto.ts",
     "./projects": "./src/projects.ts",
     "./project-dto": "./src/project-dto.ts",
+    "./goals": "./src/goals.ts",
+    "./goal-dto": "./src/goal-dto.ts",
     "./settings": "./src/settings.ts",
     "./settings-input": "./src/settings-input.ts",
     "./keyboard": "./src/keyboard.ts",

@@ -117,6 +117,19 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Goals (see CONTEXT.md): the top level of the sidebar. Archiving is soft
+// (archivedAt set): an archived goal leaves the sidebar but keeps its data.
+export const goals = pgTable("goals", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [index("goals_userId_idx").on(table.userId)]);
+
 export const sections = pgTable("sections", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
@@ -313,6 +326,8 @@ export const userSettings = pgTable("user_settings", {
   smartDateRecognitionEnabled: boolean("smart_date_recognition_enabled").default(true).notNull(),
   // Set once the post-sign-up "Import from Todoist?" prompt was answered.
   importPromptSeenAt: timestamp("import_prompt_seen_at"),
+  // Goals ticket 01: hides the sidebar's Goals section; goals keep their data.
+  goalsHidden: boolean("goals_hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

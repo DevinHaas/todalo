@@ -7,6 +7,7 @@ import { haptics, hapticsSupported } from "./feedback";
 import { legacyHash, legacySettingsPath, searchSettings, settingsBackground, settingsSections, type SettingsSection } from "./settings-nav";
 import { theme } from "./theme";
 import { SmartDatesSettingScreen } from "./settings-screen";
+import { GoalsHiddenSettingScreen } from "./goal-screens";
 import { SettingSwitch } from "./settings-views";
 import { CalendarSettingsScreen } from "./calendar-screens";
 import { ShortcutSettingsScreen } from "./keyboard-screens";
@@ -32,6 +33,7 @@ function GeneralSection({ userId }: { userId: string }) {
   const [feel, setFeel] = useState(haptics.enabled);
   return <div className="settings-general">
     <SmartDatesSettingScreen userId={userId} />
+    <GoalsHiddenSettingScreen userId={userId} />
     {hapticsSupported && <SettingSwitch title="Haptic feedback" hint="Feel a tap when you complete a task." checked={feel}
       onChange={(on) => { haptics.set(on); setFeel(on); }} />}
   </div>;

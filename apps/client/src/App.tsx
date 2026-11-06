@@ -7,6 +7,7 @@ import type { Account } from "./session";
 import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
+import { GoalScreen } from "./goal-screens";
 import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
@@ -84,6 +85,7 @@ function SignedIn({ account, error }: { account: Account; error: string | null }
         <Route path="/today" element={<TodayScreen account={account} />} />
         <Route path="/upcoming" element={<UpcomingScreen account={account} />} />
         <Route path="/tasks/:id" element={<TaskScreen account={account} />} />
+        <Route path="/goals/:id" element={<GoalScreen account={account} />} />
         <Route path="/projects" element={<ProjectsScreen account={account} />} />
         <Route path="/projects/:id" element={<ProjectScreen account={account} />} />
         <Route path="/labels" element={<MetadataScreen account={account} mode="labels" />} />

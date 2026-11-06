@@ -4,15 +4,15 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved (layout check pending stage review)
 
-- [ ] Goals are stored per user and listed in the sidebar above projects
-- [ ] Create, rename, edit description, archive and reorder goals
-- [ ] A goal page shows the goal's title and description
-- [ ] Archived goals disappear from the sidebar but keep their data
-- [ ] A settings toggle hides goals from the sidebar; projects and tasks are unaffected
+- [x] Goals are stored per user and listed in the sidebar above projects
+- [x] Create, rename, edit description, archive and reorder goals
+- [x] A goal page shows the goal's title and description
+- [x] Archived goals disappear from the sidebar but keep their data
+- [x] A settings toggle hides goals from the sidebar; projects and tasks are unaffected
 - [ ] Works in the browser, Mac and iPhone layouts
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

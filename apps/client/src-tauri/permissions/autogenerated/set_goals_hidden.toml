@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-goals-hidden"
+description = "Enables the set_goals_hidden command without any pre-configured scope."
+commands.allow = ["set_goals_hidden"]
+
+[[permission]]
+identifier = "deny-set-goals-hidden"
+description = "Denies the set_goals_hidden command without any pre-configured scope."
+commands.deny = ["set_goals_hidden"]

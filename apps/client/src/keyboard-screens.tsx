@@ -181,7 +181,7 @@ export const taskNeighbour = (id: string, step: -1 | 1): string | undefined => {
  * dialog or menu is open, during IME composition, or already handled (dnd-kit)
  * never run commands; macOS app-menu keys are reserved in the shared registry.
  */
-export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { userId: string; onCapture: () => void; onSidebar: () => void; onFind: (sectionsOnly?: boolean) => void }) {
+export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGoal }: { userId: string; onCapture: () => void; onSidebar: () => void; onFind: (sectionsOnly?: boolean) => void; onNewGoal: () => void | boolean }) {
   const navigate = useNavigate();
   const cache = useQueryClient();
   const { effective, syncError } = useShortcuts(userId);
@@ -220,8 +220,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
   const clearDates = useMutation(bulk.clearDates);
   const organize = useMutation(useOrganizationMutations(userId).organize);
   const openSettings = useOpenSettings();
-  const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize });
-  latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, cache, metadata, clearDates, organize };
+  const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize });
+  latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize };
   useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(id); }, [notice]);
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind }: { use
       if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
     });
     handlers.current = {
-      "general.capture": () => latest.current.onCapture(), "general.ramble": go("/ramble"), "general.sidebar": () => latest.current.onSidebar(),
+      "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
       "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reorder-goal"
+description = "Enables the reorder_goal command without any pre-configured scope."
+commands.allow = ["reorder_goal"]
+
+[[permission]]
+identifier = "deny-reorder-goal"
+description = "Denies the reorder_goal command without any pre-configured scope."
+commands.deny = ["reorder_goal"]

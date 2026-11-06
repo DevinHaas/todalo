@@ -6,6 +6,7 @@ mod comments;
 mod credentials;
 mod endpoint;
 mod feedback;
+mod goals;
 mod imports;
 mod links;
 mod metadata;
@@ -114,6 +115,12 @@ pub fn run() {
             projects::create_project,
             projects::rename_project,
             projects::delete_project,
+            goals::goals,
+            goals::goal,
+            goals::create_goal,
+            goals::update_goal,
+            goals::reorder_goal,
+            goals::set_goals_hidden,
             organization::destinations,
             organization::create_section,
             organization::delete_section,
