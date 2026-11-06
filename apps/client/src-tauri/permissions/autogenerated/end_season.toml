@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-end-season"
+description = "Enables the end_season command without any pre-configured scope."
+commands.allow = ["end_season"]
+
+[[permission]]
+identifier = "deny-end-season"
+description = "Denies the end_season command without any pre-configured scope."
+commands.deny = ["end_season"]

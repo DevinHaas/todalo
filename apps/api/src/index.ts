@@ -97,6 +97,9 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   start: seasons.startSeason,
   addGoal: seasons.addSeasonGoal,
   updateGoal: seasons.updateSeasonGoal,
+  removeGoal: seasons.removeSeasonGoal,
+  past: seasons.listPastSeasons,
+  end: seasons.endSeason,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

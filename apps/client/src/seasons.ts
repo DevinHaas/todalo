@@ -1,11 +1,13 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { CurrentSeasonDto, SeasonDto, SeasonGoalDto, SeasonTier } from "../../../packages/server/src/season-dto";
+import type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier } from "../../../packages/server/src/season-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
-export type { CurrentSeasonDto, SeasonDto, SeasonGoalDto, SeasonTier };
+export type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier };
 export { primaryGuideline, seasonLengths, tooManyPrimary } from "../../../packages/server/src/season-dto";
 export interface SeasonGoalPatch { tier?: SeasonTier; target?: string }
+/** The season started when the current one ends, with the goals carried into it. */
+export interface NextSeason { startDate: string; lengthDays: number; goals: { goalId: string; tier: SeasonTier; target: string }[] }
 
 export interface SeasonTransport {
   /** The current season with its day count in the given timezone; season is null before the first. */
@@ -16,6 +18,12 @@ export interface SeasonTransport {
   addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string): Promise<SeasonGoalDto | null>;
   /** Changes the tier or moves the target; null when the goal is not in the current season. */
   updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch): Promise<SeasonGoalDto | null>;
+  /** Removes the goal from the current season only; false when it is not in it. */
+  removeGoal(seasonId: string, goalId: string): Promise<boolean>;
+  /** Ended seasons, newest first, with their goals as history. */
+  past(): Promise<SeasonDto[]>;
+  /** Ends the season and, in the same operation, starts next (if given); null when the season or a carried goal is refused. */
+  end(seasonId: string, next: NextSeason | null): Promise<EndSeasonDto | null>;
 }
 
 export function browserSeasonTransport(fetcher: typeof fetch = fetch): SeasonTransport {
@@ -42,6 +50,9 @@ export function browserSeasonTransport(fetcher: typeof fetch = fetch): SeasonTra
     start: async (startDate, lengthDays) => required(await request<{ season: SeasonDto }>("POST", "/api/v1/seasons", { startDate, lengthDays }), "SAVE_FAILED").season,
     addGoal: async (seasonId, goalId, tier, target) => (await request<{ goal: SeasonGoalDto }>("POST", goals(seasonId), { goalId, tier, target }))?.goal ?? null,
     updateGoal: async (seasonId, goalId, patch) => (await request<{ goal: SeasonGoalDto }>("PATCH", `${goals(seasonId)}/${encodeURIComponent(goalId)}`, patch))?.goal ?? null,
+    removeGoal: async (seasonId, goalId) => Boolean(await request("DELETE", `${goals(seasonId)}/${encodeURIComponent(goalId)}`)),
+    past: async () => required(await request<PastSeasonsDto>("GET", "/api/v1/seasons/past"), "TASKS_UNAVAILABLE").seasons,
+    end: (seasonId, next) => request<EndSeasonDto>("POST", `/api/v1/seasons/${encodeURIComponent(seasonId)}/end`, { next }),
   };
 }
 
@@ -57,6 +68,9 @@ export function seasonTransport(): SeasonTransport {
     start: async (startDate, lengthDays) => (await command<{ season: SeasonDto }>("start_season", { startDate, lengthDays })).season,
     addGoal: async (seasonId, goalId, tier, target) => (await command<{ goal: SeasonGoalDto } | null>("add_season_goal", { seasonId, goalId, tier, target }))?.goal ?? null,
     updateGoal: async (seasonId, goalId, patch) => (await command<{ goal: SeasonGoalDto } | null>("update_season_goal", { seasonId, goalId, patch }))?.goal ?? null,
+    removeGoal: async (seasonId, goalId) => Boolean(await command<unknown>("remove_season_goal", { seasonId, goalId })),
+    past: async () => (await command<PastSeasonsDto>("past_seasons")).seasons,
+    end: (seasonId, next) => command<EndSeasonDto | null>("end_season", { seasonId, next }),
   };
 }
 
@@ -67,11 +81,13 @@ export const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 export const seasonKeys = {
   all: (userId: string) => ["user", userId, "seasons"] as const,
   current: (userId: string) => ["user", userId, "seasons", "current"] as const,
+  past: (userId: string) => ["user", userId, "seasons", "past"] as const,
 };
 
 export function seasonQueries(transport: SeasonTransport) {
   return {
     current: (userId: string) => queryOptions({ queryKey: seasonKeys.current(userId), queryFn: () => transport.current(localZone()) }),
+    past: (userId: string) => queryOptions({ queryKey: seasonKeys.past(userId), queryFn: () => transport.past() }),
   };
 }
 
@@ -83,5 +99,7 @@ export function seasonMutations(transport: SeasonTransport, cache: QueryClient, 
     async start(startDate: string, lengthDays: number) { try { return await transport.start(startDate, lengthDays); } finally { await stale(); } },
     async addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) { try { return done(await transport.addGoal(seasonId, goalId, tier, target)); } finally { await stale(); } },
     async updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) { try { return done(await transport.updateGoal(seasonId, goalId, patch)); } finally { await stale(); } },
+    async removeGoal(seasonId: string, goalId: string) { try { return done(await transport.removeGoal(seasonId, goalId) || null); } finally { await stale(); } },
+    async end(seasonId: string, next: NextSeason | null) { try { return done(await transport.end(seasonId, next)); } finally { await stale(); } },
   };
 }

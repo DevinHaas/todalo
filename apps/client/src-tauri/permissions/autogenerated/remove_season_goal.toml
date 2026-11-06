@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remove-season-goal"
+description = "Enables the remove_season_goal command without any pre-configured scope."
+commands.allow = ["remove_season_goal"]
+
+[[permission]]
+identifier = "deny-remove-season-goal"
+description = "Denies the remove_season_goal command without any pre-configured scope."
+commands.deny = ["remove_season_goal"]

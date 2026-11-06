@@ -1,8 +1,9 @@
 import { Elysia } from "elysia";
 import { seasonProgress, todayIn } from "@todalo/server/season-days";
 import {
-  addSeasonGoalInput, startSeasonInput, toSeasonDto, toSeasonGoalDto, updateSeasonGoalInput,
-  type AddSeasonGoalInput, type CurrentSeasonDto, type SeasonGoalRecord, type SeasonRecord, type StartSeasonInput, type UpdateSeasonGoalInput,
+  addSeasonGoalInput, endSeasonInput, startSeasonInput, toSeasonDto, toSeasonGoalDto, updateSeasonGoalInput,
+  type AddSeasonGoalInput, type CurrentSeasonDto, type EndSeasonDto, type EndSeasonInput, type PastSeasonsDto, type SeasonGoalRecord, type SeasonRecord,
+  type StartSeasonInput, type UpdateSeasonGoalInput,
 } from "@todalo/server/season-dto";
 import { writeUser } from "./project-routes";
 
@@ -17,6 +18,14 @@ export interface SeasonStore {
   addGoal(userId: string, seasonId: string, input: AddSeasonGoalInput): Promise<SeasonGoalRecord | "exists" | null>;
   /** null when the season is missing, foreign or ended, or the goal is not in it. */
   updateGoal(userId: string, seasonId: string, goalId: string, patch: UpdateSeasonGoalInput): Promise<SeasonGoalRecord | null>;
+  /** Removes only the season-goal row; false when the season is missing, foreign or ended, or the goal is not in it. */
+  removeGoal(userId: string, seasonId: string, goalId: string): Promise<boolean>;
+  /** Ended seasons newest first with their goals as history. */
+  past(userId: string): Promise<{ season: SeasonRecord; goals: SeasonGoalRecord[] }[]>;
+  /** Atomic end and optional next start; null when the season is missing, foreign or ended, or a carried goal is not in it or archived. */
+  end(userId: string, seasonId: string, input: EndSeasonInput): Promise<{
+    ended: { season: SeasonRecord; goals: SeasonGoalRecord[] }; next: { season: SeasonRecord; goals: SeasonGoalRecord[] } | null;
+  } | null>;
   /** The clock for the day count (tests pin it). */
   now?: () => Date;
 }
@@ -51,6 +60,11 @@ export function createSeasonRoutes(store: SeasonStore) {
       const { season, goals } = current;
       return { season: { ...toSeasonDto(season, goals), progress: seasonProgress(season.startDate, season.lengthDays, today) } } satisfies CurrentSeasonDto;
     })
+    .get("/seasons/past", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return { seasons: (await store.past(userId)).map(({ season, goals }) => toSeasonDto(season, goals)) } satisfies PastSeasonsDto;
+    })
     .post("/seasons", async ({ request, body, status }) => {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
@@ -79,5 +93,23 @@ export function createSeasonRoutes(store: SeasonStore) {
       if (!input.success) return status(400, INVALID);
       const row = await store.updateGoal(userId, params.id, params.goalId, input.data);
       return row ? { goal: toSeasonGoalDto(row) } : status(404, NOT_FOUND);
+    })
+    .delete("/seasons/:id/goals/:goalId", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return await store.removeGoal(userId, params.id, params.goalId) ? { goalId: params.goalId } : status(404, NOT_FOUND);
+    })
+    // Ends the season (its goals stay as history) and starts the next with the carried goals, all or nothing.
+    .post("/seasons/:id/end", async ({ request, params, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = endSeasonInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const result = await store.end(userId, params.id, input.data);
+      if (!result) return status(404, NOT_FOUND);
+      const { ended, next } = result;
+      return { ended: toSeasonDto(ended.season, ended.goals), next: next && toSeasonDto(next.season, next.goals) } satisfies EndSeasonDto;
     });
 }

@@ -102,6 +102,103 @@ pub async fn update_season_goal(
         .await?)
 }
 
+/// Removes the goal from the current season only (its row; the goal stays).
+#[tauri::command]
+pub async fn remove_season_goal(
+    state: tauri::State<'_, NativeAuth>,
+    season_id: String,
+    goal_id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&season_id) || !valid_id(&goal_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(
+            Method::DELETE,
+            &format!("/api/v1/seasons/{season_id}/goals/{goal_id}"),
+            None,
+        )
+        .await?)
+}
+
+/// Ended seasons, newest first, with their goals as history.
+#[tauri::command]
+pub async fn past_seasons(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .read("/api/v1/seasons/past")
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// A goal carried into the next season with a fresh tier and target.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CarriedGoal {
+    goal_id: String,
+    tier: String,
+    target: String,
+}
+
+/// The season started in the same operation that ends the current one.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NextSeason {
+    start_date: String,
+    length_days: u16,
+    goals: Vec<CarriedGoal>,
+}
+
+/// Ends the current season and optionally starts the next (POST /api/v1/seasons/:id/end).
+#[tauri::command]
+pub async fn end_season(
+    state: tauri::State<'_, NativeAuth>,
+    season_id: String,
+    next: Option<NextSeason>,
+) -> Result<Option<Value>, String> {
+    let body = end_body(next)?;
+    if !valid_id(&season_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(
+            Method::POST,
+            &format!("/api/v1/seasons/{season_id}/end"),
+            Some(body),
+        )
+        .await?)
+}
+
+/// Mirrors the server rules; the server also refuses duplicate goals.
+fn end_body(next: Option<NextSeason>) -> Result<Value, &'static str> {
+    let Some(next) = next else {
+        return Ok(json!({ "next": null }));
+    };
+    if !valid_date(&next.start_date)
+        || !(1..=366).contains(&next.length_days)
+        || next.goals.len() > 100
+    {
+        return Err(INVALID);
+    }
+    let goals = next
+        .goals
+        .into_iter()
+        .map(|goal| {
+            if !valid_id(&goal.goal_id) {
+                return Err(INVALID);
+            }
+            let mut body = patch_body(SeasonGoalPatch {
+                tier: Some(goal.tier),
+                target: Some(goal.target),
+            })?;
+            body["goalId"] = json!(goal.goal_id);
+            Ok(body)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(
+        json!({ "next": { "startDate": next.start_date, "lengthDays": next.length_days, "goals": goals } }),
+    )
+}
+
 fn valid_date(date: &str) -> bool {
     let bytes = date.as_bytes();
     bytes.len() == 10
@@ -140,7 +237,7 @@ fn patch_body(mut patch: SeasonGoalPatch) -> Result<Value, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SeasonGoalPatch, patch_body, valid_date};
+    use super::{NextSeason, SeasonGoalPatch, end_body, patch_body, valid_date};
     use serde_json::json;
 
     #[test]
@@ -179,6 +276,35 @@ mod tests {
         assert!(valid_date("2026-01-01"));
         for date in ["2026-1-01", "2026/01/01", "../2026-01", "2026-01-01x"] {
             assert!(!valid_date(date), "{date}");
+        }
+    }
+
+    #[test]
+    fn end_bodies_carry_only_typed_validated_goals() {
+        assert_eq!(end_body(None).unwrap(), json!({ "next": null }));
+        let next: NextSeason = serde_json::from_value(json!({
+            "startDate": "2026-04-01", "lengthDays": 28,
+            "goals": [{ "goalId": "g1", "tier": "secondary", "target": " Half marathon " }]
+        }))
+        .unwrap();
+        assert_eq!(
+            end_body(Some(next)).unwrap(),
+            json!({ "next": { "startDate": "2026-04-01", "lengthDays": 28,
+                "goals": [{ "goalId": "g1", "tier": "secondary", "target": "Half marathon" }] } })
+        );
+        assert!(serde_json::from_value::<NextSeason>(json!({
+            "startDate": "2026-04-01", "lengthDays": 28,
+            "goals": [{ "goalId": "g1", "tier": "primary", "target": "x", "carriedFromId": "sg" }]
+        }))
+        .is_err());
+        for next in [
+            json!({ "startDate": "2026-4-01", "lengthDays": 28, "goals": [] }),
+            json!({ "startDate": "2026-04-01", "lengthDays": 0, "goals": [] }),
+            json!({ "startDate": "2026-04-01", "lengthDays": 28, "goals": [{ "goalId": "g1", "tier": "main", "target": "x" }] }),
+            json!({ "startDate": "2026-04-01", "lengthDays": 28, "goals": [{ "goalId": "g1", "tier": "primary", "target": " " }] }),
+        ] {
+            let next: NextSeason = serde_json::from_value(next).unwrap();
+            assert_eq!(end_body(Some(next)), Err("Check your entry and try again."));
         }
     }
 }

@@ -1,10 +1,10 @@
 // Server-only season operations for /api/v1 (goals ticket 04). Every read and
 // write is scoped to the owner; ended seasons (ticket 05) are history and
 // refuse writes like missing ones.
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { goals, seasonGoals, seasons } from "@todalo/db/schema";
-import type { AddSeasonGoalInput, SeasonGoalRecord, SeasonRecord, StartSeasonInput, UpdateSeasonGoalInput } from "./season-dto";
+import type { AddSeasonGoalInput, EndSeasonInput, SeasonGoalRecord, SeasonRecord, StartSeasonInput, UpdateSeasonGoalInput } from "./season-dto";
 
 const seasonColumns = { id: seasons.id, startDate: seasons.startDate, lengthDays: seasons.lengthDays, endedAt: seasons.endedAt };
 const goalColumns = {
@@ -57,4 +57,53 @@ export async function updateSeasonGoal(userId: string, seasonId: string, goalId:
     .where(and(eq(seasonGoals.userId, userId), eq(seasonGoals.seasonId, seasonId), eq(seasonGoals.goalId, goalId))).returning({ id: seasonGoals.id });
   if (!row) return null;
   return (await goalsOf(userId, seasonId, goalId))[0] ?? null;
+}
+
+/** Removes only the goal's row in the current season (the goal and earlier seasons stay); false when missing, foreign or ended. */
+export async function removeSeasonGoal(userId: string, seasonId: string, goalId: string): Promise<boolean> {
+  if (!await currentSeason(userId, seasonId)) return false;
+  const [row] = await db.delete(seasonGoals)
+    .where(and(eq(seasonGoals.userId, userId), eq(seasonGoals.seasonId, seasonId), eq(seasonGoals.goalId, goalId))).returning({ id: seasonGoals.id });
+  return Boolean(row);
+}
+
+/** Ended seasons newest first, each with its goals, tiers and targets as they were. */
+export async function listPastSeasons(userId: string): Promise<{ season: SeasonRecord; goals: SeasonGoalRecord[] }[]> {
+  const past = await db.select(seasonColumns).from(seasons).where(and(eq(seasons.userId, userId), isNotNull(seasons.endedAt)))
+    .orderBy(desc(seasons.startDate), desc(seasons.endedAt));
+  if (!past.length) return [];
+  // ponytail: whole history in one read; page it if users ever have hundreds of seasons.
+  const rows = await db.select({ ...goalColumns, seasonId: seasonGoals.seasonId }).from(seasonGoals)
+    .innerJoin(goals, eq(goals.id, seasonGoals.goalId))
+    .where(and(eq(seasonGoals.userId, userId), inArray(seasonGoals.seasonId, past.map(season => season.id))))
+    .orderBy(asc(seasonGoals.createdAt), asc(seasonGoals.id));
+  return past.map(season => ({ season, goals: rows.filter(row => row.seasonId === season.id).map(({ seasonId: _, ...goal }) => goal) }));
+}
+
+/**
+ * Ends the current season, keeping its rows as history, and optionally starts
+ * the next with the carried goals (fresh tier and target, carriedFromId set)
+ * in one transaction. null when the season is missing, foreign or ended, or a
+ * carried goal is not in it or archived.
+ */
+export async function endSeason(userId: string, seasonId: string, { next }: EndSeasonInput): Promise<{
+  ended: { season: SeasonRecord; goals: SeasonGoalRecord[] }; next: { season: SeasonRecord; goals: SeasonGoalRecord[] } | null;
+} | null> {
+  const season = await currentSeason(userId, seasonId);
+  if (!season) return null;
+  const history = await goalsOf(userId, seasonId);
+  const from = new Map(history.map(row => [row.goalId, row]));
+  if (next?.goals.some(item => !from.get(item.goalId) || from.get(item.goalId)!.archivedAt)) return null;
+  const endedAt = new Date();
+  const end = db.update(seasons).set({ endedAt })
+    .where(and(eq(seasons.id, seasonId), eq(seasons.userId, userId), isNull(seasons.endedAt))).returning({ id: seasons.id });
+  const ended = { season: { ...season, endedAt }, goals: history };
+  if (!next) return (await end).length ? { ended, next: null } : null;
+  const nextId = crypto.randomUUID();
+  const carried = next.goals.map(item => ({ userId, seasonId: nextId, ...item, carriedFromId: from.get(item.goalId)!.id }));
+  // Ending first frees the one-current-season index for the insert. A concurrent
+  // end that already started a season makes the insert violate it, rolling back the whole batch.
+  await db.batch([end, db.insert(seasons).values({ id: nextId, userId, startDate: next.startDate, lengthDays: next.lengthDays }),
+    ...(carried.length ? [db.insert(seasonGoals).values(carried)] : [])]);
+  return { ended, next: { season: { id: nextId, startDate: next.startDate, lengthDays: next.lengthDays, endedAt: null }, goals: await goalsOf(userId, nextId) } };
 }

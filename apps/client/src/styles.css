@@ -855,3 +855,10 @@ button.property-value:hover { background: var(--accent); }
 .season-goal { display: grid; gap: .125rem; min-width: 0; flex: 1; }
 .season-target { margin: 0; color: var(--muted-foreground); font-size: .875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .season-add { margin-top: 1.5rem; }
+/* Goals ticket 05: ending a season and past seasons. */
+.season-check { display: inline-flex; align-items: center; gap: .375rem; }
+.season-carry { display: grid; gap: .75rem; margin: 0; padding: 0; border: 0; }
+.season-carry legend { margin-bottom: .25rem; padding: 0; }
+.season-carry-goal { display: grid; gap: .375rem; padding: .5rem 0; border-top: 1px solid var(--border); }
+.season-past { margin-top: 2rem; }
+.season-past li { gap: .5rem; }

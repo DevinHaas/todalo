@@ -60,6 +60,8 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("season.add-goal", "Add goal to season", "Goals", "global", ["Shift+n"], 5, { availability: "available", note: "Goals ticket 04: on the Season page." }),
   command("season.move-target", "Move goal's target", "Goals", "global", ["Shift+m"], 5, { availability: "available", note: "Goals ticket 04: the focused goal on the Season page." }),
   command("season.toggle-tier", "Make goal primary or secondary", "Goals", "global", ["Shift+p"], 5, { availability: "available", note: "Goals ticket 04: the focused goal on the Season page." }),
+  command("season.remove-goal", "Remove goal from season", "Goals", "global", ["Shift+x"], 5, { availability: "available", note: "Goals ticket 05: the focused goal on the Season page; the goal itself stays." }),
+  command("season.end", "End season", "Goals", "global", ["Shift+f"], 5, { availability: "available", note: "Goals ticket 05: on the Season page; opens the form that carries goals into the next season." }),
   command("project.goals", "Link project to goals", "Goals", "project", ["Shift+w"], 5, { availability: "available", note: "Goals ticket 02; passes on while Goals is hidden in Settings." }),
   command("project.sort-date", "Sort by date", "Projects", "project", ["d"], 2, { availability: "available", note: "Uses web project baseline D; macOS sorting subsection contradicts with Option+D. Focused task deadline takes precedence; focus the project header to sort." }),
   command("project.sort-priority", "Sort by priority", "Projects", "project", ["p"], 3, { note: "Web project baseline; macOS Option+P entry is disputed." }),

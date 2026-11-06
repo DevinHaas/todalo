@@ -9,6 +9,10 @@ export interface SeasonGoalDto { id: string; goalId: string; title: string; arch
 export interface SeasonDto { id: string; startDate: string; lengthDays: number; endedAt: string | null; goals: SeasonGoalDto[] }
 /** The season page: the one current season with its day count in the user's zone, or null before the first. */
 export interface CurrentSeasonDto { season: (SeasonDto & { progress: SeasonProgress }) | null }
+/** Ended seasons, newest first, with their goals, tiers and targets as history (ticket 05). */
+export interface PastSeasonsDto { seasons: SeasonDto[] }
+/** Ending a season: the ended one and the next it started with the carried goals, if any. */
+export interface EndSeasonDto { ended: SeasonDto; next: SeasonDto | null }
 
 export interface SeasonRecord { id: string; startDate: string; lengthDays: number; endedAt: Date | null }
 export interface SeasonGoalRecord { id: string; goalId: string; title: string; archivedAt: Date | null; tier: SeasonTier; target: string; carriedFromId: string | null }
@@ -39,7 +43,17 @@ export const addSeasonGoalInput = z.object({ goalId: z.string().min(1).max(200),
 /** Moving the target only replaces its text (no history of targets). */
 export const updateSeasonGoalInput = z.object({ tier: tier.optional(), target: target.optional() }).strict()
   .refine(patch => Object.keys(patch).length > 0, { message: "Nothing to change" });
+/**
+ * Ends the current season and, in the same operation, optionally starts the
+ * next with the selected goals carried over, each with a fresh tier and target.
+ */
+export const endSeasonInput = z.object({
+  next: startSeasonInput.extend({
+    goals: z.array(addSeasonGoalInput).max(100).refine(items => new Set(items.map(item => item.goalId)).size === items.length, { message: "Duplicate goal" }),
+  }).strict().nullable(),
+}).strict();
 
 export type StartSeasonInput = z.infer<typeof startSeasonInput>;
 export type AddSeasonGoalInput = z.infer<typeof addSeasonGoalInput>;
 export type UpdateSeasonGoalInput = z.infer<typeof updateSeasonGoalInput>;
+export type EndSeasonInput = z.infer<typeof endSeasonInput>;
