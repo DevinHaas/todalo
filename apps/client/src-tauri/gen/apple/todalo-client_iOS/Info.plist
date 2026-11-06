@@ -57,5 +57,7 @@
 			<string>app.todalo.client</string>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

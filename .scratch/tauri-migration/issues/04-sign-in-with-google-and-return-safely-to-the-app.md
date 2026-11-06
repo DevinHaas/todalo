@@ -29,3 +29,5 @@ Published from the approved implementation proposal on 2026-10-04. Eligibility r
 - Not verified: real Google (console configuration listed in the QA doc), physical
   iPhone, Mac app return. Before release: universal link or
   ASWebAuthenticationSession to remove custom-scheme interception risk.
+
+2026-11-06 — Mac debug app (API on 127.0.0.1:3000, real DB): real Google sign-in returned to the running app. Cold-start return and cancellation still to check; see `../mac-acceptance.md`.
