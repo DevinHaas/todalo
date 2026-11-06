@@ -4,12 +4,14 @@ import {
 } from "@todalo/ramble";
 import type { SpeechCallbacks, SpeechConnection } from "./elevenlabs";
 import { applySemanticOperations, type SemanticProcessor, type SemanticProject } from "@todalo/ramble/semantic";
+import { rambleOperationId } from "@todalo/ramble/commit";
 
 export interface SessionDependencies {
   send(message: unknown): void;
   speech(callbacks: SpeechCallbacks): SpeechConnection;
   semantic: SemanticProcessor;
-  commit(todos: RambleTodo[], timeZone: string): Promise<number>;
+  /** Must be retry-safe for the same operation ID (see commit.ts). */
+  commit(todos: RambleTodo[], timeZone: string, operationId: string): Promise<number>;
   smartRecognition: boolean;
   projectIds: Set<string>;
   projects: SemanticProject[];
@@ -20,6 +22,9 @@ export class RambleConnection {
   state: RambleSessionState;
   private speech?: SpeechConnection;
   private timeZone = "UTC";
+  // One staged batch, one commit operation: a save retried over this socket or
+  // replayed over HTTP after a lost connection writes each task at most once.
+  private operationId: string = crypto.randomUUID();
   private phase: "idle" | "capturing" | "saving" | "saved" | "closed" = "idle";
   private acceptingTranscripts = true;
   private pending = Promise.resolve();
@@ -169,8 +174,12 @@ export class RambleConnection {
       } catch { this.error("invalid_zone", "Your timezone could not be recognized."); return; }
       const defaultDueDate = typeof options.defaultDueDate === "string" ? options.defaultDueDate : null;
       if (defaultDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(defaultDueDate)) { this.error("invalid_date", "Invalid capture date."); return; }
+      // Optional for the legacy web client, which never replays over HTTP.
+      const operationId = options.operationId === undefined ? undefined : rambleOperationId.safeParse(options.operationId).data;
+      if (options.operationId !== undefined && !operationId) { this.error("invalid_start", "Invalid capture options."); return; }
       if (this.state.todos.length === 0) {
         this.state = createRambleSession({ referenceDate, projectId, smartRecognition: this.dependencies.smartRecognition, defaultDueDate });
+        if (operationId) this.operationId = operationId;
       }
       this.acceptingTranscripts = true;
       this.speech?.close();
@@ -207,7 +216,7 @@ export class RambleConnection {
       if (this.failedSegments.length) throw new Error("Unprocessed speech remains");
       this.acceptingTranscripts = false;
       this.speech?.close();
-      const count = await this.dependencies.commit(this.state.todos, this.timeZone);
+      const count = await this.dependencies.commit(this.state.todos, this.timeZone, this.operationId);
       if ((this.phase as string) !== "closed") {
         this.phase = "saved";
         this.dependencies.send({ type: "committed", count });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-today"
+description = "Enables the today command without any pre-configured scope."
+commands.allow = ["today"]
+
+[[permission]]
+identifier = "deny-today"
+description = "Denies the today command without any pre-configured scope."
+commands.deny = ["today"]

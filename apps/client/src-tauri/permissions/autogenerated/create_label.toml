@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-label"
+description = "Enables the create_label command without any pre-configured scope."
+commands.allow = ["create_label"]
+
+[[permission]]
+identifier = "deny-create-label"
+description = "Denies the create_label command without any pre-configured scope."
+commands.deny = ["create_label"]

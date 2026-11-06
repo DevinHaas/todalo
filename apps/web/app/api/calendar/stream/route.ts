@@ -1,8 +1,9 @@
 import { auth } from "@/lib/auth";
-import { subscribe } from "@/lib/calendar-sync-notify";
+import { subscribe } from "@todalo/server/live";
 
 export const dynamic = "force-dynamic";
 
+// Legacy browser stream: `data: sync` on any calendar change in this process.
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return new Response(null, { status: 401 });
@@ -14,14 +15,16 @@ export async function GET(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      unsubscribe = subscribe(userId, controller);
-      heartbeat = setInterval(() => {
+      const send = (text: string) => {
         try {
-          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+          controller.enqueue(encoder.encode(text));
         } catch {
           clearInterval(heartbeat);
+          unsubscribe();
         }
-      }, 25_000);
+      };
+      unsubscribe = subscribe(userId, (topic) => { if (topic === "calendar") send(`data: sync\n\n`); });
+      heartbeat = setInterval(() => send(`: heartbeat\n\n`), 25_000);
     },
     cancel() {
       clearInterval(heartbeat);

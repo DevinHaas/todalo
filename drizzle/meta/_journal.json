@@ -71,6 +71,20 @@
       "when": 1791065481073,
       "tag": "0009_faithful_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792094973139,
+      "tag": "0010_task_completion_operation",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793967476500,
+      "tag": "0011_todoist_import",
+      "breakpoints": true
     }
   ]
 }

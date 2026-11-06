@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DatePill, ProjectPill } from "@/components/tasks/task-pills";
 import { useSmartDateRecognition } from "@/components/settings/smart-date-recognition";
-import { rambleSocketUrl, startRambleCapture, type RambleCapture } from "@/lib/ramble-audio";
-import { createRambleAudioQueue } from "@/lib/ramble-audio-queue";
+import { rambleSocketUrl } from "@/lib/ramble-audio";
+import { createRambleAudioQueue, startRambleCapture, type RambleCapture } from "@todalo/ramble/audio";
 import type { RambleDefaults, RambleProject } from "@/components/ramble/ramble-provider";
 import waveStyles from "./ramble-wave.module.css";
 

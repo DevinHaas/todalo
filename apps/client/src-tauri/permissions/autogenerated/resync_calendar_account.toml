@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resync-calendar-account"
+description = "Enables the resync_calendar_account command without any pre-configured scope."
+commands.allow = ["resync_calendar_account"]
+
+[[permission]]
+identifier = "deny-resync-calendar-account"
+description = "Denies the resync_calendar_account command without any pre-configured scope."
+commands.deny = ["resync_calendar_account"]

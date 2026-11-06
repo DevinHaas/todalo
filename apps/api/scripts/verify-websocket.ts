@@ -13,6 +13,7 @@ const { createApi } = await import("../src/app");
 interface Message { type: string; state?: RambleSessionState; text?: string; final?: boolean; count?: number; code?: string }
 const origin = "http://ramble.integration.test";
 const cookie = "test-session=authenticated";
+const bearer = "Bearer native.signed-session";
 const saved: { userId: string; todos: RambleTodo[]; timeZone: string }[] = [];
 let closes = 0;
 let finishes = 0;
@@ -34,7 +35,7 @@ function speech(callbacks: SpeechCallbacks): SpeechConnection {
 }
 const app = createApi({
   allowedOrigins: new Set([origin]),
-  verify: async (headers) => headers.get("cookie") === cookie ? "test-user" : null,
+  verify: async (headers) => headers.get("cookie") === cookie || headers.get("authorization") === bearer ? "test-user" : null,
   preferences: async () => ({ smartRecognition: true, projectIds: new Set(["project-trip"]), projects: [{ id: "project-trip", name: "Trip" }], labels: [] }),
   speech,
   semantic: fixtureSemanticProcessor,
@@ -53,8 +54,8 @@ function deadline<T>(promise: Promise<T>, label: string): Promise<T> {
     timer = setTimeout(() => reject(new Error(`Timed out: ${label}`)), 3000);
   })]).finally(() => clearTimeout(timer));
 }
-async function rejected(headers: Record<string, string>) {
-  const socket = new WebSocket(ws, { headers });
+async function rejected(headers: Record<string, string>, url = ws) {
+  const socket = new WebSocket(url, { headers });
   sockets.push(socket);
   let opened = false;
   socket.addEventListener("open", () => { opened = true; socket.close(); });
@@ -65,8 +66,8 @@ async function rejected(headers: Record<string, string>) {
   assert.equal(opened, false, "unauthorized websocket must not open");
   socket.close();
 }
-async function connected() {
-  const socket = new WebSocket(ws, { headers: { origin, cookie } });
+async function connected(url = ws, headers: Record<string, string> = { origin, cookie }) {
+  const socket = new WebSocket(url, { headers });
   sockets.push(socket);
   const messages: Message[] = [];
   const listeners = new Set<() => void>();
@@ -123,6 +124,19 @@ try {
   assert.equal(session.status, 200); assert.deepEqual(await session.json(), { userId: "test-user" });
   await rejected({ origin });
   await rejected({ origin: "https://untrusted.example", cookie });
+  // Native one-use socket tickets: minted only with a bearer, never cookies.
+  const mint = (headers: Record<string, string>) => fetch(`${http}/api/ramble/ticket`, { method: "POST", headers });
+  assert.equal((await mint({ origin, cookie })).status, 401, "cookies must not mint socket tickets");
+  const minted = await mint({ authorization: bearer });
+  assert.equal(minted.status, 200);
+  const { ticket } = await minted.json() as { ticket: string };
+  const ticketUrl = `${ws}?ticket=${encodeURIComponent(ticket)}`;
+  await rejected({}, `${ws}?ticket=unknown`);
+  const native = await connected(ticketUrl, { origin: "tauri://localhost" });
+  assert.equal((await native.start()).type, "ready", "ticketed socket runs the normal protocol");
+  native.send({ type: "discard" });
+  await rejected({}, ticketUrl);
+  await rejected({ origin, cookie }, ticketUrl);
   await rejected({ cookie });
   const client = await connected();
   assert.equal((await client.start()).type, "ready");

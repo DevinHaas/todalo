@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-show-calendar-account-events"
+description = "Enables the show_calendar_account_events command without any pre-configured scope."
+commands.allow = ["show_calendar_account_events"]
+
+[[permission]]
+identifier = "deny-show-calendar-account-events"
+description = "Denies the show_calendar_account_events command without any pre-configured scope."
+commands.deny = ["show_calendar_account_events"]

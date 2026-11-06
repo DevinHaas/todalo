@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-keyboard-preferences"
+description = "Enables the update_keyboard_preferences command without any pre-configured scope."
+commands.allow = ["update_keyboard_preferences"]
+
+[[permission]]
+identifier = "deny-update-keyboard-preferences"
+description = "Denies the update_keyboard_preferences command without any pre-configured scope."
+commands.deny = ["update_keyboard_preferences"]

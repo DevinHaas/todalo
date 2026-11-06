@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "last_completion_id" text;

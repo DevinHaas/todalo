@@ -1,0 +1,7 @@
+/target/
+/gen/schemas/
+/gen/apple/build/
+/gen/apple/DerivedData/
+/gen/apple/Externals/**/*.a
+/gen/apple/assets/
+**/xcuserdata/

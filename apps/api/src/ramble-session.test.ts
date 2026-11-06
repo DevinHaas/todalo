@@ -6,7 +6,7 @@ import { fixtureSemanticProcessor, operation } from "../test-fixtures/semantic";
 
 function harness() {
   const send = vi.fn();
-  const commit = vi.fn(async (_todos: RambleTodo[], _zone: string) => 2);
+  const commit = vi.fn(async (_todos: RambleTodo[], _zone: string, _operationId: string) => 2);
   let callbacks: SpeechCallbacks | undefined;
   const audio = vi.fn();
   const close = vi.fn();
@@ -53,7 +53,7 @@ describe("connection staging", () => {
     expect(h.commit).not.toHaveBeenCalled();
     await h.session.message({ type: "commit" });
     expect(h.finish).toHaveBeenCalledOnce();
-    expect(h.commit).toHaveBeenCalledWith(h.session.state.todos, "Europe/Zurich");
+    expect(h.commit).toHaveBeenCalledWith(h.session.state.todos, "Europe/Zurich", expect.stringMatching(/^[0-9a-f-]{36}$/));
     expect(h.send).toHaveBeenLastCalledWith({ type: "committed", count: 2 });
     await h.session.message({ type: "commit" });
     expect(h.commit).toHaveBeenCalledOnce();
@@ -97,6 +97,18 @@ describe("connection staging", () => {
     expect(h.send).toHaveBeenLastCalledWith(expect.objectContaining({ code: "save_failed" }));
     await h.session.message({ type: "commit" });
     expect(h.commit).toHaveBeenCalledTimes(2);
+    // Both attempts are one operation, so a write the first one applied is not repeated.
+    expect(h.commit.mock.calls[1][2]).toBe(h.commit.mock.calls[0][2]);
+  });
+  it("commits under the client's operation ID so a lost save can be replayed over HTTP", async () => {
+    const h = harness();
+    const operationId = "4f9c1a2e-8d3b-4c5a-9e7f-1a2b3c4d5e6f";
+    await h.session.message({ type: "start", options: { referenceDate: "2026-10-03T14:30:00", timeZone: "UTC", operationId: "x" } });
+    expect(h.send).toHaveBeenLastCalledWith(expect.objectContaining({ code: "invalid_start" }));
+    await h.session.message({ type: "start", options: { referenceDate: "2026-10-03T14:30:00", timeZone: "UTC", operationId } });
+    await h.events().transcript("a task", true);
+    await h.session.message({ type: "commit" });
+    expect(h.commit.mock.calls[0][2]).toBe(operationId);
   });
   it("rejects foreign projects, browser transcript injection, bad timezone, and oversized audio", async () => {
     const h = harness();

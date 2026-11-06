@@ -6,13 +6,15 @@ import { useRouter } from "next/navigation";
 import { useKeyboardCommands } from "@/components/keyboard/keyboard-provider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { matchFindItems, type FindItem } from "@todalo/server/search";
 
-export interface FindItem { id: string; title: string; href: string; kind: "Task" | "Project" | "Section" }
+export type { FindItem };
+
 export function OrganizationNavigation({ items }: { items: FindItem[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<"find" | "sections" | null>(null);
   const [query, setQuery] = useState("");
-  const results = items.filter(item => (mode !== "sections" || item.kind === "Section") && item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())).slice(0, 40);
+  const results = matchFindItems(items, query, mode === "sections");
   const show = (next: "find" | "sections") => { setQuery(""); setMode(next); };
   useKeyboardCommands({
     "navigation.inbox": () => router.push("/inbox"),

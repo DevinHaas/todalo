@@ -1,3 +1,5 @@
+import { TaskOrganizationError } from "./task-organization-validation";
+
 export type TaskParentInput = {
   userId: string;
   taskId?: string;
@@ -17,10 +19,10 @@ export function validateTaskParent(
   hasChildren = false,
 ): void {
   if (input.parentId === null) return;
-  if (input.taskId === input.parentId) throw new Error("A task cannot be its own parent");
+  if (input.taskId === input.parentId) throw new TaskOrganizationError("A task cannot be its own parent", "invalid");
   if (!parent || parent.id !== input.parentId || parent.userId !== input.userId) {
-    throw new Error("Parent task not found");
+    throw new TaskOrganizationError("Parent task not found", "missing");
   }
-  if (parent.parentId !== null) throw new Error("Sub-tasks cannot have sub-tasks");
-  if (hasChildren) throw new Error("A task with sub-tasks cannot become a sub-task");
+  if (parent.parentId !== null) throw new TaskOrganizationError("Sub-tasks cannot have sub-tasks", "invalid");
+  if (hasChildren) throw new TaskOrganizationError("A task with sub-tasks cannot become a sub-task", "invalid");
 }

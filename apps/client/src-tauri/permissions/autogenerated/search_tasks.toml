@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-search-tasks"
+description = "Enables the search_tasks command without any pre-configured scope."
+commands.allow = ["search_tasks"]
+
+[[permission]]
+identifier = "deny-search-tasks"
+description = "Denies the search_tasks command without any pre-configured scope."
+commands.deny = ["search_tasks"]

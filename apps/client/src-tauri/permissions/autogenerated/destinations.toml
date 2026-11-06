@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-destinations"
+description = "Enables the destinations command without any pre-configured scope."
+commands.allow = ["destinations"]
+
+[[permission]]
+identifier = "deny-destinations"
+description = "Denies the destinations command without any pre-configured scope."
+commands.deny = ["destinations"]

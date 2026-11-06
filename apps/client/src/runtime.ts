@@ -1,0 +1,42 @@
+import { connectionMonitor, userQueryClient } from "./connection";
+import { SessionController } from "./session";
+import { accountTransport, googleTransport } from "./transport";
+import { AccountTransportError } from "./errors";
+import { taskQueries, taskTransport } from "./tasks";
+import { projectQueries, projectTransport } from "./projects";
+import { attachmentQueries, attachmentTransport } from "./attachments";
+import { settingsQueries, settingsTransport } from "./settings";
+import { keyboardQueries, keyboardTransport } from "./keyboard";
+import { metadataQueries, metadataTransport } from "./metadata";
+import { organizationQueries, organizationTransport } from "./organization";
+import { bulkTransport } from "./bulk";
+import { calendarQueries, calendarTransport, liveTransport } from "./calendar";
+import { searchQueries, searchTransport } from "./search";
+import { importTransport } from "./imports";
+
+// A read or write that finds the session revoked re-checks the account, which
+// signs the UI out (and clears every user-scoped query) when the server agrees.
+const onError = (error: Error) => { if (error instanceof AccountTransportError && error.code === "UNAUTHENTICATED") void session.refresh(); };
+export const connection = connectionMonitor();
+export const queries = userQueryClient(connection, onError);
+export const session = new SessionController(accountTransport(), () => queries.clear(), googleTransport());
+export const tasks = taskTransport();
+export const reads = taskQueries(tasks);
+export const projects = projectTransport();
+export const projectReads = projectQueries(projects);
+export const attachments = attachmentTransport();
+export const attachmentReads = attachmentQueries(attachments);
+export const settings = settingsTransport();
+export const settingsReads = settingsQueries(settings);
+export const shortcuts = keyboardTransport();
+export const shortcutReads = keyboardQueries(shortcuts);
+export const metadata = metadataTransport();
+export const metadataReads = metadataQueries(metadata);
+export const organization = organizationTransport();
+export const organizationReads = organizationQueries(organization);
+export const bulk = bulkTransport();
+export const searchReads = searchQueries(searchTransport());
+export const calendar = calendarTransport();
+export const calendarReads = calendarQueries(calendar);
+export const live = liveTransport();
+export const imports = importTransport();
