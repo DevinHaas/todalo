@@ -7,11 +7,16 @@ let goals: Row[] = [];
 let hidden: Map<string, boolean>;
 // Projects and tasks the links point at; unlinking must never remove these.
 const projects = [{ id: "alice-run", userId: "alice", name: "Run marathon", color: null }, { id: "alice-meals", userId: "alice", name: "Meal prep", color: null }, { id: "bob-books", userId: "bob", name: "Books", color: null }];
-const task = (id: string, userId: string, title: string) => ({ id, userId, title, description: null, status: "todo" as const, priority: 4, projectId: null, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [] });
-const tasks = [task("alice-protein", "alice", "Eat enough protein"), task("alice-stretch", "alice", "Stretch"), task("bob-page", "bob", "Read a page")];
+const task = (id: string, userId: string, title: string, projectId: string | null = null, labelIds: string[] = []) => ({ id, userId, title, description: null, status: "todo" as const, priority: 4, projectId, parentId: null, dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds });
+const tasks = [task("alice-protein", "alice", "Eat enough protein"), task("alice-stretch", "alice", "Stretch"), task("bob-page", "bob", "Read a page"),
+  // Ticket 03 suggestions: three runs share a project; the stretch-like task shares a label.
+  task("alice-run-1", "alice", "5k", "alice-run"), task("alice-run-2", "alice", "10k", "alice-run"), task("alice-run-3", "alice", "Long run", "alice-run", ["legs"]),
+  task("alice-squats", "alice", "Squats", "alice-meals", ["legs"]), task("bob-run", "bob", "Bob's run", "alice-run")];
+let dismissals: { userId: string; taskId: string; goalId: string }[] = [];
 let links: { goalId: string; kind: "projects" | "tasks"; targetId: string }[] = [];
 beforeEach(() => {
   links = [];
+  dismissals = [];
   goals = [
     { id: "alice-fit", userId: "alice", title: "Become fit", description: "Run a marathon", sortOrder: 0, archivedAt: null },
     { id: "alice-v2", userId: "alice", title: "Ship v2", description: null, sortOrder: 1, archivedAt: null },
@@ -63,6 +68,13 @@ const app = createGoalRoutes({
   unlink: async (userId, goalId, kind, targetId) => {
     if (!find(userId, goalId)) return false;
     links = links.filter(link => !(link.goalId === goalId && link.kind === kind && link.targetId === targetId));
+    return true;
+  },
+  tasks: async (userId) => tasks.filter(item => item.userId === userId),
+  dismissed: async (userId, taskId) => dismissals.filter(row => row.userId === userId && row.taskId === taskId).map(row => row.goalId),
+  dismiss: async (userId, taskId, goalId) => {
+    if (!find(userId, goalId) || !tasks.some(row => row.userId === userId && row.id === taskId)) return false;
+    if (!dismissals.some(row => row.taskId === taskId && row.goalId === goalId)) dismissals.push({ userId, taskId, goalId });
     return true;
   },
 });
@@ -229,6 +241,78 @@ describe("goal API", () => {
       expect((await call("DELETE", "/goals/alice-fit/tasks/alice-protein", { cookie: "alice" })).status).toBe(403);
       expect(links).toEqual([]);
       expect((await call("PUT", "/goals/alice-fit/tasks/alice-protein", { cookie: "alice", origin: "http://localhost:5173" })).status).toBe(200);
+    });
+  });
+
+  describe("suggestions", () => {
+    const suggested = async (taskId: string, user = "alice") => ((await (await call("GET", `/tasks/${taskId}/goal-suggestions`, { user })).json()) as { goalIds: string[] }).goalIds;
+    const linkTask = (goalId: string, taskId: string) => links.push({ goalId, kind: "tasks", targetId: taskId });
+
+    it("suggests goals that same-project and same-label tasks link to, most frequent first", async () => {
+      linkTask("alice-v2", "alice-run-1");
+      linkTask("alice-fit", "alice-run-2");
+      linkTask("alice-fit", "alice-squats");
+      // run-3: v2 once by project; fit by project (run-2) and label (squats).
+      expect(await suggested("alice-run-3")).toEqual(["alice-fit", "alice-v2"]);
+      // Unrelated task: no hint.
+      expect(await suggested("alice-protein")).toEqual([]);
+    });
+
+    it("never links on its own; accepting is the explicit link and ends the suggestions", async () => {
+      linkTask("alice-fit", "alice-run-1");
+      expect(await suggested("alice-run-2")).toEqual(["alice-fit"]);
+      expect(links).toHaveLength(1);
+      expect((await call("PUT", "/goals/alice-fit/tasks/alice-run-2", { user: "alice" })).status).toBe(200);
+      expect(await suggested("alice-run-2")).toEqual([]);
+    });
+
+    it("suggests a goal linked to the task's own project, weighted above one sibling link", async () => {
+      linkTask("alice-fit", "alice-run-1");
+      links.push({ goalId: "alice-v2", kind: "projects", targetId: "alice-run" });
+      expect(await suggested("alice-run-2")).toEqual(["alice-v2", "alice-fit"]);
+      expect(links).toHaveLength(2);
+    });
+
+    it("skips archived goals", async () => {
+      linkTask("alice-old", "alice-run-1");
+      expect(await suggested("alice-run-2")).toEqual([]);
+    });
+
+    it("dismissing hides that suggestion for that task only and creates no link", async () => {
+      linkTask("alice-fit", "alice-run-1");
+      linkTask("alice-v2", "alice-run-1");
+      const response = await call("DELETE", "/tasks/alice-run-2/goal-suggestions/alice-fit", { user: "alice" });
+      expect(await response.json()).toEqual({ taskId: "alice-run-2", goalId: "alice-fit" });
+      expect(await suggested("alice-run-2")).toEqual(["alice-v2"]);
+      expect(await suggested("alice-run-3")).toEqual(["alice-fit", "alice-v2"]);
+      expect(links).toHaveLength(2);
+      // Dismissing twice is still a success.
+      expect((await call("DELETE", "/tasks/alice-run-2/goal-suggestions/alice-fit", { user: "alice" })).status).toBe(200);
+    });
+
+    it("shows no suggestions while Goals is hidden", async () => {
+      linkTask("alice-fit", "alice-run-1");
+      hidden.set("alice", true);
+      expect(await suggested("alice-run-2")).toEqual([]);
+    });
+
+    it("keeps users apart: foreign tasks and goals are a 404 and other users' links never count", async () => {
+      linkTask("alice-fit", "alice-run-1");
+      expect(await suggested("bob-run", "bob")).toEqual([]);
+      const read = await call("GET", "/tasks/alice-run-2/goal-suggestions", { user: "bob" });
+      expect(read.status).toBe(404);
+      expect(await read.json()).toEqual({ code: "NOT_FOUND", message: "This task does not exist or you do not have access to it." });
+      for (const path of ["/tasks/bob-run/goal-suggestions/alice-fit", "/tasks/alice-run-2/goal-suggestions/bob-read", "/tasks/nope/goal-suggestions/alice-fit"]) {
+        expect((await call("DELETE", path, { user: "alice" })).status, path).toBe(404);
+      }
+      expect(dismissals).toEqual([]);
+    });
+
+    it("requires a session, and an allowed Origin for cookie-authenticated dismissals", async () => {
+      expect((await call("GET", "/tasks/alice-run-2/goal-suggestions")).status).toBe(401);
+      expect((await call("DELETE", "/tasks/alice-run-2/goal-suggestions/alice-fit", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+      expect(dismissals).toEqual([]);
+      expect((await call("DELETE", "/tasks/alice-run-2/goal-suggestions/alice-fit", { cookie: "alice", origin: "http://localhost:5173" })).status).toBe(200);
     });
   });
 });

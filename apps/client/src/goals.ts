@@ -1,10 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto } from "../../../packages/server/src/goal-dto";
+import type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto, GoalSuggestionsDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
 
-export type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto };
+export type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto, GoalSuggestionsDto };
 export interface GoalPatch { title?: string; description?: string; archived?: boolean }
 
 export interface GoalTransport {
@@ -22,6 +22,10 @@ export interface GoalTransport {
   links(): Promise<GoalLinksDto>;
   /** Links (or with `linked: false` unlinks) a project or task; false when the goal or target is missing or foreign. */
   link(id: string, kind: GoalLinkKind, targetId: string, linked: boolean): Promise<boolean>;
+  /** Goals suggested for a task, best first (ticket 03); null when the task is missing or foreign. */
+  suggestions(taskId: string): Promise<GoalSuggestionsDto | null>;
+  /** Hides one suggestion for one task (never links); false when the task or goal is missing or foreign. */
+  dismiss(taskId: string, goalId: string): Promise<boolean>;
 }
 
 export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTransport {
@@ -52,6 +56,8 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
     setHidden: async (hidden) => required(await request<{ hidden: boolean }>("PUT", "/api/v1/goals-visibility", { hidden }), "SAVE_FAILED").hidden,
     links: async () => required(await request<GoalLinksDto>("GET", "/api/v1/goal-links"), "TASKS_UNAVAILABLE"),
     link: async (id, kind, targetId, linked) => (await request(linked ? "PUT" : "DELETE", `${path(id)}/${kind}/${encodeURIComponent(targetId)}`)) !== null,
+    suggestions: (taskId) => request<GoalSuggestionsDto>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions`),
+    dismiss: async (taskId, goalId) => (await request("DELETE", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions/${encodeURIComponent(goalId)}`)) !== null,
   };
 }
 
@@ -71,6 +77,8 @@ export function goalTransport(): GoalTransport {
     setHidden: async (hidden) => (await command<{ hidden: boolean }>("set_goals_hidden", { hidden })).hidden,
     links: () => command<GoalLinksDto>("goal_links"),
     link: async (id, kind, targetId, linked) => (await command<unknown>("link_goal", { id, kind, targetId, linked })) !== null,
+    suggestions: (taskId) => command<GoalSuggestionsDto | null>("goal_suggestions", { taskId }),
+    dismiss: async (taskId, goalId) => (await command<unknown>("dismiss_goal_suggestion", { taskId, goalId })) !== null,
   };
 }
 
@@ -80,6 +88,8 @@ export const goalKeys = {
   list: (userId: string) => ["user", userId, "goals", "list"] as const,
   detail: (userId: string, id: string) => ["user", userId, "goals", "detail", id] as const,
   links: (userId: string) => ["user", userId, "goals", "links"] as const,
+  // Under "goals", so every link write refreshes them.
+  suggestions: (userId: string, taskId: string) => ["user", userId, "goals", "suggestions", taskId] as const,
 };
 
 export function goalQueries(transport: GoalTransport) {
@@ -87,6 +97,7 @@ export function goalQueries(transport: GoalTransport) {
     list: (userId: string) => queryOptions({ queryKey: goalKeys.list(userId), queryFn: () => transport.goals() }),
     detail: (userId: string, id: string) => queryOptions({ queryKey: goalKeys.detail(userId, id), queryFn: () => transport.goal(id) }),
     links: (userId: string) => queryOptions({ queryKey: goalKeys.links(userId), queryFn: () => transport.links() }),
+    suggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.suggestions(userId, taskId), queryFn: () => transport.suggestions(taskId) }),
   };
 }
 
@@ -103,6 +114,15 @@ export function goalMutations(transport: GoalTransport, cache: QueryClient, user
       const previous = cache.getQueryData<GoalLinksDto>(key);
       if (previous) cache.setQueryData(key, toggleLink(previous, id, kind, targetId, linked));
       try { if (!await transport.link(id, kind, targetId, linked)) throw new AccountTransportError("SAVE_FAILED"); }
+      catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
+      finally { await stale(); }
+    },
+    /** The hint disappears at once; a failed save brings it back. */
+    async dismiss(taskId: string, goalId: string) {
+      const key = goalKeys.suggestions(userId, taskId);
+      const previous = cache.getQueryData<GoalSuggestionsDto | null>(key);
+      if (previous) cache.setQueryData(key, { goalIds: previous.goalIds.filter(id => id !== goalId) });
+      try { if (!await transport.dismiss(taskId, goalId)) throw new AccountTransportError("SAVE_FAILED"); }
       catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
       finally { await stale(); }
     },

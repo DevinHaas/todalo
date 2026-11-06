@@ -15,7 +15,7 @@ import { copyText, taskPath } from "./links";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
-import { GoalPicker, type GoalSlots } from "./goal-views";
+import { GoalPicker, GoalSuggestion, type GoalSlots } from "./goal-views";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -230,6 +230,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
             </Property>; })()}
             {goals && <Property label="Goals" add={!goals.linked.some(id => goals.goals.some(goal => goal.id === id))}>
               <GoalPicker slots={goals} variant="property" data={{ "data-field": "goals" }} />
+              <GoalSuggestion slots={goals} />
             </Property>}
           </aside>
         </fieldset>

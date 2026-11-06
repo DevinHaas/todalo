@@ -3,7 +3,7 @@
 // ID behaves exactly like a missing one.
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { goalProjects, goalTasks, goals, projects, tasks, userSettings } from "@todalo/db/schema";
+import { goalProjects, goalSuggestionDismissals, goalTasks, goals, projects, tasks, userSettings } from "@todalo/db/schema";
 import { planReorder } from "./bulk-input";
 import { getTasksForUser } from "./today";
 import type { CreateGoalInput, GoalLinkKind, GoalLinksDto, ReorderGoalInput, UpdateGoalInput } from "./goal-dto";
@@ -106,5 +106,19 @@ export async function unlinkGoal(userId: string, goalId: string, kind: GoalLinkK
   if (!await getOwnedGoal(userId, goalId)) return false;
   if (kind === "projects") await db.delete(goalProjects).where(and(eq(goalProjects.userId, userId), eq(goalProjects.goalId, goalId), eq(goalProjects.projectId, targetId)));
   else await db.delete(goalTasks).where(and(eq(goalTasks.userId, userId), eq(goalTasks.goalId, goalId), eq(goalTasks.taskId, targetId)));
+  return true;
+}
+
+/** Goals the user dismissed as suggestions for one task (ticket 03). */
+export async function getDismissedGoals(userId: string, taskId: string) {
+  const rows = await db.select({ goalId: goalSuggestionDismissals.goalId }).from(goalSuggestionDismissals)
+    .where(and(eq(goalSuggestionDismissals.userId, userId), eq(goalSuggestionDismissals.taskId, taskId)));
+  return rows.map(row => row.goalId);
+}
+
+/** Hides one suggestion for one task; never links. Idempotent; false when the goal or task is missing or foreign. */
+export async function dismissGoalSuggestion(userId: string, taskId: string, goalId: string) {
+  if (!await getOwnedGoal(userId, goalId) || !await ownedTarget(userId, "tasks", taskId)) return false;
+  await db.insert(goalSuggestionDismissals).values({ userId, goalId, taskId }).onConflictDoNothing();
   return true;
 }

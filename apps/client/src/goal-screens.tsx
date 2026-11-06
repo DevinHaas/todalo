@@ -53,8 +53,19 @@ export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: strin
   const links = useQuery({ ...goalReads.links(userId), enabled: Boolean(targetId) && list.data?.hidden === false });
   const writes = useGoalMutations(userId);
   const toggle = useMutation({ mutationFn: ({ goalId, linked }: { goalId: string; linked: boolean }) => writes.link(goalId, kind, targetId!, linked) });
+  // Ticket 03: tasks only. Refetched each time the sheet opens, so label or project edits show on reopen.
+  const suggestions = useQuery({ ...goalReads.suggestions(userId, targetId ?? ""), enabled: kind === "tasks" && Boolean(targetId) && list.data?.hidden === false });
+  const dismiss = useMutation({ mutationFn: (goalId: string) => writes.dismiss(targetId!, goalId) });
   if (!targetId || !list.data || list.data.hidden || !links.data) return undefined;
-  return { goals: list.data.goals, linked: linkedGoalIds(links.data, kind, targetId), onToggle: (goalId, linked) => toggle.mutate({ goalId, linked }), error: toggle.error?.message ?? null };
+  const linked = linkedGoalIds(links.data, kind, targetId);
+  const active = list.data.goals;
+  // Only while the task has no goal; the server says the same, this just hides the hint at once on accept.
+  const suggested = linked.some(id => active.some(goal => goal.id === id)) ? [] : (suggestions.data?.goalIds ?? []).flatMap(id => active.filter(goal => goal.id === id));
+  return {
+    goals: active, linked, onToggle: (goalId, linked) => toggle.mutate({ goalId, linked }),
+    suggested, onDismiss: (goalId) => dismiss.mutate(goalId),
+    error: (toggle.error ?? dismiss.error)?.message ?? null,
+  };
 }
 
 /** The project page's Goals button (hidden with Goals). */

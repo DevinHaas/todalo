@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-goal-suggestions"
+description = "Enables the goal_suggestions command without any pre-configured scope."
+commands.allow = ["goal_suggestions"]
+
+[[permission]]
+identifier = "deny-goal-suggestions"
+description = "Denies the goal_suggestions command without any pre-configured scope."
+commands.deny = ["goal_suggestions"]

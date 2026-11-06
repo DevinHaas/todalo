@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
-import { createGoalInput, goalLinkKinds, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
+import { createGoalInput, goalLinkKinds, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type GoalSuggestionsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
+import { suggestGoals, type SuggestionTask } from "@todalo/server/goal-suggestions";
 import { toProjectDto, type ProjectRecord } from "@todalo/server/project-dto";
 import { toTaskDto, type TaskRecord } from "@todalo/server/task-dto";
 import { writeUser } from "./project-routes";
@@ -26,10 +27,16 @@ export interface GoalStore {
   link(userId: string, goalId: string, kind: GoalLinkKind, targetId: string): Promise<boolean>;
   /** Removes only the link; false when the goal is missing or foreign. */
   unlink(userId: string, goalId: string, kind: GoalLinkKind, targetId: string): Promise<boolean>;
+  /** The owner's tasks with their project and labels (ticket 03 suggestions). */
+  tasks(userId: string): Promise<SuggestionTask[]>;
+  dismissed(userId: string, taskId: string): Promise<string[]>;
+  /** Idempotent; false when the goal or task is missing or foreign. */
+  dismiss(userId: string, taskId: string, goalId: string): Promise<boolean>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
 const NOT_FOUND = { code: "NOT_FOUND", message: "This goal does not exist or you do not have access to it." } as const;
+const TASK_NOT_FOUND = { code: "NOT_FOUND", message: "This task does not exist or you do not have access to it." } as const;
 const FORBIDDEN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sent by todalo." } as const;
 const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try again." } as const;
 
@@ -61,6 +68,22 @@ export function createGoalRoutes(store: GoalStore) {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
       return await store.links(userId) satisfies GoalLinksDto;
+    })
+    // Suggestions are read-only hints: accepting is the link PUT below, so nothing links without a click.
+    .get("/tasks/:id/goal-suggestions", async ({ request, params, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const [tasks, goals, links, dismissed, hidden] = await Promise.all([store.tasks(userId), store.list(userId), store.links(userId), store.dismissed(userId, params.id), store.hidden(userId)]);
+      const task = tasks.find(item => item.id === params.id);
+      if (!task) return status(404, TASK_NOT_FOUND);
+      // Hidden Goals show no hints.
+      return { goalIds: hidden ? [] : suggestGoals({ task, tasks, taskLinks: links.tasks, projectLinks: links.projects, goalIds: goals.map(goal => goal.id), dismissed }) } satisfies GoalSuggestionsDto;
+    })
+    .delete("/tasks/:id/goal-suggestions/:goalId", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return await store.dismiss(userId, params.id, params.goalId) ? { taskId: params.id, goalId: params.goalId } : status(404, NOT_FOUND);
     })
     // Linking is explicit and per pair: PUT links (idempotent), DELETE removes only the link.
     .put("/goals/:id/:kind/:targetId", async ({ request, params, status }) => {

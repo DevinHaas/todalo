@@ -53,6 +53,8 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("project.section", "Create section", "Projects", "project", ["s"], 2, { availability: "available" }),
   command("goal.create", "Create goal", "Goals", "global", ["Shift+q"], 5, { availability: "available", note: "Goals ticket 01; passes on while Goals is hidden in Settings." }),
   command("task.goals", "Link task to goals", "Goals", "task", ["Shift+l"], 5, { availability: "available", note: "Goals ticket 02: opens the task's details on its Goals field." }),
+  command("editor.goal-suggestion-accept", "Link suggested goal", "Goals", "editor", ["Primary+Shift+g"], 5, { availability: "available", note: "Goals ticket 03: links the goal suggested in the open task's details." }),
+  command("editor.goal-suggestion-dismiss", "Dismiss suggested goal", "Goals", "editor", ["Primary+Shift+x"], 5, { availability: "available", note: "Goals ticket 03: hides that suggestion for this task." }),
   command("project.goals", "Link project to goals", "Goals", "project", ["Shift+w"], 5, { availability: "available", note: "Goals ticket 02; passes on while Goals is hidden in Settings." }),
   command("project.sort-date", "Sort by date", "Projects", "project", ["d"], 2, { availability: "available", note: "Uses web project baseline D; macOS sorting subsection contradicts with Option+D. Focused task deadline takes precedence; focus the project header to sort." }),
   command("project.sort-priority", "Sort by priority", "Projects", "project", ["p"], 3, { note: "Web project baseline; macOS Option+P entry is disputed." }),

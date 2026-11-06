@@ -301,6 +301,9 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "task.priority": () => picker("priority", "priority"),
       "task.labels": () => picker("labels", "labels"),
       "task.goals": () => picker(null, "goals"),
+      // The open sheet's goal hint (ticket 03); no hint, the key passes on.
+      "editor.goal-suggestion-accept": () => press(document.querySelector(".task-editor"), '[data-suggestion="accept"]'),
+      "editor.goal-suggestion-dismiss": () => press(document.querySelector(".task-editor"), '[data-suggestion="dismiss"]'),
       "task.deadline": () => picker("deadline", "deadline"),
       "task.clear-deadline": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { deadline: null } })),
       "task.move": moveDialog,

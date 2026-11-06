@@ -238,6 +238,15 @@ export const goalTasks = pgTable("goal_tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [uniqueIndex("goal_tasks_goal_task_idx").on(table.goalId, table.taskId), index("goal_tasks_userId_idx").on(table.userId)]);
 
+// Goals ticket 03: a goal suggestion the user dismissed for one task stays hidden for that task.
+export const goalSuggestionDismissals = pgTable("goal_suggestion_dismissals", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("goal_suggestion_dismissals_task_goal_idx").on(table.taskId, table.goalId), index("goal_suggestion_dismissals_userId_idx").on(table.userId)]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

@@ -133,6 +133,39 @@ pub async fn link_goal(
     Ok(state.write(method, &path, None).await?)
 }
 
+/// Goals suggested for a task (ticket 03); a read-only hint, accepting is `link_goal`.
+#[tauri::command]
+pub async fn goal_suggestions(
+    state: tauri::State<'_, NativeAuth>,
+    task_id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&task_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .read(&format!("/api/v1/tasks/{task_id}/goal-suggestions"))
+        .await?)
+}
+
+/// Hides one suggestion for one task; never links.
+#[tauri::command]
+pub async fn dismiss_goal_suggestion(
+    state: tauri::State<'_, NativeAuth>,
+    task_id: String,
+    goal_id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&task_id) || !valid_id(&goal_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(
+            Method::DELETE,
+            &format!("/api/v1/tasks/{task_id}/goal-suggestions/{goal_id}"),
+            None,
+        )
+        .await?)
+}
+
 /// Only the two link kinds reach the server; an invalid ID is the server's 404 (None).
 fn link_path(id: &str, kind: &str, target_id: &str) -> Result<Option<String>, &'static str> {
     if !matches!(kind, "projects" | "tasks") {

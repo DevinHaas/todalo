@@ -75,6 +75,8 @@ fn main() {
             "set_goals_hidden",
             "goal_links",
             "link_goal",
+            "goal_suggestions",
+            "dismiss_goal_suggestion",
             "destinations",
             "create_section",
             "delete_section",

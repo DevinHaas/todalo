@@ -123,6 +123,8 @@ pub fn run() {
             goals::set_goals_hidden,
             goals::goal_links,
             goals::link_goal,
+            goals::goal_suggestions,
+            goals::dismiss_goal_suggestion,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

@@ -41,7 +41,22 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
 }
 
 /** Linking from a task sheet or project page (ticket 02): the active goals, and which this task or project links to. */
-export interface GoalSlots { goals: GoalDto[]; linked: string[]; onToggle(goalId: string, linked: boolean): void; error: string | null }
+export interface GoalSlots {
+  goals: GoalDto[]; linked: string[]; onToggle(goalId: string, linked: boolean): void; error: string | null;
+  /** Ticket 03 (tasks only): goals suggested while the task has none, best first. Accepting is onToggle(id, true). */
+  suggested?: GoalDto[]; onDismiss?(goalId: string): void;
+}
+
+/** The best suggestion as a hint under the Goals field: Link it or dismiss it; nothing links without a click. */
+export function GoalSuggestion({ slots }: { slots: GoalSlots }) {
+  const goal = slots.suggested?.[0];
+  if (!goal) return null;
+  return <p className="goal-suggestion" data-goal-suggestion={goal.id}>
+    <Target /><span>Suggested: {goal.title}</span>
+    <button type="button" className="text-action" data-suggestion="accept" onClick={() => slots.onToggle(goal.id, true)}>Link</button>
+    <button type="button" className="icon-button" data-suggestion="dismiss" aria-label={`Dismiss suggestion ${goal.title}`} title="Dismiss" onClick={() => slots.onDismiss?.(goal.id)}><X /></button>
+  </p>;
+}
 
 /**
  * Checkboxes over the active goals; each tick links or unlinks at once.

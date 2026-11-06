@@ -4,13 +4,13 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Suggestions come from same-project and same-label links, ranked by frequency
-- [ ] Accepting links the goal; dismissing hides that suggestion for the task
-- [ ] No suggestion ever creates a link without a click
-- [ ] Works with no AI provider configured
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Suggestions come from same-project and same-label links, ranked by frequency
+- [x] Accepting links the goal; dismissing hides that suggestion for the task
+- [x] No suggestion ever creates a link without a click
+- [x] Works with no AI provider configured
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.
