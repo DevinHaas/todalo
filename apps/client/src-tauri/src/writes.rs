@@ -114,6 +114,14 @@ fn completion_body(
     }
 }
 
+/// Goals ticket 06: the user confirmed completing a milestone with open done criteria.
+pub(crate) fn confirmed(mut body: Value, confirm_criteria: Option<bool>) -> Value {
+    if confirm_criteria == Some(true) {
+        body["confirmCriteria"] = json!(true);
+    }
+    body
+}
+
 /// `occurrence` is the due date the client saw (or null) and `operation_id`
 /// identifies the tap, so a replay is recognised and a stale tap refused (412).
 #[tauri::command]
@@ -122,11 +130,12 @@ pub async fn complete_task(
     id: String,
     occurrence: Option<String>,
     operation_id: Option<String>,
+    confirm_criteria: Option<bool>,
 ) -> Result<Option<Value>, String> {
     if !valid_id(&id) {
         return Ok(None);
     }
-    let body = completion_body(occurrence, operation_id)?;
+    let body = confirmed(completion_body(occurrence, operation_id)?, confirm_criteria);
     Ok(state
         .write(
             Method::POST,

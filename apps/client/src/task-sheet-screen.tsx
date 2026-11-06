@@ -7,12 +7,12 @@ import { useTaskWrites } from "./task-writes";
 import { useOrganizationMutations } from "./organization-screens";
 import type { CommentSlots } from "./task-sheet";
 import type { Account } from "./session";
-import { useGoalSlots } from "./goal-screens";
+import { useGoalSlots, useMilestoneSlots } from "./goal-screens";
 
 /**
  * The task sheet's immediate writes for whichever screen opens it: completion
  * circles, delete, the project picker, Add sub-task, the comments section and
- * goal links (goals ticket 02).
+ * goal links (goals ticket 02) and the milestone (ticket 06).
  * `onRemoved` runs once the delete is sent (the screen closes the sheet).
  */
 export function useTaskSheet(account: Account, task: TaskDto | null | undefined, onRemoved: () => void) {
@@ -25,6 +25,7 @@ export function useTaskSheet(account: Account, task: TaskDto | null | undefined,
   const remove = useMutation(mutations.remove);
   const list = useQuery({ ...commentReads.task(userId, task?.id ?? ""), enabled: Boolean(task) });
   const goals = useGoalSlots(userId, "tasks", task?.id);
+  const milestone = useMilestoneSlots(userId, task?.id);
   if (!task) return {};
   const comments: CommentSlots = {
     state: list, onRetry: () => void list.refetch(),
@@ -40,5 +41,6 @@ export function useTaskSheet(account: Account, task: TaskDto | null | undefined,
     onAddSubtask: (subtask: NewTask) => writes.create.mutateAsync(subtask),
     comments,
     goals,
+    milestone,
   };
 }

@@ -275,6 +275,12 @@ impl NativeAuth {
             StatusCode::PRECONDITION_FAILED => {
                 Err("This task changed on another device. Review it and try again.")
             }
+            StatusCode::PRECONDITION_REQUIRED => Err(
+                "This milestone has open done criteria. Confirm to tick them all and complete it.",
+            ),
+            StatusCode::CONFLICT if path.contains("/milestone") => {
+                Err("Link this goal to the task before making it a milestone.")
+            }
             status if status.is_success() => response
                 .json()
                 .await

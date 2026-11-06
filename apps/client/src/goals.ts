@@ -1,10 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto, GoalSuggestionsDto } from "../../../packages/server/src/goal-dto";
+import type { CriterionDto, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
 
-export type { GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalsDto, GoalSuggestionsDto };
+export type { CriterionDto, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
 export interface GoalPatch { title?: string; description?: string; archived?: boolean }
 
 export interface GoalTransport {
@@ -26,6 +26,10 @@ export interface GoalTransport {
   suggestions(taskId: string): Promise<GoalSuggestionsDto | null>;
   /** Hides one suggestion for one task (never links); false when the task or goal is missing or foreign. */
   dismiss(taskId: string, goalId: string): Promise<boolean>;
+  /** Ticket 06: the task's milestone; null when it is not one (or the task is missing or foreign). */
+  milestone(taskId: string): Promise<MilestoneDto | null>;
+  /** Marks or edits (replacing the criteria), or with null unmarks; false when the task is missing or foreign. */
+  setMilestone(taskId: string, milestone: MilestoneDto | null): Promise<boolean>;
 }
 
 export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTransport {
@@ -41,6 +45,7 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
     if (response.status === 401) throw new AccountTransportError("UNAUTHENTICATED");
     if (response.status === 404) return null;
     if (response.status === 400) throw new AccountTransportError("INVALID_INPUT");
+    if (response.status === 409) throw new AccountTransportError("GOAL_NOT_LINKED");
     if (!response.ok) throw new AccountTransportError(method === "GET" ? "TASKS_UNAVAILABLE" : "SAVE_FAILED");
     try { return await response.json() as T; }
     catch { throw new AccountTransportError("INVALID_RESPONSE"); }
@@ -58,6 +63,8 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
     link: async (id, kind, targetId, linked) => (await request(linked ? "PUT" : "DELETE", `${path(id)}/${kind}/${encodeURIComponent(targetId)}`)) !== null,
     suggestions: (taskId) => request<GoalSuggestionsDto>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions`),
     dismiss: async (taskId, goalId) => (await request("DELETE", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions/${encodeURIComponent(goalId)}`)) !== null,
+    milestone: async (taskId) => (await request<{ milestone: MilestoneDto | null }>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/milestone`))?.milestone ?? null,
+    setMilestone: async (taskId, milestone) => (await request(milestone ? "PUT" : "DELETE", `/api/v1/tasks/${encodeURIComponent(taskId)}/milestone`, milestone ?? undefined)) !== null,
   };
 }
 
@@ -79,6 +86,8 @@ export function goalTransport(): GoalTransport {
     link: async (id, kind, targetId, linked) => (await command<unknown>("link_goal", { id, kind, targetId, linked })) !== null,
     suggestions: (taskId) => command<GoalSuggestionsDto | null>("goal_suggestions", { taskId }),
     dismiss: async (taskId, goalId) => (await command<unknown>("dismiss_goal_suggestion", { taskId, goalId })) !== null,
+    milestone: async (taskId) => (await command<{ milestone: MilestoneDto | null } | null>("milestone", { taskId }))?.milestone ?? null,
+    setMilestone: async (taskId, milestone) => (await command<unknown>("set_milestone", { taskId, milestone })) !== null,
   };
 }
 
@@ -90,6 +99,8 @@ export const goalKeys = {
   links: (userId: string) => ["user", userId, "goals", "links"] as const,
   // Under "goals", so every link write refreshes them.
   suggestions: (userId: string, taskId: string) => ["user", userId, "goals", "suggestions", taskId] as const,
+  // Under "goals" too: unlinking a goal drops the milestone with the link.
+  milestone: (userId: string, taskId: string) => ["user", userId, "goals", "milestone", taskId] as const,
 };
 
 export function goalQueries(transport: GoalTransport) {
@@ -98,6 +109,7 @@ export function goalQueries(transport: GoalTransport) {
     detail: (userId: string, id: string) => queryOptions({ queryKey: goalKeys.detail(userId, id), queryFn: () => transport.goal(id) }),
     links: (userId: string) => queryOptions({ queryKey: goalKeys.links(userId), queryFn: () => transport.links() }),
     suggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.suggestions(userId, taskId), queryFn: () => transport.suggestions(taskId) }),
+    milestone: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.milestone(userId, taskId), queryFn: () => transport.milestone(taskId) }),
   };
 }
 
@@ -124,6 +136,15 @@ export function goalMutations(transport: GoalTransport, cache: QueryClient, user
       if (previous) cache.setQueryData(key, { goalIds: previous.goalIds.filter(id => id !== goalId) });
       try { if (!await transport.dismiss(taskId, goalId)) throw new AccountTransportError("SAVE_FAILED"); }
       catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
+      finally { await stale(); }
+    },
+    /** Ticket 06: the milestone (mark, criteria, ticks) changes at once; a failed save puts it back. */
+    async setMilestone(taskId: string, milestone: MilestoneDto | null) {
+      const key = goalKeys.milestone(userId, taskId);
+      const previous = cache.getQueryData<MilestoneDto | null>(key);
+      cache.setQueryData(key, milestone);
+      try { if (!await transport.setMilestone(taskId, milestone)) throw new AccountTransportError("TASK_NOT_FOUND"); }
+      catch (error) { cache.setQueryData(key, previous); throw error; }
       finally { await stale(); }
     },
     /** The sidebar moves at once; a failed save puts it back. */
@@ -168,4 +189,35 @@ export function toggleLink(links: GoalLinksDto, goalId: string, kind: GoalLinkKi
   }
   const rest = links.tasks.filter(link => !(link.goalId === goalId && link.taskId === targetId));
   return { ...links, tasks: linked ? [...rest, { goalId, taskId: targetId }] : rest };
+}
+
+/** "2/3": ticked of all done criteria. */
+export const criteriaProgress = (criteria: readonly CriterionDto[]) => `${criteria.filter(item => item.done).length}/${criteria.length}`;
+
+/** Moves one criterion up (-1) or down (+1); the ends stay put. */
+export function moveCriterion<T>(items: readonly T[], index: number, by: -1 | 1): T[] {
+  const to = index + by;
+  if (to < 0 || to >= items.length) return [...items];
+  const next = [...items];
+  [next[index], next[to]] = [next[to]!, next[index]!];
+  return next;
+}
+
+type CriteriaPrompt = () => Promise<boolean>;
+let askCriteria: CriteriaPrompt = async () => false;
+/** The in-page confirm (CriteriaConfirmHost) registers itself; without one, open criteria stay open. */
+export const setCriteriaPrompt = (prompt: CriteriaPrompt) => { askCriteria = prompt; };
+
+/**
+ * Ticket 06: every completion path (row circle, `e`, task sheet, bulk) goes
+ * through this. A completion the server refuses for open done criteria asks the
+ * user once and repeats with the confirm, which ticks them all; Cancel keeps
+ * the error, so the optimistic check-off rolls back.
+ */
+export async function confirmingCriteria<T>(complete: (confirm: boolean) => Promise<T>): Promise<T> {
+  try { return await complete(false); }
+  catch (error) {
+    if (!(error instanceof AccountTransportError && error.code === "CRITERIA_OPEN") || !await askCriteria()) throw error;
+    return complete(true);
+  }
 }

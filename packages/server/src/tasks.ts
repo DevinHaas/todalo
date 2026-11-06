@@ -12,6 +12,7 @@ import { deleteTaskFromCalendar, pushTaskToCalendar } from "./calendar";
 import { assertOwnedLabels, replaceTaskLabels } from "./task-labels";
 import { createTaskInput, updateTaskInput, type CreateTaskInput, type UpdateTaskInput } from "./task-input";
 import { editConflicts, planCompletion, type CompletionRequest } from "./task-rules";
+import { criteriaAllowDone } from "./milestones";
 
 /** A client-chosen task ID that already belongs to a different user. */
 export class TaskIdConflictError extends Error {
@@ -88,9 +89,11 @@ export async function deleteTask(userId: string, id: string): Promise<boolean> {
  * are no-ops: a done task stays as it is, and a retried operation ID is
  * recognised after the task moved on. "changed" means the caller's
  * `occurrence` is no longer the task's due date (another device edited or
- * completed it), so nothing was written.
+ * completed it), so nothing was written. "criteria" (goals ticket 06): the
+ * task is a milestone with open done criteria and the request did not carry
+ * `confirmCriteria`; nothing was written. A confirmed one ticks them all.
  */
-export async function completeTask(userId: string, id: string, request: CompletionRequest = {}): Promise<"completed" | "missing" | "changed"> {
+export async function completeTask(userId: string, id: string, request: CompletionRequest = {}): Promise<"completed" | "missing" | "changed" | "criteria"> {
   const owned = and(eq(tasks.id, id), eq(tasks.userId, userId));
   // One retry: a lost compare-and-set re-reads and decides again (for example,
   // the concurrent writer was this same operation's earlier attempt).
@@ -99,6 +102,7 @@ export async function completeTask(userId: string, id: string, request: Completi
     if (!task) return "missing";
     const plan = planCompletion(task, request);
     if (plan.kind !== "write") return plan.kind === "changed" ? "changed" : "completed";
+    if (!await criteriaAllowDone(userId, id, request.confirmCriteria)) return "criteria";
     // Compare-and-set against the state the plan came from: neon-http has no
     // interactive transactions, and a concurrent completion or date edit must
     // not be overwritten or advanced twice.
@@ -121,7 +125,7 @@ const same = <T,>(column: Parameters<typeof eq>[0], value: T | null) => value ==
  * started from) an edit of a task changed elsewhere is refused as "changed"
  * unless it is a replay of itself (see `editConflicts`).
  */
-export async function updateTask(userId: string, input: UpdateTaskInput, options: { seenUpdatedAt?: Date } = {}): Promise<"updated" | "missing" | "changed"> {
+export async function updateTask(userId: string, input: UpdateTaskInput, options: { seenUpdatedAt?: Date; confirmCriteria?: boolean } = {}): Promise<"updated" | "missing" | "changed" | "criteria"> {
   const { id, labelIds, ...data } = updateTaskInput.parse(input);
   const [owned] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId))).limit(1);
   if (!owned) return "missing";
@@ -135,6 +139,8 @@ export async function updateTask(userId: string, input: UpdateTaskInput, options
     : undefined;
   if (editConflicts(current ? { ...owned, labelIds: current } : owned, current ? { ...data, labelIds: labelSet(labelIds!) } : data, options.seenUpdatedAt)) return "changed";
   if (labelIds !== undefined) await assertOwnedLabels(userId, labelIds);
+  // Goals ticket 06: a status edit to done follows the completion rule.
+  if (data.status === "done" && owned.status !== "done" && !await criteriaAllowDone(userId, id, options.confirmCriteria)) return "criteria";
   if (data.projectId !== undefined || data.sectionId !== undefined) {
     await assertTaskOrganization({ userId, projectId: data.projectId === undefined ? owned.projectId : data.projectId, sectionId: data.sectionId === undefined ? (data.projectId !== undefined && data.projectId !== owned.projectId ? null : owned.sectionId) : data.sectionId });
   }

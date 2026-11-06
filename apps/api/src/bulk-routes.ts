@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { bulkCompleteInput, bulkIdsInput, bulkMetadataInput, bulkMoveInput, reorderInput, type BulkCompletionDto, type ReorderInput } from "@todalo/server/bulk-input";
 import { MissingReferenceError } from "@todalo/server/metadata-input";
 import { writeUser } from "./project-routes";
+import { CRITERIA_OPEN } from "./task-routes";
 
 /**
  * Shared @todalo/server/bulk operations (ticket 15). Each checks that every
@@ -11,14 +12,15 @@ import { writeUser } from "./project-routes";
 export interface BulkWrites {
   verify(headers: Headers): Promise<string | null>;
   allowedOrigins: ReadonlySet<string>;
-  complete(userId: string, tasks: { id: string; occurrence: Date | null }[], operationId: string): Promise<BulkCompletionDto | null>;
+  /** "criteria": some task is a milestone with open done criteria and `confirmCriteria` is not set; nothing was written. */
+  complete(userId: string, tasks: { id: string; occurrence: Date | null }[], operationId: string, confirmCriteria: boolean): Promise<BulkCompletionDto | null | "criteria">;
   remove(userId: string, ids: string[]): Promise<boolean>;
   clearDates(userId: string, ids: string[]): Promise<boolean>;
   /** Throws MissingReferenceError for a deleted or foreign label. */
   metadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[] }): Promise<boolean>;
   move(userId: string, ids: string[], destination: { projectId: string | null; sectionId: string | null }): Promise<boolean>;
   /** Place next to an anchor and/or set a status (appending without an anchor). "invalid": the anchor is in another collection (or is the task itself). */
-  reorder(userId: string, id: string, move: ReorderInput): Promise<boolean | "invalid">;
+  reorder(userId: string, id: string, move: ReorderInput): Promise<boolean | "invalid" | "criteria">;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -42,7 +44,8 @@ export function createBulkRoutes(deps: BulkWrites) {
       if (params.action === "complete") {
         const input = bulkCompleteInput.safeParse(body);
         if (!input.success) return status(400, INVALID);
-        const result = await deps.complete(userId, input.data.tasks.map(task => ({ id: task.id, occurrence: date(task.occurrence) })), input.data.operationId);
+        const result = await deps.complete(userId, input.data.tasks.map(task => ({ id: task.id, occurrence: date(task.occurrence) })), input.data.operationId, input.data.confirmCriteria ?? false);
+        if (result === "criteria") return status(428, CRITERIA_OPEN);
         return result ? result satisfies BulkCompletionDto : status(404, NOT_FOUND);
       }
       if (params.action === "metadata") {
@@ -71,6 +74,7 @@ export function createBulkRoutes(deps: BulkWrites) {
       if (!input.success) return status(400, INVALID);
       const result = await deps.reorder(userId, params.id, input.data);
       if (result === "invalid") return status(400, INVALID);
+      if (result === "criteria") return status(428, CRITERIA_OPEN);
       return result ? { id: params.id } : status(404, NOT_FOUND);
     });
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { linkedGoalIds, toggleLink, type GoalLinksDto } from "./goals";
+import { AccountTransportError } from "./errors";
+import { confirmingCriteria, criteriaProgress, linkedGoalIds, moveCriterion, setCriteriaPrompt, toggleLink, type GoalLinksDto } from "./goals";
 
 const links: GoalLinksDto = { projects: [{ goalId: "fit", projectId: "run" }], tasks: [{ goalId: "fit", taskId: "protein" }] };
 
@@ -12,5 +13,42 @@ describe("optimistic goal links", () => {
     ["unlinking a project leaves task links", toggleLink(links, "fit", "projects", "run", false), "tasks", "protein", ["fit"]],
   ] as const)("%s", (_name, next, kind, target, expected) => {
     expect(linkedGoalIds(next, kind, target)).toEqual(expected);
+  });
+});
+
+describe("milestone completion confirm (ticket 06)", () => {
+  const refusing = (calls: boolean[]) => async (confirm: boolean) => {
+    calls.push(confirm);
+    if (!confirm) throw new AccountTransportError("CRITERIA_OPEN");
+    return "done";
+  };
+
+  it("asks once and repeats the completion with the confirm", async () => {
+    let asked = 0;
+    setCriteriaPrompt(async () => { asked++; return true; });
+    const calls: boolean[] = [];
+    expect(await confirmingCriteria(refusing(calls))).toBe("done");
+    expect([asked, calls]).toEqual([1, [false, true]]);
+  });
+
+  it("Cancel keeps the refusal, so the check-off rolls back; other errors never ask", async () => {
+    let asked = 0;
+    setCriteriaPrompt(async () => { asked++; return false; });
+    const calls: boolean[] = [];
+    await expect(confirmingCriteria(refusing(calls))).rejects.toMatchObject({ code: "CRITERIA_OPEN" });
+    await expect(confirmingCriteria(async () => { throw new AccountTransportError("TASK_CHANGED"); })).rejects.toMatchObject({ code: "TASK_CHANGED" });
+    expect([asked, calls]).toEqual([1, [false]]);
+  });
+
+  it.each([
+    [["a", "b", "c"], 1, -1, ["b", "a", "c"]],
+    [["a", "b", "c"], 2, 1, ["a", "b", "c"]],
+    [["a", "b", "c"], 0, -1, ["a", "b", "c"]],
+  ] as const)("moves %j[%i] by %i", (items, index, by, expected) => {
+    expect(moveCriterion(items, index, by)).toEqual(expected);
+  });
+
+  it("shows progress as ticked/total", () => {
+    expect(criteriaProgress([{ text: "a", done: true }, { text: "b", done: false }, { text: "c", done: true }])).toBe("2/3");
   });
 });

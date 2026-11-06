@@ -19,8 +19,11 @@ export interface TaskWrites {
   allowedOrigins: ReadonlySet<string>;
   /** null: the client-chosen ID already belongs to another user. */
   create(userId: string, input: BasicTaskInput): Promise<{ task: TaskRecord; created: boolean } | null>;
-  /** "changed": `occurrence` is no longer the task's due date, nothing was written. */
-  complete(userId: string, id: string, request: { occurrence?: Date | null; operationId?: string }): Promise<TaskRecord | null | "changed">;
+  /**
+   * "changed": `occurrence` is no longer the task's due date; "criteria": a
+   * milestone with open done criteria without `confirmCriteria`. Neither wrote anything.
+   */
+  complete(userId: string, id: string, request: { occurrence?: Date | null; operationId?: string; confirmCriteria?: boolean }): Promise<TaskRecord | null | "changed" | "criteria">;
   /** "changed": the task was edited elsewhere since `details.updatedAt`, nothing was written. */
   update(userId: string, id: string, details: TaskDetailsInput): Promise<TaskRecord | null | "changed">;
   /**
@@ -39,6 +42,8 @@ const TASK_CONFLICT = { code: "TASK_CONFLICT", message: "This task could not be 
 const FORBIDDEN_ORIGIN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sent by todalo." } as const;
 // 412: the client's copy (due date or version) is stale; it should refetch.
 const TASK_CHANGED = { code: "TASK_CHANGED", message: "This task changed on another device. Review it and try again." } as const;
+// 428 (goals ticket 06): completing a milestone with open done criteria needs `confirmCriteria`.
+export const CRITERIA_OPEN = { code: "MILESTONE_CRITERIA_OPEN", message: "This milestone has open done criteria. Confirm to tick them all and complete it." } as const;
 
 // Error envelope shared with /api/v1/account: { code, message }. The user ID is
 // only ever the authenticated session's; no request parameter can select it.
@@ -81,9 +86,10 @@ export function createTaskRoutes(deps: TaskReads & TaskWrites) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const input = completionInput.safeParse(body ?? undefined);
       if (!input.success) return status(400, INVALID);
-      const { occurrence, operationId } = input.data ?? {};
-      const task = await deps.complete(userId, params.id, { occurrence: occurrence == null ? occurrence : new Date(occurrence), operationId });
+      const { occurrence, operationId, confirmCriteria } = input.data ?? {};
+      const task = await deps.complete(userId, params.id, { occurrence: occurrence == null ? occurrence : new Date(occurrence), operationId, confirmCriteria });
       if (task === "changed") return status(412, TASK_CHANGED);
+      if (task === "criteria") return status(428, CRITERIA_OPEN);
       return task ? { task: toTaskDto(task) satisfies TaskDto } : status(404, NOT_FOUND);
     })
     .patch("/tasks/:id", async ({ request, params, body, status }) => {

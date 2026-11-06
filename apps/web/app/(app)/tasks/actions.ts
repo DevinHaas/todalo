@@ -31,7 +31,9 @@ export async function bulkTaskAction(input: { ids: string[]; action: "complete" 
 
 export async function updateTask(input: UpdateTaskInput) {
   const userId = await requireUserId();
-  if (await updateTaskOperation(userId, input) === "missing") throw new Error("Task not found");
+  const result = await updateTaskOperation(userId, input);
+  if (result === "missing") throw new Error("Task not found");
+  if (result === "criteria") throw new Error("This milestone has open done criteria. Tick them before marking it done.");
   revalidatePath("/", "layout");
 }
 

@@ -839,6 +839,16 @@ button.property-value:hover { background: var(--accent); }
 .goal-link-list a { display: inline-flex; align-items: center; gap: .375rem; min-width: 0; overflow-wrap: anywhere; }
 .goal-link-list a svg { width: 1rem; height: 1rem; flex: none; }
 .goal-link-list li[data-done] a { text-decoration: line-through; color: var(--muted-foreground); }
+/* Goals ticket 06: milestones. */
+.milestone-panel { display: grid; gap: .5rem; min-width: 18rem; }
+.milestone-panel label { display: grid; gap: .25rem; }
+.criteria { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
+.criterion { display: flex; align-items: center; gap: .25rem; }
+.criterion input:not([type]) { flex: 1; min-width: 0; }
+.criterion[data-done] input:not([type]) { text-decoration: line-through; color: var(--muted-foreground); }
+.milestone-progress { font-size: .8125rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.dialog-backdrop.criteria-confirm { z-index: 40; align-items: center; }
+.dialog-backdrop.criteria-confirm .dialog { max-width: 24rem; padding: 1rem; }
 .goal-suggestion { grid-column: 1 / -1; display: flex; align-items: center; gap: .375rem; margin: 0; padding-top: .25rem; font-size: .8125rem; color: var(--muted-foreground); }
 .goal-suggestion > svg { width: .875rem; height: .875rem; flex: none; }
 .goal-suggestion > span { min-width: 0; overflow-wrap: anywhere; }

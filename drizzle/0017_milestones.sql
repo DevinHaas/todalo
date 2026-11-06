@@ -1,0 +1,1 @@
+ALTER TABLE "goal_tasks" ADD COLUMN "milestone_criteria" jsonb;

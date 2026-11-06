@@ -15,6 +15,7 @@ import { createGoalRoutes } from "./goal-routes";
 import { createSeasonRoutes } from "./season-routes";
 import * as seasons from "@todalo/server/seasons";
 import * as goals from "@todalo/server/goals";
+import * as milestones from "@todalo/server/milestones";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createCommentRoutes } from "./comment-routes";
 import * as comments from "@todalo/server/comments";
@@ -50,14 +51,14 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
 })).use(createBulkRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
-  complete: async (userId, items, operationId) => { const result = await bulk.completeTasks(userId, items, operationId); return result === "missing" ? null : result; },
+  complete: async (userId, items, operationId, confirmCriteria) => { const result = await bulk.completeTasks(userId, items, operationId, confirmCriteria); return result === "missing" ? null : result; },
   remove: bulk.deleteTasks,
   clearDates: bulk.clearTaskDates,
   metadata: bulk.updateTasksMetadata,
   // A missing or foreign task or destination is the route's 404.
   move: (userId, ids, destination) => organization.moveTasks(userId, ids, destination)
     .then(() => true, (error: unknown) => { if (error instanceof TaskOrganizationError) return false; throw error; }),
-  reorder: async (userId, id, move) => { const result = await bulk.reorderTask(userId, id, move); return result === "invalid" ? result : result === "reordered"; },
+  reorder: async (userId, id, move) => { const result = await bulk.reorderTask(userId, id, move); return result === "invalid" || result === "criteria" ? result : result === "reordered"; },
 })).use(createProjectRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
@@ -90,6 +91,10 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   tasks: (userId) => getTasksForUser(userId),
   dismissed: goals.getDismissedGoals,
   dismiss: goals.dismissGoalSuggestion,
+  milestone: milestones.getMilestone,
+  setMilestone: milestones.setMilestone,
+  clearMilestone: milestones.clearMilestone,
+  milestones: milestones.getGoalMilestones,
 })).use(createSeasonRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

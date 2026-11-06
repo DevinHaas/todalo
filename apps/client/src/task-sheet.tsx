@@ -15,7 +15,7 @@ import { copyText, taskPath } from "./links";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
-import { GoalPicker, GoalSuggestion, type GoalSlots } from "./goal-views";
+import { GoalPicker, GoalSuggestion, MilestoneField, type GoalSlots, type MilestoneSlots } from "./goal-views";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -53,7 +53,7 @@ export interface CommentSlots {
  * are kept. Keyboard commands press its controls (`.task-editor .sheet-form`,
  * `data-field`, `data-navigate`, `data-insert`, the submit button).
  */
-export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation, onComplete, onRemove, onMove, onOpen, onAddSubtask, comments, goals }: {
+export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation, onComplete, onRemove, onMove, onOpen, onAddSubtask, comments, goals, milestone }: {
   task: TaskDto; labels?: { id: string; name: string }[];
   /** The resolved https task link (ticket 18); "Copy link" shows once known. */
   shareUrl?: string;
@@ -73,6 +73,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   comments?: CommentSlots;
   /** Goals ticket 02: links save at once (not a draft field); absent while Goals is hidden. */
   goals?: GoalSlots;
+  /** Goals ticket 06: saves at once; absent while Goals is hidden or the task has no linked goal. */
+  milestone?: MilestoneSlots;
 }) {
   const tree = useContext(TaskTree);
   const { projects } = useContext(ComposerChoices);
@@ -231,6 +233,9 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
             {goals && <Property label="Goals" add={!goals.linked.some(id => goals.goals.some(goal => goal.id === id))}>
               <GoalPicker slots={goals} variant="property" data={{ "data-field": "goals" }} />
               <GoalSuggestion slots={goals} />
+            </Property>}
+            {milestone && <Property label="Milestone" add={!milestone.milestone}>
+              <MilestoneField slots={milestone} />
             </Property>}
           </aside>
         </fieldset>

@@ -10,6 +10,7 @@ import { deleteTaskFromCalendar } from "./calendar";
 import { assertOwnedLabels } from "./task-labels";
 import { completeTask, syncToCalendar } from "./tasks";
 import { manualOrder } from "./today";
+import { criteriaAllowDone, tasksWithOpenCriteria } from "./milestones";
 import { bulkIds, planReorder, type BulkCompletionDto, type ReorderInput } from "./bulk-input";
 
 /** One neon-http batch: the statements commit together or not at all. */
@@ -29,13 +30,16 @@ export async function ownedTasks(userId: string, ids: string[]) {
  * Completes each task with the due date the client saw and one tap ID, so a
  * retried request advances no recurring task twice. Per task (recurrence and
  * calendar effects), as legacy did; a task changed elsewhere is reported, not written.
+ * "criteria": some task is a milestone with open done criteria and the user did
+ * not confirm (goals ticket 06); nothing is written, so a selection never half-applies.
  */
-export async function completeTasks(userId: string, items: { id: string; occurrence?: Date | null }[], operationId?: string): Promise<BulkCompletionDto | "missing"> {
+export async function completeTasks(userId: string, items: { id: string; occurrence?: Date | null }[], operationId?: string, confirmCriteria = false): Promise<BulkCompletionDto | "missing" | "criteria"> {
   const unique = [...new Map(items.map(item => [item.id, item])).values()];
   if (!await ownedTasks(userId, unique.map(item => item.id))) return "missing";
+  if (!confirmCriteria && (await tasksWithOpenCriteria(userId, unique.map(item => item.id))).length) return "criteria";
   const result: BulkCompletionDto = { completed: [], changed: [] };
   for (const item of unique) {
-    const outcome = await completeTask(userId, item.id, { occurrence: item.occurrence, operationId });
+    const outcome = await completeTask(userId, item.id, { occurrence: item.occurrence, operationId, confirmCriteria });
     (outcome === "completed" ? result.completed : result.changed).push(item.id);
   }
   return result;
@@ -92,15 +96,18 @@ export const inCollection = (projectId: string | null) => projectId ? eq(tasks.p
  * Renumbering keeps `updatedAt` (open editors stay valid); a status change
  * (legacy status board, ticket 17) is an edit and moves it, in the same batch.
  * Without an anchor the task goes to the end of its collection, so a retried
- * drop is a no-op.
+ * drop is a no-op. "criteria": a drop into Done of a milestone with open done
+ * criteria without `confirmCriteria`; nothing was written.
  */
-export async function reorderTask(userId: string, id: string, move: ReorderInput): Promise<"reordered" | "missing" | "invalid"> {
+export async function reorderTask(userId: string, id: string, move: ReorderInput): Promise<"reordered" | "missing" | "invalid" | "criteria"> {
   const anchorId = move.anchorId ?? null;
   const pair = await db.select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, anchorId ? [id, anchorId] : [id])));
   const task = pair.find(row => row.id === id);
   const anchor = pair.find(row => row.id === anchorId);
   if (!task || (anchorId && !anchor)) return "missing";
   if (anchor && (id === anchorId || task.projectId !== anchor.projectId)) return "invalid";
+  // Goals ticket 06: a board drop into Done follows the completion rule.
+  if (move.status === "done" && task.status !== "done" && !await criteriaAllowDone(userId, id, move.confirmCriteria)) return "criteria";
   const collection = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.userId, userId), inCollection(task.projectId))).orderBy(...manualOrder);
   const order = planReorder(collection.map(row => row.id), id, anchorId, move.position);
   if (!order) return "missing";

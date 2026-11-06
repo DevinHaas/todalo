@@ -77,6 +77,11 @@ const app = createGoalRoutes({
     if (!dismissals.some(row => row.taskId === taskId && row.goalId === goalId)) dismissals.push({ userId, taskId, goalId });
     return true;
   },
+  // Milestones: milestone-routes.test.ts.
+  milestone: async () => null,
+  setMilestone: async () => "missing",
+  clearMilestone: async () => false,
+  milestones: async () => [],
 });
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
   const headers = new Headers();
@@ -109,7 +114,7 @@ describe("goal API", () => {
   });
 
   it("opens a goal page (archived ones too); foreign and missing IDs share one 404", async () => {
-    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", archived: false }, projects: [], tasks: [] });
+    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", archived: false }, projects: [], tasks: [], milestones: [] });
     expect((await (await call("GET", "/goals/alice-old", { user: "alice" })).json() as { goal: { archived: boolean } }).goal.archived).toBe(true);
     const foreign = await call("GET", "/goals/bob-read", { user: "alice" });
     const missing = await call("GET", "/goals/nope", { user: "alice" });

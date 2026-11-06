@@ -89,6 +89,8 @@ export type TaskDetailsInput = z.infer<typeof taskDetailsInput>;
 
 /**
  * `occurrence`: the due date the client saw; `operationId`: generated per tap and
- * reused on its retries, so a replay is recognised and a stale tap is refused.
+ * reused on its retries, so a replay is recognised and a stale tap is refused;
+ * `confirmCriteria`: the user confirmed completing a milestone with open done
+ * criteria (goals ticket 06), which ticks them all.
  */
-export const completionInput = z.object({ occurrence: isoDate.nullable().optional(), operationId: z.uuid().optional() }).optional();
+export const completionInput = z.object({ occurrence: isoDate.nullable().optional(), operationId: z.uuid().optional(), confirmCriteria: z.boolean().optional() }).optional();

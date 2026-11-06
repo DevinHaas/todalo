@@ -4,15 +4,15 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mark/unmark a task as a milestone for one of its linked goals
-- [ ] Add, edit, reorder and tick done criteria
-- [ ] Milestone reached only when all criteria are ticked
-- [ ] Completing with open criteria prompts to confirm and ticks all
-- [ ] Milestones keep normal due dates, deadlines and calendar sync
-- [ ] Goal page lists milestones in order with criteria progress
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Mark/unmark a task as a milestone for one of its linked goals
+- [x] Add, edit, reorder and tick done criteria
+- [x] Milestone reached only when all criteria are ticked
+- [x] Completing with open criteria prompts to confirm and ticks all
+- [x] Milestones keep normal due dates, deadlines and calendar sync
+- [x] Goal page lists milestones in order with criteria progress
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

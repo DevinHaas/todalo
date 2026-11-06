@@ -1,7 +1,11 @@
 // Ticket 15: bulk actions and manual reorder. One fixed method and path per
 // operation; every ID is validated and every body rebuilt from typed fields
 // here, so the webview cannot choose a path or add server fields.
-use crate::{auth::NativeAuth, reads::valid_id, writes::valid_operation_id};
+use crate::{
+    auth::NativeAuth,
+    reads::valid_id,
+    writes::{confirmed, valid_operation_id},
+};
 use reqwest::Method;
 use serde::{Deserialize, Deserializer};
 use serde_json::{Value, json};
@@ -50,8 +54,9 @@ pub async fn bulk_complete(
     state: tauri::State<'_, NativeAuth>,
     tasks: Vec<Completion>,
     operation_id: String,
+    confirm_criteria: Option<bool>,
 ) -> Result<Option<Value>, String> {
-    let body = complete_body(&tasks, &operation_id)?;
+    let body = confirmed(complete_body(&tasks, &operation_id)?, confirm_criteria);
     Ok(state
         .write(Method::POST, "/api/v1/bulk/complete", Some(body))
         .await?)
@@ -194,11 +199,15 @@ pub async fn reorder_task(
     anchor_id: Option<String>,
     position: Option<String>,
     status: Option<String>,
+    confirm_criteria: Option<bool>,
 ) -> Result<Option<Value>, String> {
     if !valid_id(&id) {
         return Ok(None);
     }
-    let body = reorder_body(anchor_id.as_deref(), position.as_deref(), status.as_deref())?;
+    let body = confirmed(
+        reorder_body(anchor_id.as_deref(), position.as_deref(), status.as_deref())?,
+        confirm_criteria,
+    );
     Ok(state
         .write(
             Method::POST,

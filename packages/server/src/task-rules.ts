@@ -14,6 +14,8 @@ export interface CompletionRequest {
   occurrence?: Date | null;
   /** Client-generated per tap and reused on retries of that tap. */
   operationId?: string;
+  /** Goals ticket 06: completes a milestone with open done criteria, ticking them all. */
+  confirmCriteria?: boolean;
 }
 export type CompletionPatch = { status?: "done"; completedAt: Date | null; dueDate?: Date; lastCompletionId: string | null };
 export type CompletionPlan =

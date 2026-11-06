@@ -1,13 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, goals, seasonReads, seasons } from "./runtime";
 import { seasonMutations, type NextSeason, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import { PastSeasonView, SeasonView } from "./season-views";
-import { goalMutations, linkedGoalIds, type GoalLinkKind, type GoalPatch } from "./goals";
+import { goalMutations, linkedGoalIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
 import type { ReorderPosition } from "./bulk";
-import { GoalPicker, GoalsNav, GoalView, type GoalSlots } from "./goal-views";
+import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
 
 function useGoalMutations(userId: string) {
@@ -68,6 +68,38 @@ export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: strin
     suggested, onDismiss: (goalId) => dismiss.mutate(goalId),
     error: (toggle.error ?? dismiss.error)?.message ?? null,
   };
+}
+
+/**
+ * Ticket 06: the task sheet's Milestone property. Undefined while Goals is
+ * hidden or loading, and while the task has no linked goal (a milestone needs one).
+ */
+export function useMilestoneSlots(userId: string, taskId: string | null | undefined): MilestoneSlots | undefined {
+  const list = useQuery(goalReads.list(userId));
+  const shown = Boolean(taskId) && list.data?.hidden === false;
+  const links = useQuery({ ...goalReads.links(userId), enabled: shown });
+  const milestone = useQuery({ ...goalReads.milestone(userId, taskId ?? ""), enabled: shown });
+  const writes = useGoalMutations(userId);
+  const change = useMutation({ mutationFn: (next: MilestoneDto | null) => writes.setMilestone(taskId!, next) });
+  if (!taskId || !shown || !list.data || !links.data || milestone.data === undefined) return undefined;
+  const linked = linkedGoalIds(links.data, "tasks", taskId);
+  const goals = list.data.goals.filter(goal => linked.includes(goal.id));
+  if (!goals.length && !milestone.data) return undefined;
+  return { goals, milestone: milestone.data, onChange: (next) => change.mutate(next), error: change.error?.message ?? null };
+}
+
+/**
+ * Ticket 06: answers confirmingCriteria for every completion path (rendered
+ * once in the shell). Concurrent asks share the one dialog and its answer.
+ */
+export function CriteriaConfirmHost() {
+  const [answer, setAnswer] = useState<((confirmed: boolean) => void) | null>(null);
+  useEffect(() => {
+    let waiting: Promise<boolean> | null = null;
+    setCriteriaPrompt(() => waiting ??= new Promise<boolean>(resolve => setAnswer(() => (confirmed: boolean) => { waiting = null; setAnswer(null); resolve(confirmed); })));
+    return () => setCriteriaPrompt(async () => false);
+  }, []);
+  return answer ? <CriteriaConfirm onAnswer={answer} /> : null;
 }
 
 /** The project page's Goals button (hidden with Goals). */

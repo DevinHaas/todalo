@@ -126,6 +126,8 @@ pub fn run() {
             goals::link_goal,
             goals::goal_suggestions,
             goals::dismiss_goal_suggestion,
+            goals::milestone,
+            goals::set_milestone,
             seasons::current_season,
             seasons::start_season,
             seasons::add_season_goal,

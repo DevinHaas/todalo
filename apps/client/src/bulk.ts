@@ -5,13 +5,15 @@ import { AccountTransportError, nativeAccountError } from "./errors";
 import { operationId as newOperationId, taskKeys, treeOrder, type TaskDto, type TodayDto } from "./tasks";
 import type { ProjectDetailDto } from "./projects";
 import type { Feedback } from "./feedback";
+import { confirmingCriteria } from "./goals";
 
 export type { BulkCompletionDto, BulkMetadataChange, ReorderInput, ReorderPosition, TaskStatus };
 export type Destination = { projectId: string | null; sectionId: string | null };
 
 /** Ticket 15 writes. null/false: some selected task (or the destination) is missing or another user's; nothing was written. */
 export interface BulkTransport {
-  complete(tasks: { id: string; occurrence: string | null }[], operationId: string): Promise<BulkCompletionDto | null>;
+  /** CRITERIA_OPEN: some task is a milestone with open done criteria, unless `confirmCriteria` (nothing was written). */
+  complete(tasks: { id: string; occurrence: string | null }[], operationId: string, confirmCriteria?: boolean): Promise<BulkCompletionDto | null>;
   remove(ids: string[]): Promise<boolean>;
   clearDates(ids: string[]): Promise<boolean>;
   metadata(ids: string[], change: BulkMetadataChange): Promise<boolean>;
@@ -29,13 +31,14 @@ export function browserBulkTransport(fetcher: typeof fetch = fetch): BulkTranspo
     if (response.status === 401) throw new AccountTransportError("UNAUTHENTICATED");
     if (response.status === 404) return null;
     if (response.status === 400) throw new AccountTransportError("INVALID_INPUT");
+    if (response.status === 428) throw new AccountTransportError("CRITERIA_OPEN");
     if (!response.ok) throw new AccountTransportError("SAVE_FAILED");
     try { return await response.json() as T; }
     catch { throw new AccountTransportError("INVALID_RESPONSE"); }
   }
   const done = async (result: Promise<unknown>) => (await result) !== null;
   return {
-    complete: (tasks, operationId) => post<BulkCompletionDto>("/api/v1/bulk/complete", { operationId, tasks }),
+    complete: (tasks, operationId, confirmCriteria) => post<BulkCompletionDto>("/api/v1/bulk/complete", { operationId, tasks, ...(confirmCriteria && { confirmCriteria }) }),
     remove: (ids) => done(post("/api/v1/bulk/delete", { ids })),
     clearDates: (ids) => done(post("/api/v1/bulk/clear-date", { ids })),
     metadata: (ids, change) => done(post("/api/v1/bulk/metadata", { ids, ...change })),
@@ -53,7 +56,7 @@ export function bulkTransport(): BulkTransport {
   const done = async (result: Promise<unknown>) => (await result) !== null;
   // One fixed native command per operation; Rust attaches the Keychain bearer.
   return {
-    complete: (tasks, operationId) => command<BulkCompletionDto | null>("bulk_complete", { tasks, operationId }),
+    complete: (tasks, operationId, confirmCriteria) => command<BulkCompletionDto | null>("bulk_complete", { tasks, operationId, ...(confirmCriteria && { confirmCriteria }) }),
     remove: (ids) => done(command("bulk_delete", { ids })),
     clearDates: (ids) => done(command("bulk_clear_date", { ids })),
     metadata: (ids, change) => done(command("bulk_metadata", { ids, change })),
@@ -137,6 +140,8 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
     cache.invalidateQueries({ queryKey: projects }),
     cache.invalidateQueries({ queryKey: [...user, "metadata"] }),
     cache.invalidateQueries({ queryKey: [...user, "search"] }),
+    // Goal pages and milestones: a confirmed completion ticks criteria.
+    cache.invalidateQueries({ queryKey: [...user, "goals"] }),
   ]);
   async function optimistic(change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
     await Promise.all([cache.cancelQueries({ queryKey: taskKeys.today(userId) }), cache.cancelQueries({ queryKey: projects })]);
@@ -160,7 +165,7 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
   return {
     complete: {
       mutationFn: async (selection: BulkCompletion) => {
-        const result = await transport.complete(selection.tasks.map(task => ({ id: task.id, occurrence: task.dueDate })), selection.operationId);
+        const result = await confirmingCriteria(confirm => transport.complete(selection.tasks.map(task => ({ id: task.id, occurrence: task.dueDate })), selection.operationId, confirm));
         if (!result) throw new AccountTransportError("TASK_NOT_FOUND");
         return result;
       },
@@ -203,7 +208,8 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
       onSettled: settle,
     } satisfies MutationOptions<void, Error, BulkSelection & { destination: Destination }>,
     reorder: {
-      mutationFn: async ({ task, ...move }: Reorder) => written(await transport.reorder(task.id, move)),
+      // A drop into Done of a milestone with open criteria asks first; Cancel rolls the card back to its column.
+      mutationFn: async ({ task, ...move }: Reorder) => written(await confirmingCriteria(confirm => transport.reorder(task.id, confirm ? { ...move, confirmCriteria: true } : move))),
       retry, retryDelay,
       // Today and every project list: the row moves (to the end for a board column) and takes the status.
       onMutate: ({ task, anchorId, position, status }: Reorder) => optimistic(tasks => reorderTasks(status ? matching({ tasks: [task] }, { status })(tasks) : tasks, task.id, anchorId ?? null, position)),

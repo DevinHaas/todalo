@@ -22,7 +22,7 @@ import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
 import { useOpenSettings } from "./settings-nav";
-import { GoalsSidebar, useGoalsShown } from "./goal-screens";
+import { CriteriaConfirmHost, GoalsSidebar, useGoalsShown } from "./goal-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -184,6 +184,7 @@ export function Shell({ account }: { account: Account }) {
     </div>
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
+    <CriteriaConfirmHost />
     {finding && <QuickFind userId={account.user.id} sectionsOnly={finding === "sections"} onClose={() => setFinding(null)} />}
     <KeyboardCommands userId={account.user.id} onCapture={() => setAdding(true)}
       // Hidden Goals: the key passes on.

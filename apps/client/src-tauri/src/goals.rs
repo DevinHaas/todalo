@@ -166,6 +166,72 @@ pub async fn dismiss_goal_suggestion(
         .await?)
 }
 
+/// One done criterion (goals ticket 06).
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Criterion {
+    text: String,
+    done: bool,
+}
+
+/// Marks a task a milestone for one linked goal, with its ordered criteria.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Milestone {
+    goal_id: String,
+    criteria: Vec<Criterion>,
+}
+
+#[tauri::command]
+pub async fn milestone(
+    state: tauri::State<'_, NativeAuth>,
+    task_id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&task_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .read(&format!("/api/v1/tasks/{task_id}/milestone"))
+        .await?)
+}
+
+/// Marks (or edits) the milestone; `None` unmarks it and keeps the goal link.
+#[tauri::command]
+pub async fn set_milestone(
+    state: tauri::State<'_, NativeAuth>,
+    task_id: String,
+    milestone: Option<Milestone>,
+) -> Result<Option<Value>, String> {
+    let body = milestone.map(milestone_body).transpose()?;
+    if !valid_id(&task_id) {
+        return Ok(None);
+    }
+    let method = if body.is_some() {
+        Method::PUT
+    } else {
+        Method::DELETE
+    };
+    Ok(state
+        .write(method, &format!("/api/v1/tasks/{task_id}/milestone"), body)
+        .await?)
+}
+
+/// Mirrors milestoneInput: a valid goal ID, at most 50 criteria of 1–500 trimmed characters.
+fn milestone_body(milestone: Milestone) -> Result<Value, &'static str> {
+    if !valid_id(&milestone.goal_id) || milestone.criteria.len() > 50 {
+        return Err(INVALID);
+    }
+    let mut criteria = Vec::with_capacity(milestone.criteria.len());
+    for item in milestone.criteria {
+        let text = item.text.trim();
+        if text.is_empty() || text.chars().count() > 500 {
+            return Err(INVALID);
+        }
+        criteria.push(json!({ "text": text, "done": item.done }));
+    }
+    Ok(json!({ "goalId": milestone.goal_id, "criteria": criteria }))
+}
+
 /// Only the two link kinds reach the server; an invalid ID is the server's 404 (None).
 fn link_path(id: &str, kind: &str, target_id: &str) -> Result<Option<String>, &'static str> {
     if !matches!(kind, "projects" | "tasks") {
@@ -201,7 +267,7 @@ fn patch_body(mut patch: GoalPatch) -> Result<Value, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GoalPatch, link_path, patch_body};
+    use super::{GoalPatch, Milestone, link_path, milestone_body, patch_body};
     use serde_json::json;
 
     #[test]
@@ -216,6 +282,34 @@ mod tests {
         );
         assert_eq!(link_path("../x", "projects", "p1"), Ok(None));
         assert_eq!(link_path("g1", "projects", "p1/../../tasks"), Ok(None));
+    }
+
+    #[test]
+    fn milestone_bodies_are_trimmed_bounded_and_typed() {
+        let milestone: Milestone = serde_json::from_value(
+            json!({ "goalId": "g1", "criteria": [{ "text": " Register ", "done": true }] }),
+        )
+        .unwrap();
+        assert_eq!(
+            milestone_body(milestone).unwrap(),
+            json!({ "goalId": "g1", "criteria": [{ "text": "Register", "done": true }] })
+        );
+        assert!(
+            serde_json::from_value::<Milestone>(
+                json!({ "goalId": "g1", "criteria": [], "userId": "bob" })
+            )
+            .is_err()
+        );
+        for value in [
+            json!({ "goalId": "../x", "criteria": [] }),
+            json!({ "goalId": "g1", "criteria": [{ "text": "  ", "done": false }] }),
+        ] {
+            let milestone: Milestone = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                milestone_body(milestone),
+                Err("Check your entry and try again.")
+            );
+        }
     }
 
     #[test]

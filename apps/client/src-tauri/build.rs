@@ -77,6 +77,8 @@ fn main() {
             "link_goal",
             "goal_suggestions",
             "dismiss_goal_suggestion",
+            "milestone",
+            "set_milestone",
             "current_season",
             "start_season",
             "add_season_goal",

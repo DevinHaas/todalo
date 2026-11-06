@@ -302,6 +302,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "task.priority": () => picker("priority", "priority"),
       "task.labels": () => picker("labels", "labels"),
       "task.goals": () => picker(null, "goals"),
+      // Absent until the task has a linked goal: the sheet opens without focusing a field.
+      "task.milestone": () => picker(null, "milestone"),
       // The open sheet's goal hint (ticket 03); no hint, the key passes on.
       "editor.goal-suggestion-accept": () => press(document.querySelector(".task-editor"), '[data-suggestion="accept"]'),
       "editor.goal-suggestion-dismiss": () => press(document.querySelector(".task-editor"), '[data-suggestion="dismiss"]'),

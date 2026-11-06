@@ -35,6 +35,8 @@ const messages = {
   PROJECT_NOT_FOUND: "This project does not exist or you do not have access to it.",
   TASK_NOT_FOUND: "This task does not exist or you do not have access to it.",
   TASK_CHANGED: "This task changed on another device. Review it and try again.",
+  CRITERIA_OPEN: "This milestone has open done criteria. Confirm to tick them all and complete it.",
+  GOAL_NOT_LINKED: "Link this goal to the task before making it a milestone.",
   DOWNLOAD_FAILED: "The file could not be downloaded. Try again.",
   FILE_SAVE_FAILED: "The file could not be saved on this device. Try again.",
   IMPORT_UNAVAILABLE: "The Todoist import is unavailable. Try again.",

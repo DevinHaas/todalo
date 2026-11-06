@@ -13,6 +13,7 @@
     "./goals": "./src/goals.ts",
     "./goal-dto": "./src/goal-dto.ts",
     "./goal-suggestions": "./src/goal-suggestions.ts",
+    "./milestones": "./src/milestones.ts",
     "./seasons": "./src/seasons.ts",
     "./season-dto": "./src/season-dto.ts",
     "./season-days": "./src/season-days.ts",

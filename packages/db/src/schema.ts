@@ -236,6 +236,9 @@ export const goalTasks = pgTable("goal_tasks", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
   taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  // Goals ticket 06: non-null marks the task as a milestone for this goal and
+  // holds its ordered done criteria; unlinking drops the milestone with the link.
+  milestoneCriteria: jsonb("milestone_criteria").$type<{ text: string; done: boolean }[]>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [uniqueIndex("goal_tasks_goal_task_idx").on(table.goalId, table.taskId), index("goal_tasks_userId_idx").on(table.userId)]);
 

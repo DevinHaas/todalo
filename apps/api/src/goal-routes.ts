@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { createGoalInput, goalLinkKinds, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type GoalSuggestionsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
+import { createGoalInput, goalLinkKinds, milestoneInput, milestoneReached, type CriterionDto, type GoalMilestoneDto, type MilestoneDto, type MilestoneInput, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type GoalSuggestionsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
 import { suggestGoals, type SuggestionTask } from "@todalo/server/goal-suggestions";
 import { toProjectDto, type ProjectRecord } from "@todalo/server/project-dto";
 import { toTaskDto, type TaskRecord } from "@todalo/server/task-dto";
@@ -32,6 +32,14 @@ export interface GoalStore {
   dismissed(userId: string, taskId: string): Promise<string[]>;
   /** Idempotent; false when the goal or task is missing or foreign. */
   dismiss(userId: string, taskId: string, goalId: string): Promise<boolean>;
+  /** Ticket 06. false: the task is missing or foreign; null: not a milestone. */
+  milestone(userId: string, taskId: string): Promise<MilestoneDto | null | false>;
+  /** Marks the task a milestone for one linked goal (moving the mark) and replaces its criteria. */
+  setMilestone(userId: string, taskId: string, input: MilestoneInput): Promise<MilestoneDto | "missing" | "unlinked">;
+  /** Unmarks; the link stays. false when the task is missing or foreign. */
+  clearMilestone(userId: string, taskId: string): Promise<boolean>;
+  /** An owned goal's milestones: task IDs with their criteria. */
+  milestones(userId: string, goalId: string): Promise<{ taskId: string; criteria: CriterionDto[] }[]>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -39,6 +47,7 @@ const NOT_FOUND = { code: "NOT_FOUND", message: "This goal does not exist or you
 const TASK_NOT_FOUND = { code: "NOT_FOUND", message: "This task does not exist or you do not have access to it." } as const;
 const FORBIDDEN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sent by todalo." } as const;
 const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try again." } as const;
+const NOT_LINKED = { code: "GOAL_NOT_LINKED", message: "Link this goal to the task before making it a milestone." } as const;
 
 const linkKind = (value: string) => goalLinkKinds.find(kind => kind === value) ?? null;
 
@@ -61,8 +70,39 @@ export function createGoalRoutes(store: GoalStore) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const goal = await store.get(userId, params.id);
       if (!goal) return status(404, NOT_FOUND);
-      const work = await store.work(userId, goal.id);
-      return { goal: toGoalDto(goal), projects: work.projects.map(toProjectDto), tasks: work.tasks.map(toTaskDto) } satisfies GoalDetailDto;
+      const [work, marked] = await Promise.all([store.work(userId, goal.id), store.milestones(userId, goal.id)]);
+      const byId = new Map(work.tasks.map(task => [task.id, task]));
+      // The path to the goal: by due date, undated last, otherwise in the linked tasks' order.
+      const due = (task: TaskRecord) => task.dueDate == null ? Infinity : new Date(task.dueDate).getTime();
+      const milestones = marked.flatMap(({ taskId, criteria }) => { const task = byId.get(taskId); return task ? [{ task, criteria }] : []; })
+        .sort((a, b) => due(a.task) - due(b.task) || work.tasks.indexOf(a.task) - work.tasks.indexOf(b.task))
+        .map(({ task, criteria }): GoalMilestoneDto => ({ task: toTaskDto(task), criteria, reached: milestoneReached(criteria, task.status === "done") }));
+      return { goal: toGoalDto(goal), projects: work.projects.map(toProjectDto), tasks: work.tasks.map(toTaskDto), milestones } satisfies GoalDetailDto;
+    })
+    // Ticket 06: one milestone per task, for one of its linked goals. PUT marks it and
+    // replaces the ordered criteria (add, edit, reorder and tick all go through it).
+    .get("/tasks/:id/milestone", async ({ request, params, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const milestone = await store.milestone(userId, params.id);
+      return milestone === false ? status(404, TASK_NOT_FOUND) : { milestone };
+    })
+    .put("/tasks/:id/milestone", async ({ request, params, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = milestoneInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const milestone = await store.setMilestone(userId, params.id, input.data);
+      if (milestone === "missing") return status(404, TASK_NOT_FOUND);
+      if (milestone === "unlinked") return status(409, NOT_LINKED);
+      return { milestone };
+    })
+    .delete("/tasks/:id/milestone", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return await store.clearMilestone(userId, params.id) ? { milestone: null } : status(404, TASK_NOT_FOUND);
     })
     .get("/goal-links", async ({ request, status }) => {
       const userId = await store.verify(request.headers);

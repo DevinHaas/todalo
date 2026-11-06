@@ -20,7 +20,7 @@ export const taskOperations: Omit<TaskWrites, "allowedOrigins"> = {
   },
   async complete(userId, id, request) {
     const result = await completeTask(userId, id, request);
-    return result === "completed" ? getOwnedTask(userId, id) : result === "changed" ? "changed" : null;
+    return result === "completed" ? getOwnedTask(userId, id) : result === "changed" || result === "criteria" ? result : null;
   },
   async update(userId, id, { updatedAt, deadline, dueDate, dueDateEnd, recurrence, ...details }) {
     const date = (value: string | null) => value === null ? null : new Date(value);

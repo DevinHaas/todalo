@@ -12,6 +12,8 @@ export const bulkIds = z.array(id).min(1).max(200);
 export const bulkCompleteInput = z.object({
   operationId: z.uuid(),
   tasks: z.array(z.object({ id, occurrence: isoDate.nullable() }).strict()).min(1).max(200),
+  /** Goals ticket 06: the user confirmed completing milestones with open done criteria (ticks them all). */
+  confirmCriteria: z.boolean().optional(),
 }).strict();
 export type BulkCompleteInput = z.infer<typeof bulkCompleteInput>;
 
@@ -37,7 +39,9 @@ export const bulkMoveInput = z.object({ ids: bulkIds, projectId: id.nullable(), 
  * and/or set its status (ticket 17, legacy status board). A status without an
  * anchor appends the task to the end of its collection, as the legacy board did.
  */
-export const reorderInput = z.object({ anchorId: id.optional(), position: z.enum(["before", "after"]).optional(), status: z.enum(["todo", "in_progress", "done"]).optional() }).strict()
+export const reorderInput = z.object({ anchorId: id.optional(), position: z.enum(["before", "after"]).optional(), status: z.enum(["todo", "in_progress", "done"]).optional(),
+  /** Goals ticket 06: confirms a drop into Done of a milestone with open done criteria (ticks them all). */
+  confirmCriteria: z.boolean().optional() }).strict()
   .refine(move => (move.anchorId === undefined) === (move.position === undefined), { path: ["position"], message: "An anchor needs a position" })
   .refine(move => move.anchorId !== undefined || move.status !== undefined, { message: "Choose a place or a status" });
 export type ReorderInput = z.infer<typeof reorderInput>;

@@ -4,6 +4,7 @@ import type { RecurrenceDto, TaskDto, TodayDto } from "../../../packages/server/
 import type { TaskDetailsInput } from "../../../packages/server/src/task-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { Feedback } from "./feedback";
+import { confirmingCriteria } from "./goals";
 
 export type { RecurrenceDto, TaskDto, TodayDto };
 /** Everything the edit dialog saves (ticket 11), with the version it started from. */
@@ -41,8 +42,11 @@ export interface TaskTransport {
   /** null when the task is missing or not the signed-in user's. */
   task(id: string): Promise<TaskDto | null>;
   create(task: NewTask): Promise<TaskDto>;
-  /** `occurrence` is the due date the client saw; null when the task is missing or not the user's. */
-  complete(id: string, occurrence: string | null, operationId: string): Promise<TaskDto | null>;
+  /**
+   * `occurrence` is the due date the client saw; null when the task is missing or not the user's.
+   * CRITERIA_OPEN: a milestone with open done criteria, unless `confirmCriteria` (which ticks them all).
+   */
+  complete(id: string, occurrence: string | null, operationId: string, confirmCriteria?: boolean): Promise<TaskDto | null>;
   /** null when the task is missing or not the user's; TASK_CHANGED when edited elsewhere. */
   update(id: string, details: TaskDetails): Promise<TaskDto | null>;
   /** false when the task is missing or not the signed-in user's (already gone). */
@@ -63,6 +67,7 @@ export function browserTaskTransport(fetcher: typeof fetch = fetch): TaskTranspo
     if (response.status === 404) return null;
     if (response.status === 400) throw new AccountTransportError("INVALID_INPUT");
     if (response.status === 412) throw new AccountTransportError("TASK_CHANGED");
+    if (response.status === 428) throw new AccountTransportError("CRITERIA_OPEN");
     if (!response.ok) throw new AccountTransportError(method === "GET" ? "TASKS_UNAVAILABLE" : "SAVE_FAILED");
     try { return await response.json() as T; }
     catch { throw new AccountTransportError("INVALID_RESPONSE"); }
@@ -80,7 +85,7 @@ export function browserTaskTransport(fetcher: typeof fetch = fetch): TaskTranspo
       if (!created) throw new AccountTransportError("SAVE_FAILED");
       return created.task;
     },
-    complete: async (id, occurrence, operationId) => (await request<{ task: TaskDto }>("POST", `${path(id)}/complete`, { occurrence, operationId }))?.task ?? null,
+    complete: async (id, occurrence, operationId, confirmCriteria) => (await request<{ task: TaskDto }>("POST", `${path(id)}/complete`, { occurrence, operationId, ...(confirmCriteria && { confirmCriteria }) }))?.task ?? null,
     update: async (id, details) => (await request<{ task: TaskDto }>("PATCH", path(id), details))?.task ?? null,
     remove: async (id) => (await request<{ id: string }>("DELETE", path(id))) !== null,
   };
@@ -97,7 +102,7 @@ export function taskTransport(): TaskTransport {
     today: () => command<TodayDto>("today"),
     task: async (id) => (await command<{ task: TaskDto } | null>("task", { id }))?.task ?? null,
     create: async (task) => (await command<{ task: TaskDto }>("create_task", { task })).task,
-    complete: async (id, occurrence, operationId) => (await command<{ task: TaskDto } | null>("complete_task", { id, occurrence, operationId }))?.task ?? null,
+    complete: async (id, occurrence, operationId, confirmCriteria) => (await command<{ task: TaskDto } | null>("complete_task", { id, occurrence, operationId, ...(confirmCriteria && { confirmCriteria }) }))?.task ?? null,
     update: async (id, details) => (await command<{ task: TaskDto } | null>("update_task", { id, details }))?.task ?? null,
     remove: async (id) => (await command<{ id: string } | null>("delete_task", { id })) !== null,
   };
@@ -164,6 +169,8 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "metadata"] }),
     // Search results and Quick Find items (searchKeys.all, ticket 18).
     cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "search"] }),
+    // Goal pages and milestones (goalKeys.all): a completed milestone ticks its criteria.
+    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "goals"] }),
   ]);
   async function optimistic(task: TaskDto, change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
     await cache.cancelQueries({ queryKey: today });
@@ -183,7 +190,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       onSettled: (_task: TaskDto | undefined, _error: Error | null, input: NewTask) => settle(input.id),
     } satisfies MutationOptions<TaskDto, Error, NewTask>,
     complete: {
-      mutationFn: ({ task, operationId }: Completion) => transport.complete(task.id, task.dueDate, operationId),
+      mutationFn: ({ task, operationId }: Completion) => confirmingCriteria(confirm => transport.complete(task.id, task.dueDate, operationId, confirm)),
       retry, retryDelay,
       onMutate: ({ task }: Completion) => {
         feedback?.play("taskCompleted");

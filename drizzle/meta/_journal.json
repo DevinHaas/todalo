@@ -120,6 +120,13 @@
       "when": 1794004684253,
       "tag": "0016_seasons",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794005763016,
+      "tag": "0017_milestones",
+      "breakpoints": true
     }
   ]
 }
