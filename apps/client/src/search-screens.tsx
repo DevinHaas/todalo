@@ -20,7 +20,6 @@ export function SearchScreen({ account }: { account: Account }) {
   const [params, setParams] = useSearchParams();
   const q = searchQuery(params.get("q") ?? "");
   const query = useQuery(searchReads.results(userId, q));
-  const { slots, writeError } = useCollection(account, query.data?.tasks ?? []);
-  return <SearchView key={q} query={q} state={query} onRetry={() => void query.refetch()} onSearch={(next) => setParams({ q: next })}
-    writeError={writeError} {...slots} />;
+  const { slots } = useCollection(account, query.data?.tasks ?? []);
+  return <SearchView key={q} query={q} state={query} onRetry={() => void query.refetch()} onSearch={(next) => setParams({ q: next })} {...slots} />;
 }

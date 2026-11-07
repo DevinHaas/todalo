@@ -10,6 +10,7 @@ import { focusDialog, MoveDialog } from "./organization-views";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import { AccountTransportError } from "./errors";
+import { inlineError, toasted } from "./toasts";
 
 // Pure views for ticket 15 (no runtime imports). The legacy client selected
 // tasks with X and acted on the selection from a toolbar (Complete, Delete,
@@ -67,9 +68,10 @@ export interface BulkActions {
 
 type Field = "priority" | "labels" | "deadline";
 // A bulk 404 writes nothing: some selected task was deleted or moved out of reach meanwhile.
-const message = (reason: unknown) => reason instanceof AccountTransportError && reason.code === "TASK_NOT_FOUND"
+// A toasted failure (toasts.ts) is not repeated inline.
+const message = (reason: unknown) => toasted(reason) ? null : reason instanceof AccountTransportError && reason.code === "TASK_NOT_FOUND"
   ? "Some selected tasks no longer exist. Nothing was changed; the list has been refreshed."
-  : reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.";
+  : inlineError(reason);
 const plural = (count: number) => `${count} task${count === 1 ? "" : "s"}`;
 
 /**

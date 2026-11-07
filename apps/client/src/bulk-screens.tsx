@@ -49,6 +49,5 @@ export function useReorder(userId: string) {
   return {
     reorder: (task: TaskDto, anchorId: string, position: ReorderPosition) => reorder.mutate({ task, anchorId, position }),
     move: (task: TaskDto, move: ReorderInput) => reorder.mutate({ task, ...move }),
-    error: reorder.error?.message ?? null,
   };
 }

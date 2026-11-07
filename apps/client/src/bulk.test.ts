@@ -158,7 +158,7 @@ describe("selection views", () => {
     expect(today).toContain("data-selected");
     const project = render(createElement(ProjectView, {
       state: { status: "success", data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks: [task("a"), task("b")] }, error: null },
-      onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false, error: null }, reorder() {},
+      onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false }, reorder() {},
     }));
     expect(project).toContain('aria-label="Reorder a"');
     expect(project).toContain('aria-roledescription="sortable"');
@@ -184,7 +184,7 @@ describe("selection views", () => {
 
   it("lets project rows complete and delete, and shows completed tasks when Display does", () => {
     const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks: [task("open"), task("done", { status: "done" })] }, error: null };
-    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false, error: null }, actions: { complete() {}, remove() {} } };
+    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false }, actions: { complete() {}, remove() {} } };
     const html = render(createElement(ProjectView, props));
     expect(html).toContain('aria-label="Complete open"');
     expect(html).toContain('aria-label="Delete open"');

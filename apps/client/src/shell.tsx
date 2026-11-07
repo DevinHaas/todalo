@@ -206,7 +206,7 @@ export function TodayScreen({ account }: { account: Account }) {
   const events = useCalendarEvents(account.user.id);
   const { overdue, today } = todaySections(query.data?.tasks ?? [], new Date(), display.showCompleted);
   const selection = useBulkSelection(account.user.id, [...overdue, ...today]);
-  return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} writeError={writes.error} selection={selection}
+  return <TodayView state={query} events={events} onRetry={() => void query.refetch()} projectNames={projectNames} actions={writes.actions} selection={selection}
     // `calendar` renders any non-list layout over the whole collection (legacy Today's ViewSwitcher).
     showCompleted={display.showCompleted} calendar={display.layout === "calendar" ? (tasks) => <TodayCalendar account={account} tasks={tasks} />
       : display.layout === "board" ? (tasks) => <BoardScreen account={account} tasks={tasks} /> : undefined}
@@ -234,7 +234,7 @@ export function TaskScreen({ account }: { account: Account }) {
     onSave={(details) => writes.update.mutateAsync({ id, details })}
     onOpen={(other) => navigate(`/tasks/${encodeURIComponent(other)}`)}
     onInsert={(edge) => { setClosedFor(id); setInserting({ edge, task: query.data! }); }} />;
-  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions} writeError={writes.error}
+  return <TaskView state={query} onRetry={() => void query.refetch()} actions={actions}
     onEdit={() => setClosedFor(null)} editor={editor}
     organize={(task) => <TaskOrganizerScreen userId={account.user.id} task={task} />}
     attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;

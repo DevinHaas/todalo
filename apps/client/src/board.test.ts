@@ -103,7 +103,7 @@ describe("board view", () => {
 
   it("replaces a project's section list when Display chooses another layout", () => {
     const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks }, error: null };
-    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false, error: null } };
+    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false } };
     const board = render(createElement(ProjectView, { ...props, layout: (shown: TaskDto[]) => createElement(StatusBoard, { tasks: shown, onOpen() {} }) }));
     expect(board).toContain('aria-label="Board view"');
     expect(board).not.toContain('class="sections"');

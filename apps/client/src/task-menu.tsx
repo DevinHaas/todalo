@@ -10,6 +10,7 @@ import { reads } from "./runtime";
 import { useTaskWrites } from "./task-writes";
 import { useBulkWrites } from "./bulk-screens";
 import { copyTaskLink } from "./links";
+import { inlineError } from "./toasts";
 import { durationOf, isTimed, nextSlot, scheduledDetails, unscheduledDetails } from "./schedule";
 import { operationId } from "./tasks";
 import {
@@ -32,7 +33,8 @@ export function TaskContextMenu({ userId, onOpen, children }: { userId: string; 
     if (!event.currentTarget.contains(event.target as Node)) return;
     setId((event.target as Element).closest?.<HTMLElement>("[data-task-id]")?.dataset.taskId ?? null);
   };
-  const run = (write: Promise<unknown>) => { setNotice(null); write.catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.")); };
+  // Writes are toasted on failure (toasts.ts); only the clipboard copy reports here.
+  const run = (write: Promise<unknown>) => { setNotice(null); write.catch((reason: unknown) => setNotice(inlineError(reason))); };
   const update = (details: Parameters<typeof writes.update.mutateAsync>[0]["details"]) => task && run(writes.update.mutateAsync({ id: task.id, details }));
   return <div className="contents" onPointerDownCapture={pick}>
     {notice && <p role="alert" className="form-error">{notice}</p>}

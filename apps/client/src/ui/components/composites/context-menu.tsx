@@ -16,10 +16,16 @@ function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props): Rea
   return <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />;
 }
 
+/**
+ * The area a right-click opens the menu in. It wraps whatever it is given,
+ * often legacy markup (task rows, board cards, schedule blocks), so it carries
+ * no `data-slot`: that attribute is the scoped preflight's marker (styles.css)
+ * and would reset everything inside it. Style it through `className` only.
+ */
 function ContextMenuTrigger({ className, ...props }: ContextMenuPrimitive.Trigger.Props) {
   return (
     <ContextMenuPrimitive.Trigger
-      data-slot="context-menu-trigger"
+      data-context-menu-trigger=""
       className={cn("select-none", className)}
       {...props}
     />

@@ -137,9 +137,9 @@ export const MilestoneMark = () => <span className="milestone-mark" title="Miles
 // The task composer with smart quick add (tickets 5, 12) lives in composer.tsx.
 export { Composer } from "./composer";
 
-export function TodayView({ state, onRetry, now = new Date(), projectNames = {}, actions, composer, writeError, showCompleted = false, calendar, events = [], selection }: {
+export function TodayView({ state, onRetry, now = new Date(), projectNames = {}, actions, composer, showCompleted = false, calendar, events = [], selection }: {
   state: ReadState<TodayDto>; onRetry: () => void; now?: Date; projectNames?: Record<string, string>;
-  actions?: RowActions; composer?: ReactNode; writeError?: string | null;
+  actions?: RowActions; composer?: ReactNode;
   /** Display settings (ticket 16): completed tasks, and the Calendar layout in place of the list. */
   showCompleted?: boolean; calendar?: (tasks: TaskDto[]) => ReactNode;
   /** Ticket 20: provider events; today's render first in the Today section (legacy TodayView). */
@@ -156,7 +156,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   const tree = listTree([...overdue, ...today]);
   const todayEvents = events.filter(event => eventDayKey(event) === dayKey(now));
   // A failed refetch keeps the last list (and an open composer's draft) on screen.
-  return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{writeError && <p role="alert" className="form-error">{writeError}</p>}{selection?.toolbar}<div className="sections">
+  return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{selection?.toolbar}<div className="sections">
     {overdue.length > 0 && <section>
       <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
         <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>
@@ -173,8 +173,8 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   </div></div>;
 }
 
-export function TaskView({ state, onRetry, actions, writeError, attachments, onEdit, editor, organize }: {
-  state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; writeError?: string | null; attachments?: ReactNode;
+export function TaskView({ state, onRetry, actions, attachments, onEdit, editor, organize }: {
+  state: ReadState<TaskDto | null>; onRetry: () => void; actions?: RowActions; attachments?: ReactNode;
   /** Opens the edit dialog (rendered as `editor`); without it the page stays read-only. */
   onEdit?: () => void; editor?: ReactNode;
   /** Ticket 13: Move / Nest / Unnest for the loaded task. */
@@ -193,7 +193,6 @@ export function TaskView({ state, onRetry, actions, writeError, attachments, onE
       {task.description && <p className="description">{task.description}</p>}
       <p>{meta}</p>
       {attachments}
-      {writeError && <p role="alert" className="form-error">{writeError}</p>}
       {(actions || onEdit) && <div className="task-actions">
         {onEdit && <button type="button" className="button" onClick={onEdit}>Edit task details</button>}
         {actions && task.status !== "done" && <button type="button" className="button outline" onClick={() => actions.complete(task)}>Complete task</button>}

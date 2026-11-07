@@ -17,7 +17,6 @@ export function BoardScreen({ account, tasks }: { account: Account; tasks: TaskD
   const task = editing ? tasks.find(item => item.id === editing) : undefined;
   const extras = useEditorExtras(account.user.id, task?.id ?? null);
   return <>
-    {order.error && <p role="alert" className="form-error">{order.error}</p>}
     <StatusBoard tasks={tasks} onOpen={(open) => setEditing(open.id)} onMove={order.move} />
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setEditing(null)}
       onSave={async (details) => { await writes.update.mutateAsync({ id: task.id, details }); setEditing(null); }} />}

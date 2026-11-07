@@ -71,7 +71,7 @@ describe("smart quick add composer", () => {
 
   it("activates Add task in every project section", () => {
     const work = { id: "work", name: "Work", color: null } as never;
-    const props = { state: { status: "success" as const, data: { project: work, sections: [{ id: "doing", projectId: "work", name: "Doing", sortOrder: 0 }], tasks: [] }, error: null }, onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false, error: null } };
+    const props = { state: { status: "success" as const, data: { project: work, sections: [{ id: "doing", projectId: "work", name: "Doing", sortOrder: 0 }], tasks: [] }, error: null }, onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false } };
     const html = render(createElement(ProjectView, { ...props, onCreate: async () => {} } as never));
     expect(html.match(/<button type="button" class="composer">/g)).toHaveLength(2);
     expect(render(createElement(ProjectView, props as never))).toContain('<span class="composer" aria-disabled="true">');

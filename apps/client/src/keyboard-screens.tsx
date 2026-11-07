@@ -14,6 +14,7 @@ import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from ".
 import { collapsedTasks } from "./views";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
+import { inlineError } from "./toasts";
 import { useTaskWrites } from "./task-writes";
 import { isTimed, unscheduledDetails } from "./schedule";
 import { theme } from "./theme";
@@ -232,7 +233,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     const go = (path: string) => () => void latest.current.navigate(path);
     const openHelp = () => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setHelp(true); };
     const all = async () => (await latest.current.cache.fetchQuery(reads.today(userId))).tasks;
-    const write = (action: () => Promise<unknown>) => { setNotice(null); action().catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.")); };
+    // Toasted write failures (toasts.ts) are not repeated in the notice.
+    const write = (action: () => Promise<unknown>) => { setNotice(null); action().catch((reason: unknown) => setNotice(inlineError(reason))); };
     /** Legacy metadata keys: the selection, else the focused task; false (key passes on) with neither. */
     const rowWrite = (change: (tasks: TaskDto[]) => Promise<unknown>) => {
       const ids = targetIds();
@@ -426,7 +428,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // Legacy cleared only the menu's task, never the selection.
       if (action === "clear-date") return void cache.fetchQuery(reads.today(userId))
         .then(({ tasks }) => { const task = tasks.find(item => item.id === row.dataset.taskId); return task && clearDates.mutateAsync({ tasks: [task] }); })
-        .catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again."));
+        .catch((reason: unknown) => setNotice(inlineError(reason)));
       if (action) handlers.current[menuCommands[action]]?.();
     });
   };

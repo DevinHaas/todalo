@@ -10,6 +10,7 @@ import {
   type NewTask, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto,
 } from "./tasks";
 import { AccountTransportError } from "./errors";
+import { toasted } from "./toasts";
 import { releaseFocus } from "./software-keyboard";
 import { copyText, taskPath } from "./links";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
@@ -153,7 +154,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
               <button type="button" className="icon-button" data-navigate="1" aria-label="Next task" title="Next task" disabled={pending || !navigation.next || !draft.title.trim()} onClick={() => void save(1)}><ChevronDown /></button>
             </>}
             <DropdownMenu>
-              <DropdownMenuTrigger render={<button type="button" className="icon-button" aria-label="More actions" title="More actions" data-sheet-action="more" />}><Ellipsis /></DropdownMenuTrigger>
+              <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="More actions" title="More actions" data-sheet-action="more" />}><Ellipsis /></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="ui min-w-52">
                 {routed && <DropdownMenuItem render={<Link to={taskPath(base.id)} onClick={onClose} />}><SquareArrowOutUpRight />Open task page</DropdownMenuItem>}
                 {shareUrl && <DropdownMenuItem onClick={() => copyText(shareUrl).then(() => setCopied(true), (reason: Error) => setError(reason))}><Link2 />Copy link</DropdownMenuItem>}
@@ -175,8 +176,9 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
           <button type="button" data-insert="above" disabled={pending || !draft.title.trim()} onClick={() => void save("above")}>Save and add above</button>
           <button type="button" data-insert="below" disabled={pending || !draft.title.trim()} onClick={() => void save("below")}>Save and add below</button>
         </div>}
-        {(error || copied) && <div className="sheet-notice">
-          {error && <p role="alert" className="form-error">{error.message}{changed && (task.updatedAt === base.updatedAt ? " Loading current details…" : <>
+        {/* A toasted failure (toasts.ts) is not repeated here; a conflict still offers the draft choice. */}
+        {((error && (changed || !toasted(error))) || copied) && <div className="sheet-notice">
+          {error && (changed || !toasted(error)) && <p role={toasted(error) ? "status" : "alert"} className="form-error">{toasted(error) ? "Your draft is kept." : error.message}{changed && (task.updatedAt === base.updatedAt ? " Loading current details…" : <>
             {" "}<button type="button" className="text-action" onClick={() => load(task)}>Load current details</button>
             {" "}<button type="button" className="text-action" onClick={() => { setBase(task); setError(null); }}>Keep my changes</button>
           </>)}</p>}

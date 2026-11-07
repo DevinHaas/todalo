@@ -106,7 +106,7 @@ describe("organization views", () => {
   it("activates Add section and groups tasks: unsectioned first, then sections, sub-tasks after parents", () => {
     const tasks = [task("loose"), task("child", { sectionId: "doing", parentId: "parent" }), task("parent", { sectionId: "doing" }), task("lost", { sectionId: "deleted" })];
     const html = render(createElement(ProjectView, {
-      state: success({ project: work, sections: [doing], tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false, error: null },
+      state: success({ project: work, sections: [doing], tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false },
       sections: { create: async () => {}, remove: noop },
     }));
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Add section<\/button>/);
@@ -114,7 +114,7 @@ describe("organization views", () => {
     const order = ["loose", "lost", "Doing", "parent", "child"].map(text => html.indexOf(`>${text}<`));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(order.every(index => index >= 0)).toBe(true);
-    expect(render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks: [] }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false, error: null } })))
+    expect(render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks: [] }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false } })))
       .toContain('<span class="button outline" aria-disabled="true">Add section</span>');
   });
 

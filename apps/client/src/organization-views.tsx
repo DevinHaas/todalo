@@ -5,13 +5,15 @@ import { parentCandidates, type DestinationsDto, type OrganizationChange, type S
 import { treeOrder, type TaskDto } from "./tasks";
 import { Failure, type ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
+import { inlineError } from "./toasts";
 
 // Pure views for ticket 13 (no runtime imports). The legacy client offered
 // move/nest/unnest only as keyboard commands (v, Ctrl+], Ctrl+[); these are the
 // touch-accessible buttons for the same operations. Shortcuts are ticket 19.
 
 type Submit = (change: OrganizationChange) => Promise<unknown>;
-const message = (reason: unknown) => reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.";
+// A toasted failure (toasts.ts) is not repeated in the dialog.
+const message = (reason: unknown) => inlineError(reason);
 
 /** Task page actions: Move task (legacy dialog), Nest task, Unnest task. */
 export function TaskOrganizer({ task, tasks, destinations, onRetryDestinations, onOrganize }: {

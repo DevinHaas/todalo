@@ -25,7 +25,7 @@ export function ProjectsScreen({ account }: { account: Account }) {
   const query = useQuery(projectReads.list(account.user.id));
   const writes = useProjectMutations(account.user.id);
   const create = useMutation({ mutationFn: writes.create, meta: { action: (name: string) => `add the project "${name}"` } });
-  return <ProjectsView state={query} onRetry={() => void query.refetch()} onCreate={create.mutateAsync} write={{ pending: create.isPending, error: create.error?.message ?? null }} />;
+  return <ProjectsView state={query} onRetry={() => void query.refetch()} onCreate={create.mutateAsync} write={{ pending: create.isPending }} />;
 }
 
 export function ProjectScreen({ account }: { account: Account }) {
@@ -55,7 +55,7 @@ export function ProjectScreen({ account }: { account: Account }) {
     onRename={rename.mutateAsync}
     onDelete={() => remove.mutate()}
     sections={{ create: (name) => createSection.mutateAsync({ projectId: id, name }), remove: (section) => removeSection.mutate(section) }}
-    write={{ pending, error: (rename.error ?? remove.error ?? createSection.error ?? removeSection.error)?.message ?? order.error ?? tasks.error }}
+    write={{ pending }}
     selection={selection}
     reorder={order.reorder}
     layout={layout}

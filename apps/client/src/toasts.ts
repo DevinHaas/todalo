@@ -40,6 +40,13 @@ export function writeFailure(error: unknown, action: string, online = true): Wri
   }
 }
 
+const reported = new WeakSet<object>();
+/** Whether a write's failure already has its toast, so inline banners leave it out (field validation stays inline). */
+export const toasted = (error: unknown) => typeof error === "object" && error !== null && reported.has(error);
+/** An inline banner's text: null when the failure is already toasted. */
+export const inlineError = (error: unknown, fallback = "Your changes could not be saved. Try again.") =>
+  toasted(error) ? null : error instanceof Error ? error.message : fallback;
+
 let next = 0;
 /**
  * The query cache's write-error handler: one toast per failed write (after its
@@ -51,6 +58,7 @@ export function reportWriteError(cache: QueryClient, error: Error, input: unknow
   const action = mutation.meta?.action?.(input);
   const failure = action && writeFailure(error, action, typeof navigator === "undefined" || navigator.onLine);
   if (!failure) return;
+  reported.add(error);
   const id = `write-${++next}`;
   toasts.add({
     id, type: "error", priority: "high", title: failure.title, description: failure.description,

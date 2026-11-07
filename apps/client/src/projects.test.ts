@@ -102,7 +102,8 @@ describe("project screens", () => {
     const populated = view(success([work, { id: "a/b", name: "Home", color: null }]));
     expect(populated).toContain('href="/projects/work"');
     expect(populated).toContain('href="/projects/a%2Fb"');
-    expect(render(createElement(ProjectsView, { state: success([]), onRetry: noop, onCreate: async () => {}, write: { pending: false, error: "Check your entry and try again." } }))).toContain('role="alert"');
+    // A failed create is toasted (toasts.ts), not repeated inline.
+    expect(render(createElement(ProjectsView, { state: success([]), onRetry: noop, onCreate: async () => {}, write: { pending: false } }))).not.toContain('role="alert"');
   });
 
   it("opens a project with its open member tasks, children after parents", () => {

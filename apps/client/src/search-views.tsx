@@ -38,8 +38,8 @@ export function QuickFindDialog({ state, onRetry, sectionsOnly = false, onOpen, 
 }
 
 /** Legacy /search page: the query form, the result count and the matching tasks. */
-export function SearchView({ query, state, onSearch, onRetry, writeError, ...slots }: CollectionSlots & {
-  query: string; state: ReadState<SearchDto>; onSearch: (query: string) => void; onRetry: () => void; writeError?: string | null;
+export function SearchView({ query, state, onSearch, onRetry, ...slots }: CollectionSlots & {
+  query: string; state: ReadState<SearchDto>; onSearch: (query: string) => void; onRetry: () => void;
 }) {
   const [draft, setDraft] = useState(query);
   const submit = (event: FormEvent) => { event.preventDefault(); onSearch(draft); };
@@ -55,7 +55,6 @@ export function SearchView({ query, state, onSearch, onRetry, writeError, ...slo
       : <>
         <p className="state" role="status">{tasks.length} results</p>
         {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
-        {writeError && <p role="alert" className="form-error">{writeError}</p>}
         <CollectionBody tasks={tasks} {...slots} />
       </>}
   </div>;

@@ -8,6 +8,7 @@ import { useOrganizationMutations } from "./organization-screens";
 import type { CommentSlots } from "./task-sheet";
 import type { Account } from "./session";
 import { useGoalSlots, useMilestoneSlots } from "./goal-screens";
+import { inlineError } from "./toasts";
 
 /**
  * The task sheet's immediate writes for whichever screen opens it: completion
@@ -32,7 +33,7 @@ export function useTaskSheet(account: Account, task: TaskDto | null | undefined,
     author: { name: account.user.name, image: account.user.image },
     add: (body) => add.mutateAsync({ taskId: task.id, body, id: operationId() }),
     remove: (comment) => remove.mutate({ taskId: task.id, id: comment.id }),
-    error: (add.error ?? remove.error)?.message ?? null,
+    error: inlineError(add.error ?? remove.error ?? undefined, ""),
   };
   return {
     onComplete: writes.actions.complete,

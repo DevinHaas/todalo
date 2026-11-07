@@ -165,8 +165,8 @@ export function CollectionBody({ tasks, projectNames = {}, actions, now = new Da
 }
 
 /** Legacy label, saved-filter or Inbox page: its name, the manage link and the matching tasks. */
-export function TaskCollectionView({ kind, state, onRetry, writeError, ...slots }: CollectionSlots & {
-  kind: "label" | "filter" | "inbox"; state: ReadState<{ name: string; tasks: TaskDto[] } | null>; onRetry: () => void; writeError?: string | null;
+export function TaskCollectionView({ kind, state, onRetry, ...slots }: CollectionSlots & {
+  kind: "label" | "filter" | "inbox"; state: ReadState<{ name: string; tasks: TaskDto[] } | null>; onRetry: () => void;
 }) {
   const manage = kind === "label" ? <Link className="text-action" to="/labels">Manage labels</Link> : kind === "filter" ? <Link className="text-action" to="/filters">Manage filters</Link> : null;
   if (state.status === "pending") return <p className="state" role="status">Loading tasks…</p>;
@@ -177,7 +177,6 @@ export function TaskCollectionView({ kind, state, onRetry, writeError, ...slots 
     <div className="project-header"><h1 className="page-title">{state.data.name}</h1>{!slots.layout && slots.selection?.control}</div>
     {manage}
     {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
-    {writeError && <p role="alert" className="form-error">{writeError}</p>}
     <CollectionBody tasks={state.data.tasks} {...slots} />
   </div>;
 }

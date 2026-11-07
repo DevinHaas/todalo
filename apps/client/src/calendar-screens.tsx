@@ -6,6 +6,7 @@ import { calendar, calendarReads, live, session } from "./runtime";
 import { calendarMutations, startLiveUpdates, type CalendarEventDto } from "./calendar";
 import { CalendarSettings } from "./calendar-views";
 import { GoogleButton } from "./google";
+import { inlineError } from "./toasts";
 
 const none: CalendarEventDto[] = [];
 /** The user's visible provider events; a failed read just shows no events (tasks still render). */
@@ -33,7 +34,8 @@ export function CalendarSettingsScreen({ userId }: { userId: string }) {
   // Legacy disabled the card while a write ran; failures keep the card and say so.
   const begin = (accountId: string) => { setError(null); setPending(current => new Set(current).add(accountId)); };
   const settle = (accountId: string) => ({
-    onError: (failure: Error) => setError(`${failure.message} Your calendars were not changed.`),
+    // Toasted failures (toasts.ts) are not repeated on the card.
+    onError: (failure: Error) => { const text = inlineError(failure); setError(text && `${text} Your calendars were not changed.`); },
     onSettled: () => setPending(current => { const next = new Set(current); next.delete(accountId); return next; }),
   });
 

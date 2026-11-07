@@ -13,6 +13,7 @@ import {
 } from "./quick-add";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
+import { inlineError } from "./toasts";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -169,7 +170,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         }, project);
         close();
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.");
+        setError(inlineError(reason));
       } finally { setPending(false); }
       return;
     }
@@ -188,7 +189,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       reset();
       input.current?.focus();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again.");
+      setError(inlineError(reason));
     } finally { setPending(false); }
   }
 

@@ -15,7 +15,8 @@ export function useTaskWrites(userId: string) {
   const remove = useMutation(writes.remove);
   const update = useMutation(writes.update);
   const actions: RowActions = { complete: (task) => complete.mutate({ task, operationId: operationId() }), remove: (task) => remove.mutate(task) };
-  return { create, complete, remove, update, actions, error: (complete.error ?? remove.error)?.message ?? null };
+  // Failures are toasted (toasts.ts); screens show no inline write banner.
+  return { create, complete, remove, update, actions };
 }
 
 /**

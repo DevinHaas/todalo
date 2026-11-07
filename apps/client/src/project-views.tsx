@@ -11,13 +11,14 @@ import { SectionComposer, SectionHeader, sectionGroups } from "./organization-vi
 import { releaseFocus } from "./software-keyboard";
 
 // Pure screen views (legacy ProjectDirectory / ProjectView): no runtime imports.
-type Write = { pending: boolean; error: string | null };
+/** Failures are toasted (toasts.ts); the forms keep their input. */
+type Write = { pending: boolean };
 
 export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadState<ProjectDto[]>; onRetry: () => void; onCreate: (name: string) => Promise<unknown>; write: Write }) {
   const [name, setName] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
-    try { await onCreate(name); setName(""); } catch { /* shown through write.error */ }
+    try { await onCreate(name); setName(""); } catch { /* toasted */ }
   }
   let list;
   if (state.status === "pending") list = <p className="state" role="status">Loading projects…</p>;
@@ -32,7 +33,6 @@ export function ProjectsView({ state, onRetry, onCreate, write }: { state: ReadS
       <input aria-label="New project name" placeholder="New project name" value={name} onChange={event => setName(event.target.value)} required maxLength={200} />
       <button type="submit" className="button" disabled={write.pending || !name.trim()}>Create project</button>
     </form>
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
     {list}
   </div>;
 }
@@ -83,7 +83,7 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
   const toggle = (id: string) => setCollapsed(current => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   async function rename(event: FormEvent) {
     event.preventDefault();
-    try { await onRename(name ?? project.name); setMenuOpen(false); setName(null); } catch { /* shown through write.error */ }
+    try { await onRename(name ?? project.name); setMenuOpen(false); setName(null); } catch { /* toasted */ }
   }
   return <div data-project-id={project.id}>
     <div className="project-header">
@@ -116,7 +116,6 @@ export function ProjectView({ state, onRetry, onRename, onDelete, write, files, 
       </div> : <button type="button" className="button destructive" disabled={write.pending} onClick={() => setConfirming(true)}>Delete project</button>}
     </section>}
     {adding && sectionActions && <SectionComposer pending={write.pending} onCreate={sectionActions.create} onClose={() => setAdding(false)} />}
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
     {!layout && selection?.toolbar}
     {files}
     {layout ? layout(sortProjectTasks(tasks, sort)) : <div className="sections">{sectionGroups(sections, open).map(({ section, tasks: grouped }) => <section key={section?.id ?? "root"} id={section ? `section-${section.id}` : undefined} tabIndex={section ? -1 : undefined}>

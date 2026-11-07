@@ -75,12 +75,11 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const priority = useMutation(useBulkWrites(userId).metadata);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filter, setFilter] = useState<UnscheduledFilter>({});
-  const [error, setError] = useState<string | null>(null);
   // Hidden Goals: no goal colours or goal filter.
   const goalList = goals.data?.hidden ? [] : goals.data?.goals ?? [];
   const goalLinks = links.data ?? { projects: [], tasks: [] };
-  const report = (reason: unknown) => { setError(reason instanceof Error ? reason.message : "Your changes could not be saved. Try again."); throw reason; };
-  const write = (task: TaskDto, details: ReturnType<typeof scheduledDetails>) => { setError(null); return writes.update.mutateAsync({ id: task.id, details }).catch(report); };
+  // A failed write is toasted (toasts.ts) and rolled back; nothing inline.
+  const write = (task: TaskDto, details: ReturnType<typeof scheduledDetails>) => writes.update.mutateAsync({ id: task.id, details });
   const quietly = (promise: Promise<unknown>) => void promise.catch(() => {});
   const drag = useTaskDrag((task, day, y) => { const { start, end } = dropRange(parseDayKey(day), y, durationOf(task)); quietly(write(task, scheduledDetails(task, start, end))); });
   const slots: PlannerSlots = {
@@ -101,25 +100,21 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     projectName={(task) => task.projectId ? projectNames[task.projectId] : undefined}
     onPriority={(task, value) => quietly(priority.mutateAsync({ tasks: [task], change: { priority: value } }))}
     onNextSlot={(task) => { const { start, end } = nextSlot(durationOf(task)); quietly(write(task, scheduledDetails(task, start, end))); }} />;
-  const overlay = <>
-    {error && <p role="alert" className="form-error">{error}</p>}
-    {drag.preview}
-  </>;
-  return { slots, overlay, sidebar: sidebar || null };
+  return { slots, overlay: drag.preview, sidebar: sidebar || null };
 }
 
 /** The week Calendar layout of a project or task collection (legacy ViewSwitcher default CalendarView); a slot adds a task to the project (else the Inbox). */
 export function ProjectCalendar({ account, tasks, projectId }: { account: Account; tasks: TaskDto[]; projectId?: string }) {
   const { slots, overlay, writes, now } = useSchedule(account, tasks, { projectId });
   const events = useCalendarEvents(account.user.id);
-  return <>{writes.error && <p role="alert" className="form-error">{writes.error}</p>}<CalendarView tasks={tasks} events={events} slots={slots} now={now} />{overlay}</>;
+  return <><CalendarView tasks={tasks} events={events} slots={slots} now={now} />{overlay}</>;
 }
 
 /** Today's Calendar layout: the legacy daily schedule. */
 export function TodayCalendar({ account, tasks }: { account: Account; tasks: TaskDto[] }) {
   const { slots, overlay, writes, now, sidebar } = useSchedule(account, tasks, { planner: true });
   const events = useCalendarEvents(account.user.id);
-  return <>{writes.error && <p role="alert" className="form-error">{writes.error}</p>}<Planner sidebar={sidebar}><TodaySchedule tasks={tasks} events={events} slots={slots} now={now} /></Planner>{overlay}</>;
+  return <><Planner sidebar={sidebar}><TodaySchedule tasks={tasks} events={events} slots={slots} now={now} /></Planner>{overlay}</>;
 }
 
 export function UpcomingScreen({ account }: { account: Account }) {
@@ -137,7 +132,6 @@ export function UpcomingScreen({ account }: { account: Account }) {
   else if (!query.data) body = <Failure error={query.error} onRetry={() => void query.refetch()} />;
   else body = <>
     {query.status === "error" && <Failure error={query.error} onRetry={() => void query.refetch()} />}
-    {writes.error && <p role="alert" className="form-error">{writes.error}</p>}
     {layout === "board" ? <BoardScreen account={account} tasks={tasks} />
       : layout === "calendar" ? <Planner sidebar={calendarRange === "week" && sidebar}><CalendarView tasks={tasks} events={events} slots={slots} now={now} /></Planner>
       : <>{selection.toolbar}<UpcomingList tasks={tasks} events={events} slots={slots} composer={composer} now={now} /></>}

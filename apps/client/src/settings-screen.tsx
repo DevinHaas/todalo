@@ -4,6 +4,7 @@ import { metadataReads, projectReads, settings, settingsReads } from "./runtime"
 import { settingsMutations } from "./settings";
 import { ComposerChoices, SmartDates } from "./composer";
 import { SmartDatesSetting } from "./settings-views";
+import { inlineError } from "./toasts";
 
 /** Provides the signed-in account's smart date setting to every composer. */
 export function SmartDatesProvider({ userId, children }: { userId: string; children: ReactNode }) {
@@ -25,6 +26,6 @@ export function SmartDatesSettingScreen({ userId }: { userId: string }) {
   const update = useMutation(useMemo(() => settingsMutations(settings, cache, userId).update, [cache, userId]));
   // A failed save rolls the switch back; flipping it again retries.
   return <SmartDatesSetting state={query} onRetry={() => void query.refetch()} pending={update.isPending}
-    error={update.error ? `${update.error.message} The setting was not changed.` : null}
+    error={update.error && inlineError(update.error) ? `${update.error.message} The setting was not changed.` : null}
     onChange={(smartDateRecognition) => update.mutate({ smartDateRecognition })} />;
 }

@@ -275,12 +275,12 @@ describe("task write controls", () => {
     expect(inert).toContain('aria-disabled="true"');
     expect(inert).not.toContain('role="checkbox"');
     const live = render(createElement(TodayView, {
-      state: { status: "success", error: null, data }, onRetry: noop, now, writeError: "Your changes could not be saved. Try again.",
+      state: { status: "success", error: null, data }, onRetry: noop, now,
       actions: { complete: noop, remove: noop }, composer: createElement(Composer, { dueDate: () => local(4), onCreate: async () => {} }),
     }));
     expect(live).toContain('aria-label="Complete Plan"');
     expect(live).toContain('aria-label="Delete Plan"');
-    expect(live).toContain("Your changes could not be saved. Try again.");
+    expect(live).not.toContain("could not be saved");
     expect(live).toMatch(/<button type="button" class="composer">/);
   });
 

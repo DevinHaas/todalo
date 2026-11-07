@@ -17,6 +17,10 @@ to look like Todoist.
   `List`/`ListRow`, `Hint`, `SidebarSectionHeader`, `sidebarItemClassName`.
 - Wrap a library screen's root in `className="ui"` (scoped preflight). Do not put `ui` on an
   element that also carries legacy classes: the reset would strip their margins.
+- The reset also covers everything inside an element with `data-slot` (every library part sets it).
+  A composite that wraps arbitrary children (e.g. `ContextMenuTrigger` around task rows) must not set
+  `data-slot`, and a library trigger must not `render` onto a legacy element: render a library
+  component (`Button`) instead. `ui-scope.test.ts` checks the context-menu wrapper.
 - `src/styles.css` is legacy, layered below Tailwind (`@layer legacy` in `src/ui/styles.css`).
   Migrate a legacy screen when a ticket touches it, then delete its CSS.
 - Keep keyboard hooks: commands click or focus `data-*` attributes (`data-season-action`,
