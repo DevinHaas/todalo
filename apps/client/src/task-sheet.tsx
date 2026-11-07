@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useContext, useEffect, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useInRouterContext } from "react-router";
 import {
-  ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Circle as CircleIcon, CircleCheck, Ellipsis, Flag, GitBranch, Goal, Hash, Inbox, Plus, Repeat, Tag, TextAlignStart, Trash2, X,
+  ArrowDown, ArrowUp, CalendarDays, CalendarMinus, Link2, SquareArrowOutUpRight, ChevronDown, ChevronRight, ChevronUp, Circle as CircleIcon, CircleCheck, Ellipsis, Flag, GitBranch, Goal, Hash, Inbox, Plus, Repeat, Tag, TextAlignStart, Trash2, X,
 } from "lucide-react";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
@@ -17,7 +17,7 @@ import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
 import { GoalPicker, GoalSuggestion, MilestoneToggle, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { moveCriterion, type CriterionDto } from "./goals";
-import { Button, Checkbox, Input, cn } from "./ui";
+import { Button, Checkbox, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, cn } from "./ui";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -94,17 +94,19 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   const edit = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setDirty(true); };
   const changed = error instanceof AccountTransportError && error.code === "TASK_CHANGED";
 
-  async function save(after?: "above" | "below" | -1 | 1) {
+  async function save(after?: "above" | "below" | -1 | 1, change?: Partial<Draft>) {
     if (!draft.title.trim() || pending) return false;
+    const next = { ...draft, ...change };
+    if (change) setDraft(next);
     setPending(true); setError(null);
     try {
       await onSave({
-        updatedAt: base.updatedAt ?? "", title: draft.title.trim(), description: draft.description, priority: draft.priority,
-        deadline: draft.deadline ? localInstant(draft.deadline) : null,
-        dueDate: draft.date ? localInstant(draft.date, draft.start) : null,
-        dueDateEnd: draft.date && draft.end ? localInstant(draft.date, draft.end) : null,
-        recurrence: draft.recurrence,
-        ...(labels && { labelIds: draft.labelIds.filter(id => labels.some(label => label.id === id)) }),
+        updatedAt: base.updatedAt ?? "", title: next.title.trim(), description: next.description, priority: next.priority,
+        deadline: next.deadline ? localInstant(next.deadline) : null,
+        dueDate: next.date ? localInstant(next.date, next.start) : null,
+        dueDateEnd: next.date && next.end ? localInstant(next.date, next.end) : null,
+        recurrence: next.recurrence,
+        ...(labels && { labelIds: next.labelIds.filter(id => labels.some(label => label.id === id)) }),
       });
       if (after === "above" || after === "below") onInsert?.(after);
       else if (after) navigation?.go(after);
@@ -150,17 +152,21 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
               <button type="button" className="icon-button" data-navigate="-1" aria-label="Previous task" title="Previous task" disabled={pending || !navigation.previous || !draft.title.trim()} onClick={() => void save(-1)}><ChevronUp /></button>
               <button type="button" className="icon-button" data-navigate="1" aria-label="Next task" title="Next task" disabled={pending || !navigation.next || !draft.title.trim()} onClick={() => void save(1)}><ChevronDown /></button>
             </>}
-            {(shareUrl || onInsert || onRemove) && <Popover label="More actions" role="menu" triggerClassName="icon-button" trigger={<Ellipsis />}>
-              {close => <>
-                {shareUrl && <Link role="menuitem" className="popover-item" to={taskPath(base.id)} onClick={() => { close(false); onClose(); }}>Task link</Link>}
-                {shareUrl && <button type="button" role="menuitem" className="popover-item" onClick={() => { copyText(shareUrl).then(() => setCopied(true), (reason: Error) => setError(reason)); close(); }}>Copy link</button>}
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<button type="button" className="icon-button" aria-label="More actions" title="More actions" data-sheet-action="more" />}><Ellipsis /></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="ui min-w-52">
+                {routed && <DropdownMenuItem render={<Link to={taskPath(base.id)} onClick={onClose} />}><SquareArrowOutUpRight />Open task page</DropdownMenuItem>}
+                {shareUrl && <DropdownMenuItem onClick={() => copyText(shareUrl).then(() => setCopied(true), (reason: Error) => setError(reason))}><Link2 />Copy link</DropdownMenuItem>}
+                {/* Unschedule saves through the draft (same version check); the task keeps its day. */}
+                {draft.date && draft.start && <DropdownMenuItem disabled={!draft.title.trim()} onClick={() => void save(undefined, { start: "", end: "" })}><CalendarMinus />Unschedule</DropdownMenuItem>}
                 {onInsert && <>
-                  <button type="button" role="menuitem" className="popover-item" disabled={!draft.title.trim()} onClick={() => { close(false); void save("above"); }}>Save and add task above</button>
-                  <button type="button" role="menuitem" className="popover-item" disabled={!draft.title.trim()} onClick={() => { close(false); void save("below"); }}>Save and add task below</button>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!draft.title.trim()} onClick={() => void save("above")}><ArrowUp />Save and add task above</DropdownMenuItem>
+                  <DropdownMenuItem disabled={!draft.title.trim()} onClick={() => void save("below")}><ArrowDown />Save and add task below</DropdownMenuItem>
                 </>}
-                {onRemove && <button type="button" role="menuitem" className="popover-item destructive" onClick={() => { close(false); onRemove(); }}><Trash2 />Delete task</button>}
-              </>}
-            </Popover>}
+                {onRemove && <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={onRemove}><Trash2 />Delete task</DropdownMenuItem></>}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button type="button" className="icon-button" aria-label="Close" title="Close" disabled={pending} onClick={onClose}><X /></button>
           </div>
         </header>

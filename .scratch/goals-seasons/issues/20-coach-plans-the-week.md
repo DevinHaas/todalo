@@ -1,6 +1,6 @@
 # 20: Coach plans the week
 
-**What to build:** In the Weekly review the Coach drafts next week's blocks around primary goals; when time is short it drafts dropping or postponing secondary-goal work first.
+**What to build:** In the Weekly review the Coach drafts next week's scheduled goal tasks around primary goals; when time is short it drafts dropping or postponing secondary-goal work first.
 
 **Blocked by:** 19, 13
 

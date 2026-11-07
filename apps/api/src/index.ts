@@ -16,9 +16,6 @@ import { createSeasonRoutes } from "./season-routes";
 import * as seasons from "@todalo/server/seasons";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
-import { createTimeBlockRoutes } from "./time-block-routes";
-import * as timeBlocks from "@todalo/server/time-blocks";
-import { deleteTaskFromCalendar } from "@todalo/server/calendar";
 import { createAttachmentRoutes } from "./attachment-routes";
 import { createCommentRoutes } from "./comment-routes";
 import * as comments from "@todalo/server/comments";
@@ -108,17 +105,6 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   removeGoal: seasons.removeSeasonGoal,
   past: seasons.listPastSeasons,
   end: seasons.endSeason,
-})).use(createTimeBlockRoutes({
-  verify,
-  allowedOrigins: dependencies.allowedOrigins,
-  list: (userId) => timeBlocks.getTimeBlocksForUser(userId),
-  create: timeBlocks.createTimeBlock,
-  update: timeBlocks.updateTimeBlock,
-  remove: timeBlocks.deleteTimeBlock,
-  setTask: timeBlocks.setTimeBlockTask,
-  setOutcome: timeBlocks.setTimeBlockOutcome,
-  setEventId: timeBlocks.setTimeBlockEventId,
-  calendar: { push: timeBlocks.pushTimeBlock, remove: deleteTaskFromCalendar },
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

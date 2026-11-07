@@ -9,7 +9,7 @@
 - [ ] Patterns stored with their supporting evidence
 - [ ] Settings list to view, edit and delete patterns
 - [ ] Coach prompts include only stored patterns
-- [ ] Learned from block outcomes and ratings
+- [ ] Learned from goal-linked tasks (completed, scheduled, time spent) and ratings
 - [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
 - [ ] Any new user action has a keyboard command in the shortcut registry
 

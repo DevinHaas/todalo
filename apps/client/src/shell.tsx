@@ -21,6 +21,7 @@ import { Popover } from "./popover";
 import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
+import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds } from "./goal-screens";
 import { MilestoneTasks } from "./task-tree";
@@ -120,7 +121,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const task = id ? query.data : null;
   const sheet = useTaskSheet(account, task, close);
   return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}>
-    {children}
+    <TaskContextMenu userId={userId} onOpen={dialog.open}>{children}</TaskContextMenu>
     {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
       navigation={{ previous: Boolean(neighbour(-1)), next: Boolean(neighbour(1)), go: (step) => { const next = neighbour(step); if (next) setId(next); } }}

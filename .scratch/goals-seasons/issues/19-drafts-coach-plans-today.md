@@ -1,6 +1,6 @@
 # 19: Drafts: the Coach plans today
 
-**What to build:** After a Check-in the Coach drafts today's plan. Drafted blocks show dashed on the schedule with a summary ('4 added, 1 moved, 1 removed') and the Coach's reasoning; the user accepts or declines the whole draft or single items. Nothing touches the real calendar before acceptance.
+**What to build:** After a Check-in the Coach drafts today's plan. Drafted tasks and times show dashed on the schedule with a summary ('4 added, 1 moved, 1 removed') and the Coach's reasoning; the user accepts or declines the whole draft or single items. Nothing touches the real calendar before acceptance.
 
 **Blocked by:** 17, 12
 

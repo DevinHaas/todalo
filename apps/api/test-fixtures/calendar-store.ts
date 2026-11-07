@@ -18,7 +18,7 @@ export function memoryCalendarStore(options: {
   /** Google's events per calendar id; edit it, then call `providerChanged`. */
   google: Map<string, StubGoogleEvent[]>;
   synced?: Omit<Synced, "channelId" | "resourceId" | "syncedAt">[];
-  /** googleCalendarEventIds of tasks and time blocks the user pushed to Google (the echo filter). */
+  /** googleCalendarEventIds of tasks the user pushed to Google (the echo filter). */
   ownEventIds?: Set<string>;
   subscribe: CalendarStore["subscribe"];
   publish: CalendarStore["publish"];

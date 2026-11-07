@@ -45,7 +45,7 @@ The user's own judgement, given during a review, of how much a period moved them
 _Avoid_: score, self-assessment
 
 **Energy rating**:
-Whether one occurrence of a task, time block or calendar event was **Energizing** or **Draining** for the user. Given per occurrence because energy changes with mood and circumstance; recent ratings count for more than old ones when learning when certain work is best scheduled.
+Whether one occurrence of a task (scheduled or not) or calendar event was **Energizing** or **Draining** for the user. Given per occurrence because energy changes with mood and circumstance; recent ratings count for more than old ones when learning when certain work is best scheduled.
 _Avoid_: mood, tag
 
 **Primary goal** / **Secondary goal**:
@@ -61,8 +61,8 @@ Something the Coach has learned about how the user works (e.g. "ships best in th
 _Avoid_: insight, memory, learning
 
 **Time block**:
-A reserved slot of time on the schedule, dedicated to a goal and/or holding one or more tasks. Time can be reserved for a goal before its tasks exist. A task scheduled on its own is a time block holding just that task.
-_Avoid_: event, slot, appointment
+A task with a start time and a duration, shown as a block on the schedule in its goal's colour (the first linked goal in sidebar order; a neutral colour without one). There is no separate block record: dragging over an empty slot creates a task with that time range, moving or resizing a block changes the task's own times, and unscheduling a task clears its time and duration while it keeps its day.
+_Avoid_: event, slot, appointment, block outcome
 
 **Check-in**:
 The daily ritual: reflect on the previous day with progress ratings, then plan the day. It sits on the schedule as a recurring item.
@@ -85,7 +85,7 @@ The optional ritual at the end of a season where the user looks back on it, deci
 _Avoid_: quarterly review, retrospective
 
 **Goal status**:
-Where a goal stands against its season: **On track**, **Adjust**, or **Off track**. Always calculated from the user's progress ratings, reached milestones and how well the planned schedule was kept; never set by hand or by the Coach.
+Where a goal stands against its season: **On track**, **Adjust**, or **Off track**. Always calculated from the user's progress ratings, reached milestones, and the goal-linked tasks completed or scheduled with the time spent on them; never set by hand or by the Coach.
 _Avoid_: health, RAG status, trajectory
 
 **Sub-task**:

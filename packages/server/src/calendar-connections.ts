@@ -5,7 +5,7 @@
 // missing or foreign account is `false` (the API's 404), never another user's row.
 import { and, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { account, calendarAccountSettings, calendarEvents, syncedCalendars, tasks, timeBlocks } from "@todalo/db/schema";
+import { account, calendarAccountSettings, calendarEvents, syncedCalendars, tasks } from "@todalo/db/schema";
 import type { CalendarAccountDto, CalendarVisibilityInput } from "./calendar-input";
 import { ensureCalendarSync, ensureWatchChannel, listGoogleCalendars, logSafe, stopWatchChannel, syncCalendar } from "./calendar-sync";
 
@@ -19,10 +19,6 @@ export async function getCalendarEventsForUser(userId: string) {
     .select({ id: tasks.googleCalendarEventId })
     .from(tasks)
     .where(and(eq(tasks.userId, userId), isNotNull(tasks.googleCalendarEventId)));
-  const ownBlockEventIds = db
-    .select({ id: timeBlocks.googleCalendarEventId })
-    .from(timeBlocks)
-    .where(and(eq(timeBlocks.userId, userId), isNotNull(timeBlocks.googleCalendarEventId)));
 
   return db
     .select({
@@ -43,9 +39,8 @@ export async function getCalendarEventsForUser(userId: string) {
         eq(syncedCalendars.enabled, true),
         // No settings row yet means the account-level toggle defaults to on.
         or(isNull(calendarAccountSettings.showEvents), eq(calendarAccountSettings.showEvents, true)),
-        // Echo filter: don't show events we pushed to Google ourselves (tasks and time blocks).
+        // Echo filter: don't show events we pushed to Google ourselves.
         notInArray(calendarEvents.googleEventId, ownGoogleEventIds),
-        notInArray(calendarEvents.googleEventId, ownBlockEventIds),
       ),
     )
     .orderBy(calendarEvents.start);

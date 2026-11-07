@@ -1,63 +1,62 @@
-// The unscheduled sidebar (goals ticket 08): open tasks without a scheduled time
+// The unscheduled sidebar (goals ticket 08): open tasks without a time of day
 // beside the schedule, filtered by goal, project, priority and label. A row is
-// dragged onto a free slot (schedules the task) or into a block (puts it there);
-// its Schedule menu does the same from the keyboard. Pure view: the screen
-// passes the tasks, choices and writes.
+// dragged onto a slot (schedules the task, with a ghost at the drop position);
+// a scheduled task dragged back onto the sidebar is unscheduled. Its Schedule
+// menu does the same from the keyboard. Pure view: the screen passes the
+// tasks, choices and writes.
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CalendarPlus, Flag, GripVertical, X } from "lucide-react";
 import {
-  Button, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Hint, List, ListRow,
+  Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Hint, List, ListRow,
   RightSidebar, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "./ui";
 import { GoalDot } from "./goal-views";
-import { DRAG_THRESHOLD, labels, type UnscheduledFilter } from "./schedule";
+import { DRAG_THRESHOLD, type UnscheduledFilter } from "./schedule";
+import type { IncomingTask } from "./schedule-views";
 import type { TaskDto } from "./tasks";
 
 const ALL = "all", INBOX = "inbox";
 const priorityTone = { 1: "text-priority-1", 2: "text-priority-2", 3: "text-priority-3", 4: "text-priority-4" } as Record<number, string>;
 
-/** Where a dragged task can land: a block (by ID) or a day column (by its key). */
-const DROP = "[data-time-block-id], [data-day]";
-export const dropTargetAt = (x: number, y: number) => document.elementFromPoint(x, y)?.closest<HTMLElement>(DROP) ?? null;
+/** The schedule's day column under the pointer, if any. */
+const columnAt = (x: number, y: number) => document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]") ?? null;
 
 /**
- * Pointer drag from a sidebar row (mouse and pen; a finger scrolls the list):
- * a ghost follows the pointer, the block or column under it is marked
- * `data-drop-target`, and release calls `drop` with the pointer position.
+ * Pointer drag from a sidebar row (mouse and pen; a finger scrolls the list).
+ * Over a day column `over` says where (the schedule draws the task's ghost
+ * there); elsewhere a title chip follows the pointer. Release over a column
+ * calls `drop` with the column's day key and the offset in it.
  */
-export function useTaskDrag(drop: (task: TaskDto, x: number, y: number) => void) {
-  const [ghost, setGhost] = useState<{ task: TaskDto; x: number; y: number } | null>(null);
+export function useTaskDrag(drop: (task: TaskDto, day: string, y: number) => void) {
+  const [over, setOver] = useState<IncomingTask | null>(null);
+  const [chip, setChip] = useState<{ task: TaskDto; x: number; y: number } | null>(null);
   const start = (task: TaskDto, event: ReactPointerEvent) => {
     if (event.button !== 0 || event.pointerType === "touch") return;
     const x0 = event.clientX, y0 = event.clientY;
-    let moved = false, marked: HTMLElement | null = null;
-    const mark = (target: HTMLElement | null) => {
-      if (target === marked) return;
-      marked?.removeAttribute("data-drop-target");
-      target?.setAttribute("data-drop-target", "");
-      marked = target;
-    };
+    let moved = false, at: IncomingTask | null = null;
     const onMove = (next: PointerEvent) => {
       if (!moved && Math.abs(next.clientX - x0) < DRAG_THRESHOLD && Math.abs(next.clientY - y0) < DRAG_THRESHOLD) return;
       moved = true;
-      setGhost({ task, x: next.clientX, y: next.clientY });
-      mark(dropTargetAt(next.clientX, next.clientY));
+      const column = columnAt(next.clientX, next.clientY);
+      at = column ? { task, day: column.dataset.day!, y: next.clientY - column.getBoundingClientRect().top } : null;
+      setOver(at);
+      setChip(at ? null : { task, x: next.clientX, y: next.clientY });
     };
     const onUp = (end: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      mark(null);
-      setGhost(null);
-      if (moved && end.type === "pointerup") drop(task, end.clientX, end.clientY);
+      setOver(null);
+      setChip(null);
+      if (moved && at && end.type === "pointerup") drop(task, at.day, at.y);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
-  const preview = ghost && <div aria-hidden="true" className="ui pointer-events-none fixed z-50 max-w-sidebar truncate rounded-md border border-border bg-popover px-2 py-1 text-sm text-popover-foreground shadow-popover"
-    style={{ left: ghost.x + 12, top: ghost.y + 8 }}>{ghost.task.title}</div>;
-  return { start, preview };
+  const preview = chip && <div aria-hidden="true" className="ui pointer-events-none fixed z-50 max-w-sidebar truncate rounded-md border border-border bg-popover px-2 py-1 text-sm text-popover-foreground shadow-popover"
+    style={{ left: chip.x + 12, top: chip.y + 8 }}>{chip.task.title}</div>;
+  return { start, over, preview };
 }
 
 export interface UnscheduledChoices {
@@ -65,11 +64,9 @@ export interface UnscheduledChoices {
   goals: { id: string; title: string; color: string }[];
   projects: { id: string; name: string }[];
   labels: { id: string; name: string }[];
-  /** Upcoming blocks a task can go into from the Schedule menu. */
-  blocks: { id: string; title: string; start: Date; end: Date }[];
 }
 
-export function UnscheduledSidebar({ tasks, choices, filter, onFilter, onPriority, onNextSlot, onAddToBlock, onOpen, onDragStart, onClose, projectName }: {
+export function UnscheduledSidebar({ tasks, choices, filter, onFilter, onPriority, onNextSlot, onOpen, onDragStart, onClose, projectName }: {
   tasks: TaskDto[];
   choices: UnscheduledChoices;
   filter: UnscheduledFilter;
@@ -77,7 +74,6 @@ export function UnscheduledSidebar({ tasks, choices, filter, onFilter, onPriorit
   onPriority: (task: TaskDto, priority: number) => void;
   /** Schedules the task at the next quarter hour today. */
   onNextSlot: (task: TaskDto) => void;
-  onAddToBlock: (task: TaskDto, blockId: string) => void;
   onOpen: (task: TaskDto) => void;
   onDragStart: (task: TaskDto, event: ReactPointerEvent) => void;
   onClose: () => void;
@@ -102,7 +98,7 @@ export function UnscheduledSidebar({ tasks, choices, filter, onFilter, onPriorit
       </SelectItem>)}</SelectContent>
     </Select>;
 
-  return <RightSidebar className="ui" aria-label="Unscheduled tasks" data-unscheduled="" title={<>Unscheduled <span className="font-normal text-muted-foreground">{tasks.length}</span></>}
+  return <RightSidebar className="ui data-[drop-target]:bg-selected" aria-label="Unscheduled tasks" data-unscheduled="" title={<>Unscheduled <span className="font-normal text-muted-foreground">{tasks.length}</span></>}
     actions={<Button type="button" variant="ghost" size="icon-sm" aria-label="Close unscheduled tasks" onClick={onClose}><X /></Button>}>
     <div className="grid grid-cols-2 gap-2">
       {choices.goals.length > 0 && filterSelect("goalId", "Goal", goalItems, filter.goalId ?? ALL, true)}
@@ -131,13 +127,6 @@ export function UnscheduledSidebar({ tasks, choices, filter, onFilter, onPriorit
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onNextSlot(task)}>Next quarter hour today</DropdownMenuItem>
-            {choices.blocks.length > 0 && <DropdownMenuGroup>
-              <DropdownMenuLabel>Add to block</DropdownMenuLabel>
-              {choices.blocks.map(block => <DropdownMenuItem key={block.id} onClick={() => onAddToBlock(task, block.id)}>
-                <span className="min-w-0 flex-1 truncate">{block.title}</span>
-                <span className="text-muted-foreground">{labels.weekday(block.start)} {labels.time(block.start)}–{labels.time(block.end)}</span>
-              </DropdownMenuItem>)}
-            </DropdownMenuGroup>}
           </DropdownMenuContent>
         </DropdownMenu>
       </ListRow>)}</List>}

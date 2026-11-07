@@ -30,9 +30,9 @@ export function EventChip({ event }: { event: CalendarEventDto }) {
 }
 
 /** Legacy TimedEventBlock: schedule columns, placed like task blocks. */
-export function EventBlock({ event }: { event: CalendarEventDto }) {
+export function EventBlock({ event, style }: { event: CalendarEventDto; style?: CSSProperties }) {
   const block = blockFor(event.start, event.end);
-  return <a className="event-block" style={{ top: block.top, height: block.height, borderColor: event.color, ...tint(event.color, 15) }} {...link(event)}>
+  return <a className="event-block" style={{ top: block.top, height: block.height, borderColor: event.color, ...tint(event.color, 15), ...style }} {...link(event)}>
     <span className="timed-title">{event.title}</span><span className="timed-range">{labels.time(block.start)}–{labels.time(block.end)}</span>
   </a>;
 }

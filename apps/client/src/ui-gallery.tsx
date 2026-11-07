@@ -4,7 +4,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger, Alert, AlertDescription, AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertTitle, Avatar,
   AvatarFallback, Badge, Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, Button, Card,
-  CardContent, CardDescription, CardHeader, CardTitle, Checkbox, ColorControl, Dialog, DialogContent, DialogDescription, DialogFooter,
+  CardContent, CardDescription, CardHeader, CardTitle, Checkbox, ColorControl, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
   DropdownMenuShortcut, DropdownMenuTrigger, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Field, FieldDescription, FieldError,
   FieldLabel, Hint, Input, Label, Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger, PortalLayerContainerProvider, Progress,
@@ -131,6 +131,14 @@ function Showcase() {
             <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ContextMenu><ContextMenuTrigger className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted-foreground">Right-click me</ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem>Open</ContextMenuItem>
+            <ContextMenuItem>Unschedule</ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem variant="destructive">Delete task</ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <Dialog><DialogTrigger render={<Button variant="outline">Dialog</Button>} />
           <DialogContent>
             <DialogHeader><DialogTitle>Edit goal</DialogTitle><DialogDescription>Title, colour and description.</DialogDescription></DialogHeader>

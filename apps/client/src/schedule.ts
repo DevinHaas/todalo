@@ -5,10 +5,8 @@
 // legacy client did, so grouping follows local midnights through DST changes.
 // Provider events (ticket 20) group with `eventDayKey` (calendar.ts) and timed
 // ones position with `blockFor` (start/end instants), next to tasks in each view.
-import type { TaskDto } from "./tasks";
+import type { TaskDetails, TaskDto } from "./tasks";
 import { isOverdue, treeOrder } from "./tasks";
-import type { TimeBlockDto } from "./time-blocks";
-import { goalTime } from "../../../packages/server/src/time-block-dto";
 
 export type Layout = "list" | "board" | "calendar";
 export type CalendarRange = "week" | "month";
@@ -148,18 +146,15 @@ export function blockFor(startValue: string, endValue: string | null) {
 /** Schedule columns split a day's tasks into the all-day row and timed blocks. */
 export const isTimed = (task: TaskDto) => task.dueDate !== null && hasDueTime(new Date(task.dueDate));
 
-// Goals ticket 07: time blocks and scheduled tasks share one presentation. A
-// scheduled task is a block holding just that task, positioned from its own
-// dueDate/dueDateEnd (never stored as a block); a time block is reserved time.
-/** One block on the grid: a stored time block, or a scheduled task shown as a single-task block. */
-export interface ScheduleItem { key: string; title: string; start: Date; end: Date; color: string | null; done: boolean; task?: TaskDto; block?: TimeBlockDto }
+// Time blocks (goals ticket 07, reworked): a scheduled task IS a block. Every
+// task with a time of day shows on the grid from its own dueDate/dueDateEnd, in
+// its goal's colour; nothing else is stored.
+/** One task on the grid. */
+export interface ScheduleItem { key: string; title: string; start: Date; end: Date; color: string | null; done: boolean; task: TaskDto }
 export const taskItem = (task: TaskDto, color: string | null): ScheduleItem => {
   const { start, end } = blockFor(task.dueDate!, task.dueDateEnd);
   return { key: `task:${task.id}`, title: task.title, start, end, color, done: task.status === "done", task };
 };
-/** Untitled blocks take their goal's title, else "Time block". */
-export const blockItem = (block: TimeBlockDto, goal?: { title: string; color: string }): ScheduleItem =>
-  ({ key: `block:${block.id}`, title: block.title ?? goal?.title ?? "Time block", start: new Date(block.start), end: new Date(block.end), color: goal?.color ?? null, done: block.outcome === "done", block });
 
 /** Top and height from the duration, so a block ending at midnight still reaches the bottom; at least 20px (legacy). */
 export const spanFor = (start: Date, end: Date) => ({ top: offsetFor(start), height: Math.max((end.getTime() - start.getTime()) / 3_600_000 * HOUR_HEIGHT, 20) });
@@ -198,15 +193,14 @@ export function dragRange(mode: "move" | "resize", start: Date, end: Date, dy: n
   return { start: new Date(next), end: new Date(next + length) };
 }
 
-/** A new block from the keyboard: the next quarter hour today if `day` is today, else 09:00; one hour. */
-export function defaultBlockRange(day: Date, now = new Date()) {
-  const start = startOfDay(day);
-  if (sameDay(day, now)) start.setHours(0, Math.min(Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / CLICK_SLOT_MINUTES) * CLICK_SLOT_MINUTES, 23 * 60), 0, 0);
-  else start.setHours(9, 0, 0, 0);
-  return { start, end: new Date(start.getTime() + 60 * MINUTE) };
+/** "Schedule" from a menu: the next quarter hour today, for the task's duration. */
+export function nextSlot(minutes = DEFAULT_DURATION_MINUTES, now = new Date()) {
+  const start = startOfDay(now);
+  start.setHours(0, Math.min(Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / CLICK_SLOT_MINUTES) * CLICK_SLOT_MINUTES, 24 * 60 - minutes), 0, 0);
+  return { start, end: new Date(start.getTime() + minutes * MINUTE) };
 }
 
-// Goals ticket 08: the unscheduled sidebar and tasks in blocks.
+// Goals ticket 08: the unscheduled sidebar.
 /** Sidebar filters; an absent field matches everything. `projectId: null` is the Inbox. */
 export interface UnscheduledFilter { goalId?: string; projectId?: string | null; priority?: number; labelId?: string }
 /** Which goals a task serves: linked directly or through its project. */
@@ -215,32 +209,63 @@ export const servesGoal = (task: TaskDto, goalId: string, links: GoalLinks) =>
   links.tasks.some(link => link.goalId === goalId && link.taskId === task.id)
   || (task.projectId !== null && links.projects.some(link => link.goalId === goalId && link.projectId === task.projectId));
 
-/** Open tasks without a scheduled time (no time of day, in no block), filtered; in collection order. */
-export function unscheduledTasks(tasks: TaskDto[], blocks: TimeBlockDto[], filter: UnscheduledFilter, links: GoalLinks) {
-  const inBlock = new Set(blocks.flatMap(block => block.taskIds));
-  return tasks.filter(task => task.status !== "done" && !isTimed(task) && !inBlock.has(task.id)
+/** Open tasks without a time of day, filtered; in collection order. */
+export function unscheduledTasks(tasks: TaskDto[], filter: UnscheduledFilter, links: GoalLinks) {
+  return tasks.filter(task => task.status !== "done" && !isTimed(task)
     && (filter.goalId === undefined || servesGoal(task, filter.goalId, links))
     && (filter.projectId === undefined || task.projectId === filter.projectId)
     && (filter.priority === undefined || task.priority === filter.priority)
     && (filter.labelId === undefined || task.labelIds.includes(filter.labelId)));
 }
 
-/** A task dropped at `y` px in a day column: starts at the snapped slot, 30 minutes, ending by midnight. */
-export function dropRange(day: Date, y: number) {
-  const { start } = slotAt(day, y);
-  const midnight = addDays(startOfDay(day), 1).getTime();
-  return { start, end: new Date(Math.min(start.getTime() + DEFAULT_DURATION_MINUTES * MINUTE, midnight)) };
+/** A task's length on the grid: its own range when it has one within a day, else 30 minutes. */
+export function durationOf(task: TaskDto) {
+  const minutes = task.dueDate && task.dueDateEnd ? (new Date(task.dueDateEnd).getTime() - new Date(task.dueDate).getTime()) / MINUTE : 0;
+  return minutes >= CLICK_SLOT_MINUTES && minutes <= 24 * 60 ? minutes : DEFAULT_DURATION_MINUTES;
 }
 
-// Goals ticket 09: block outcomes and the week's reserved vs kept time per goal.
-/** Per goal, minutes reserved and kept in the local Monday-to-Sunday week around `now`. */
-export const weekGoalTime = (blocks: TimeBlockDto[], now = new Date()) =>
-  goalTime(blocks.filter(block => !block.id.startsWith("pending-")), startOfWeek(now, 1), addDays(startOfWeek(now, 1), 7));
-/** "1h 30m", "2h", "45m". */
-export function durationLabel(minutes: number) {
-  const hours = Math.floor(minutes / 60), rest = Math.round(minutes % 60);
-  return hours && rest ? `${hours}h ${rest}m` : hours ? `${hours}h` : `${rest}m`;
+/** A task dropped at `y` px in a day column: starts at the snapped slot, keeps `minutes`, ending by midnight. */
+export function dropRange(day: Date, y: number, minutes = DEFAULT_DURATION_MINUTES) {
+  const { start } = slotAt(day, y);
+  const midnight = addDays(startOfDay(day), 1).getTime();
+  const begin = Math.min(start.getTime(), midnight - minutes * MINUTE);
+  return { start: new Date(begin), end: new Date(begin + minutes * MINUTE) };
 }
-/** Pressing the outcome a block already has puts it back to planned; rescheduling always counts again. */
-export const toggledOutcome = (current: TimeBlockDto["outcome"], pressed: TimeBlockDto["outcome"]) =>
-  pressed !== "rescheduled" && current === pressed ? "planned" : pressed;
+
+/** The first goal in sidebar order the task serves (directly or through its project). */
+export const goalOf = <G extends { id: string }>(task: TaskDto, goals: G[], links: GoalLinks) => goals.find(goal => servesGoal(task, goal.id, links));
+
+/** Every editable field as the task has it, from its current version (the stale-edit check). */
+const detailsOf = (task: TaskDto): TaskDetails => ({
+  updatedAt: task.updatedAt ?? "", title: task.title, description: task.description ?? "", priority: task.priority,
+  deadline: task.deadline, dueDate: task.dueDate, dueDateEnd: task.dueDateEnd, recurrence: task.recurrence,
+});
+/** The edit that puts a task on the schedule from `start` to `end`. */
+export const scheduledDetails = (task: TaskDto, start: Date, end: Date): TaskDetails => ({ ...detailsOf(task), dueDate: start.toISOString(), dueDateEnd: end.toISOString() });
+/** Unschedule: clears the time and duration; the task keeps its day (all day). */
+export const unscheduledDetails = (task: TaskDto): TaskDetails =>
+  ({ ...detailsOf(task), dueDate: task.dueDate && startOfDay(new Date(task.dueDate)).toISOString(), dueDateEnd: null });
+
+/**
+ * Standard calendar overlap layout: items that overlap (directly or through a
+ * chain) form a cluster and share its width side by side; each takes the first
+ * column free at its start. Returns `column` and the cluster's `columns` per
+ * item, in input order. Touching ranges (one ends as the next starts) do not overlap.
+ */
+export function overlapColumns(ranges: readonly { start: Date; end: Date }[]) {
+  const order = ranges.map((range, index) => ({ index, start: range.start.getTime(), end: Math.max(range.end.getTime(), range.start.getTime() + 1) }))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  const result: { column: number; columns: number }[] = ranges.map(() => ({ column: 0, columns: 1 }));
+  let cluster: number[] = [], ends: number[] = [], clusterEnd = -Infinity;
+  const close = () => { for (const index of cluster) result[index]!.columns = ends.length; cluster = []; ends = []; };
+  for (const item of order) {
+    if (item.start >= clusterEnd) { close(); clusterEnd = -Infinity; }
+    let column = ends.findIndex(end => end <= item.start);
+    if (column < 0) { column = ends.length; ends.push(item.end); } else ends[column] = item.end;
+    result[item.index]!.column = column;
+    cluster.push(item.index);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  close();
+  return result;
+}

@@ -10,8 +10,8 @@ import {
 import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigation";
 import type { TaskDto } from "./tasks";
 import {
-  addDays, addMonths, blockFor, blockItem, dayKey, defaultBlockRange, dragRange, dropRange, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
-  upcomingSections, upcomingWindow, weekOf, durationLabel, toggledOutcome, weekGoalTime,
+  addDays, addMonths, blockFor, dayKey, dragRange, dropRange, durationOf, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
+  upcomingSections, upcomingWindow, weekOf,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
 import { TodayView } from "./views";
@@ -165,25 +165,16 @@ describe("schedule views", () => {
     expect(html).not.toContain("Done today");
   });
 
-  it("renders time blocks in their goal's colour next to task blocks and Google Calendar events (goals ticket 07)", () => {
+  it("renders scheduled tasks in their goal's colour, side by side with overlapping Google Calendar events (goals ticket 07)", () => {
     process.env.TZ = "Europe/Zurich";
-    const events = [{ id: "e1", title: "Team sync", start: at(7, 13), end: at(7, 14), allDay: false, htmlLink: null, color: "#4285f4" }];
-    const blocks = {
-      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12), taskIds: ["Spec"], outcome: "planned" as const, rescheduleCount: 0 }],
-      goal: (goalId: string | null) => goalId === "g1" ? { title: "Ship v2", color: "oklch(0.62 0.16 250)" } : undefined,
-      taskColor: () => "oklch(0.64 0.16 150)", create() {}, open() {}, change: async () => {},
-      tasksIn: () => [task("Spec", { title: "Write the spec" })], toolbar: createElement("button", { "data-schedule-action": "unscheduled" }),
-    };
-    const html = render(createElement(TodaySchedule, { tasks, events, slots: { ...slots, blocks }, now: new Date(2026, 9, 7, 10) }));
-    expect(html).toContain("Team sync");
-    expect(html).toMatch(/data-block="time-block"[^>]*style="top:480px;height:96px;border-left:3px solid oklch\(0.62 0.16 250\)/);
-    expect(html).toContain("Ship v2");
-    // The scheduled task is a block holding just that task, from its own dates, in its goal's colour.
-    expect(html).toMatch(/data-block="task"[^>]*style="top:432px;height:72px;border-left:3px solid oklch\(0.64 0.16 150\)/);
-    expect(html).toContain('data-schedule-action="new-block"');
-    // Ticket 08: a block lists the tasks it holds and is a drop target by its ID.
-    expect(html).toMatch(/data-time-block-id="b1"[^>]*>.*data-block-task="Spec"[^>]*>Write the spec</);
+    const events = [{ id: "e1", title: "Team sync", start: at(7, 9, 30), end: at(7, 10), allDay: false, htmlLink: null, color: "#4285f4" }];
+    const planner = { taskColor: () => "oklch(0.64 0.16 150)", change: async () => {}, unschedule() {}, toolbar: createElement("button", { "data-schedule-action": "unscheduled" }) };
+    const html = render(createElement(TodaySchedule, { tasks, events, slots: { ...slots, planner }, now: new Date(2026, 9, 7, 10) }));
+    // 09:00–10:30 and the 09:30 event overlap: two columns.
+    expect(html).toMatch(/class="event-block"[^>]*style="top:456px;height:24px;[^"]*left:calc\(50% \+ 0.125rem\);width:calc\(50% - 0.25rem\)/);
+    expect(html).toMatch(/data-block="task" data-task-id="Timed standup"[^>]*style="top:432px;height:72px;border-left:3px solid oklch\(0.64 0.16 150\)[^"]*left:calc\(0% \+ 0.125rem\)/);
     expect(html).toContain('data-schedule-action="unscheduled"');
+    expect(html).not.toContain("new-block");
   });
 
   it("renders the month grid (Sunday start) with task chips and the Monday week marker", () => {
@@ -267,19 +258,11 @@ describe("time blocks on the schedule (goals ticket 07)", () => {
     expect(taskItem(task("Call", { dueDate: "2026-02-21T09:00:00.000Z" }), null).end.toISOString()).toBe("2026-02-21T09:30:00.000Z");
   });
 
-  it("titles a block by its own title, else its goal's, else Time block; colour from the goal", () => {
-    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z", taskIds: [], outcome: "planned" as const, rescheduleCount: 0 };
-    expect(blockItem(block, { title: "Ship v2", color: "blue" })).toMatchObject({ key: "block:b1", title: "Ship v2", color: "blue" });
-    expect(blockItem({ ...block, title: "Deep work" }, { title: "Ship v2", color: "blue" }).title).toBe("Deep work");
-    expect(blockItem({ ...block, goalId: null })).toMatchObject({ title: "Time block", color: null });
+  it("offers the next quarter hour today for the task's duration from a menu", () => {
+    const range = nextSlot(45, at(14, 7));
+    expect([labels.time(range.start), labels.time(range.end)]).toEqual(["14:15", "15:00"]);
+    expect(labels.time(nextSlot(30, at(23, 50)).start)).toBe("23:30");
     expect(spanFor(at(23), at(0, 0, addDays(day, 1)))).toEqual({ top: 23 * 48, height: 48 });
-  });
-
-  it("offers the next quarter hour today and 09:00 on other days for a keyboard block", () => {
-    const now = at(14, 7);
-    expect(labels.time(defaultBlockRange(day, now).start)).toBe("14:15");
-    expect(labels.time(defaultBlockRange(addDays(day, 1), now).start)).toBe("09:00");
-    expect(defaultBlockRange(day, now).end.getTime() - defaultBlockRange(day, now).start.getTime()).toBe(3_600_000);
   });
 });
 
@@ -291,15 +274,13 @@ describe("unscheduled sidebar (goals ticket 08)", () => {
     task("Dated", { projectId: "p2", dueDate: "2026-02-20T23:00:00.000Z", labelIds: ["deep"] }),
     task("Timed", { dueDate: "2026-02-21T08:00:00.000Z" }),
     task("Done", { status: "done" }),
-    task("Blocked", { projectId: "p1" }),
   ];
-  const blocks = [{ id: "b1", goalId: null, title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T10:00:00.000Z", taskIds: ["Blocked"], outcome: "planned" as const, rescheduleCount: 0 }];
   const links = { projects: [{ goalId: "g1", projectId: "p1" }], tasks: [{ goalId: "g2", taskId: "Inbox chore" }] };
   beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
-  const ids = (filter: Parameters<typeof unscheduledTasks>[2]) => unscheduledTasks(open, blocks, filter, links).map(item => item.id);
+  const ids = (filter: Parameters<typeof unscheduledTasks>[1]) => unscheduledTasks(open, filter, links).map(item => item.id);
 
   it.each([
-    ["no filter: open, without a time, in no block (a date alone is unscheduled)", {}, ["Spec", "Inbox chore", "Dated"]],
+    ["no filter: open, without a time (a date alone is unscheduled)", {}, ["Spec", "Inbox chore", "Dated"]],
     ["a goal through the task's project", { goalId: "g1" }, ["Spec"]],
     ["a goal linked to the task itself", { goalId: "g2" }, ["Inbox chore"]],
     ["a project", { projectId: "p2" }, ["Dated"]],
@@ -309,34 +290,50 @@ describe("unscheduled sidebar (goals ticket 08)", () => {
     ["filters together", { labelId: "deep", projectId: "p1" }, ["Spec"]],
   ])("lists %s", (_name, filter, expected) => expect(ids(filter)).toEqual(expected));
 
-  it("schedules a dropped task for 30 minutes at the snapped slot, ending by midnight", () => {
+  it("schedules a dropped task for its duration at the snapped slot, ending by midnight", () => {
     process.env.TZ = "Europe/Zurich";
     const day = new Date(2026, 2, 29);
     const { start, end } = dropRange(day, 9.4 * 48);
     expect([labels.time(start), labels.time(end)]).toEqual(["09:30", "10:00"]);
-    expect(end.getTime() - start.getTime()).toBe(30 * 60_000);
-    const late = dropRange(day, 24 * 48);
-    expect([labels.time(late.start), late.end.getTime()]).toEqual(["23:45", addDays(day, 1).getTime()]);
+    const late = dropRange(day, 24 * 48, 60);
+    expect([labels.time(late.start), late.end.getTime()]).toEqual(["23:00", addDays(day, 1).getTime()]);
+  });
+
+  it.each([
+    ["no end", {}, 30],
+    ["its own range", { dueDate: "2026-02-21T09:00:00.000Z", dueDateEnd: "2026-02-21T10:15:00.000Z" }, 75],
+    ["a range longer than a day", { dueDate: "2026-02-21T09:00:00.000Z", dueDateEnd: "2026-02-23T09:00:00.000Z" }, 30],
+  ])("lasts %s: %i minutes", (_name, dates, minutes) => expect(durationOf(task("t", dates))).toBe(minutes));
+
+  it("colours a task by its first goal in sidebar order, directly or through its project", () => {
+    const goals = [{ id: "g2" }, { id: "g1" }];
+    expect(goalOf(task("Spec", { projectId: "p1" }), goals, links)?.id).toBe("g1");
+    expect(goalOf(task("Inbox chore", { projectId: "p1" }), goals, links)?.id).toBe("g2");
+    expect(goalOf(task("Loose"), goals, links)).toBeUndefined();
+  });
+
+  it("schedules and unschedules with the task's own version and fields; unscheduling keeps the day", () => {
+    const timed = task("Call", { title: "Call", dueDate: "2026-02-21T08:00:00.000Z", dueDateEnd: "2026-02-21T09:00:00.000Z", updatedAt: "v1", priority: 2 });
+    expect(unscheduledDetails(timed)).toMatchObject({ updatedAt: "v1", title: "Call", priority: 2, description: "", dueDate: "2026-02-20T23:00:00.000Z", dueDateEnd: null });
+    const range = { start: new Date("2026-02-21T10:00:00.000Z"), end: new Date("2026-02-21T10:30:00.000Z") };
+    expect(scheduledDetails(timed, range.start, range.end)).toMatchObject({ updatedAt: "v1", dueDate: "2026-02-21T10:00:00.000Z", dueDateEnd: "2026-02-21T10:30:00.000Z" });
   });
 });
 
-describe("block outcomes (goals ticket 09)", () => {
-  it.each([[45, "45m"], [60, "1h"], [90, "1h 30m"], [0, "0m"]])("labels %i minutes as %s", (minutes, label) => expect(durationLabel(minutes)).toBe(label));
-
+describe("overlap layout", () => {
+  const r = (from: number, to: number) => ({ start: new Date(2026, 1, 21, 0, from), end: new Date(2026, 1, 21, 0, to) });
   it.each([
-    ["planned", "done", "done"], ["done", "done", "planned"], ["skipped", "skipped", "planned"],
-    ["done", "skipped", "skipped"], ["rescheduled", "rescheduled", "rescheduled"], ["skipped", "rescheduled", "rescheduled"],
-  ] as const)("%s pressed %s becomes %s", (current, pressed, next) => expect(toggledOutcome(current, pressed)).toBe(next));
-
-  it("sums this local week's blocks per goal; a done block reads as done", () => {
-    const now = new Date(2026, 1, 18, 12);
-    const at = (day: number, hour: number) => new Date(2026, 1, day, hour).toISOString();
-    const block = (id: string, goalId: string, day: number, hours: number, outcome: "planned" | "done") =>
-      ({ id, goalId, title: null, start: at(day, 9), end: at(day, 9 + hours), taskIds: [], outcome, rescheduleCount: 0 });
-    // Monday 16th to Sunday 22nd; the 15th and 23rd are outside, pending writes are left out.
-    const blocks = [block("a", "g1", 16, 2, "done"), block("b", "g1", 22, 1, "planned"), block("c", "g1", 15, 3, "done"), block("d", "g1", 23, 3, "done"), block("pending-x", "g1", 17, 5, "done")];
-    expect(weekGoalTime(blocks, now)).toEqual([{ goalId: "g1", reservedMinutes: 180, keptMinutes: 120 }]);
-    expect(blockItem(blocks[0]!).done).toBe(true);
-    expect(blockItem(blocks[1]!).done).toBe(false);
+    ["nothing", [], []],
+    ["one item", [r(60, 120)], [[0, 1]]],
+    ["two apart", [r(60, 120), r(180, 240)], [[0, 1], [0, 1]]],
+    ["touching ranges do not overlap", [r(60, 120), r(120, 180)], [[0, 1], [0, 1]]],
+    ["two overlapping", [r(60, 120), r(90, 150)], [[0, 2], [1, 2]]],
+    ["three at once", [r(60, 120), r(60, 120), r(60, 120)], [[0, 3], [1, 3], [2, 3]]],
+    ["a chain shares one cluster; a freed column is reused", [r(60, 120), r(90, 180), r(130, 200)], [[0, 2], [1, 2], [0, 2]]],
+    ["input order kept; longer first at the same start", [r(90, 100), r(60, 180), r(60, 240)], [[2, 3], [1, 3], [0, 3]]],
+    ["a later cluster starts over", [r(60, 120), r(90, 150), r(300, 330)], [[0, 2], [1, 2], [0, 1]]],
+    ["a zero-length item still takes a column", [r(60, 60), r(60, 90)], [[1, 2], [0, 2]]],
+  ] as const)("%s", (_name, ranges, expected) => {
+    expect(overlapColumns(ranges).map(({ column, columns }) => [column, columns])).toEqual(expected);
   });
 });

@@ -14,6 +14,8 @@ import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from ".
 import { collapsedTasks } from "./views";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
+import { useTaskWrites } from "./task-writes";
+import { isTimed, unscheduledDetails } from "./schedule";
 import { theme } from "./theme";
 
 const platform = detectPlatform();
@@ -90,12 +92,6 @@ function clickAndRefocus(selector: string) {
 const composerForm = () => document.activeElement?.closest<HTMLFormElement>("form.composer-form") ?? null;
 const inComposerTitle = () => Boolean(document.activeElement?.closest(".quick-add-title")) && composerForm();
 const editorForm = () => document.activeElement?.closest<HTMLElement>(".task-editor :is(form, .sheet-form)") ?? null;
-/** Goals ticket 09: asks the schedule to mark the focused time block (schedule-screens.tsx listens). */
-function blockOutcome(outcome: "done" | "skipped" | "rescheduled") {
-  const id = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("main [data-time-block-id]")?.dataset.timeBlockId;
-  if (!id) return false;
-  window.dispatchEvent(new CustomEvent("todalo:block-outcome", { detail: { id, outcome } }));
-}
 function press(scope: ParentNode | null, selector: string) {
   const control = scope?.querySelector<HTMLButtonElement>(selector);
   if (!control || control.disabled) return false;
@@ -227,8 +223,9 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
   const clearDates = useMutation(bulk.clearDates);
   const organize = useMutation(useOrganizationMutations(userId).organize);
   const openSettings = useOpenSettings();
-  const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize });
-  latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize };
+  const update = useTaskWrites(userId).update;
+  const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize, update });
+  latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize, update };
   useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(id); }, [notice]);
 
   useEffect(() => {
@@ -392,13 +389,15 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         keepFocus(row);
       },
       "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
-      // Goals ticket 07: passes on when no schedule with blocks is shown.
-      "schedule.new-block": () => press(document.querySelector("main"), '[data-schedule-action="new-block"]'),
       // Goals ticket 08: pass on away from the schedule (or with the sidebar closed).
       "schedule.unscheduled": () => press(document.querySelector("main"), '[data-schedule-action="unscheduled"]'),
       "schedule.filter": () => { const first = document.querySelector<HTMLElement>('main [data-unscheduled] [data-unscheduled-filter="first"]'); if (!first) return false; first.focus(); },
-      // Goals ticket 09: the focused block's outcome; passes on when no block is focused.
-      "schedule.block-done": () => blockOutcome("done"), "schedule.block-skip": () => blockOutcome("skipped"), "schedule.block-reschedule": () => blockOutcome("rescheduled"),
+      // The focused task (row, card or schedule block) keeps its day and loses its time; passes on without one.
+      "task.unschedule": () => {
+        const row = activeRow();
+        if (!row) return false;
+        write(async () => { const { task } = await focusedTask(row); if (task && isTimed(task)) await latest.current.update.mutateAsync({ id: task.id, details: unscheduledDetails(task) }); });
+      },
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };

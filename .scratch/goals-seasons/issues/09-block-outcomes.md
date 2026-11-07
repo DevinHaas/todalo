@@ -1,15 +1,7 @@
 # 09: Block outcomes
 
-**What to build:** A user marks a block as done, skipped or rescheduled, and sees how much time is reserved and kept per goal this week.
+**Status:** superseded — time blocks are now scheduled tasks; completing or unscheduling the task replaces done/skipped/rescheduled outcomes.
 
-**Blocked by:** 07
-
-**Status:** resolved
-
-- [x] Mark a block done, skipped or rescheduled; rescheduling counts how often
-- [x] Outcomes are recorded per block occurrence
-- [x] A per-goal summary shows reserved vs kept time for the current week
-- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [x] Any new user action has a keyboard command in the shortcut registry
+The outcome feature (Done/Skipped/Rescheduled, the "This week" reserved vs kept summary, `b d/s/r`) was built and then removed in the stage 2 rework; its columns were dropped with `time_blocks` in migration 0023. Per-goal time this week moves to the Weekly review (13).
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

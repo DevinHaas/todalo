@@ -67,10 +67,9 @@ describe("search views", () => {
     expect(html).toContain("1 results");
     expect(html).toContain("Plan trip");
   });
-  it("offer Task link and Copy link in the sheet's More actions menu once the shareable URL is known", () => {
+  it("offer the sheet's More actions menu (Open task page, Copy link once the shareable URL is known) as a dropdown menu trigger", () => {
     const props = { task: task("a/b", { updatedAt: "2026-10-01T00:00:00.000Z" }), onSave: async () => {}, onClose: noop };
-    expect(render(createElement(TaskEditor, props))).not.toContain('aria-label="More actions"');
-    expect(render(createElement(TaskEditor, { ...props, shareUrl: "https://todalo.example/tasks/a%2Fb" }))).toContain('aria-label="More actions"');
+    expect(render(createElement(TaskEditor, { ...props, shareUrl: "https://todalo.example/tasks/a%2Fb" }))).toMatch(/aria-haspopup="menu"[^>]*aria-label="More actions"|aria-label="More actions"[^>]*aria-haspopup="menu"/);
   });
   it("show Previous and Next in the editor when it was opened from a list, disabled at its ends", () => {
     const props = { task: task("a", { updatedAt: "2026-10-01T00:00:00.000Z" }), onSave: async () => {}, onClose: noop };

@@ -1,6 +1,6 @@
 # 27: Accountability notifications
 
-**What to build:** Habito notifies the user when a goal drops to Adjust or Off track, a primary-goal block is skipped, or a Check-in is missed — at most two a day, outside quiet hours, each trigger toggleable — via native notifications on Mac and iPhone and browser notifications on web. Today and the week view show a banner when no primary-goal time is planned.
+**What to build:** Habito notifies the user when a goal drops to Adjust or Off track, a scheduled primary-goal task's time passes without it being completed, or a Check-in is missed — at most two a day, outside quiet hours, each trigger toggleable — via native notifications on Mac and iPhone and browser notifications on web. Today and the week view show a banner when no primary-goal time is planned.
 
 **Blocked by:** 15, 11
 

@@ -18,7 +18,6 @@ mod reads;
 mod search;
 mod seasons;
 mod settings;
-mod time_blocks;
 mod writes;
 use auth::{Account, Credentials, NativeAuth};
 
@@ -136,12 +135,6 @@ pub fn run() {
             seasons::remove_season_goal,
             seasons::past_seasons,
             seasons::end_season,
-            time_blocks::time_blocks,
-            time_blocks::create_time_block,
-            time_blocks::update_time_block,
-            time_blocks::delete_time_block,
-            time_blocks::set_time_block_task,
-            time_blocks::set_time_block_outcome,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

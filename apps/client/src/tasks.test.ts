@@ -231,6 +231,33 @@ describe("task mutations", () => {
     expect(calls).toBe(2);
   });
 
+  it("queues a second edit started before the first settled and rebases it onto the first's version", async () => {
+    // A server with the real stale check: an edit citing an older version is refused.
+    let version = "v1";
+    const sent: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const { cache, writes } = setup({ update: async (_id, body) => {
+      sent.push(body.updatedAt);
+      if (sent.length === 1) await gate;
+      if (body.updatedAt !== version) throw new AccountTransportError("TASK_CHANGED");
+      version = `v${sent.length + 1}`;
+      return task("a", { dueDateEnd: body.dueDateEnd, updatedAt: version });
+    } });
+    cache.setQueryData<TodayDto>(today, { tasks: [task("a", { updatedAt: "v1" })], openCount: 0 });
+    // Two resizes from the same stale copy (v1), the second while the first is in flight.
+    const first = new MutationObserver(cache, writes.update).mutate({ id: "a", details: { ...details, updatedAt: "v1", dueDateEnd: local(5, 10) } });
+    const second = new MutationObserver(cache, writes.update).mutate({ id: "a", details: { ...details, updatedAt: "v1", dueDateEnd: local(5, 11) } });
+    release();
+    await first;
+    expect((await second).dueDateEnd).toBe(local(5, 11));
+    expect(sent).toEqual(["v1", "v2"]);
+    expect(cache.getQueryData<TodayDto>(today)?.tasks[0]?.updatedAt).toBe("v3");
+    // Another device's version still conflicts.
+    version = "elsewhere";
+    await expect(new MutationObserver(cache, writes.update).mutate({ id: "a", details: { ...details, updatedAt: "v3" } })).rejects.toMatchObject({ code: "TASK_CHANGED" });
+  });
+
   it("deletes optimistically and treats a task already gone after a retry as deleted", async () => {
     let calls = 0;
     const { cache, writes } = setup({ remove: async () => { calls += 1; if (calls === 1) throw new AccountTransportError("SAVE_FAILED"); return false; } });

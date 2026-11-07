@@ -182,6 +182,29 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     return { previous };
   }
   const rollback = (_error: Error, _input: unknown, snapshot?: Snapshot) => { if (snapshot?.previous) cache.setQueryData(today, snapshot.previous); };
+  // Edits of one task run one at a time, and an edit based on the version this
+  // client's own earlier edit replaced is rebased onto that edit's result. A
+  // second drag (or any write) started before the first settled — and before
+  // Today refetched — would otherwise send the old updatedAt and be refused
+  // as "changed on another device". Only our own writes are skipped over: a
+  // version written elsewhere still conflicts.
+  // ponytail: `replaced` grows by one entry per edit for the session; fine at human edit rates.
+  const running = new Map<string, Promise<unknown>>();
+  const replaced = new Map<string, string>();
+  const latest = (id: string, version: string) => { let current = version; while (replaced.has(`${id}@${current}`)) current = replaced.get(`${id}@${current}`)!; return current; };
+  const edit = (id: string, details: TaskDetails) => {
+    const run = (running.get(id) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      const base = latest(id, details.updatedAt);
+      const task = await transport.update(id, { ...details, updatedAt: base });
+      if (!task) throw new AccountTransportError("TASK_NOT_FOUND");
+      if (task.updatedAt && task.updatedAt !== base) replaced.set(`${id}@${base}`, task.updatedAt);
+      return task;
+    });
+    const done = () => { if (running.get(id) === run) running.delete(id); };
+    running.set(id, run);
+    run.then(done, done);
+    return run;
+  };
   return {
     create: {
       mutationFn: (task: NewTask) => transport.create(task),
@@ -201,13 +224,13 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     } satisfies MutationOptions<TaskDto | null, Error, Completion, Snapshot>,
     // Not optimistic (the legacy dialog waited too); the editor keeps its draft until saved.
     update: {
-      mutationFn: async ({ id, details }: { id: string; details: TaskDetails }) => {
-        const task = await transport.update(id, details);
-        if (!task) throw new AccountTransportError("TASK_NOT_FOUND");
-        return task;
-      },
+      mutationFn: ({ id, details }: { id: string; details: TaskDetails }) => edit(id, details),
       retry, retryDelay,
-      onSuccess: (task: TaskDto) => { cache.setQueryData(taskKeys.task(userId, task.id), task); },
+      // Today gets the saved copy at once too, so the next write starts from the new version.
+      onSuccess: (task: TaskDto) => {
+        cache.setQueryData(taskKeys.task(userId, task.id), task);
+        cache.setQueryData<TodayDto>(today, current => current && { ...current, tasks: current.tasks.map(item => item.id === task.id ? task : item) });
+      },
       onSettled: (_task: TaskDto | undefined, _error: Error | null, { id }: { id: string }) => settle(id),
     } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }>,
     remove: {
