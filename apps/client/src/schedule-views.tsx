@@ -104,6 +104,10 @@ export interface BlockSlots {
   open(block: TimeBlockDto): void;
   /** A moved or resized block (or task block: its own dueDate/dueDateEnd); settles once saved or refused. */
   change(item: ScheduleItem, start: Date, end: Date): Promise<unknown>;
+  /** Ticket 08: the tasks a block holds, listed inside it. */
+  tasksIn(block: TimeBlockDto): TaskDto[];
+  /** Ticket 08: extra controls beside Block time (the unscheduled sidebar toggle). */
+  toolbar?: ReactNode;
 }
 
 /** Legacy UpcomingListView: week strip, scroll-spy and one section per day for a year. */
@@ -294,7 +298,8 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
   };
 
   return <>
-    {blocks && <div className="ui flex justify-end pb-2">
+    {blocks && <div className="ui flex justify-end gap-2 pb-2">
+      {blocks.toolbar}
       <Button type="button" variant="outline" size="sm" data-schedule-action="new-block" onClick={newBlock}>Block time</Button>
     </div>}
     <div ref={scroll} className="schedule" style={{ height }}>
@@ -306,9 +311,9 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
       {/* ponytail: no overlap layout for simultaneous blocks (legacy neither); add columns if overlaps become common. */}
       <div ref={columns} className="schedule-columns" style={{ gridTemplateColumns: template }}>
         <div />
-        {days.map(day => <div key={dayKey(day)} className="schedule-column select-none" data-day={dayKey(day)} onClick={(event) => click(day, event)} onPointerDown={(event) => createDown(day, event)}>
+        {days.map(day => <div key={dayKey(day)} className="schedule-column select-none data-[drop-target]:bg-selected" data-day={dayKey(day)} onClick={(event) => click(day, event)} onPointerDown={(event) => createDown(day, event)}>
           {(eventDays.get(dayKey(day)) ?? []).filter(event => !event.allDay).map(event => <EventBlock key={event.id} event={event} />)}
-          {itemsOn(day).map(item => <BlockView key={item.key} item={item} draggable={Boolean(blocks)} onOpen={() => open(item)} onDrag={(mode, event) => itemDown(item, mode, event)} />)}
+          {itemsOn(day).map(item => <BlockView key={item.key} item={item} tasks={item.block ? blocks?.tasksIn(item.block) : undefined} draggable={Boolean(blocks)} onOpen={() => open(item)} onDrag={(mode, event) => itemDown(item, mode, event)} />)}
           {ghost && sameDay(ghost.start, day) && <div aria-hidden="true" className="timed-block pointer-events-none z-[2] border border-dashed border-primary bg-transparent" style={spanFor(ghost.start, ghost.end)}>
             <span className="timed-range">{labels.time(ghost.start)}–{labels.time(ghost.end)}</span>
           </div>}
@@ -325,12 +330,13 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
  * (a block holding just that task). Drag to move, drag the bottom edge to resize;
  * Enter or a click opens it.
  */
-function BlockView({ item, draggable, onOpen, onDrag }: { item: ScheduleItem; draggable: boolean; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
+function BlockView({ item, tasks = [], draggable, onOpen, onDrag }: { item: ScheduleItem; tasks?: TaskDto[]; draggable: boolean; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
   const tone = item.color ? { borderLeft: `3px solid ${item.color}`, backgroundColor: `color-mix(in srgb, ${item.color} 18%, transparent)` } : {};
-  return <button type="button" className={cn("timed-block z-[1]", draggable && "touch-none", item.block && !item.color && "border-l-[3px] border-solid border-border")}
-    data-block={item.block ? "time-block" : "task"} data-done={item.done || undefined} style={{ ...spanFor(item.start, item.end), ...tone }}
+  return <button type="button" className={cn("timed-block z-[1] data-[drop-target]:ring-2 data-[drop-target]:ring-ring", draggable && "touch-none", item.block && !item.color && "border-l-[3px] border-solid border-border")}
+    data-block={item.block ? "time-block" : "task"} data-time-block-id={item.block?.id} data-done={item.done || undefined} style={{ ...spanFor(item.start, item.end), ...tone }}
     onClick={(event) => { event.stopPropagation(); onOpen(); }} onPointerDown={draggable ? (event) => onDrag("move", event) : undefined}>
     <span className="timed-title">{item.title}</span><span className="timed-range">{labels.time(item.start)}–{labels.time(item.end)}</span>
+    {tasks.map(task => <span key={task.id} data-block-task={task.id} className={cn("truncate text-xs", task.status === "done" && "text-muted-foreground line-through")}>{task.title}</span>)}
     {draggable && <span aria-hidden="true" data-resize="" className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" onPointerDown={(event) => onDrag("resize", event)} />}
   </button>;
 }

@@ -75,7 +75,7 @@ export const clientCommandIds = [
   "quick-add.description", "quick-add.actions", "quick-add.deadline",
   "task.date", "task.clear-date", "task.priority-1", "task.priority-2", "task.priority-3", "task.priority-4", "task.priority",
   "task.labels", "task.deadline", "task.clear-deadline", "task.move", "task.nest", "task.unnest", "editor.previous", "editor.next",
-  "navigation.ui", "goal.create", "navigation.season", "season.start", "season.add-goal", "season.move-target", "season.toggle-tier", "season.remove-goal", "season.end", "task.goals", "task.milestone", "schedule.new-block", "editor.goal-suggestion-accept", "editor.goal-suggestion-dismiss", "project.goals", "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
+  "navigation.ui", "goal.create", "navigation.season", "season.start", "season.add-goal", "season.move-target", "season.toggle-tier", "season.remove-goal", "season.end", "task.goals", "task.milestone", "schedule.new-block", "schedule.unscheduled", "schedule.filter", "schedule.task", "editor.goal-suggestion-accept", "editor.goal-suggestion-dismiss", "project.goals", "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
   "task.menu", "task.copy-url", "task.reveal", "task.toggle-children", "view.toggle-nested",
   "upcoming.today", "upcoming.next-week", "upcoming.previous-week", "calendar.today", "calendar.next-week", "calendar.previous-week",
 ] as const;

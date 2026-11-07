@@ -1,15 +1,18 @@
-// The time block editor (goals ticket 07): title, goal, start and end, delete.
+// The time block editor (goals tickets 07, 08): title, goal, start and end, the
+// tasks it holds (each can be taken out), delete.
 // Pure view: the screen passes the block, goals and writes. The time fields are
 // the keyboard way to move and resize a block.
 import { useState, type FormEvent } from "react";
+import { X } from "lucide-react";
 import {
   Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Input,
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  List, ListRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "./ui";
 import { FormError, GoalDot } from "./goal-views";
 import { addDays, labels, startOfDay } from "./schedule";
 import type { GoalDto } from "./goals";
 import type { TimeBlockDto, TimeBlockPatch } from "./time-blocks";
+import type { TaskDto } from "./tasks";
 
 const NO_GOAL = "none";
 /** "HH:mm" on the block's day; an end at or before the start is the next midnight-crossing day. */
@@ -20,8 +23,12 @@ const onDay = (day: Date, time: string, after?: Date) => {
   return after && date <= after ? addDays(date, 1) : date;
 };
 
-export function TimeBlockDialog({ block, goals, onSave, onDelete, onClose }: {
+export function TimeBlockDialog({ block, goals, tasks = [], onSave, onDelete, onRemoveTask, onClose }: {
   block: TimeBlockDto;
+  /** The tasks in the block, in order. */
+  tasks?: TaskDto[];
+  /** Takes a task out of the block (the task stays unscheduled). */
+  onRemoveTask?: (taskId: string) => Promise<unknown>;
   /** Active goals; empty while Goals is hidden (no goal picker). */
   goals: GoalDto[];
   onSave: (patch: TimeBlockPatch) => Promise<unknown>;
@@ -67,6 +74,12 @@ export function TimeBlockDialog({ block, goals, onSave, onDelete, onClose }: {
             <Field><FieldLabel htmlFor="block-start">Start</FieldLabel><Input id="block-start" type="time" step={900} required value={from} onChange={event => setFrom(event.target.value)} /></Field>
             <Field><FieldLabel htmlFor="block-end">End</FieldLabel><Input id="block-end" type="time" step={900} required value={to} onChange={event => setTo(event.target.value)} /></Field>
           </div>
+          {tasks.length > 0 && <Field><FieldLabel>Tasks</FieldLabel>
+            <List>{tasks.map(task => <ListRow key={task.id} data-block-task={task.id}>
+              <span className={task.status === "done" ? "min-w-0 flex-1 truncate text-sm text-muted-foreground line-through" : "min-w-0 flex-1 truncate text-sm"}>{task.title}</span>
+              {onRemoveTask && <Button type="button" variant="ghost" size="icon-sm" aria-label={`Take ${task.title} out of the block`}
+                onClick={() => { setError(null); onRemoveTask(task.id).catch(() => setError("The task could not be taken out. Try again.")); }}><X /></Button>}
+            </ListRow>)}</List></Field>}
           {error && <FormError>{error}</FormError>}
         </DialogBody>
         <DialogFooter>

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-time-block-task"
+description = "Enables the set_time_block_task command without any pre-configured scope."
+commands.allow = ["set_time_block_task"]
+
+[[permission]]
+identifier = "deny-set-time-block-task"
+description = "Denies the set_time_block_task command without any pre-configured scope."
+commands.deny = ["set_time_block_task"]

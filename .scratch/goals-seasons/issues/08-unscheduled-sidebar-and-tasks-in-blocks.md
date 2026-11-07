@@ -4,15 +4,15 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Right sidebar lists open tasks without a scheduled time
-- [ ] Drag a task onto a free slot to schedule it
-- [ ] Drag a task into a block to add it; a block can hold several tasks
-- [ ] Filter by goal, project, priority and label
-- [ ] Set a task's priority from the sidebar
-- [ ] The right-sidebar container is reusable by later tickets (rituals, Coach chat)
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Right sidebar lists open tasks without a scheduled time
+- [x] Drag a task onto a free slot to schedule it
+- [x] Drag a task into a block to add it; a block can hold several tasks
+- [x] Filter by goal, project, priority and label
+- [x] Set a task's priority from the sidebar
+- [x] The right-sidebar container is reusable by later tickets (rituals, Coach chat)
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

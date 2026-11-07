@@ -16,10 +16,12 @@ export interface TimeBlockStore {
   update(userId: string, id: string, patch: UpdateTimeBlockInput): Promise<TimeBlockRecord | null>;
   /** false when missing or foreign. */
   remove(userId: string, id: string): Promise<boolean>;
+  /** Ticket 08: puts a task into the block or takes it out (idempotent); null when either is missing or foreign. */
+  setTask(userId: string, blockId: string, taskId: string, linked: boolean): Promise<TimeBlockRecord | null>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
-const NOT_FOUND = { code: "NOT_FOUND", message: "This time block or goal does not exist or you do not have access to it." } as const;
+const NOT_FOUND = { code: "NOT_FOUND", message: "This time block, goal or task does not exist or you do not have access to it." } as const;
 const FORBIDDEN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sent by todalo." } as const;
 const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try again." } as const;
 
@@ -59,5 +61,20 @@ export function createTimeBlockRoutes(store: TimeBlockStore) {
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
       return await store.remove(userId, params.id) ? { id: params.id } : status(404, NOT_FOUND);
+    })
+    // Ticket 08: a block holds zero or more tasks; PUT puts one in, DELETE takes it out.
+    .put("/time-blocks/:id/tasks/:taskId", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const block = await store.setTask(userId, params.id, params.taskId, true);
+      return block ? { block: toTimeBlockDto(block) satisfies TimeBlockDto } : status(404, NOT_FOUND);
+    })
+    .delete("/time-blocks/:id/tasks/:taskId", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const block = await store.setTask(userId, params.id, params.taskId, false);
+      return block ? { block: toTimeBlockDto(block) satisfies TimeBlockDto } : status(404, NOT_FOUND);
     });
 }

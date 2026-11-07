@@ -140,6 +140,7 @@ pub fn run() {
             time_blocks::create_time_block,
             time_blocks::update_time_block,
             time_blocks::delete_time_block,
+            time_blocks::set_time_block_task,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

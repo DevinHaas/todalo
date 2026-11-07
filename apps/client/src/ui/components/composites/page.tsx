@@ -61,4 +61,21 @@ const sidebarItemClassName = [
   "[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-subtle-foreground aria-[current=page]:[&_svg]:text-brand-tint-foreground",
 ].join(" ");
 
-export { Hint, List, ListRow, PageHeader, PageSection, SidebarSectionHeader, sidebarItemClassName };
+/**
+ * The right sidebar beside a screen (the unscheduled tasks next to the schedule;
+ * later rituals and the Coach chat): a titled column, sticky while the page scrolls.
+ */
+function RightSidebar({ title, actions, className, children, ...props }: Omit<React.ComponentProps<"aside">, "title"> & {
+  title: React.ReactNode; actions?: React.ReactNode;
+}) {
+  return (
+    <aside data-slot="right-sidebar" className={cn("sticky top-0 flex max-h-screen w-sidebar shrink-0 flex-col gap-2 self-start overflow-y-auto border-l border-border pl-4", className)} {...props}>
+      <div className="flex h-control items-center justify-between gap-2">
+        <h2 className="min-w-0 truncate text-sm font-bold">{title}</h2>{actions && <div className="flex items-center gap-1">{actions}</div>}
+      </div>
+      {children}
+    </aside>
+  );
+}
+
+export { Hint, List, ListRow, PageHeader, PageSection, RightSidebar, SidebarSectionHeader, sidebarItemClassName };

@@ -87,6 +87,27 @@ pub async fn delete_time_block(
         .await?)
 }
 
+/// Goals ticket 08: puts a task into a block (`linked`) or takes it out.
+#[tauri::command]
+pub async fn set_time_block_task(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+    task_id: String,
+    linked: bool,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&id) || !valid_id(&task_id) {
+        return Ok(None);
+    }
+    let method = if linked { Method::PUT } else { Method::DELETE };
+    Ok(state
+        .write(
+            method,
+            &format!("/api/v1/time-blocks/{id}/tasks/{task_id}"),
+            None,
+        )
+        .await?)
+}
+
 /// Instants are short ISO strings, the goal a valid ID or null, the title at
 /// most 200 characters; an empty patch is refused.
 fn block_body(patch: TimeBlockPatch) -> Result<Value, &'static str> {

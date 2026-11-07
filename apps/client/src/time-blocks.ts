@@ -16,6 +16,8 @@ export interface TimeBlockTransport {
   /** null when the block or goal is missing or foreign. */
   update(id: string, patch: TimeBlockPatch): Promise<TimeBlockDto | null>;
   remove(id: string): Promise<boolean>;
+  /** Ticket 08: puts a task into the block or takes it out; null when either is missing or foreign. */
+  setTask(id: string, taskId: string, linked: boolean): Promise<TimeBlockDto | null>;
 }
 
 export function browserTimeBlockTransport(fetcher: typeof fetch = fetch): TimeBlockTransport {
@@ -45,6 +47,7 @@ export function browserTimeBlockTransport(fetcher: typeof fetch = fetch): TimeBl
     create: async (block) => (await request<{ block: TimeBlockDto }>("POST", "/api/v1/time-blocks", block))?.block ?? null,
     update: async (id, patch) => (await request<{ block: TimeBlockDto }>("PATCH", one(id), patch))?.block ?? null,
     remove: async (id) => Boolean(await request("DELETE", one(id))),
+    setTask: async (id, taskId, linked) => (await request<{ block: TimeBlockDto }>(linked ? "PUT" : "DELETE", `${one(id)}/tasks/${encodeURIComponent(taskId)}`))?.block ?? null,
   };
 }
 
@@ -60,6 +63,7 @@ export function timeBlockTransport(): TimeBlockTransport {
     create: async (block) => (await command<{ block: TimeBlockDto } | null>("create_time_block", { block }))?.block ?? null,
     update: async (id, patch) => (await command<{ block: TimeBlockDto } | null>("update_time_block", { id, patch }))?.block ?? null,
     remove: async (id) => Boolean(await command<unknown>("delete_time_block", { id })),
+    setTask: async (id, taskId, linked) => (await command<{ block: TimeBlockDto } | null>("set_time_block_task", { id, taskId, linked }))?.block ?? null,
   };
 }
 
@@ -88,8 +92,10 @@ export function timeBlockMutations(transport: TimeBlockTransport, cache: QueryCl
     finally { await cache.invalidateQueries({ queryKey: key }); }
   }
   return {
-    create: (block: NewTimeBlock) => optimistic(blocks => [...blocks, { id: `pending-${block.start}`, goalId: block.goalId ?? null, title: block.title?.trim() || null, start: block.start, end: block.end }], () => transport.create(block)),
+    create: (block: NewTimeBlock) => optimistic(blocks => [...blocks, { id: `pending-${block.start}`, goalId: block.goalId ?? null, title: block.title?.trim() || null, start: block.start, end: block.end, taskIds: [] }], () => transport.create(block)),
     update: (id: string, patch: TimeBlockPatch) => optimistic(blocks => blocks.map(block => block.id === id ? { ...block, ...patch, title: patch.title === undefined ? block.title : patch.title.trim() || null } : block), () => transport.update(id, patch)),
     remove: (id: string) => optimistic(blocks => blocks.filter(block => block.id !== id), () => transport.remove(id)),
+    setTask: (id: string, taskId: string, linked: boolean) => optimistic(blocks => blocks.map(block => block.id !== id ? block
+      : { ...block, taskIds: linked ? [...new Set([...block.taskIds, taskId])] : block.taskIds.filter(item => item !== taskId) }), () => transport.setTask(id, taskId, linked)),
   };
 }

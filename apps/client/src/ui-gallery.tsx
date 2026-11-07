@@ -7,8 +7,8 @@ import {
   CardContent, CardDescription, CardHeader, CardTitle, Checkbox, ColorControl, Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
   DropdownMenuShortcut, DropdownMenuTrigger, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Field, FieldDescription, FieldError,
-  FieldLabel, Input, Label, Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger, PortalLayerContainerProvider, Progress,
-  RadioGroup, RadioGroupItem, SegmentedControl, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Sheet, SheetContent,
+  FieldLabel, Hint, Input, Label, Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger, PortalLayerContainerProvider, Progress,
+  RadioGroup, RadioGroupItem, RightSidebar, SegmentedControl, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Sheet, SheetContent,
   SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SliderControl, Spinner, Switch, SwatchPicker, Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, ToggleGroup, ToggleGroupItem, Tooltip, TooltipContent, TooltipTrigger,
 } from "./ui";
@@ -172,6 +172,9 @@ function Showcase() {
       <Table><TableHeader><TableRow><TableHead>Goal</TableHead><TableHead>Tier</TableHead></TableRow></TableHeader>
         <TableBody><TableRow><TableCell>Finish Todalo</TableCell><TableCell>Primary</TableCell></TableRow><TableRow><TableCell>Run a half</TableCell><TableCell>Secondary</TableCell></TableRow></TableBody>
       </Table>
+      <div className="flex h-40 justify-end rounded-lg border border-border">
+        <RightSidebar title="Unscheduled" actions={<Button variant="ghost" size="sm">Close</Button>}><Hint>The right sidebar: unscheduled tasks, rituals, Coach chat.</Hint></RightSidebar>
+      </div>
     </Group>
   </>;
 }

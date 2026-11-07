@@ -90,6 +90,7 @@ fn main() {
             "create_time_block",
             "update_time_block",
             "delete_time_block",
+            "set_time_block_task",
             "destinations",
             "create_section",
             "delete_section",

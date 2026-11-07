@@ -204,3 +204,29 @@ export function defaultBlockRange(day: Date, now = new Date()) {
   else start.setHours(9, 0, 0, 0);
   return { start, end: new Date(start.getTime() + 60 * MINUTE) };
 }
+
+// Goals ticket 08: the unscheduled sidebar and tasks in blocks.
+/** Sidebar filters; an absent field matches everything. `projectId: null` is the Inbox. */
+export interface UnscheduledFilter { goalId?: string; projectId?: string | null; priority?: number; labelId?: string }
+/** Which goals a task serves: linked directly or through its project. */
+export interface GoalLinks { projects: { goalId: string; projectId: string }[]; tasks: { goalId: string; taskId: string }[] }
+export const servesGoal = (task: TaskDto, goalId: string, links: GoalLinks) =>
+  links.tasks.some(link => link.goalId === goalId && link.taskId === task.id)
+  || (task.projectId !== null && links.projects.some(link => link.goalId === goalId && link.projectId === task.projectId));
+
+/** Open tasks without a scheduled time (no time of day, in no block), filtered; in collection order. */
+export function unscheduledTasks(tasks: TaskDto[], blocks: TimeBlockDto[], filter: UnscheduledFilter, links: GoalLinks) {
+  const inBlock = new Set(blocks.flatMap(block => block.taskIds));
+  return tasks.filter(task => task.status !== "done" && !isTimed(task) && !inBlock.has(task.id)
+    && (filter.goalId === undefined || servesGoal(task, filter.goalId, links))
+    && (filter.projectId === undefined || task.projectId === filter.projectId)
+    && (filter.priority === undefined || task.priority === filter.priority)
+    && (filter.labelId === undefined || task.labelIds.includes(filter.labelId)));
+}
+
+/** A task dropped at `y` px in a day column: starts at the snapped slot, 30 minutes, ending by midnight. */
+export function dropRange(day: Date, y: number) {
+  const { start } = slotAt(day, y);
+  const midnight = addDays(startOfDay(day), 1).getTime();
+  return { start, end: new Date(Math.min(start.getTime() + DEFAULT_DURATION_MINUTES * MINUTE, midnight)) };
+}

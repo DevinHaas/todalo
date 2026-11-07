@@ -10,7 +10,7 @@ import {
 import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigation";
 import type { TaskDto } from "./tasks";
 import {
-  addDays, addMonths, blockFor, blockItem, dayKey, defaultBlockRange, dragRange, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
+  addDays, addMonths, blockFor, blockItem, dayKey, defaultBlockRange, dragRange, dropRange, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
   upcomingSections, upcomingWindow, weekOf,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
@@ -169,9 +169,10 @@ describe("schedule views", () => {
     process.env.TZ = "Europe/Zurich";
     const events = [{ id: "e1", title: "Team sync", start: at(7, 13), end: at(7, 14), allDay: false, htmlLink: null, color: "#4285f4" }];
     const blocks = {
-      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12) }],
+      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12), taskIds: ["Spec"] }],
       goal: (goalId: string | null) => goalId === "g1" ? { title: "Ship v2", color: "oklch(0.62 0.16 250)" } : undefined,
       taskColor: () => "oklch(0.64 0.16 150)", create() {}, open() {}, change: async () => {},
+      tasksIn: () => [task("Spec", { title: "Write the spec" })], toolbar: createElement("button", { "data-schedule-action": "unscheduled" }),
     };
     const html = render(createElement(TodaySchedule, { tasks, events, slots: { ...slots, blocks }, now: new Date(2026, 9, 7, 10) }));
     expect(html).toContain("Team sync");
@@ -180,6 +181,9 @@ describe("schedule views", () => {
     // The scheduled task is a block holding just that task, from its own dates, in its goal's colour.
     expect(html).toMatch(/data-block="task"[^>]*style="top:432px;height:72px;border-left:3px solid oklch\(0.64 0.16 150\)/);
     expect(html).toContain('data-schedule-action="new-block"');
+    // Ticket 08: a block lists the tasks it holds and is a drop target by its ID.
+    expect(html).toMatch(/data-time-block-id="b1"[^>]*>.*data-block-task="Spec"[^>]*>Write the spec</);
+    expect(html).toContain('data-schedule-action="unscheduled"');
   });
 
   it("renders the month grid (Sunday start) with task chips and the Monday week marker", () => {
@@ -264,7 +268,7 @@ describe("time blocks on the schedule (goals ticket 07)", () => {
   });
 
   it("titles a block by its own title, else its goal's, else Time block; colour from the goal", () => {
-    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z" };
+    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z", taskIds: [] };
     expect(blockItem(block, { title: "Ship v2", color: "blue" })).toMatchObject({ key: "block:b1", title: "Ship v2", color: "blue" });
     expect(blockItem({ ...block, title: "Deep work" }, { title: "Ship v2", color: "blue" }).title).toBe("Deep work");
     expect(blockItem({ ...block, goalId: null })).toMatchObject({ title: "Time block", color: null });
@@ -276,5 +280,42 @@ describe("time blocks on the schedule (goals ticket 07)", () => {
     expect(labels.time(defaultBlockRange(day, now).start)).toBe("14:15");
     expect(labels.time(defaultBlockRange(addDays(day, 1), now).start)).toBe("09:00");
     expect(defaultBlockRange(day, now).end.getTime() - defaultBlockRange(day, now).start.getTime()).toBe(3_600_000);
+  });
+});
+
+describe("unscheduled sidebar (goals ticket 08)", () => {
+  const open = [
+    task("Spec", { projectId: "p1", priority: 1, labelIds: ["deep"] }),
+    task("Inbox chore", { priority: 4 }),
+    // Midnight and 09:00 in Zurich.
+    task("Dated", { projectId: "p2", dueDate: "2026-02-20T23:00:00.000Z", labelIds: ["deep"] }),
+    task("Timed", { dueDate: "2026-02-21T08:00:00.000Z" }),
+    task("Done", { status: "done" }),
+    task("Blocked", { projectId: "p1" }),
+  ];
+  const blocks = [{ id: "b1", goalId: null, title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T10:00:00.000Z", taskIds: ["Blocked"] }];
+  const links = { projects: [{ goalId: "g1", projectId: "p1" }], tasks: [{ goalId: "g2", taskId: "Inbox chore" }] };
+  beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
+  const ids = (filter: Parameters<typeof unscheduledTasks>[2]) => unscheduledTasks(open, blocks, filter, links).map(item => item.id);
+
+  it.each([
+    ["no filter: open, without a time, in no block (a date alone is unscheduled)", {}, ["Spec", "Inbox chore", "Dated"]],
+    ["a goal through the task's project", { goalId: "g1" }, ["Spec"]],
+    ["a goal linked to the task itself", { goalId: "g2" }, ["Inbox chore"]],
+    ["a project", { projectId: "p2" }, ["Dated"]],
+    ["the Inbox", { projectId: null }, ["Inbox chore"]],
+    ["a priority", { priority: 4 }, ["Inbox chore", "Dated"]],
+    ["a label", { labelId: "deep" }, ["Spec", "Dated"]],
+    ["filters together", { labelId: "deep", projectId: "p1" }, ["Spec"]],
+  ])("lists %s", (_name, filter, expected) => expect(ids(filter)).toEqual(expected));
+
+  it("schedules a dropped task for 30 minutes at the snapped slot, ending by midnight", () => {
+    process.env.TZ = "Europe/Zurich";
+    const day = new Date(2026, 2, 29);
+    const { start, end } = dropRange(day, 9.4 * 48);
+    expect([labels.time(start), labels.time(end)]).toEqual(["09:30", "10:00"]);
+    expect(end.getTime() - start.getTime()).toBe(30 * 60_000);
+    const late = dropRange(day, 24 * 48);
+    expect([labels.time(late.start), late.end.getTime()]).toEqual(["23:45", addDays(day, 1).getTime()]);
   });
 });

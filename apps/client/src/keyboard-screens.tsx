@@ -388,6 +388,10 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
       // Goals ticket 07: passes on when no schedule with blocks is shown.
       "schedule.new-block": () => press(document.querySelector("main"), '[data-schedule-action="new-block"]'),
+      // Goals ticket 08: pass on away from the schedule (or with the sidebar closed).
+      "schedule.unscheduled": () => press(document.querySelector("main"), '[data-schedule-action="unscheduled"]'),
+      "schedule.filter": () => { const first = document.querySelector<HTMLElement>('main [data-unscheduled] [data-unscheduled-filter="first"]'); if (!first) return false; first.focus(); },
+      "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };
     const commands = dispatchCommands(handlers.current, id => effectiveBindings(id, effective, platform));

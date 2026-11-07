@@ -298,6 +298,16 @@ export const timeBlocks = pgTable("time_blocks", {
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [index("time_blocks_user_start_idx").on(table.userId, table.startAt)]);
 
+// Goals ticket 08: tasks put into a block. A task may sit in several blocks (work
+// sessions); deleting either side drops only the link.
+export const timeBlockTasks = pgTable("time_block_tasks", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  blockId: text("block_id").notNull().references(() => timeBlocks.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("time_block_tasks_block_task_idx").on(table.blockId, table.taskId), index("time_block_tasks_user_idx").on(table.userId)]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

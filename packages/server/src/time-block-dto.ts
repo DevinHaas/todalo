@@ -4,13 +4,13 @@
 // blocks here: the client presents each as a block holding just that task.
 import { z } from "zod";
 
-/** Instants are ISO strings, like task dates. Ticket 08 adds taskIds, 09 the outcome, 10 the calendar event. */
-export interface TimeBlockDto { id: string; goalId: string | null; title: string | null; start: string; end: string }
+/** Instants are ISO strings, like task dates. taskIds in the order they were put in (ticket 08); 09 adds the outcome, 10 the calendar event. */
+export interface TimeBlockDto { id: string; goalId: string | null; title: string | null; start: string; end: string; taskIds: string[] }
 export interface TimeBlocksDto { blocks: TimeBlockDto[] }
 
-export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date }
+export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[] }
 export const toTimeBlockDto = (block: TimeBlockRecord): TimeBlockDto => ({
-  id: block.id, goalId: block.goalId, title: block.title, start: block.startAt.toISOString(), end: block.endAt.toISOString(),
+  id: block.id, goalId: block.goalId, title: block.title, start: block.startAt.toISOString(), end: block.endAt.toISOString(), taskIds: block.taskIds,
 });
 
 /** A block is at least 15 minutes (the schedule's snap) and at most a day. */
