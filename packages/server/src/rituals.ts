@@ -2,13 +2,13 @@
 // is scoped to the owner. The Check-in item on the schedule is an ordinary
 // daily recurring task, written through tasks.ts so Google Calendar sync and the
 // live delta treat it like any other scheduled task.
-import { and, between, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { goals, progressRatings, ritualRuns, ritualSettings, tasks } from "@todalo/db/schema";
 import { createTask, deleteTask, updateTask } from "./tasks";
 import { getGoalLinks } from "./goals";
 import { getCurrentSeason } from "./seasons";
-import { defaultRitualSettings, type ProgressRating, type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RunStatus } from "./ritual-dto";
+import { addDays, defaultRitualSettings, type ProgressRating, type RatingHistoryItem, type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RunStatus } from "./ritual-dto";
 import type { WeekLinks, WeekTask } from "./weekly-review";
 
 const kinds = { checkIn: "check_in", weeklyReview: "weekly_review", seasonReview: "season_review" } as const;
@@ -89,6 +89,41 @@ export async function getWeekInputs(userId: string, { from, to, firstDay, lastDa
       .where(and(eq(progressRatings.userId, userId), eq(progressRatings.runId, run.id))),
   } : null;
   return { goalIds, links, tasks: weekTasks, checkIns: ratings, review };
+}
+
+/** Ticket 14: the raw inputs of the Season review (the route groups them per goal). */
+export interface SeasonReviewInputs {
+  season: { id: string; startDate: string; lengthDays: number } | null;
+  goalIds: string[];
+  history: (RatingHistoryItem & { goalId: string })[];
+  review: RitualRunDto | null;
+}
+
+/**
+ * The current season, its goals (not archived), every completed Check-in and
+ * Weekly review rating of those goals for periods inside the season's dates,
+ * and the season's own review run (its period is the season's start date).
+ */
+export async function getSeasonReviewInputs(userId: string): Promise<SeasonReviewInputs> {
+  const current = await getCurrentSeason(userId);
+  if (!current) return { season: null, goalIds: [], history: [], review: null };
+  const { id, startDate, lengthDays } = current.season;
+  const goalIds = current.goals.filter(goal => !goal.archivedAt).map(goal => goal.goalId);
+  const [rows, [run]] = await Promise.all([
+    goalIds.length ? db.select({ goalId: progressRatings.goalId, kind: ritualRuns.kind, period: ritualRuns.period, rating: progressRatings.rating, context: progressRatings.context })
+      .from(progressRatings).innerJoin(ritualRuns, eq(ritualRuns.id, progressRatings.runId))
+      .where(and(eq(progressRatings.userId, userId), inArray(progressRatings.goalId, goalIds), inArray(ritualRuns.kind, [kinds.checkIn, kinds.weeklyReview]),
+        eq(ritualRuns.status, "completed"), between(ritualRuns.period, startDate, addDays(startDate, lengthDays - 1))))
+      .orderBy(asc(ritualRuns.period)) : [],
+    db.select().from(ritualRuns).where(and(eq(ritualRuns.userId, userId), eq(ritualRuns.kind, kinds.seasonReview), eq(ritualRuns.period, startDate))),
+  ]);
+  const review = run ? {
+    id: run.id, kind: "seasonReview" as const, period: run.period, status: run.status, planning: run.planning,
+    ratings: await db.select({ goalId: progressRatings.goalId, rating: progressRatings.rating, context: progressRatings.context }).from(progressRatings)
+      .where(and(eq(progressRatings.userId, userId), eq(progressRatings.runId, run.id))),
+  } : null;
+  const history = rows.map(row => ({ ...row, kind: row.kind === kinds.checkIn ? "checkIn" as const : "weeklyReview" as const }));
+  return { season: { id, startDate, lengthDays }, goalIds, history, review };
 }
 
 /** The Check-in task's current start, or null when there is none (never created, or deleted by hand). */

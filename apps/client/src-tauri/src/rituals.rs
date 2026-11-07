@@ -138,3 +138,12 @@ pub async fn weekly_review(
         .await?
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
+
+/// Ticket 14: each current-season goal's ratings across the season for the Season review.
+#[tauri::command]
+pub async fn season_review(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .read("/api/v1/rituals/season-review")
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}

@@ -133,6 +133,8 @@ const app = createApi(dependencies)
   checkInTask: rituals.getCheckInTask,
   placeCheckIn: rituals.placeCheckIn,
   weekInputs: rituals.getWeekInputs,
+  season: async (userId) => (await seasons.getCurrentSeason(userId))?.season ?? null,
+  seasonReviewInputs: rituals.getSeasonReviewInputs,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

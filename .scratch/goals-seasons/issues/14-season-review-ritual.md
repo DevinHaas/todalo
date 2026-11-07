@@ -4,12 +4,12 @@
 
 **Blocked by:** 11, 05
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Offered when a season ends (and on demand)
-- [ ] Per-goal look-back with ratings history
-- [ ] Choose continuing goals, new targets and tiers; starts the next season
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Offered when a season ends (and on demand)
+- [x] Per-goal look-back with ratings history
+- [x] Choose continuing goals, new targets and tiers; starts the next season
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

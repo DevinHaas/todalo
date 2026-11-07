@@ -3,10 +3,10 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { change, optimisticWrite } from "./optimistic";
 import { localZone } from "./seasons";
 import { taskKeys } from "./tasks";
-import type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, WeekGoalSummary, WeeklyReviewDto } from "../../../packages/server/src/ritual-dto";
+import type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, RatingHistoryItem, SeasonReviewDto, WeekGoalSummary, WeeklyReviewDto } from "../../../packages/server/src/ritual-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
-export type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, WeekGoalSummary, WeeklyReviewDto };
+export type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, RatingHistoryItem, SeasonReviewDto, WeekGoalSummary, WeeklyReviewDto };
 export { addDays, progressRatings, ratingLabels } from "../../../packages/server/src/ritual-dto";
 export interface RitualRun { kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[]; planning?: PlanningAnswer | null }
 
@@ -18,6 +18,8 @@ export interface RitualTransport {
   record(timeZone: string, run: RitualRun): Promise<{ run: RitualRunDto; rituals: RitualsDto } | null>;
   /** Ticket 13: each current-season goal's week for the Weekly review. */
   weekly(timeZone: string): Promise<WeeklyReviewDto>;
+  /** Ticket 14: each current-season goal's ratings across the season. */
+  seasonReview(): Promise<SeasonReviewDto>;
 }
 
 export function browserRitualTransport(fetcher: typeof fetch = fetch): RitualTransport {
@@ -43,6 +45,7 @@ export function browserRitualTransport(fetcher: typeof fetch = fetch): RitualTra
     save: async (timeZone, settings) => required(await request<RitualsDto>("PUT", zoned("/api/v1/rituals/settings", timeZone), settings), "SAVE_FAILED"),
     record: (timeZone, run) => request("POST", zoned("/api/v1/rituals/runs", timeZone), run),
     weekly: async (timeZone) => required(await request<WeeklyReviewDto>("GET", zoned("/api/v1/rituals/weekly-review", timeZone)), "TASKS_UNAVAILABLE"),
+    seasonReview: async () => required(await request<SeasonReviewDto>("GET", "/api/v1/rituals/season-review"), "TASKS_UNAVAILABLE"),
   };
 }
 
@@ -58,6 +61,7 @@ export function ritualTransport(): RitualTransport {
     save: (timeZone, settings) => command("update_ritual_settings", { timeZone, settings }),
     record: (timeZone, run) => command("record_ritual_run", { timeZone, run }),
     weekly: (timeZone) => command("weekly_review", { timeZone }),
+    seasonReview: () => command("season_review"),
   };
 }
 
@@ -66,11 +70,14 @@ export const ritualKeys = {
   all: (userId: string) => ["user", userId, "rituals"] as const,
   /** Derived from tasks, goal links and the season too: sync.ts refreshes it on those changes. */
   weekly: (userId: string) => ["user", userId, "rituals", "weekly"] as const,
+  /** Ratings per season goal; refreshed with ritual and season changes. */
+  seasonReview: (userId: string) => ["user", userId, "rituals", "season-review"] as const,
 };
 
 export const ritualQueries = (transport: RitualTransport) => ({
   state: (userId: string) => queryOptions({ queryKey: ritualKeys.all(userId), queryFn: () => transport.get(localZone()) }),
   weekly: (userId: string) => queryOptions({ queryKey: ritualKeys.weekly(userId), queryFn: () => transport.weekly(localZone()) }),
+  seasonReview: (userId: string) => queryOptions({ queryKey: ritualKeys.seasonReview(userId), queryFn: () => transport.seasonReview() }),
 });
 
 /**
@@ -88,7 +95,8 @@ export function ritualMutations(transport: RitualTransport, cache: QueryClient, 
     record: (run: RitualRun) => optimisticWrite(cache,
       [change<RitualsDto | undefined>(key, data => !data ? data
         : run.kind === "checkIn" && run.period === data.checkIn.period ? { ...data, checkIn: { ...data.checkIn, status: run.status } }
-        : run.kind === "weeklyReview" && run.period === data.weeklyReview.period ? { ...data, weeklyReview: { ...data.weeklyReview, status: run.status } } : data),
+        : run.kind === "weeklyReview" && run.period === data.weeklyReview.period ? { ...data, weeklyReview: { ...data.weeklyReview, status: run.status } }
+        : run.kind === "seasonReview" && run.period === data.seasonReview.period ? { ...data, seasonReview: { ...data.seasonReview, status: run.status } } : data),
       change<WeeklyReviewDto | undefined>(ritualKeys.weekly(userId), data => data && run.kind === "weeklyReview" && run.period === data.period
         ? { ...data, status: run.status, ratings: run.ratings, planning: run.planning ?? null } : data)],
       async () => done(await transport.record(localZone(), run)), refresh, ({ rituals }) => [change(key, () => rituals)]),

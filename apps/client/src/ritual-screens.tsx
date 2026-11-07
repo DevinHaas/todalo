@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
-import { ritualReads, rituals, seasonReads } from "./runtime";
+import { ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { seasonMutations, type NextSeason } from "./seasons";
+import { EndSeasonStep, seasonRange } from "./season-views";
 import { addDays, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto } from "./rituals";
-import { checkInCopy, RitualPanel, RitualSettingsForm, RitualsNav, WeekSummary, weeklyReviewCopy } from "./ritual-views";
+import { checkInCopy, RatingHistory, RitualPanel, RitualSettingsForm, RitualsNav, seasonReviewCopy, WeekSummary, weeklyReviewCopy } from "./ritual-views";
 import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
 import { showCalendarDay, useDisplay } from "./schedule-views";
@@ -19,12 +21,23 @@ const OPEN = "todalo:ritual";
 /** Opens a ritual's panel from anywhere (sidebar, schedule item, keyboard). */
 export const openRitual = (kind: RitualKind = "checkIn") => window.dispatchEvent(new CustomEvent(OPEN, { detail: kind }));
 
+const ritualNames: Record<RitualKind, string> = { checkIn: "Check-in", weeklyReview: "Weekly review", seasonReview: "Season review" };
+
 function useRitualWrites(userId: string) {
   const cache = useQueryClient();
   const writes = useMemo(() => ritualMutations(rituals, cache, userId), [cache, userId]);
+  const seasonWrites = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   return {
     save: useMutation({ mutationFn: writes.save, meta: { action: () => "save your ritual settings" } }),
-    record: useMutation({ mutationFn: writes.record, meta: { action: (run: RitualRun) => `${run.status === "skipped" ? "skip" : "save"} the ${run.kind === "weeklyReview" ? "Weekly review" : "Check-in"}` } }),
+    record: useMutation({ mutationFn: writes.record, meta: { action: (run: RitualRun) => `${run.status === "skipped" ? "skip" : "save"} the ${ritualNames[run.kind]}` } }),
+    // Ticket 14: the existing End season write (carrying goals into the next season), then the review's own ratings.
+    review: useMutation({
+      mutationFn: async ({ seasonId, period, ratings, next }: { seasonId: string; period: string; ratings: RatingDto[]; next: NextSeason | null }) => {
+        await seasonWrites.end(seasonId, next);
+        await writes.record({ kind: "seasonReview", period, status: "completed", ratings, planning: null });
+      },
+      meta: { action: () => "finish the Season review" },
+    }),
   };
 }
 
@@ -83,7 +96,12 @@ export function RitualHost({ userId }: { userId: string }) {
   const query = useQuery(ritualReads.state(userId));
   const season = useQuery({ ...seasonReads.current(userId), enabled: open !== null });
   const weekly = useQuery({ ...ritualReads.weekly(userId), enabled: open === "weeklyReview" });
-  const { record } = useRitualWrites(userId);
+  const looking = useQuery({ ...ritualReads.seasonReview(userId), enabled: open === "seasonReview" });
+  const { record, review } = useRitualWrites(userId);
+  // Ending refetches the season before the review closes: keep showing the season under review meanwhile.
+  const reviewed = useRef<typeof season.data>(undefined);
+  if (!review.isPending) reviewed.current = season.data;
+  const shown = review.isPending ? reviewed.current : season.data;
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const display = useDisplay();
@@ -103,9 +121,8 @@ export function RitualHost({ userId }: { userId: string }) {
     window.addEventListener(OPEN, start);
     return () => window.removeEventListener(OPEN, start);
   }, []);
-  // ponytail: the Season review panel comes with ticket 14.
-  if ((open !== "checkIn" && open !== "weeklyReview") || !query.data || season.status === "pending") return null;
-  const goals = (season.data?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color }) => ({ goalId, title, color }));
+  if (!open || !query.data || season.status === "pending") return null;
+  const goals = (shown?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color }) => ({ goalId, title, color }));
   const voice = (append: (text: string) => void) => <VoiceContext onText={append} />;
   const close = () => setOpen(null);
   if (open === "checkIn") {
@@ -116,6 +133,21 @@ export function RitualHost({ userId }: { userId: string }) {
         done({ status: "completed", ratings, planning });
         if (planning === "help") { navigate("/today"); setPlan({ path: "/today" }); }
       }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={close} />;
+  }
+  if (open === "seasonReview") {
+    const current = shown?.season;
+    if (!current || looking.status === "pending") return null;
+    const period = current.startDate;
+    const status = query.data.seasonReview.period === period ? query.data.seasonReview.status : null;
+    return <RitualPanel key={period} copy={seasonReviewCopy(seasonRange(current))} goals={goals} status={status} pending={record.isPending || review.isPending}
+      initial={looking.data?.ratings} voice={voice}
+      summary={goalId => {
+        if (!looking.data) return <LoadFailure error={looking.error} onRetry={() => void looking.refetch()} />;
+        return <RatingHistory goalId={goalId} history={looking.data.goals.find(item => item.goalId === goalId)?.history ?? []} />;
+      }}
+      final={(ratings, back) => <EndSeasonStep season={current} back={back} write={{ pending: review.isPending, error: review.error?.message ?? null }}
+        onEnd={async next => { await review.mutateAsync({ seasonId: current.id, period, ratings, next }); close(); navigate("/season"); }} />}
+      onFinish={() => undefined} onSkip={() => { record.mutate({ kind: "seasonReview", period, status: "skipped", ratings: [] }); close(); }} onClose={close} />;
   }
   if (weekly.status === "pending") return null;
   // The week summary failing to load never blocks rating the week.

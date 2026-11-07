@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { CalendarRange, CircleCheck, Sunrise, X } from "lucide-react";
-import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
+import { CalendarCheck, CalendarRange, CircleCheck, Sunrise, X } from "lucide-react";
+import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RatingHistoryItem, type RitualKind, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
 import { GoalDot } from "./goal-views";
 import {
   Badge, Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
@@ -44,10 +44,11 @@ export function RitualSettingsForm({ settings, disabled, onChange }: { settings:
   </div>;
 }
 
-/** The left sidebar's Rituals section: one click starts a ritual. Hidden while the Check-in and Weekly review are off. */
-export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart: (kind: "checkIn" | "weeklyReview") => void }) {
-  const { settings, checkIn, weeklyReview } = rituals;
-  if (!settings.checkIn.enabled && !settings.weeklyReview.enabled) return null;
+/** The left sidebar's Rituals section: one click starts a ritual. Hidden while every ritual is off (or only the Season review, without a season). */
+export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart: (kind: RitualKind) => void }) {
+  const { settings, checkIn, weeklyReview, seasonReview } = rituals;
+  const season = settings.seasonReview.enabled && seasonReview.period !== null;
+  if (!settings.checkIn.enabled && !settings.weeklyReview.enabled && !season) return null;
   const state = (status: RunStatus | null, otherwise: string) => status === "completed" ? "Done" : status === "skipped" ? "Skipped" : otherwise;
   return <section className="ui mb-3 flex flex-col" aria-label="Rituals">
     <SidebarSectionHeader title="Rituals" />
@@ -59,6 +60,10 @@ export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart:
       {weeklyReview.status ? <CircleCheck /> : <CalendarRange />}<span className="flex-1 truncate">Weekly review</span>
       <span className="text-xs text-subtle-foreground">{state(weeklyReview.status, weekdays[settings.weeklyReview.day]!.slice(0, 3))}</span>
     </button>}
+    {season && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("seasonReview")} data-ritual-start="seasonReview">
+      {seasonReview.status ? <CircleCheck /> : <CalendarCheck />}<span className="flex-1 truncate">Season review</span>
+      <span className="text-xs text-subtle-foreground">{state(seasonReview.status, seasonReview.due ? "Due" : "")}</span>
+    </button>}
   </section>;
 }
 
@@ -66,12 +71,14 @@ export interface CheckInGoal { goalId: string; title: string; color: string }
 
 /** What differs between the Check-in and the Weekly review panels. */
 export interface RitualCopy {
-  kind: "checkIn" | "weeklyReview"; title: string;
+  kind: RitualKind; title: string;
   /** Above each goal's rating. */
   prompt: string;
   /** Shown when the run for this period was already done or skipped. */
   done: string;
-  planQuestion: string; planHint: string; planYes: string;
+  planQuestion: string; planHint: string;
+  /** The "help" answer; unused with a custom last step. */
+  planYes?: string;
 }
 
 /** "1 h 30 min", "45 min", "0 min". */
@@ -95,6 +102,25 @@ export function WeekSummary({ week }: { week: WeekGoalSummary }) {
   </div>;
 }
 
+const shortDate = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+const dayMonth = (day: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(Date.parse(`${day}T00:00:00Z`));
+
+/** Ticket 14: one goal's ratings across the season above its season rating, as counts and then each rating, oldest first. */
+export function RatingHistory({ goalId, history }: { goalId: string; history: RatingHistoryItem[] }) {
+  return <div className="flex flex-col gap-2 rounded-md border border-border-subtle p-3 text-sm" data-rating-history={goalId}>
+    <span className="text-muted-foreground">Ratings this season</span>
+    {history.length ? <>
+      <div className="flex flex-wrap gap-x-3 gap-y-1" data-rating-counts="">{progressRatings.flatMap(rating => {
+        const count = history.filter(item => item.rating === rating).length;
+        return count ? [<span key={rating}>{ratingLabels[rating]}: <strong className="font-semibold">{count}</strong></span>] : [];
+      })}</div>
+      <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">{history.map(item => <Badge key={`${item.kind}-${item.period}`} variant="outline" title={item.context ?? undefined}>
+        {item.kind === "weeklyReview" ? `Week of ${dayMonth(item.period)}` : shortDate.format(Date.parse(`${item.period}T00:00:00Z`))}: {ratingLabels[item.rating]}
+      </Badge>)}</div>
+    </> : <Hint>No Check-in or Weekly review ratings this season.</Hint>}
+  </div>;
+}
+
 /**
  * A ritual's step runner in the right sidebar: one step per current-season
  * goal (a progress rating for the period, optional context typed or spoken,
@@ -102,7 +128,7 @@ export function WeekSummary({ week }: { week: WeekGoalSummary }) {
  * question (tickets 12 and 13). Either answer finishes the ritual; "help" also
  * opens the schedule to plan. Skip records a skip; closing keeps nothing (do it later).
  */
-export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, onFinish, onSkip, onClose }: {
+export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, final, onFinish, onSkip, onClose }: {
   copy: RitualCopy; goals: CheckInGoal[]; status: RunStatus | null; pending: boolean;
   /** A redo starts from the ratings given before. */
   initial?: RatingDto[];
@@ -110,6 +136,8 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   summary?: (goalId: string) => ReactNode;
   /** The spoken-context control for one goal's context: calls `append` with what was said. */
   voice?: (append: (text: string) => void) => ReactNode;
+  /** Replaces the planning answers as the last step (the Season review's next season); `back` returns to the last goal. */
+  final?: (ratings: RatingDto[], back: ReactNode) => ReactNode;
   onFinish: (ratings: RatingDto[], planning: PlanningAnswer) => void; onSkip: () => void; onClose: () => void;
 }) {
   const [step, setStep] = useState(0);
@@ -120,10 +148,12 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   const set = (patch: Partial<{ rating: ProgressRating; context: string }>) => goal && setRatings(all => ({ ...all, [goal.goalId]: { ...(all[goal.goalId] ?? { context: "" }), ...patch } }));
   // The planning question is the last step, after every goal.
   const steps = goals.length + 1;
-  const finish = (planning: PlanningAnswer) => onFinish(goals.flatMap(({ goalId }) => {
+  const given = () => goals.flatMap(({ goalId }) => {
     const item = ratings[goalId];
     return item?.rating ? [{ goalId, rating: item.rating, context: item.context.trim() || null }] : [];
-  }), planning);
+  });
+  const finish = (planning: PlanningAnswer) => onFinish(given(), planning);
+  const back = goals.length > 0 && <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setStep(step - 1)}>Back</Button>;
   const contextId = `${copy.kind}-context`;
   return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label={copy.title} data-ritual-panel={copy.kind}
     title={copy.title} actions={<>
@@ -136,11 +166,11 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
       {!goals.length && <Hint>No goals in the current season to rate. Add goals on the Season page.</Hint>}
       <h3 className="text-sm font-semibold">{copy.planQuestion}</h3>
       <Hint>{copy.planHint}</Hint>
-      <div className="flex flex-col gap-2">
+      {final ? final(given(), back) : <><div className="flex flex-col gap-2">
         <Button type="button" disabled={pending} onClick={() => finish("help")} data-ritual-action="plan-help">{copy.planYes}</Button>
         <Button type="button" variant="outline" disabled={pending} onClick={() => finish("clear")} data-ritual-action="plan-clear">No, I've got a clear idea</Button>
       </div>
-      {goals.length > 0 && <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setStep(step - 1)}>Back</Button>}
+      {back}</>}
     </div> : <div className="flex flex-col gap-3" key={goal.goalId}>
       <h3 className="flex items-center gap-2 text-sm font-semibold"><GoalDot color={goal.color} />{goal.title}</h3>
       {summary?.(goal.goalId)}
@@ -165,7 +195,7 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   </RightSidebar>;
 }
 
-/** The two rituals' wording. */
+/** The rituals' wording. */
 export const checkInCopy = (period: string): RitualCopy => ({
   kind: "checkIn", title: "Check-in", prompt: `How much did ${dayLabel(period)} move you towards this goal?`, done: "Today's Check-in is already",
   planQuestion: "Do you need help planning today?", planHint: "Yes opens today's schedule with your unscheduled tasks beside it: drag them onto a time.", planYes: "Yes, help me plan today",
@@ -173,4 +203,9 @@ export const checkInCopy = (period: string): RitualCopy => ({
 export const weeklyReviewCopy = (period: string): RitualCopy => ({
   kind: "weeklyReview", title: "Weekly review", prompt: `How much did the week of ${dayLabel(period)} move you towards this goal?`, done: "This week's review is already",
   planQuestion: "Do you want to plan next week now?", planHint: "Yes opens next week's schedule with your unscheduled tasks beside it: drag goal tasks onto a time.", planYes: "Yes, plan next week",
+});
+/** Ticket 14: the planning fields are the next season (planQuestion/planHint head that step). */
+export const seasonReviewCopy = (range: string): RitualCopy => ({
+  kind: "seasonReview", title: "Season review", prompt: `Looking back on ${range}, how much did this season move you towards this goal?`, done: "This season's review is already",
+  planQuestion: "Which goals continue?", planHint: "Choose the goals that carry into the next season, with their tier and next target. Finishing ends this season (kept as history) and starts the next.",
 });

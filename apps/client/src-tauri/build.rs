@@ -91,6 +91,7 @@ fn main() {
             "update_ritual_settings",
             "record_ritual_run",
             "weekly_review",
+            "season_review",
             "destinations",
             "create_section",
             "delete_section",

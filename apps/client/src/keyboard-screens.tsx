@@ -409,6 +409,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "ritual.check-in": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.checkIn.enabled) return false; openRitual("checkIn"); },
       // Goals ticket 13: passes on while the Weekly review is off.
       "ritual.weekly-review": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.weeklyReview.enabled) return false; openRitual("weeklyReview"); },
+      // Goals ticket 14: passes on while the Season review is off or no season is running.
+      "ritual.season-review": () => { const state = latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId)); if (!state?.settings.seasonReview.enabled || !state.seasonReview.period) return false; openRitual("seasonReview"); },
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 12: the Check-in's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),

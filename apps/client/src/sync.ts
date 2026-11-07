@@ -95,7 +95,8 @@ export function deltaChanges(userId: string, delta: SyncDelta): { changes: Chang
   if (delta.changed.includes("section")) refresh.push({ queryKey: [...user, "project"] }, { queryKey: [...user, "destinations"] });
   // Season rows show goal titles and colours; links feed goal pages, milestones and suggestions.
   if (delta.changed.includes("goal") || delta.changed.includes("goalLink")) refresh.push({ queryKey: [...user, "goals"] }, { queryKey: [...user, "seasons"] }, { queryKey: [...user, "rituals", "weekly"] });
-  if (delta.changed.includes("season")) refresh.push({ queryKey: [...user, "seasons"] }, { queryKey: [...user, "rituals", "weekly"] });
+  // The rituals' state names the current season's review (ticket 14).
+  if (delta.changed.includes("season")) refresh.push({ queryKey: [...user, "seasons"] }, { queryKey: [...user, "rituals"] });
   // Ritual settings, runs and ratings (goals ticket 11).
   if (delta.changed.includes("ritual")) refresh.push({ queryKey: [...user, "rituals"] });
   return { changes, refresh };

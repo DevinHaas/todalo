@@ -29,6 +29,12 @@ export interface RitualsDto {
   settings: RitualSettingsDto;
   checkIn: { period: string; status: RunStatus | null; taskId: string | null };
   weeklyReview: { period: string; status: RunStatus | null };
+  /**
+   * Ticket 14: the current season's review (its `period` is the season's start
+   * date; null without a current season). `due` from the season's last day on:
+   * the review is offered then, and on demand before.
+   */
+  seasonReview: { period: string | null; status: RunStatus | null; due: boolean };
 }
 export interface RatingDto { goalId: string; rating: ProgressRating; context: string | null }
 /**
@@ -47,6 +53,18 @@ export interface RitualRunDto { id: string; kind: RitualKind; period: string; st
 export interface WeeklyReviewDto {
   period: string; nextWeek: string; status: RunStatus | null; ratings: RatingDto[]; planning: PlanningAnswer | null;
   goals: WeekGoalSummary[];
+}
+
+/** One earlier rating of a goal in the season: a Check-in's day or a Weekly review's Monday. */
+export interface RatingHistoryItem { kind: "checkIn" | "weeklyReview"; period: string; rating: ProgressRating; context: string | null }
+/**
+ * GET /api/v1/rituals/season-review (ticket 14): the current season's review run
+ * if any, and per season goal its completed ratings in the season, oldest first.
+ * seasonId is null without a current season.
+ */
+export interface SeasonReviewDto {
+  seasonId: string | null; period: string | null; status: RunStatus | null; ratings: RatingDto[];
+  goals: { goalId: string; history: RatingHistoryItem[] }[];
 }
 
 export const defaultRitualSettings: RitualSettingsDto = {

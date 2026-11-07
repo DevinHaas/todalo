@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-season-review"
+description = "Enables the season_review command without any pre-configured scope."
+commands.allow = ["season_review"]
+
+[[permission]]
+identifier = "deny-season-review"
+description = "Denies the season_review command without any pre-configured scope."
+commands.deny = ["season_review"]

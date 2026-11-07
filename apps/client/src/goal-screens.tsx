@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { goalReads, goals, seasonReads, seasons } from "./runtime";
+import { goalReads, goals, ritualReads, seasonReads, seasons } from "./runtime";
+import { openRitual } from "./ritual-screens";
 import { seasonMutations, type NextSeason, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import { PastSeasonView, SeasonsNav, SeasonView } from "./season-views";
 import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
@@ -160,12 +161,15 @@ export function SeasonScreen({ account }: { account: Account }) {
   const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId), meta: { action: () => "remove the goal from the season" } });
   const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next), meta: { action: () => "end the season" } });
   const writing = [start, add, create, update, remove, end];
+  const ritualState = useQuery(ritualReads.state(userId)).data;
+  const review = ritualState?.settings.seasonReview.enabled
+    ? { due: ritualState.seasonReview.due, done: ritualState.seasonReview.status !== null, onStart: () => openRitual("seasonReview") } : undefined;
   return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
     onAdd={(goalId, tier, target) => add.mutateAsync({ goalId, tier, target })}
     onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
-    onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)}
+    onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)} review={review}
     write={{ pending: writing.some(write => write.isPending), error: writing.find(write => write.error)?.error?.message ?? null }} />;
 }
 

@@ -7,7 +7,7 @@ import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto,
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import {
-  Alert, AlertDescription, Button, Checkbox, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field,
+  Alert, AlertAction, AlertDescription, Button, Checkbox, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field,
   FieldLabel, FieldLegend, FieldSet, Hint, Input, Label, List, ListRow, PageHeader, PageSection, Progress, RadioGroup, RadioGroupItem, Select,
   SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, ToggleGroup, ToggleGroupItem, cn, sidebarItemClassName,
 } from "./ui";
@@ -62,7 +62,7 @@ export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Seaso
   return `Day ${day} of ${length} · ${daysLeft ? `${plural(daysLeft, "day")} left` : "last day"}`;
 }
 
-export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCreate, onUpdate, onRemove, onEnd, write }: {
+export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCreate, onUpdate, onRemove, onEnd, review, write }: {
   state: ReadState<CurrentSeasonDto>; goals: GoalDto[]; past: SeasonDto[]; onRetry: () => void;
   onStart: (startDate: string, lengthDays: number) => Promise<unknown>;
   onAdd: (goalId: string, tier: SeasonTier, target: string) => Promise<unknown>;
@@ -70,7 +70,10 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
   onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>;
   onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>;
   onRemove: (goalId: string) => Promise<unknown>;
-  onEnd: (next: NextSeason | null) => Promise<unknown>; write: Write;
+  onEnd: (next: NextSeason | null) => Promise<unknown>;
+  /** Ticket 14: while the Season review is on; `due` from the season's last day. */
+  review?: { due: boolean; done: boolean; onStart: () => void };
+  write: Write;
 }) {
   const [ending, setEnding] = useState(false);
   if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
@@ -86,9 +89,15 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
   const primary = season.goals.filter(goal => goal.tier === "primary");
   const { day, length, phase } = season.progress;
   return <div className="ui max-w-page" data-season-id={season.id}>
-    <PageHeader title="Season" actions={<Button variant="outline" size="sm" data-season-action="end" onClick={() => setEnding(true)}>End season</Button>} />
+    <PageHeader title="Season" actions={<>
+      {review && <Button variant="outline" size="sm" data-season-action="review" onClick={review.onStart}>Season review</Button>}
+      <Button variant="outline" size="sm" data-season-action="end" onClick={() => setEnding(true)}>End season</Button>
+    </>} />
     <p className="text-muted-foreground" data-season-phase={phase}><strong className="font-semibold text-foreground">{seasonDayLabel(season.progress)}</strong> · {seasonRange(season)}</p>
     <Progress aria-hidden="true" className="mt-2 mb-4" value={phase === "upcoming" ? 0 : Math.round(day / length * 100)} />
+    {review?.due && !review.done && <div role="status" className="mb-4" data-season-review-due=""><Alert><AlertDescription>
+      {phase === "over" ? "This season's last day has passed." : "Today is this season's last day."} Look back on it and choose what continues.
+    </AlertDescription><AlertAction><Button size="sm" onClick={review.onStart}>Start Season review</Button></AlertAction></Alert></div>}
     {tooManyPrimary(season.goals) && <div role="status" className="mb-4"><Alert><AlertDescription>
       {primary.length} primary goals. Around {primaryGuideline} keeps your best time protected; consider making some secondary.
     </AlertDescription></Alert></div>}
@@ -170,10 +179,11 @@ function useSeasonDates(initialStart: string) {
 }
 
 /**
- * Season review in one dialog: which goals continue, each with a fresh tier and
- * target, and the next season's dates. Ending and starting are one server write.
+ * Which goals continue, each with a fresh tier and target, and the next
+ * season's dates: the fields shared by the End season dialog and the Season
+ * review's last step (ticket 14). Ending and starting are one server write.
  */
-function EndSeason({ season, onEnd, onCancel, write }: { season: SeasonDto; onEnd: (next: NextSeason | null) => Promise<unknown>; onCancel: () => void; write: Write }) {
+function useEndSeason(season: SeasonDto, onEnd: (next: NextSeason | null) => Promise<unknown>) {
   const dayAfter = addDays(season.startDate, season.lengthDays);
   const dates = useSeasonDates(dayAfter > localToday() ? dayAfter : localToday());
   const [startNext, setStartNext] = useState(true);
@@ -186,36 +196,57 @@ function EndSeason({ season, onEnd, onCancel, write }: { season: SeasonDto; onEn
     const next = startNext ? { startDate: dates.startDate, lengthDays: dates.lengthDays, goals: chosen.map(goal => ({ goalId: goal.goalId, tier: carry[goal.goalId]!.tier, target: carry[goal.goalId]!.target })) } : null;
     try { await onEnd(next); } catch { /* shown through write.error */ }
   }
-  return <form ref={releaseFocus} className="flex min-h-0 flex-col gap-4" aria-label="End season" onSubmit={submit}>
+  const fields = <>
+    <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={startNext} onCheckedChange={setStartNext} />Start the next season now</Label>
+    {startNext && <>
+      {dates.fields}
+      <FieldSet className="gap-0"><FieldLegend variant="label">Goals that continue</FieldLegend>
+        {season.goals.length ? season.goals.map(goal => {
+          const item = carry[goal.goalId]!;
+          return <div key={goal.id} className="flex flex-col gap-2 border-t border-border-subtle py-2.5" data-season-carry={goal.goalId}>
+            <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={item.on} disabled={goal.archived} onCheckedChange={(on) => set(goal.goalId, { on })} />
+              <GoalDot color={goal.color} />{goal.title}{goal.archived && <span className="text-muted-foreground"> (archived)</span>}</Label>
+            {item.on && <div className="flex flex-wrap items-center gap-2 pl-6">
+              <Select items={[{ value: "primary", label: "Primary" }, { value: "secondary", label: "Secondary" }]} value={item.tier} onValueChange={(tier) => { if (tier) set(goal.goalId, { tier: tier as SeasonTier }); }}>
+                <SelectTrigger aria-label="Tier" className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="primary">Primary</SelectItem><SelectItem value="secondary">Secondary</SelectItem></SelectContent>
+              </Select>
+              <Input aria-label="Next target" placeholder="Next target" className="min-w-48 flex-1" value={item.target} onChange={event => set(goal.goalId, { target: event.target.value })} required maxLength={1_000} />
+            </div>}
+          </div>;
+        }) : <Hint>No goals in this season. Add goals to the next one after it starts.</Hint>}
+      </FieldSet>
+      {tooManyPrimary(chosen.map(goal => carry[goal.goalId]!)) && <div role="status"><Alert><AlertDescription>More than {primaryGuideline} primary goals; consider making some secondary.</AlertDescription></Alert></div>}
+    </>}
+  </>;
+  return { fields, submit, valid, label: startNext ? "End and start next" : "End season" };
+}
+
+function EndSeason({ season, onEnd, onCancel, write }: { season: SeasonDto; onEnd: (next: NextSeason | null) => Promise<unknown>; onCancel: () => void; write: Write }) {
+  const form = useEndSeason(season, onEnd);
+  return <form ref={releaseFocus} className="flex min-h-0 flex-col gap-4" aria-label="End season" onSubmit={form.submit}>
     <DialogHeader><DialogTitle>End season</DialogTitle><DialogDescription>This season and its goals, tiers and targets are kept as history.</DialogDescription></DialogHeader>
     <DialogBody className="flex flex-col gap-4">
-      <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={startNext} onCheckedChange={setStartNext} />Start the next season now</Label>
-      {startNext && <>
-        {dates.fields}
-        <FieldSet className="gap-0"><FieldLegend variant="label">Goals that continue</FieldLegend>
-          {season.goals.length ? season.goals.map(goal => {
-            const item = carry[goal.goalId]!;
-            return <div key={goal.id} className="flex flex-col gap-2 border-t border-border-subtle py-2.5" data-season-carry={goal.goalId}>
-              <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={item.on} disabled={goal.archived} onCheckedChange={(on) => set(goal.goalId, { on })} />
-                <GoalDot color={goal.color} />{goal.title}{goal.archived && <span className="text-muted-foreground"> (archived)</span>}</Label>
-              {item.on && <div className="flex flex-wrap items-center gap-2 pl-6">
-                <Select items={[{ value: "primary", label: "Primary" }, { value: "secondary", label: "Secondary" }]} value={item.tier} onValueChange={(tier) => { if (tier) set(goal.goalId, { tier: tier as SeasonTier }); }}>
-                  <SelectTrigger aria-label="Tier" className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="primary">Primary</SelectItem><SelectItem value="secondary">Secondary</SelectItem></SelectContent>
-                </Select>
-                <Input aria-label="Next target" placeholder="Next target" className="min-w-48 flex-1" value={item.target} onChange={event => set(goal.goalId, { target: event.target.value })} required maxLength={1_000} />
-              </div>}
-            </div>;
-          }) : <Hint>No goals in this season. Add goals to the next one after it starts.</Hint>}
-        </FieldSet>
-        {tooManyPrimary(chosen.map(goal => carry[goal.goalId]!)) && <div role="status"><Alert><AlertDescription>More than {primaryGuideline} primary goals; consider making some secondary.</AlertDescription></Alert></div>}
-      </>}
+      {form.fields}
       {write.error && <FormError>{write.error}</FormError>}
     </DialogBody>
     <DialogFooter>
       <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-      <Button type="submit" data-season-action="confirm-end" disabled={write.pending || !valid}>{startNext ? "End and start next" : "End season"}</Button>
+      <Button type="submit" data-season-action="confirm-end" disabled={write.pending || !form.valid}>{form.label}</Button>
     </DialogFooter>
+  </form>;
+}
+
+/** The Season review's last step (ticket 14): the End season fields inline in the ritual panel. */
+export function EndSeasonStep({ season, onEnd, write, back }: { season: SeasonDto; onEnd: (next: NextSeason | null) => Promise<unknown>; write: Write; back: ReactNode }) {
+  const form = useEndSeason(season, onEnd);
+  return <form ref={releaseFocus} className="flex flex-col gap-4" aria-label="End season" onSubmit={form.submit}>
+    {form.fields}
+    {write.error && <FormError>{write.error}</FormError>}
+    <div className="flex items-center justify-between gap-2">
+      {back}
+      <Button type="submit" size="sm" data-season-action="confirm-end" disabled={write.pending || !form.valid}>{form.label}</Button>
+    </div>
   </form>;
 }
 

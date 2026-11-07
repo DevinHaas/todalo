@@ -1,11 +1,11 @@
 import { Elysia } from "elysia";
-import { todayIn } from "@todalo/server/season-days";
+import { seasonProgress, todayIn } from "@todalo/server/season-days";
 import { zonedTaskDate } from "@todalo/server/dates";
 import {
   addDays, checkInDay, checkInPeriod, ritualRunInput, ritualSettingsInput, weeklyReviewPeriod,
-  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RitualsDto, type RunStatus, type WeeklyReviewDto,
+  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RitualsDto, type RunStatus, type SeasonReviewDto, type WeeklyReviewDto,
 } from "@todalo/server/ritual-dto";
-import type { WeekInputs } from "@todalo/server/rituals";
+import type { SeasonReviewInputs, WeekInputs } from "@todalo/server/rituals";
 import { summariseWeek } from "@todalo/server/weekly-review";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
@@ -23,6 +23,9 @@ export interface RitualStore {
   placeCheckIn(userId: string, start: Date | null): Promise<string | null>;
   /** Ticket 13: one week's raw inputs (see getWeekInputs). */
   weekInputs(userId: string, week: { from: Date; to: Date; firstDay: string; lastDay: string }): Promise<WeekInputs>;
+  /** Ticket 14: the current season's dates (null before the first) and the Season review's raw inputs. */
+  season(userId: string): Promise<{ startDate: string; lengthDays: number } | null>;
+  seasonReviewInputs(userId: string): Promise<SeasonReviewInputs>;
   /** The clock (tests pin it). */
   now?: () => Date;
 }
@@ -60,7 +63,13 @@ export function createRitualRoutes(store: RitualStore) {
       else taskId = task.id;
     }
     const week = weeklyReviewPeriod(today);
-    return { settings, checkIn: { period, status, taskId }, weeklyReview: { period: week, status: await store.runStatus(userId, "weeklyReview", week) } };
+    const season = await store.season(userId);
+    return {
+      settings, checkIn: { period, status, taskId }, weeklyReview: { period: week, status: await store.runStatus(userId, "weeklyReview", week) },
+      seasonReview: season
+        ? { period: season.startDate, status: await store.runStatus(userId, "seasonReview", season.startDate), due: seasonProgress(season.startDate, season.lengthDays, today).daysLeft === 0 }
+        : { period: null, status: null, due: false },
+    };
   }
 
   return new Elysia({ prefix: "/api/v1" })
@@ -85,6 +94,16 @@ export function createRitualRoutes(store: RitualStore) {
         period, nextWeek, status: review?.status ?? null, ratings: review?.ratings ?? [], planning: review?.planning ?? null,
         goals: summariseWeek({ ...inputs, from, to, zone }),
       } satisfies WeeklyReviewDto;
+    })
+    // Ticket 14: each current-season goal's ratings across the season for the Season review's look-back.
+    .get("/rituals/season-review", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const { season, goalIds, history, review } = await store.seasonReviewInputs(userId);
+      return {
+        seasonId: season?.id ?? null, period: season?.startDate ?? null, status: review?.status ?? null, ratings: review?.ratings ?? [],
+        goals: goalIds.map(goalId => ({ goalId, history: history.filter(item => item.goalId === goalId).map(({ goalId: _, ...item }) => item).sort((a, b) => a.period.localeCompare(b.period)) })),
+      } satisfies SeasonReviewDto;
     })
     .put("/rituals/settings", async ({ request, body, status }) => {
       const userId = await writer(request);
