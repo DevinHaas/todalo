@@ -25,6 +25,7 @@ import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds } from "./goal-screens";
 import { MilestoneTasks } from "./task-tree";
+import { openRitual, RitualHost, RitualsSidebar, useCheckInTaskId } from "./ritual-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -97,11 +98,15 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
   const milestones = useMilestoneTaskIds(userId);
+  // Opening the Check-in item (list row, schedule block) starts the Check-in instead.
+  const checkInTaskId = useCheckInTaskId(userId);
   const { pathname } = useLocation();
   useEffect(() => { setId(null); setInserting(null); setEditing(null); }, [pathname]);
   const create = writes.create.mutateAsync;
   const dialog = useMemo<TaskDialog>(() => ({
-    open(next) { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next); },
+    open(next) {
+      if (next === checkInTaskId) { openRitual("checkIn"); return; }
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next); },
     edit(next) { setInserting(null); setEditing(next); },
     editor: (task) => editing === task.id ? <div className="dialog quick-add inline-quick-add row-edit" aria-label={`Edit ${task.title}`}>
       <Composer key={task.id} startOpen quick editing={task} dueDate={() => task.dueDate} projectId={task.projectId} sectionId={task.sectionId}
@@ -115,7 +120,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       ? <InsertComposer edge={edge} task={inserting.task} onClose={() => { setInserting(null); focusRow(anchor, opener.current); }}
         // The composer follows the task just added, as the next draft does (legacy onCreated).
         onCreate={async (task, direction) => { const created = await create(task); setInserting({ edge: direction, task: created }); }} /> : null,
-  }), [inserting, create, editing, writes.update, organize]);
+  }), [inserting, create, editing, writes.update, organize, checkInTaskId]);
   const close = () => { if (id) focusRow(id, opener.current); setId(null); };
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
@@ -162,7 +167,7 @@ export function Shell({ account }: { account: Account }) {
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
-      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><ul className="nav">
+      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><RitualsSidebar userId={account.user.id} /><ul className="nav">
         <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
@@ -185,6 +190,7 @@ export function Shell({ account }: { account: Account }) {
       <ConnectionStatus />
       <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>
     </div>
+    <RitualHost userId={account.user.id} />
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
     <CriteriaConfirmHost />

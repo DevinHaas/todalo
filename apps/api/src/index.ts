@@ -14,6 +14,8 @@ import { createProjectRoutes } from "./project-routes";
 import { createGoalRoutes } from "./goal-routes";
 import { createSeasonRoutes } from "./season-routes";
 import * as seasons from "@todalo/server/seasons";
+import { createRitualRoutes } from "./ritual-routes";
+import * as rituals from "@todalo/server/rituals";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
 import { createAttachmentRoutes } from "./attachment-routes";
@@ -121,6 +123,15 @@ const app = createApi(dependencies)
   removeGoal: seasons.removeSeasonGoal,
   past: seasons.listPastSeasons,
   end: seasons.endSeason,
+})).use(createRitualRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  settings: rituals.getRitualSettings,
+  save: rituals.saveRitualSettings,
+  runStatus: rituals.getRunStatus,
+  record: rituals.recordRun,
+  checkInTask: rituals.getCheckInTask,
+  placeCheckIn: rituals.placeCheckIn,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

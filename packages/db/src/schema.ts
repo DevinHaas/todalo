@@ -284,6 +284,49 @@ export const seasonGoals = pgTable("season_goals", {
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [uniqueIndex("season_goals_season_goal_idx").on(table.seasonId, table.goalId), index("season_goals_userId_idx").on(table.userId)]);
 
+// Goals ticket 11: which rituals the user does and when (no row = all off).
+// The Check-in sits on the schedule as a recurring task (checkInTaskId), so the
+// existing task sync puts it on Google Calendar.
+export const ritualSettings = pgTable("ritual_settings", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  checkInEnabled: boolean("check_in_enabled").default(false).notNull(),
+  checkInTime: text("check_in_time").default("09:00").notNull(),
+  checkInTaskId: text("check_in_task_id").references(() => tasks.id, { onDelete: "set null" }),
+  weeklyReviewEnabled: boolean("weekly_review_enabled").default(false).notNull(),
+  // 0 = Sunday … 6 = Saturday (Date#getDay).
+  weeklyReviewDay: integer("weekly_review_day").default(0).notNull(),
+  weeklyReviewTime: text("weekly_review_time").default("17:00").notNull(),
+  seasonReviewEnabled: boolean("season_review_enabled").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const ritualKind = pgEnum("ritual_kind", ["check_in", "weekly_review", "season_review"]);
+export const ritualRunStatus = pgEnum("ritual_run_status", ["completed", "skipped"]);
+export const progressRatingValue = pgEnum("progress_rating", ["massive", "solid", "mixed", "little", "not_relevant"]);
+
+// One finished (or skipped) ritual per kind and period: the day reflected on
+// (Check-in: yesterday), the week's first day, or the season's start date.
+export const ritualRuns = pgTable("ritual_runs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  kind: ritualKind("kind").notNull(),
+  period: date("period", { mode: "string" }).notNull(),
+  status: ritualRunStatus("status").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [uniqueIndex("ritual_runs_user_kind_period_idx").on(table.userId, table.kind, table.period)]);
+
+export const progressRatings = pgTable("progress_ratings", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  runId: text("run_id").notNull().references(() => ritualRuns.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  rating: progressRatingValue("rating").notNull(),
+  context: text("context"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("progress_ratings_run_goal_idx").on(table.runId, table.goalId), index("progress_ratings_user_goal_idx").on(table.userId, table.goalId)]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

@@ -199,7 +199,7 @@ fn end_body(next: Option<NextSeason>) -> Result<Value, &'static str> {
     )
 }
 
-fn valid_date(date: &str) -> bool {
+pub(crate) fn valid_date(date: &str) -> bool {
     let bytes = date.as_bytes();
     bytes.len() == 10
         && bytes.iter().enumerate().all(|(index, byte)| {

@@ -9,6 +9,8 @@ import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
 import type { TaskDto } from "./tasks";
 import { goalKeys, type GoalsDto } from "./goals";
+import { ritualKeys, type RitualsDto } from "./rituals";
+import { openRitual } from "./ritual-screens";
 import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
 import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
 import { collapsedTasks } from "./views";
@@ -403,6 +405,9 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         write(async () => { const { task } = await focusedTask(row); if (task && isTimed(task)) await latest.current.update.mutateAsync({ id: task.id, details: unscheduledDetails(task) }); });
       },
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
+      // Goals ticket 11: pass on while the Check-in is off, or with no ritual open.
+      "ritual.check-in": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.checkIn.enabled) return false; openRitual("checkIn"); },
+      "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };
     const commands = dispatchCommands(handlers.current, id => effectiveBindings(id, effective, platform));

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, type To } from "react-router";
-import { Blocks, CalendarDays, ChevronLeft, Keyboard, Palette, Search, Settings, UserRound, X } from "lucide-react";
+import { Blocks, CalendarDays, Sunrise, ChevronLeft, Keyboard, Palette, Search, Settings, UserRound, X } from "lucide-react";
 import type { Account } from "./session";
 import { session } from "./runtime";
 import { haptics, hapticsSupported } from "./feedback";
@@ -12,9 +12,10 @@ import { SettingSwitch } from "./settings-views";
 import { CalendarSettingsScreen } from "./calendar-screens";
 import { ShortcutSettingsScreen } from "./keyboard-screens";
 import { ImportSettingsScreen } from "./import-screen";
+import { RitualSettingsScreen } from "./ritual-screens";
 
 const icons: Record<SettingsSection, ReactNode> = {
-  account: <UserRound />, general: <Settings />, theme: <Palette />, "keyboard-shortcuts": <Keyboard />, calendars: <CalendarDays />, integrations: <Blocks />,
+  account: <UserRound />, general: <Settings />, theme: <Palette />, "keyboard-shortcuts": <Keyboard />, rituals: <Sunrise />, calendars: <CalendarDays />, integrations: <Blocks />,
 };
 
 function AccountSection({ account }: { account: Account }) {
@@ -53,6 +54,7 @@ function sectionBody(id: SettingsSection, account: Account): ReactNode {
     case "general": return <GeneralSection userId={userId} />;
     case "theme": return <ThemeSection />;
     case "keyboard-shortcuts": return <ShortcutSettingsScreen userId={userId} />;
+    case "rituals": return <RitualSettingsScreen userId={userId} />;
     case "calendars": return <CalendarSettingsScreen userId={userId} />;
     case "integrations": return <ImportSettingsScreen userId={userId} />;
   }

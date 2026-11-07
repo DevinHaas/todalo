@@ -17,7 +17,8 @@ const localDateTime = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth
 // A revoked session signs the UI out, as runtime.ts does for queries.
 const signedOut = (error: unknown) => { if (error instanceof AccountTransportError && error.code === "UNAUTHENTICATED") void session.refresh(); throw error; };
 
-function platform(options: { defaultDueDate: string | null; smartRecognition: boolean }): RambleRecorderDependencies {
+/** Ramble's socket, microphone and save for this platform (also the rituals' spoken context). */
+export function platform(options: { defaultDueDate: string | null; smartRecognition: boolean }): RambleRecorderDependencies {
   return {
     socketUrl: async () => {
       // Browser: same-origin socket, HttpOnly cookie + exact Origin check.

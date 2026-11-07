@@ -4,15 +4,15 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Settings to enable Check-in, Weekly review and Season review and set their times
-- [ ] Check-in shows on the schedule as a recurring item and syncs to Google Calendar
-- [ ] Start a ritual from its schedule item or the sidebar
-- [ ] Step runner in the right sidebar with a progress bar
-- [ ] Progress rating per goal (A massive amount, Solid, Mixed, Little progress, Not relevant) with optional text or Ramble voice context
-- [ ] Skipping a ritual never blocks the app
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Settings to enable Check-in, Weekly review and Season review and set their times
+- [x] Check-in shows on the schedule as a recurring item and syncs to Google Calendar
+- [x] Start a ritual from its schedule item or the sidebar
+- [x] Step runner in the right sidebar with a progress bar
+- [x] Progress rating per goal (A massive amount, Solid, Mixed, Little progress, Not relevant) with optional text or Ramble voice context
+- [x] Skipping a ritual never blocks the app
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

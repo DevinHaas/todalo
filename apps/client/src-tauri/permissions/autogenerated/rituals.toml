@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rituals"
+description = "Enables the rituals command without any pre-configured scope."
+commands.allow = ["rituals"]
+
+[[permission]]
+identifier = "deny-rituals"
+description = "Denies the rituals command without any pre-configured scope."
+commands.deny = ["rituals"]

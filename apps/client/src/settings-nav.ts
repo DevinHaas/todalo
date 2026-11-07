@@ -8,6 +8,7 @@ export const settingsSections = [
   { id: "general", name: "General", terms: ["Smart date recognition", "Show goals", ...(hapticsSupported ? ["Haptic feedback"] : [])] },
   { id: "theme", name: "Theme", terms: ["Dark theme"] },
   { id: "keyboard-shortcuts", name: "Keyboard shortcuts", terms: ["Shortcut help"] },
+  { id: "rituals", name: "Rituals", terms: ["Check-in", "Weekly review", "Season review"] },
   { id: "calendars", name: "Calendars", terms: ["Google Calendar", "Show events"] },
   { id: "integrations", name: "Integrations", terms: ["Import from Todoist"] },
 ] as const;

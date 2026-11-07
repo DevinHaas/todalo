@@ -16,6 +16,7 @@ mod projects;
 mod ramble;
 mod reads;
 mod search;
+mod rituals;
 mod seasons;
 mod settings;
 mod writes;
@@ -136,6 +137,9 @@ pub fn run() {
             seasons::remove_season_goal,
             seasons::past_seasons,
             seasons::end_season,
+            rituals::rituals,
+            rituals::update_ritual_settings,
+            rituals::record_ritual_run,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

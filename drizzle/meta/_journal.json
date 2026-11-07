@@ -176,6 +176,13 @@
       "when": 1794056885906,
       "tag": "0024_sync_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794058705648,
+      "tag": "0025_rituals",
+      "breakpoints": true
     }
   ]
 }

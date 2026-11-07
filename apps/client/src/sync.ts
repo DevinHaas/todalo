@@ -94,6 +94,8 @@ export function deltaChanges(userId: string, delta: SyncDelta): { changes: Chang
   // Season rows show goal titles and colours; links feed goal pages, milestones and suggestions.
   if (delta.changed.includes("goal") || delta.changed.includes("goalLink")) refresh.push({ queryKey: [...user, "goals"] }, { queryKey: [...user, "seasons"] });
   if (delta.changed.includes("season")) refresh.push({ queryKey: [...user, "seasons"] });
+  // Ritual settings, runs and ratings (goals ticket 11).
+  if (delta.changed.includes("ritual")) refresh.push({ queryKey: [...user, "rituals"] });
   return { changes, refresh };
 }
 

@@ -17,7 +17,7 @@ import type { CommentDto } from "./comment-dto";
 export const mergedKinds = ["task", "project", "label", "filter", "comment"] as const;
 export type MergedKind = (typeof mergedKinds)[number];
 /** Entities whose reads are derived (manual order, progress, joins): the client refetches those reads. */
-export const refetchedKinds = ["section", "goal", "goalLink", "season"] as const;
+export const refetchedKinds = ["section", "goal", "goalLink", "season", "ritual"] as const;
 export type RefetchedKind = (typeof refetchedKinds)[number];
 
 export interface SyncDelta {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-record-ritual-run"
+description = "Enables the record_ritual_run command without any pre-configured scope."
+commands.allow = ["record_ritual_run"]
+
+[[permission]]
+identifier = "deny-record-ritual-run"
+description = "Denies the record_ritual_run command without any pre-configured scope."
+commands.deny = ["record_ritual_run"]

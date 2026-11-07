@@ -37,7 +37,7 @@ const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try agai
 const SEASON_EXISTS = { code: "SEASON_EXISTS", message: "A season is already running. End it before starting another." } as const;
 const GOAL_IN_SEASON = { code: "GOAL_IN_SEASON", message: "This goal is already in the season." } as const;
 
-const zoneOrUtc = (zone: string | null) => {
+export const zoneOrUtc = (zone: string | null) => {
   if (!zone) return "UTC";
   try { new Intl.DateTimeFormat("en", { timeZone: zone }); return zone; } catch { return "UTC"; }
 };
