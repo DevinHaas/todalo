@@ -11,7 +11,7 @@ import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigatio
 import type { TaskDto } from "./tasks";
 import {
   addDays, addMonths, blockFor, blockItem, dayKey, defaultBlockRange, dragRange, dropRange, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
-  upcomingSections, upcomingWindow, weekOf,
+  upcomingSections, upcomingWindow, weekOf, durationLabel, toggledOutcome, weekGoalTime,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
 import { TodayView } from "./views";
@@ -169,7 +169,7 @@ describe("schedule views", () => {
     process.env.TZ = "Europe/Zurich";
     const events = [{ id: "e1", title: "Team sync", start: at(7, 13), end: at(7, 14), allDay: false, htmlLink: null, color: "#4285f4" }];
     const blocks = {
-      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12), taskIds: ["Spec"] }],
+      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12), taskIds: ["Spec"], outcome: "planned" as const, rescheduleCount: 0 }],
       goal: (goalId: string | null) => goalId === "g1" ? { title: "Ship v2", color: "oklch(0.62 0.16 250)" } : undefined,
       taskColor: () => "oklch(0.64 0.16 150)", create() {}, open() {}, change: async () => {},
       tasksIn: () => [task("Spec", { title: "Write the spec" })], toolbar: createElement("button", { "data-schedule-action": "unscheduled" }),
@@ -268,7 +268,7 @@ describe("time blocks on the schedule (goals ticket 07)", () => {
   });
 
   it("titles a block by its own title, else its goal's, else Time block; colour from the goal", () => {
-    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z", taskIds: [] };
+    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z", taskIds: [], outcome: "planned" as const, rescheduleCount: 0 };
     expect(blockItem(block, { title: "Ship v2", color: "blue" })).toMatchObject({ key: "block:b1", title: "Ship v2", color: "blue" });
     expect(blockItem({ ...block, title: "Deep work" }, { title: "Ship v2", color: "blue" }).title).toBe("Deep work");
     expect(blockItem({ ...block, goalId: null })).toMatchObject({ title: "Time block", color: null });
@@ -293,7 +293,7 @@ describe("unscheduled sidebar (goals ticket 08)", () => {
     task("Done", { status: "done" }),
     task("Blocked", { projectId: "p1" }),
   ];
-  const blocks = [{ id: "b1", goalId: null, title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T10:00:00.000Z", taskIds: ["Blocked"] }];
+  const blocks = [{ id: "b1", goalId: null, title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T10:00:00.000Z", taskIds: ["Blocked"], outcome: "planned" as const, rescheduleCount: 0 }];
   const links = { projects: [{ goalId: "g1", projectId: "p1" }], tasks: [{ goalId: "g2", taskId: "Inbox chore" }] };
   beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
   const ids = (filter: Parameters<typeof unscheduledTasks>[2]) => unscheduledTasks(open, blocks, filter, links).map(item => item.id);
@@ -317,5 +317,26 @@ describe("unscheduled sidebar (goals ticket 08)", () => {
     expect(end.getTime() - start.getTime()).toBe(30 * 60_000);
     const late = dropRange(day, 24 * 48);
     expect([labels.time(late.start), late.end.getTime()]).toEqual(["23:45", addDays(day, 1).getTime()]);
+  });
+});
+
+describe("block outcomes (goals ticket 09)", () => {
+  it.each([[45, "45m"], [60, "1h"], [90, "1h 30m"], [0, "0m"]])("labels %i minutes as %s", (minutes, label) => expect(durationLabel(minutes)).toBe(label));
+
+  it.each([
+    ["planned", "done", "done"], ["done", "done", "planned"], ["skipped", "skipped", "planned"],
+    ["done", "skipped", "skipped"], ["rescheduled", "rescheduled", "rescheduled"], ["skipped", "rescheduled", "rescheduled"],
+  ] as const)("%s pressed %s becomes %s", (current, pressed, next) => expect(toggledOutcome(current, pressed)).toBe(next));
+
+  it("sums this local week's blocks per goal; a done block reads as done", () => {
+    const now = new Date(2026, 1, 18, 12);
+    const at = (day: number, hour: number) => new Date(2026, 1, day, hour).toISOString();
+    const block = (id: string, goalId: string, day: number, hours: number, outcome: "planned" | "done") =>
+      ({ id, goalId, title: null, start: at(day, 9), end: at(day, 9 + hours), taskIds: [], outcome, rescheduleCount: 0 });
+    // Monday 16th to Sunday 22nd; the 15th and 23rd are outside, pending writes are left out.
+    const blocks = [block("a", "g1", 16, 2, "done"), block("b", "g1", 22, 1, "planned"), block("c", "g1", 15, 3, "done"), block("d", "g1", 23, 3, "done"), block("pending-x", "g1", 17, 5, "done")];
+    expect(weekGoalTime(blocks, now)).toEqual([{ goalId: "g1", reservedMinutes: 180, keptMinutes: 120 }]);
+    expect(blockItem(blocks[0]!).done).toBe(true);
+    expect(blockItem(blocks[1]!).done).toBe(false);
   });
 });

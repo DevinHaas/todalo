@@ -115,6 +115,7 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   update: timeBlocks.updateTimeBlock,
   remove: timeBlocks.deleteTimeBlock,
   setTask: timeBlocks.setTimeBlockTask,
+  setOutcome: timeBlocks.setTimeBlockOutcome,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

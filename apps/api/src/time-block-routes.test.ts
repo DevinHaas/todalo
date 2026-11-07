@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createTimeBlockRoutes } from "./time-block-routes";
 
-type Row = { id: string; userId: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[] };
+type Row = { id: string; userId: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: "planned" | "done" | "skipped" | "rescheduled"; rescheduleCount: number };
 const goals = [{ id: "alice-v2", userId: "alice" }, { id: "alice-fit", userId: "alice" }, { id: "bob-read", userId: "bob" }];
 const tasks = [{ id: "alice-spec", userId: "alice" }, { id: "alice-tests", userId: "alice" }, { id: "bob-book", userId: "bob" }];
 let rows: Row[] = [];
 let next = 0;
 beforeEach(() => {
   next = 0;
-  rows = [{ id: "bob-block", userId: "bob", goalId: "bob-read", title: null, startAt: new Date("2026-02-20T09:00:00Z"), endAt: new Date("2026-02-20T10:00:00Z"), taskIds: ["bob-book"] }];
+  rows = [{ id: "bob-block", userId: "bob", goalId: "bob-read", title: null, startAt: new Date("2026-02-20T09:00:00Z"), endAt: new Date("2026-02-20T10:00:00Z"), taskIds: ["bob-book"], outcome: "planned", rescheduleCount: 0 }];
 });
 
 // In-memory mirror of packages/server/src/time-blocks.ts.
@@ -20,7 +20,7 @@ const app = createTimeBlockRoutes({
   list: async (userId) => rows.filter(row => row.userId === userId).sort((a, b) => a.startAt.getTime() - b.startAt.getTime()),
   create: async (userId, input) => {
     if (!goalAllowed(userId, input.goalId)) return null;
-    const row = { id: `block-${++next}`, userId, goalId: input.goalId ?? null, title: input.title ?? null, startAt: input.start, endAt: input.end, taskIds: [] };
+    const row = { id: `block-${++next}`, userId, goalId: input.goalId ?? null, title: input.title ?? null, startAt: input.start, endAt: input.end, taskIds: [], outcome: "planned" as const, rescheduleCount: 0 };
     rows.push(row);
     return row;
   },
@@ -43,6 +43,13 @@ const app = createTimeBlockRoutes({
     row.taskIds = linked ? [...new Set([...row.taskIds, taskId])] : row.taskIds.filter(id => id !== taskId);
     return row;
   },
+  setOutcome: async (userId, id, outcome) => {
+    const row = find(userId, id);
+    if (!row) return null;
+    row.outcome = outcome;
+    if (outcome === "rescheduled") row.rescheduleCount += 1;
+    return row;
+  },
 });
 
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
@@ -56,6 +63,7 @@ const call = (method: string, path: string, init: { user?: string; cookie?: stri
 const list = async (user = "alice") => ((await (await call("GET", "/time-blocks", { user })).json()) as { blocks: unknown[] }).blocks;
 const create = (body: unknown, user = "alice") => call("POST", "/time-blocks", { user, body });
 const range = { start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z" };
+const planned = { outcome: "planned", rescheduleCount: 0 };
 
 describe("time block API", () => {
   it("rejects every unauthenticated operation with the shared envelope", async () => {
@@ -69,17 +77,17 @@ describe("time block API", () => {
   it("creates a block over a dragged range, without a goal or tasks", async () => {
     const response = await create(range);
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({ block: { id: "block-1", goalId: null, title: null, ...range, taskIds: [] } });
+    expect(await response.json()).toEqual({ block: { id: "block-1", goalId: null, title: null, ...range, taskIds: [], ...planned } });
     const read = await call("GET", "/time-blocks", { user: "alice" });
     expect(read.headers.get("cache-control")).toBe("no-store");
-    expect((await read.json() as { blocks: unknown[] }).blocks).toEqual([{ id: "block-1", goalId: null, title: null, ...range, taskIds: [] }]);
+    expect((await read.json() as { blocks: unknown[] }).blocks).toEqual([{ id: "block-1", goalId: null, title: null, ...range, taskIds: [], ...planned }]);
   });
 
   it("dedicates a block to a goal with no tasks in it; an empty title clears", async () => {
     const created = await create({ ...range, goalId: "alice-v2", title: "  Deep work " });
-    expect(await created.json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: "Deep work", ...range, taskIds: [] } });
+    expect(await created.json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: "Deep work", ...range, taskIds: [], ...planned } });
     const changed = await call("PATCH", "/time-blocks/block-1", { user: "alice", body: { goalId: "alice-fit", title: "" } });
-    expect(await changed.json()).toEqual({ block: { id: "block-1", goalId: "alice-fit", title: null, ...range, taskIds: [] } });
+    expect(await changed.json()).toEqual({ block: { id: "block-1", goalId: "alice-fit", title: null, ...range, taskIds: [], ...planned } });
     // Removing the goal keeps the reserved time.
     const cleared = await call("PATCH", "/time-blocks/block-1", { user: "alice", body: { goalId: null } });
     expect(await cleared.json()).toMatchObject({ block: { goalId: null, ...range } });
@@ -88,7 +96,7 @@ describe("time block API", () => {
   it("moves and resizes a block with start and end together", async () => {
     await create({ ...range, goalId: "alice-v2" });
     const moved = { start: "2026-02-22T14:00:00.000Z", end: "2026-02-22T16:00:00.000Z" };
-    expect(await (await call("PATCH", "/time-blocks/block-1", { user: "alice", body: moved })).json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: null, ...moved, taskIds: [] } });
+    expect(await (await call("PATCH", "/time-blocks/block-1", { user: "alice", body: moved })).json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: null, ...moved, taskIds: [], ...planned } });
     const resized = { start: moved.start, end: "2026-02-22T14:15:00.000Z" };
     expect(await (await call("PATCH", "/time-blocks/block-1", { user: "alice", body: resized })).json()).toMatchObject({ block: resized });
     // One side alone is refused rather than guessed.
@@ -134,7 +142,7 @@ describe("time block API", () => {
   it("puts several tasks into a block and takes them out again, idempotently", async () => {
     await create({ ...range, goalId: "alice-v2" });
     const put = (taskId: string) => call("PUT", `/time-blocks/block-1/tasks/${taskId}`, { user: "alice" });
-    expect(await (await put("alice-spec")).json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: null, ...range, taskIds: ["alice-spec"] } });
+    expect(await (await put("alice-spec")).json()).toEqual({ block: { id: "block-1", goalId: "alice-v2", title: null, ...range, taskIds: ["alice-spec"], ...planned } });
     await put("alice-tests");
     expect(await (await put("alice-spec")).json()).toMatchObject({ block: { taskIds: ["alice-spec", "alice-tests"] } });
     expect(await list()).toMatchObject([{ taskIds: ["alice-spec", "alice-tests"] }]);
@@ -170,5 +178,36 @@ describe("time block API", () => {
     expect((await call("POST", "/time-blocks", { cookie: "alice", origin: "https://evil.example", body: range })).status).toBe(403);
     expect((await call("POST", "/time-blocks", { cookie: "alice", origin: "http://localhost:5173", body: range })).status).toBe(201);
     expect((await create(range)).status).toBe(201);
+  });
+
+  it("marks a block done, skipped or rescheduled, counting every reschedule", async () => {
+    await create({ ...range, goalId: "alice-v2" });
+    const mark = (outcome: unknown, id = "block-1", init: { user?: string; cookie?: string; origin?: string } = { user: "alice" }) =>
+      call("POST", `/time-blocks/${id}/outcome`, { ...init, body: { outcome } });
+    expect(await (await mark("skipped")).json()).toMatchObject({ block: { id: "block-1", outcome: "skipped", rescheduleCount: 0 } });
+    await mark("rescheduled");
+    expect(await (await mark("rescheduled")).json()).toMatchObject({ block: { outcome: "rescheduled", rescheduleCount: 2 } });
+    // Done after rescheduling keeps the count; back to planned too.
+    expect(await (await mark("done")).json()).toMatchObject({ block: { outcome: "done", rescheduleCount: 2 } });
+    expect(await (await mark("planned")).json()).toMatchObject({ block: { outcome: "planned", rescheduleCount: 2 } });
+    expect(await list()).toMatchObject([{ id: "block-1", outcome: "planned", rescheduleCount: 2 }]);
+    // Each block is its own occurrence.
+    await create({ start: "2026-02-22T09:00:00.000Z", end: "2026-02-22T10:00:00.000Z", goalId: "alice-v2" });
+    await mark("done", "block-2");
+    expect(await list()).toMatchObject([{ id: "block-1", outcome: "planned" }, { id: "block-2", outcome: "done", rescheduleCount: 0 }]);
+  });
+
+  it("refuses unknown outcomes, foreign blocks and unauthenticated or cross-site outcome writes", async () => {
+    await create(range);
+    const mark = (body: unknown, id = "block-1", init: { user?: string; cookie?: string; origin?: string } = { user: "alice" }) =>
+      call("POST", `/time-blocks/${id}/outcome`, { ...init, body });
+    for (const body of [{ outcome: "kept" }, {}, { outcome: "done", rescheduleCount: 9 }]) expect((await mark(body)).status).toBe(400);
+    const foreign = await mark({ outcome: "done" }, "bob-block");
+    expect(foreign.status).toBe(404);
+    expect(await foreign.json()).toEqual(await (await mark({ outcome: "done" }, "nope")).json());
+    expect(rows.find(row => row.id === "bob-block")).toMatchObject({ outcome: "planned", rescheduleCount: 0 });
+    expect((await mark({ outcome: "done" }, "block-1", { origin: "http://localhost:5173" })).status).toBe(401);
+    expect((await mark({ outcome: "done" }, "block-1", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    expect(await list()).toMatchObject([{ outcome: "planned" }]);
   });
 });

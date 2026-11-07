@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import {
-  createTimeBlockInput, toTimeBlockDto, updateTimeBlockInput,
-  type CreateTimeBlockInput, type TimeBlockDto, type TimeBlockRecord, type TimeBlocksDto, type UpdateTimeBlockInput,
+  blockOutcomeInput, createTimeBlockInput, toTimeBlockDto, updateTimeBlockInput,
+  type BlockOutcome, type CreateTimeBlockInput, type TimeBlockDto, type TimeBlockRecord, type TimeBlocksDto, type UpdateTimeBlockInput,
 } from "@todalo/server/time-block-dto";
 import { writeUser } from "./project-routes";
 
@@ -18,6 +18,8 @@ export interface TimeBlockStore {
   remove(userId: string, id: string): Promise<boolean>;
   /** Ticket 08: puts a task into the block or takes it out (idempotent); null when either is missing or foreign. */
   setTask(userId: string, blockId: string, taskId: string, linked: boolean): Promise<TimeBlockRecord | null>;
+  /** Ticket 09: records the outcome; "rescheduled" adds one to the count. null when missing or foreign. */
+  setOutcome(userId: string, id: string, outcome: BlockOutcome): Promise<TimeBlockRecord | null>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -75,6 +77,17 @@ export function createTimeBlockRoutes(store: TimeBlockStore) {
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
       const block = await store.setTask(userId, params.id, params.taskId, false);
+      return block ? { block: toTimeBlockDto(block) satisfies TimeBlockDto } : status(404, NOT_FOUND);
+    })
+    // Ticket 09: done, skipped, rescheduled (counted every time) or back to planned.
+    // POST, not PUT: a repeated "rescheduled" counts again.
+    .post("/time-blocks/:id/outcome", async ({ request, params, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = blockOutcomeInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const block = await store.setOutcome(userId, params.id, input.data.outcome);
       return block ? { block: toTimeBlockDto(block) satisfies TimeBlockDto } : status(404, NOT_FOUND);
     });
 }

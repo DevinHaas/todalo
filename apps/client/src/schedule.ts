@@ -8,6 +8,7 @@
 import type { TaskDto } from "./tasks";
 import { isOverdue, treeOrder } from "./tasks";
 import type { TimeBlockDto } from "./time-blocks";
+import { goalTime } from "../../../packages/server/src/time-block-dto";
 
 export type Layout = "list" | "board" | "calendar";
 export type CalendarRange = "week" | "month";
@@ -158,7 +159,7 @@ export const taskItem = (task: TaskDto, color: string | null): ScheduleItem => {
 };
 /** Untitled blocks take their goal's title, else "Time block". */
 export const blockItem = (block: TimeBlockDto, goal?: { title: string; color: string }): ScheduleItem =>
-  ({ key: `block:${block.id}`, title: block.title ?? goal?.title ?? "Time block", start: new Date(block.start), end: new Date(block.end), color: goal?.color ?? null, done: false, block });
+  ({ key: `block:${block.id}`, title: block.title ?? goal?.title ?? "Time block", start: new Date(block.start), end: new Date(block.end), color: goal?.color ?? null, done: block.outcome === "done", block });
 
 /** Top and height from the duration, so a block ending at midnight still reaches the bottom; at least 20px (legacy). */
 export const spanFor = (start: Date, end: Date) => ({ top: offsetFor(start), height: Math.max((end.getTime() - start.getTime()) / 3_600_000 * HOUR_HEIGHT, 20) });
@@ -230,3 +231,16 @@ export function dropRange(day: Date, y: number) {
   const midnight = addDays(startOfDay(day), 1).getTime();
   return { start, end: new Date(Math.min(start.getTime() + DEFAULT_DURATION_MINUTES * MINUTE, midnight)) };
 }
+
+// Goals ticket 09: block outcomes and the week's reserved vs kept time per goal.
+/** Per goal, minutes reserved and kept in the local Monday-to-Sunday week around `now`. */
+export const weekGoalTime = (blocks: TimeBlockDto[], now = new Date()) =>
+  goalTime(blocks.filter(block => !block.id.startsWith("pending-")), startOfWeek(now, 1), addDays(startOfWeek(now, 1), 7));
+/** "1h 30m", "2h", "45m". */
+export function durationLabel(minutes: number) {
+  const hours = Math.floor(minutes / 60), rest = Math.round(minutes % 60);
+  return hours && rest ? `${hours}h ${rest}m` : hours ? `${hours}h` : `${rest}m`;
+}
+/** Pressing the outcome a block already has puts it back to planned; rescheduling always counts again. */
+export const toggledOutcome = (current: TimeBlockDto["outcome"], pressed: TimeBlockDto["outcome"]) =>
+  pressed !== "rescheduled" && current === pressed ? "planned" : pressed;

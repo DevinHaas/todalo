@@ -4,13 +4,18 @@
 // blocks here: the client presents each as a block holding just that task.
 import { z } from "zod";
 
-/** Instants are ISO strings, like task dates. taskIds in the order they were put in (ticket 08); 09 adds the outcome, 10 the calendar event. */
-export interface TimeBlockDto { id: string; goalId: string | null; title: string | null; start: string; end: string; taskIds: string[] }
+/** Goals ticket 09: what became of one block (one occurrence). */
+export const blockOutcomes = ["planned", "done", "skipped", "rescheduled"] as const;
+export type BlockOutcome = typeof blockOutcomes[number];
+
+/** Instants are ISO strings, like task dates. taskIds in the order they were put in (ticket 08); outcome and how often it was rescheduled (09); 10 adds the calendar event. */
+export interface TimeBlockDto { id: string; goalId: string | null; title: string | null; start: string; end: string; taskIds: string[]; outcome: BlockOutcome; rescheduleCount: number }
 export interface TimeBlocksDto { blocks: TimeBlockDto[] }
 
-export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[] }
+export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: BlockOutcome; rescheduleCount: number }
 export const toTimeBlockDto = (block: TimeBlockRecord): TimeBlockDto => ({
   id: block.id, goalId: block.goalId, title: block.title, start: block.startAt.toISOString(), end: block.endAt.toISOString(), taskIds: block.taskIds,
+  outcome: block.outcome, rescheduleCount: block.rescheduleCount,
 });
 
 /** A block is at least 15 minutes (the schedule's snap) and at most a day. */
@@ -35,3 +40,26 @@ export const updateTimeBlockInput = z.object({ start: instant.optional(), end: i
 
 export type CreateTimeBlockInput = z.infer<typeof createTimeBlockInput>;
 export type UpdateTimeBlockInput = z.infer<typeof updateTimeBlockInput>;
+
+/** Ticket 09: "rescheduled" adds one to the block's reschedule count every time it is sent; "planned" undoes done or skipped. */
+export const blockOutcomeInput = z.object({ outcome: z.enum(blockOutcomes) }).strict();
+
+/** Reserved and kept (done) minutes for one goal. */
+export interface GoalTime { goalId: string; reservedMinutes: number; keptMinutes: number }
+/**
+ * Ticket 09: per goal, the minutes of its blocks inside [from, to) (a block
+ * crossing an edge counts only its inside part) and how many of them were kept.
+ * Blocks without a goal are left out; goals in first-block order.
+ */
+export function goalTime(blocks: Pick<TimeBlockDto, "goalId" | "start" | "end" | "outcome">[], from: Date, to: Date): GoalTime[] {
+  const totals = new Map<string, GoalTime>();
+  for (const block of blocks) {
+    const minutes = (Math.min(Date.parse(block.end), to.getTime()) - Math.max(Date.parse(block.start), from.getTime())) / 60_000;
+    if (!block.goalId || minutes <= 0) continue;
+    const total = totals.get(block.goalId) ?? { goalId: block.goalId, reservedMinutes: 0, keptMinutes: 0 };
+    total.reservedMinutes += minutes;
+    if (block.outcome === "done") total.keptMinutes += minutes;
+    totals.set(block.goalId, total);
+  }
+  return [...totals.values()];
+}

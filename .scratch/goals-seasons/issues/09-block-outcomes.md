@@ -4,12 +4,12 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mark a block done, skipped or rescheduled; rescheduling counts how often
-- [ ] Outcomes are recorded per block occurrence
-- [ ] A per-goal summary shows reserved vs kept time for the current week
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Mark a block done, skipped or rescheduled; rescheduling counts how often
+- [x] Outcomes are recorded per block occurrence
+- [x] A per-goal summary shows reserved vs kept time for the current week
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

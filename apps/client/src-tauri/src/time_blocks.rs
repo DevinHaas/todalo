@@ -108,6 +108,30 @@ pub async fn set_time_block_task(
         .await?)
 }
 
+/// Goals ticket 09: records a block's outcome; the server counts each "rescheduled".
+#[tauri::command]
+pub async fn set_time_block_outcome(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+    outcome: String,
+) -> Result<Option<Value>, String> {
+    if !OUTCOMES.contains(&outcome.as_str()) {
+        return Err(INVALID.to_owned());
+    }
+    if !valid_id(&id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(
+            Method::POST,
+            &format!("/api/v1/time-blocks/{id}/outcome"),
+            Some(serde_json::json!({ "outcome": outcome })),
+        )
+        .await?)
+}
+
+const OUTCOMES: [&str; 4] = ["planned", "done", "skipped", "rescheduled"];
+
 /// Instants are short ISO strings, the goal a valid ID or null, the title at
 /// most 200 characters; an empty patch is refused.
 fn block_body(patch: TimeBlockPatch) -> Result<Value, &'static str> {

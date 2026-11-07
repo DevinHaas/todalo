@@ -1,10 +1,10 @@
 // Time blocks (goals ticket 07): reserved time on the schedule with an optional goal.
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { TimeBlockDto, TimeBlocksDto } from "../../../packages/server/src/time-block-dto";
+import type { BlockOutcome, TimeBlockDto, TimeBlocksDto } from "../../../packages/server/src/time-block-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
-export type { TimeBlockDto };
+export type { BlockOutcome, TimeBlockDto };
 /** Only the supplied fields change; a move or resize sends start and end together; goalId null removes the goal. */
 export interface TimeBlockPatch { start?: string; end?: string; goalId?: string | null; title?: string }
 export interface NewTimeBlock { start: string; end: string; goalId?: string | null; title?: string }
@@ -18,6 +18,8 @@ export interface TimeBlockTransport {
   remove(id: string): Promise<boolean>;
   /** Ticket 08: puts a task into the block or takes it out; null when either is missing or foreign. */
   setTask(id: string, taskId: string, linked: boolean): Promise<TimeBlockDto | null>;
+  /** Ticket 09: "rescheduled" counts once more each time; null when missing or foreign. */
+  setOutcome(id: string, outcome: BlockOutcome): Promise<TimeBlockDto | null>;
 }
 
 export function browserTimeBlockTransport(fetcher: typeof fetch = fetch): TimeBlockTransport {
@@ -48,6 +50,7 @@ export function browserTimeBlockTransport(fetcher: typeof fetch = fetch): TimeBl
     update: async (id, patch) => (await request<{ block: TimeBlockDto }>("PATCH", one(id), patch))?.block ?? null,
     remove: async (id) => Boolean(await request("DELETE", one(id))),
     setTask: async (id, taskId, linked) => (await request<{ block: TimeBlockDto }>(linked ? "PUT" : "DELETE", `${one(id)}/tasks/${encodeURIComponent(taskId)}`))?.block ?? null,
+    setOutcome: async (id, outcome) => (await request<{ block: TimeBlockDto }>("POST", `${one(id)}/outcome`, { outcome }))?.block ?? null,
   };
 }
 
@@ -64,6 +67,7 @@ export function timeBlockTransport(): TimeBlockTransport {
     update: async (id, patch) => (await command<{ block: TimeBlockDto } | null>("update_time_block", { id, patch }))?.block ?? null,
     remove: async (id) => Boolean(await command<unknown>("delete_time_block", { id })),
     setTask: async (id, taskId, linked) => (await command<{ block: TimeBlockDto } | null>("set_time_block_task", { id, taskId, linked }))?.block ?? null,
+    setOutcome: async (id, outcome) => (await command<{ block: TimeBlockDto } | null>("set_time_block_outcome", { id, outcome }))?.block ?? null,
   };
 }
 
@@ -92,10 +96,12 @@ export function timeBlockMutations(transport: TimeBlockTransport, cache: QueryCl
     finally { await cache.invalidateQueries({ queryKey: key }); }
   }
   return {
-    create: (block: NewTimeBlock) => optimistic(blocks => [...blocks, { id: `pending-${block.start}`, goalId: block.goalId ?? null, title: block.title?.trim() || null, start: block.start, end: block.end, taskIds: [] }], () => transport.create(block)),
+    create: (block: NewTimeBlock) => optimistic(blocks => [...blocks, { id: `pending-${block.start}`, goalId: block.goalId ?? null, title: block.title?.trim() || null, start: block.start, end: block.end, taskIds: [], outcome: "planned", rescheduleCount: 0 }], () => transport.create(block)),
     update: (id: string, patch: TimeBlockPatch) => optimistic(blocks => blocks.map(block => block.id === id ? { ...block, ...patch, title: patch.title === undefined ? block.title : patch.title.trim() || null } : block), () => transport.update(id, patch)),
     remove: (id: string) => optimistic(blocks => blocks.filter(block => block.id !== id), () => transport.remove(id)),
     setTask: (id: string, taskId: string, linked: boolean) => optimistic(blocks => blocks.map(block => block.id !== id ? block
       : { ...block, taskIds: linked ? [...new Set([...block.taskIds, taskId])] : block.taskIds.filter(item => item !== taskId) }), () => transport.setTask(id, taskId, linked)),
+    setOutcome: (id: string, outcome: BlockOutcome) => optimistic(blocks => blocks.map(block => block.id !== id ? block
+      : { ...block, outcome, rescheduleCount: block.rescheduleCount + (outcome === "rescheduled" ? 1 : 0) }), () => transport.setOutcome(id, outcome)),
   };
 }

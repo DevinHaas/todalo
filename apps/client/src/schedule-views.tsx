@@ -108,6 +108,8 @@ export interface BlockSlots {
   tasksIn(block: TimeBlockDto): TaskDto[];
   /** Ticket 08: extra controls beside Block time (the unscheduled sidebar toggle). */
   toolbar?: ReactNode;
+  /** Ticket 09: this week's reserved vs kept time per goal, left of the toolbar. */
+  summary?: ReactNode;
 }
 
 /** Legacy UpcomingListView: week strip, scroll-spy and one section per day for a year. */
@@ -298,7 +300,8 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
   };
 
   return <>
-    {blocks && <div className="ui flex justify-end gap-2 pb-2">
+    {blocks && <div className="ui flex items-start justify-end gap-2 pb-2">
+      {blocks.summary && <div className="mr-auto min-w-0">{blocks.summary}</div>}
       {blocks.toolbar}
       <Button type="button" variant="outline" size="sm" data-schedule-action="new-block" onClick={newBlock}>Block time</Button>
     </div>}
@@ -331,11 +334,15 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
  * Enter or a click opens it.
  */
 function BlockView({ item, tasks = [], draggable, onOpen, onDrag }: { item: ScheduleItem; tasks?: TaskDto[]; draggable: boolean; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
+  // Ticket 09: skipped blocks fade; a reschedule count shows whatever the outcome.
+  const outcome = item.block?.outcome, rescheduled = item.block?.rescheduleCount ?? 0;
+  const note = [outcome === "skipped" && "Skipped", rescheduled > 0 && `Rescheduled ${rescheduled}×`].filter(Boolean).join(" · ");
   const tone = item.color ? { borderLeft: `3px solid ${item.color}`, backgroundColor: `color-mix(in srgb, ${item.color} 18%, transparent)` } : {};
-  return <button type="button" className={cn("timed-block z-[1] data-[drop-target]:ring-2 data-[drop-target]:ring-ring", draggable && "touch-none", item.block && !item.color && "border-l-[3px] border-solid border-border")}
-    data-block={item.block ? "time-block" : "task"} data-time-block-id={item.block?.id} data-done={item.done || undefined} style={{ ...spanFor(item.start, item.end), ...tone }}
+  return <button type="button" className={cn("timed-block z-[1] data-[drop-target]:ring-2 data-[drop-target]:ring-ring", draggable && "touch-none", item.block && !item.color && "border-l-[3px] border-solid border-border", outcome === "skipped" && "opacity-50")}
+    data-block={item.block ? "time-block" : "task"} data-time-block-id={item.block?.id} data-outcome={outcome} data-done={item.done || undefined} style={{ ...spanFor(item.start, item.end), ...tone }}
     onClick={(event) => { event.stopPropagation(); onOpen(); }} onPointerDown={draggable ? (event) => onDrag("move", event) : undefined}>
     <span className="timed-title">{item.title}</span><span className="timed-range">{labels.time(item.start)}–{labels.time(item.end)}</span>
+    {note && <span data-block-note="" className="truncate text-xs text-muted-foreground">{note}</span>}
     {tasks.map(task => <span key={task.id} data-block-task={task.id} className={cn("truncate text-xs", task.status === "done" && "text-muted-foreground line-through")}>{task.title}</span>)}
     {draggable && <span aria-hidden="true" data-resize="" className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" onPointerDown={(event) => onDrag("resize", event)} />}
   </button>;

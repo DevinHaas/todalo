@@ -1,13 +1,13 @@
-// Server-only time block operations (goals tickets 07, 08). Every read and write is
+// Server-only time block operations (goals tickets 07, 08, 09). Every read and write is
 // scoped to the owner, so a foreign block, goal or task ID behaves like a missing one.
-import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks, timeBlockTasks, timeBlocks } from "@todalo/db/schema";
 import { getOwnedGoal } from "./goals";
-import type { CreateTimeBlockInput, TimeBlockRecord, UpdateTimeBlockInput } from "./time-block-dto";
+import type { BlockOutcome, CreateTimeBlockInput, TimeBlockRecord, UpdateTimeBlockInput } from "./time-block-dto";
 
 const owned = (userId: string, id: string) => and(eq(timeBlocks.id, id), eq(timeBlocks.userId, userId));
-const columns = { id: timeBlocks.id, goalId: timeBlocks.goalId, title: timeBlocks.title, startAt: timeBlocks.startAt, endAt: timeBlocks.endAt };
+const columns = { id: timeBlocks.id, goalId: timeBlocks.goalId, title: timeBlocks.title, startAt: timeBlocks.startAt, endAt: timeBlocks.endAt, outcome: timeBlocks.outcome, rescheduleCount: timeBlocks.rescheduleCount };
 type BlockRow = Omit<TimeBlockRecord, "taskIds">;
 // ponytail: fixed look-back instead of a requested range; the schedule only shows this week and today.
 const LOOK_BACK_MS = 8 * 7 * 24 * 60 * 60_000;
@@ -35,6 +35,14 @@ export async function createTimeBlock(userId: string, input: CreateTimeBlockInpu
   if (!await goalAllowed(userId, input.goalId)) return null;
   const [block] = await db.insert(timeBlocks).values({ userId, goalId: input.goalId ?? null, title: input.title ?? null, startAt: input.start, endAt: input.end }).returning(columns);
   return { ...block!, taskIds: [] };
+}
+
+/** Ticket 09: records the block's outcome; "rescheduled" counts once more each time. null when missing or foreign. */
+export async function setTimeBlockOutcome(userId: string, id: string, outcome: BlockOutcome) {
+  const [block] = await db.update(timeBlocks).set({
+    outcome, ...(outcome === "rescheduled" && { rescheduleCount: sql`${timeBlocks.rescheduleCount} + 1` }),
+  }).where(owned(userId, id)).returning(columns);
+  return one(userId, block);
 }
 
 /** null when the block or the new goal is missing or foreign. */

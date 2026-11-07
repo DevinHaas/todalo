@@ -90,6 +90,12 @@ function clickAndRefocus(selector: string) {
 const composerForm = () => document.activeElement?.closest<HTMLFormElement>("form.composer-form") ?? null;
 const inComposerTitle = () => Boolean(document.activeElement?.closest(".quick-add-title")) && composerForm();
 const editorForm = () => document.activeElement?.closest<HTMLElement>(".task-editor :is(form, .sheet-form)") ?? null;
+/** Goals ticket 09: asks the schedule to mark the focused time block (schedule-screens.tsx listens). */
+function blockOutcome(outcome: "done" | "skipped" | "rescheduled") {
+  const id = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("main [data-time-block-id]")?.dataset.timeBlockId;
+  if (!id) return false;
+  window.dispatchEvent(new CustomEvent("todalo:block-outcome", { detail: { id, outcome } }));
+}
 function press(scope: ParentNode | null, selector: string) {
   const control = scope?.querySelector<HTMLButtonElement>(selector);
   if (!control || control.disabled) return false;
@@ -391,6 +397,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // Goals ticket 08: pass on away from the schedule (or with the sidebar closed).
       "schedule.unscheduled": () => press(document.querySelector("main"), '[data-schedule-action="unscheduled"]'),
       "schedule.filter": () => { const first = document.querySelector<HTMLElement>('main [data-unscheduled] [data-unscheduled-filter="first"]'); if (!first) return false; first.focus(); },
+      // Goals ticket 09: the focused block's outcome; passes on when no block is focused.
+      "schedule.block-done": () => blockOutcome("done"), "schedule.block-skip": () => blockOutcome("skipped"), "schedule.block-reschedule": () => blockOutcome("rescheduled"),
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };

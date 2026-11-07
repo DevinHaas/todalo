@@ -1,17 +1,17 @@
 // Upcoming and Today's calendar layouts (ticket 16). Both read the Today query:
 // it is the full owned-task collection (getTasksForUser), exactly what the legacy
 // Upcoming page loaded, so every task write already refreshes these views.
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, metadataReads, projectReads, reads, timeBlockReads, timeBlocks } from "./runtime";
 import { goalColorValue } from "./goals";
-import { timeBlockMutations, type TimeBlockDto } from "./time-blocks";
-import { TimeBlockDialog } from "./time-block-views";
+import { timeBlockMutations, type BlockOutcome, type TimeBlockDto } from "./time-blocks";
+import { GoalTimeSummary, TimeBlockDialog } from "./time-block-views";
 import { useEditorExtras, useTaskWrites } from "./task-writes";
 import { Composer, Failure, listTree, TaskEditor, TaskRow, type SelectionSlots } from "./views";
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type BlockSlots, type ScheduleSlots } from "./schedule-views";
-import { DEFAULT_DURATION_MINUTES, blockItem, dayKey, defaultBlockRange, dropRange, labels, parseDayKey, startOfDay, unscheduledTasks, type UnscheduledFilter } from "./schedule";
+import { DEFAULT_DURATION_MINUTES, blockItem, dayKey, defaultBlockRange, dropRange, labels, parseDayKey, startOfDay, toggledOutcome, unscheduledTasks, weekGoalTime, type UnscheduledFilter } from "./schedule";
 import { UnscheduledSidebar, dropTargetAt, useTaskDrag } from "./unscheduled-views";
 import { useBulkWrites } from "./bulk-screens";
 import { Button } from "./ui";
@@ -101,6 +101,19 @@ function useBlockSlots(userId: string, tasks: TaskDto[], writes: ReturnType<type
     quietly(schedule(task, start, end));
   };
   const drag = useTaskDrag(drop);
+  // Ticket 09: outcomes from the dialog or the keyboard (b then d/s/r on a focused block).
+  const mark = (block: TimeBlockDto, outcome: BlockOutcome) => mutations.setOutcome(block.id, toggledOutcome(block.outcome, outcome));
+  const blockList = list.data ?? [];
+  useEffect(() => {
+    const onOutcome = (event: Event) => {
+      const { id, outcome } = (event as CustomEvent<{ id: string; outcome: BlockOutcome }>).detail;
+      const block = blockList.find(item => item.id === id);
+      if (block && !id.startsWith("pending-")) quietly(mark(block, outcome));
+    };
+    window.addEventListener("todalo:block-outcome", onOutcome);
+    return () => window.removeEventListener("todalo:block-outcome", onOutcome);
+  });
+  const weekRows = goals.data?.hidden ? [] : weekGoalTime(blockList).flatMap(row => { const goal = byId.get(row.goalId); return goal ? [{ ...row, title: goal.title, color: goal.color }] : []; });
   const slots: BlockSlots = {
     blocks: list.data ?? [],
     goal: (goalId) => { const goal = goalId ? byId.get(goalId) : undefined; return goal && { title: goal.title, color: goalColorValue(goal.color) }; },
@@ -116,6 +129,7 @@ function useBlockSlots(userId: string, tasks: TaskDto[], writes: ReturnType<type
       return schedule(item.task!, start, end).catch(report);
     },
     tasksIn: (block) => block.taskIds.map(id => tasks.find(task => task.id === id)).filter((task): task is TaskDto => Boolean(task)),
+    summary: <GoalTimeSummary rows={weekRows} />,
     toolbar: <Button type="button" variant={sidebarOpen ? "secondary" : "outline"} size="sm" aria-pressed={sidebarOpen} data-schedule-action="unscheduled" onClick={() => setSidebarOpen(open => !open)}>Unscheduled</Button>,
   };
   const now = new Date();
@@ -138,7 +152,7 @@ function useBlockSlots(userId: string, tasks: TaskDto[], writes: ReturnType<type
     {error && <p role="alert" className="form-error">{error}</p>}
     {block && <TimeBlockDialog key={block.id} block={block} goals={goals.data?.hidden ? [] : goalList} tasks={slots.tasksIn(block)}
       onSave={(patch) => mutations.update(block.id, patch)} onDelete={() => mutations.remove(block.id)} onClose={() => setEditing(null)}
-      onRemoveTask={(taskId) => mutations.setTask(block.id, taskId, false)} />}
+      onRemoveTask={(taskId) => mutations.setTask(block.id, taskId, false)} onOutcome={(outcome) => mark(block, outcome)} />}
     {drag.preview}
   </>;
   return { slots, overlay, sidebar: sidebar || null };

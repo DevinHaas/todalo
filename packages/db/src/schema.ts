@@ -294,6 +294,10 @@ export const timeBlocks = pgTable("time_blocks", {
   title: text("title"),
   startAt: timestamp("start_at").notNull(),
   endAt: timestamp("end_at").notNull(),
+  // Goals ticket 09: a block is one occurrence; its outcome is planned, done,
+  // skipped or rescheduled, and the count keeps every reschedule even once done.
+  outcome: text("outcome").$type<"planned" | "done" | "skipped" | "rescheduled">().default("planned").notNull(),
+  rescheduleCount: integer("reschedule_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [index("time_blocks_user_start_idx").on(table.userId, table.startAt)]);

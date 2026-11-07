@@ -1,17 +1,18 @@
-// The time block editor (goals tickets 07, 08): title, goal, start and end, the
-// tasks it holds (each can be taken out), delete.
+// The time block editor (goals tickets 07, 08, 09): title, goal, start and end, the
+// tasks it holds (each can be taken out), its outcome, delete. Ticket 09 also
+// adds the week's reserved vs kept time per goal.
 // Pure view: the screen passes the block, goals and writes. The time fields are
 // the keyboard way to move and resize a block.
 import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import {
   Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Input,
-  List, ListRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  List, ListRow, Progress, ProgressLabel, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "./ui";
 import { FormError, GoalDot } from "./goal-views";
-import { addDays, labels, startOfDay } from "./schedule";
+import { addDays, durationLabel, labels, startOfDay } from "./schedule";
 import type { GoalDto } from "./goals";
-import type { TimeBlockDto, TimeBlockPatch } from "./time-blocks";
+import type { BlockOutcome, TimeBlockDto, TimeBlockPatch } from "./time-blocks";
 import type { TaskDto } from "./tasks";
 
 const NO_GOAL = "none";
@@ -23,8 +24,12 @@ const onDay = (day: Date, time: string, after?: Date) => {
   return after && date <= after ? addDays(date, 1) : date;
 };
 
-export function TimeBlockDialog({ block, goals, tasks = [], onSave, onDelete, onRemoveTask, onClose }: {
+const OUTCOME_ACTIONS: { outcome: BlockOutcome; label: string }[] = [{ outcome: "done", label: "Done" }, { outcome: "skipped", label: "Skipped" }, { outcome: "rescheduled", label: "Rescheduled" }];
+
+export function TimeBlockDialog({ block, goals, tasks = [], onSave, onDelete, onRemoveTask, onOutcome, onClose }: {
   block: TimeBlockDto;
+  /** Ticket 09: marks the block; pressing done or skipped again puts it back to planned. */
+  onOutcome?: (outcome: BlockOutcome) => Promise<unknown>;
   /** The tasks in the block, in order. */
   tasks?: TaskDto[];
   /** Takes a task out of the block (the task stays unscheduled). */
@@ -80,6 +85,13 @@ export function TimeBlockDialog({ block, goals, tasks = [], onSave, onDelete, on
               {onRemoveTask && <Button type="button" variant="ghost" size="icon-sm" aria-label={`Take ${task.title} out of the block`}
                 onClick={() => { setError(null); onRemoveTask(task.id).catch(() => setError("The task could not be taken out. Try again.")); }}><X /></Button>}
             </ListRow>)}</List></Field>}
+          {onOutcome && <Field><FieldLabel>Outcome</FieldLabel>
+            <div className="flex flex-wrap items-center gap-2">
+              {OUTCOME_ACTIONS.map(({ outcome, label }) => <Button key={outcome} type="button" size="sm" variant={block.outcome === outcome ? "secondary" : "outline"}
+                aria-pressed={block.outcome === outcome} data-block-outcome={outcome}
+                onClick={() => { setError(null); onOutcome(outcome).catch(() => setError("The outcome could not be saved. Try again.")); }}>{label}</Button>)}
+              {block.rescheduleCount > 0 && <span className="text-xs-plus text-muted-foreground" data-block-reschedules="">Rescheduled {block.rescheduleCount}×</span>}
+            </div></Field>}
           {error && <FormError>{error}</FormError>}
         </DialogBody>
         <DialogFooter>
@@ -90,4 +102,19 @@ export function TimeBlockDialog({ block, goals, tasks = [], onSave, onDelete, on
       </form>
     </DialogContent>
   </Dialog>;
+}
+
+/** Ticket 09: per goal, this week's kept (done) time against its reserved time. */
+export function GoalTimeSummary({ rows }: { rows: { goalId: string; title: string; color: string; reservedMinutes: number; keptMinutes: number }[] }) {
+  if (!rows.length) return null;
+  return <section aria-label="This week by goal" data-goal-time="" className="flex flex-wrap items-center gap-x-5 gap-y-2">
+    <span className="text-xs-plus text-muted-foreground">This week</span>
+    {rows.map(row => <Progress key={row.goalId} data-goal-time-goal={row.goalId} className="w-48 gap-1"
+      value={Math.round(row.keptMinutes / row.reservedMinutes * 100)} aria-label={`${row.title}: ${durationLabel(row.keptMinutes)} kept of ${durationLabel(row.reservedMinutes)} reserved this week`}>
+      <ProgressLabel className="flex min-w-0 flex-1 items-center gap-1.5 text-xs-plus font-normal">
+        <GoalDot color={row.color} /><span className="truncate">{row.title}</span>
+        <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{durationLabel(row.keptMinutes)} / {durationLabel(row.reservedMinutes)}</span>
+      </ProgressLabel>
+    </Progress>)}
+  </section>;
 }

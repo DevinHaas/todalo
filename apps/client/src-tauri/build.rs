@@ -91,6 +91,7 @@ fn main() {
             "update_time_block",
             "delete_time_block",
             "set_time_block_task",
+            "set_time_block_outcome",
             "destinations",
             "create_section",
             "delete_section",
