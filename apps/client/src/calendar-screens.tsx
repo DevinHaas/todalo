@@ -2,11 +2,12 @@
 // stream for the signed-in user, and the Calendars section of the Account screen.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { calendar, calendarReads, live, session } from "./runtime";
+import { calendar, calendarReads, live, session, syncFor } from "./runtime";
 import { calendarMutations, startLiveUpdates, type CalendarEventDto } from "./calendar";
 import { CalendarSettings } from "./calendar-views";
 import { GoogleButton } from "./google";
 import { inlineError } from "./toasts";
+import { Button } from "./ui";
 
 const none: CalendarEventDto[] = [];
 /** The user's visible provider events; a failed read just shows no events (tasks still render). */
@@ -14,11 +15,21 @@ export function useCalendarEvents(userId: string) {
   return useQuery(calendarReads.events(userId)).data ?? none;
 }
 
-/** One live stream while signed in; unmounting (sign-out) closes it. */
+/** One live stream while signed in; unmounting (sign-out) closes it. Its `sync` changes pull the delta. */
 export function LiveUpdates({ userId }: { userId: string }) {
   const cache = useQueryClient();
-  useEffect(() => startLiveUpdates({ transport: live, cache, userId, onUnauthenticated: () => void session.refresh() }), [cache, userId]);
+  useEffect(() => startLiveUpdates({ transport: live, cache, userId, sync: syncFor(userId), onUnauthenticated: () => void session.refresh() }), [cache, userId]);
   return null;
+}
+
+/** The toolbar's quiet Synced / Syncing… label; pressing it (or ⌘R / Ctrl+R) refetches everything. */
+export function SyncStatus({ userId }: { userId: string }) {
+  const sync = syncFor(userId);
+  const state = useSyncExternalStore(sync.subscribe, () => sync.state);
+  return <Button variant="ghost" size="xs" className="text-muted-foreground" data-sync-now aria-live="polite"
+    title="Sync now" onClick={() => void sync.reload().catch(() => {})}>
+    {state === "syncing" ? "Syncing…" : "Synced"}
+  </Button>;
 }
 
 export function CalendarSettingsScreen({ userId }: { userId: string }) {

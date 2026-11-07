@@ -92,6 +92,7 @@ pub fn run() {
             sign_out,
             reads::today,
             reads::task,
+            reads::sync_changes,
             writes::create_task,
             writes::complete_task,
             writes::update_task,

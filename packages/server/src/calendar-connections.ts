@@ -76,7 +76,7 @@ export async function getCalendarAccounts(userId: string): Promise<CalendarAccou
       id: acct.id,
       email: acct.accountId,
       needsConsent,
-      hasSyncError: synced.some((s) => s.enabled && !s.syncedAt),
+      hasSyncError: synced.some((s) => s.enabled && !s.tasksOnly && !s.syncedAt),
       showEvents: settings?.showEvents ?? true,
       calendars,
     };

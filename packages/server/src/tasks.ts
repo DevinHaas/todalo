@@ -171,6 +171,7 @@ export async function updateTask(userId: string, input: UpdateTaskInput, options
     const descendants = subtreeIds(id, taskTree(await ownedTaskTree(userId))).slice(1);
     if (descendants.length) await db.update(tasks).set({ projectId, sectionId }).where(and(inArray(tasks.id, descendants), eq(tasks.userId, userId)));
   }
-  if ("dueDate" in data) await syncToCalendar(userId, id);
+  // What the event shows changed (two-way sync keeps title and times in step).
+  if (["dueDate", "dueDateEnd", "title", "description"].some(field => field in data) && (owned.dueDate || owned.googleCalendarEventId || data.dueDate)) await syncToCalendar(userId, id);
   return "updated";
 }

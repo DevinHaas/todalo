@@ -28,7 +28,9 @@ import { createMetadataRoutes } from "./metadata-routes";
 import { createSearchRoutes } from "./search-routes";
 import { createCalendarRoutes } from "./calendar-routes";
 import * as calendar from "@todalo/server/calendar-connections";
-import { handleCalendarWebhook } from "@todalo/server/calendar-sync";
+import { handleCalendarWebhook, startCalendarMaintenance } from "@todalo/server/calendar-sync";
+import { getSyncDelta } from "@todalo/server/sync";
+import { createSyncRoutes } from "./sync-routes";
 import * as live from "@todalo/server/live";
 import { createImportRoutes } from "./import-routes";
 import { todoistClient } from "./todoist";
@@ -40,9 +42,23 @@ import { sql } from "drizzle-orm";
 db.execute(sql`select 1`).catch(() => {});
 
 const dependencies = productionDependencies();
+// Live sync: a Ramble save (socket or HTTP) tells the user's devices to pull the delta.
+const commitTodos = dependencies.commit;
+dependencies.commit = async (userId, ...rest) => { const count = await commitTodos(userId, ...rest); live.publish(userId, "sync"); return count; };
 const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };
 const verify = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
-const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRoutes({
+const app = createApi(dependencies)
+  // Live sync: every successful /api/v1 write tells the user's devices (this one
+  // included) to pull the delta. Hooks cover the routes registered after them.
+  .onAfterResponse(async ({ request, set, responseValue }) => {
+    if (request.method === "GET" || !new URL(request.url).pathname.startsWith("/api/v1/")) return;
+    const code = responseValue instanceof Response ? responseValue.status : Number(set.status ?? 200);
+    if (code >= 400) return;
+    const userId = await verify(request.headers).catch(() => null);
+    if (userId) live.publish(userId, "sync");
+  })
+  .use(createSyncRoutes({ verify, delta: getSyncDelta }))
+  .use(createAuthRoutes(auth)).use(createTaskRoutes({
   verify,
   today: (userId) => getTodayTasksForUser(userId),
   task: getOwnedTask,
@@ -174,3 +190,5 @@ const app = createApi(dependencies).use(createAuthRoutes(auth)).use(createTaskRo
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",
 });
 console.log(`Ramble API listening on port ${app.server?.port}`);
+// Google edits reach tasks by webhook (GOOGLE_WEBHOOK_BASE_URL) or, locally, by syncToken polling.
+startCalendarMaintenance((userId) => { live.publish(userId, "calendar"); live.publish(userId, "sync"); });

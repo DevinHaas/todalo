@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { disconnectAccount, getCalendarAccounts, resyncAccount, setAccountShowEvents, setCalendarVisible } from "./calendar-connections";
-import { handleCalendarWebhook, logSafe } from "./calendar-sync";
+import { ensureTaskCalendar, handleCalendarWebhook, logSafe } from "./calendar-sync";
 
 const boundary = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]> }));
 vi.mock("@todalo/db", async () => {
@@ -126,11 +126,12 @@ describe("Google webhook", () => {
     expect(boundary.rows.synced_calendars[0].syncToken).toBe("sync-3");
   });
 
-  it("an expired sync token clears the cache for a full resync; failures still answer 200", async () => {
+  it("an expired sync token clears the cache and resyncs in full at once; failures still answer 200", async () => {
     google.list.mockRejectedValueOnce(Object.assign(new Error("Gone"), { code: 410 }));
     expect(await handleCalendarWebhook(headers())).toEqual({ status: 200, userId: "alice" });
     expect(boundary.rows.calendar_events.map(event => event.id)).toEqual(["event-bob"]);
-    expect(boundary.rows.synced_calendars[0].syncToken).toBeNull();
+    expect(google.list.mock.calls[1][0].syncToken).toBeUndefined();
+    expect(boundary.rows.synced_calendars[0].syncToken).toBe("sync-2");
 
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     google.list.mockRejectedValueOnce(Object.assign(new Error("Backend Error"), { code: 500, config: { headers: { Authorization: "Bearer stub-access-token" } } }));
@@ -144,5 +145,61 @@ describe("Google webhook", () => {
     logSafe("failed", "cal-work", { code: 401, message: "Invalid Credentials", config: { headers: { Authorization: "Bearer secret" } } });
     expect(error).toHaveBeenCalledWith("failed", "cal-work", { code: 401, message: "Invalid Credentials" });
     error.mockRestore();
+  });
+});
+
+describe("two-way task sync (Google → task)", () => {
+  const seen = new Date("2026-11-07T11:00:00.000Z");
+  const edited = "2026-11-07T12:00:00.000Z";
+  const headers = new Headers({ "x-goog-channel-id": "channel-tasks", "x-goog-resource-id": "resource-tasks", "x-goog-channel-token": "cal-tasks", "x-goog-resource-state": "exists" });
+  beforeEach(() => {
+    boundary.rows.synced_calendars.push({ id: "cal-tasks", userId: "alice", accountId: "acct-alice", googleCalendarId: "primary", summary: "Tasks", color: "#4285f4", enabled: true, tasksOnly: true, syncToken: "t-1", syncedAt: new Date(), channelId: "channel-tasks", resourceId: "resource-tasks", channelExpiresAt: null });
+    boundary.rows.tasks = [
+      { id: "block", userId: "alice", title: "Write", dueDate: new Date("2026-11-09T09:00:00Z"), dueDateEnd: new Date("2026-11-09T10:00:00Z"), googleCalendarEventId: "ev-block", updatedAt: seen },
+      { id: "gone", userId: "alice", title: "Call", dueDate: new Date("2026-11-09T12:00:00Z"), dueDateEnd: new Date("2026-11-09T12:30:00Z"), googleCalendarEventId: "ev-gone", updatedAt: seen },
+      { id: "echo", userId: "alice", title: "Read", dueDate: new Date("2026-11-10T09:00:00Z"), dueDateEnd: new Date("2026-11-10T10:00:00Z"), googleCalendarEventId: "ev-echo", updatedAt: seen },
+      { id: "bobs", userId: "bob", title: "Bob's", dueDate: new Date("2026-11-09T09:00:00Z"), dueDateEnd: null, googleCalendarEventId: "ev-bob", updatedAt: seen },
+    ];
+  });
+  const task = (id: string) => boundary.rows.tasks.find(row => row.id === id)!;
+
+  it("applies moved, resized, renamed and deleted events to the owner's tasks, ignores echoes and caches no events", async () => {
+    google.list.mockResolvedValue({ data: { nextSyncToken: "t-2", items: [
+      { id: "ev-block", summary: "Write chapter 2", start: { dateTime: "2026-11-09T13:00:00Z" }, end: { dateTime: "2026-11-09T15:00:00Z" }, updated: edited },
+      { id: "ev-gone", status: "cancelled", updated: edited },
+      { id: "ev-echo", summary: "Read", start: { dateTime: "2026-11-10T09:00:00.000Z" }, end: { dateTime: "2026-11-10T10:00:00.000Z" }, updated: edited },
+      // Another user's event ID in this calendar never reaches their task.
+      { id: "ev-bob", summary: "Hijacked", start: { date: "2026-11-12" }, end: { date: "2026-11-13" }, updated: edited },
+    ] } });
+    expect(await handleCalendarWebhook(headers)).toEqual({ status: 200, userId: "alice" });
+    expect(google.list.mock.calls[0][0]).toMatchObject({ calendarId: "primary", syncToken: "t-1" });
+    expect(task("block")).toMatchObject({ title: "Write chapter 2", dueDate: new Date("2026-11-09T13:00:00Z"), dueDateEnd: new Date("2026-11-09T15:00:00Z") });
+    expect(task("gone")).toMatchObject({ title: "Call", dueDate: null, dueDateEnd: null, googleCalendarEventId: null });
+    expect(task("echo").updatedAt).toBe(seen);
+    expect(task("bobs")).toMatchObject({ title: "Bob's", dueDate: new Date("2026-11-09T09:00:00Z") });
+    expect(boundary.rows.calendar_events.filter(event => event.calendarId === "cal-tasks")).toEqual([]);
+    expect(boundary.rows.synced_calendars.find(row => row.id === "cal-tasks")!.syncToken).toBe("t-2");
+    // Inbound writes never push back to Google (no echo loop).
+    expect(google.watch).not.toHaveBeenCalled();
+  });
+
+  it("the push calendar gets one tasks-only row once calendar access is granted", async () => {
+    boundary.rows.synced_calendars = boundary.rows.synced_calendars.filter(row => row.id !== "cal-tasks");
+    await ensureTaskCalendar("alice");
+    expect(boundary.rows.synced_calendars.filter(row => row.tasksOnly)).toEqual([]);
+    boundary.rows.account[0].scope = "openid,https://www.googleapis.com/auth/calendar.events";
+    await ensureTaskCalendar("alice");
+    await ensureTaskCalendar("alice");
+    expect(boundary.rows.synced_calendars.filter(row => row.tasksOnly)).toMatchObject([{ userId: "alice", accountId: "acct-alice", googleCalendarId: "primary" }]);
+  });
+
+  it("an expired token resyncs the calendar in full and still applies its edits", async () => {
+    google.list
+      .mockRejectedValueOnce(Object.assign(new Error("Gone"), { code: 410 }))
+      .mockResolvedValueOnce({ data: { nextSyncToken: "t-full", items: [{ id: "ev-block", summary: "Write", start: { dateTime: "2026-11-09T09:00:00Z" }, end: { dateTime: "2026-11-09T09:45:00Z" }, updated: edited }] } });
+    expect(await handleCalendarWebhook(headers)).toEqual({ status: 200, userId: "alice" });
+    expect(google.list.mock.calls[1][0].syncToken).toBeUndefined();
+    expect(task("block").dueDateEnd).toEqual(new Date("2026-11-09T09:45:00Z"));
+    expect(boundary.rows.synced_calendars.find(row => row.id === "cal-tasks")!.syncToken).toBe("t-full");
   });
 });

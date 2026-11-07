@@ -1,6 +1,6 @@
 // Server-only task comments. Callers authenticate first and pass the session's
 // userId; a foreign task or comment behaves exactly like a missing one.
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { taskComments, tasks, user } from "@todalo/db/schema";
 import { commentInput, type CommentDto, type CommentInput } from "./comment-dto";
@@ -46,4 +46,14 @@ export async function addComment(userId: string, taskId: string, input: CommentI
 export async function deleteComment(userId: string, id: string): Promise<boolean> {
   const deleted = await db.delete(taskComments).where(and(eq(taskComments.id, id), eq(taskComments.userId, userId))).returning({ id: taskComments.id });
   return deleted.length > 0;
+}
+
+/** The user's comments among `ids` (the live sync delta). */
+export async function getCommentsByIds(userId: string, ids: string[]): Promise<CommentDto[]> {
+  if (!ids.length) return [];
+  const [rows, author] = await Promise.all([
+    db.select(columns).from(taskComments).where(and(eq(taskComments.userId, userId), inArray(taskComments.id, ids))),
+    authorOf(userId),
+  ]);
+  return rows.map(row => toDto(row, author));
 }

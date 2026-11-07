@@ -1,6 +1,6 @@
 // Server-only query boundary. Transports authenticate before supplying userId.
 // Do not import this package into client components except through type imports.
-import { and, asc, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks, taskLabels } from "@todalo/db/schema";
 
@@ -26,6 +26,16 @@ export async function getTasksForUser(userId: string, projectId?: string) {
     ...task,
     labelIds: associations.filter(link => link.taskId === task.id).map(link => link.labelId),
   }));
+}
+
+/** The user's tasks among `ids` (the live sync delta); missing and foreign IDs are left out. */
+export async function getTasksByIds(userId: string, ids: string[]) {
+  if (!ids.length) return [];
+  const [rows, associations] = await Promise.all([
+    db.select(withCommentCount).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, ids))),
+    db.select().from(taskLabels).where(and(eq(taskLabels.userId, userId), inArray(taskLabels.taskId, ids))),
+  ]);
+  return rows.map(task => ({ ...task, labelIds: associations.filter(link => link.taskId === task.id).map(link => link.labelId) }));
 }
 
 /** Returns null for missing and other users' tasks alike, so callers cannot probe IDs. */

@@ -169,6 +169,13 @@
       "when": 1794048702263,
       "tag": "0023_drop_time_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794056885906,
+      "tag": "0024_sync_changes",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,27 @@ pub async fn task(
     Ok(state.read(&format!("/api/v1/tasks/{id}")).await?)
 }
 
+/// GET /api/v1/sync: what changed since `since` (a cursor from the last answer; none starts over).
+#[tauri::command]
+pub async fn sync_changes(
+    state: tauri::State<'_, NativeAuth>,
+    since: Option<String>,
+) -> Result<serde_json::Value, String> {
+    // A cursor is digits only, so it can never change the request path; anything else starts over.
+    let path = match since.as_deref() {
+        Some(cursor) if valid_cursor(cursor) => format!("/api/v1/sync?since={cursor}"),
+        _ => "/api/v1/sync".to_owned(),
+    };
+    state
+        .read(&path)
+        .await?
+        .ok_or_else(|| "Your changes could not be loaded. Try again.".to_owned())
+}
+
+fn valid_cursor(cursor: &str) -> bool {
+    !cursor.is_empty() && cursor.len() <= 15 && cursor.bytes().all(|byte| byte.is_ascii_digit())
+}
+
 pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
@@ -32,7 +53,15 @@ pub(crate) fn valid_id(id: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_id;
+    use super::{valid_cursor, valid_id};
+
+    #[test]
+    fn sync_cursors_are_digits_only() {
+        assert!(valid_cursor("123456"));
+        for cursor in ["", "12a", "1&since=2", "../x", &"9".repeat(16)] {
+            assert!(!valid_cursor(cursor), "{cursor}");
+        }
+    }
 
     #[test]
     fn task_ids_cannot_change_the_request_path() {

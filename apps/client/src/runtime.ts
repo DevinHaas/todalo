@@ -14,6 +14,7 @@ import { metadataQueries, metadataTransport } from "./metadata";
 import { organizationQueries, organizationTransport } from "./organization";
 import { bulkTransport } from "./bulk";
 import { calendarQueries, calendarTransport, liveTransport } from "./calendar";
+import { createSync, syncTransport, type Sync } from "./sync";
 import { searchQueries, searchTransport } from "./search";
 import { importTransport } from "./imports";
 import { commentQueries, commentTransport } from "./comments";
@@ -47,6 +48,14 @@ export const searchReads = searchQueries(searchTransport());
 export const calendar = calendarTransport();
 export const calendarReads = calendarQueries(calendar);
 export const live = liveTransport();
+const changes = syncTransport();
+const syncs = new Map<string, Sync>();
+/** The signed-in user's live sync (sync.ts): one cursor per user for the app's lifetime. */
+export function syncFor(userId: string) {
+  let sync = syncs.get(userId);
+  if (!sync) syncs.set(userId, sync = createSync({ transport: changes, cache: queries, userId }));
+  return sync;
+}
 export const imports = importTransport();
 export const comments = commentTransport();
 export const commentReads = commentQueries(comments);

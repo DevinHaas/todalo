@@ -11,6 +11,8 @@ import {
   jsonb,
   pgEnum,
   date,
+  bigint,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type { Recurrence } from "@todalo/ramble/recurrence";
 
@@ -336,6 +338,9 @@ export const syncedCalendars = pgTable(
     channelId: text("channel_id"),
     resourceId: text("resource_id"),
     channelExpiresAt: timestamp("channel_expires_at"),
+    // Two-way task sync: this row only feeds Google edits back into the tasks
+    // pushed to this calendar (calendar.ts); its events are not cached or shown.
+    tasksOnly: boolean("tasks_only").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -444,3 +449,15 @@ export const calendarEventRelations = relations(calendarEvents, ({ one }) => ({
     references: [syncedCalendars.id],
   }),
 }));
+
+// Live sync (packages/server/src/sync.ts): one row per changed entity, kept
+// current by the sync_touch() triggers in drizzle/0024_sync_changes.sql on
+// every table the client caches. `xid` is the last writing transaction; the
+// delta cursor is a snapshot xmin, so a late commit can never be skipped. No
+// FK to user: rows are written while a user's data cascades away.
+export const syncChanges = pgTable("sync_changes", {
+  userId: text("user_id").notNull(),
+  entity: text("entity").notNull(),
+  entityId: text("entity_id").notNull(),
+  xid: bigint("xid", { mode: "number" }).notNull(),
+}, table => [primaryKey({ columns: [table.entity, table.entityId] }), index("sync_changes_user_xid_idx").on(table.userId, table.xid)]);

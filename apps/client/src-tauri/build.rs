@@ -43,6 +43,7 @@ fn main() {
             "sign_out",
             "today",
             "task",
+            "sync_changes",
             "create_task",
             "complete_task",
             "update_task",

@@ -18,7 +18,7 @@ import { BoardScreen } from "./board-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen, useOrganizationMutations } from "./organization-screens";
 import { Popover } from "./popover";
-import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
+import { LiveUpdates, SyncStatus, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
 import { TaskContextMenu } from "./task-menu";
@@ -180,7 +180,7 @@ export function Shell({ account }: { account: Account }) {
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
           <LayoutSwitcher />
         </div>
-        <DisplayMenu />
+        <div className="toolbar-start"><SyncStatus userId={account.user.id} /><DisplayMenu /></div>
       </div>
       <ConnectionStatus />
       <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>

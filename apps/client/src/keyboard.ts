@@ -66,7 +66,7 @@ export const detectPlatform = (platform = navigator.platform): Platform =>
  * help and settings list only these. Every one has a click/touch path.
  */
 export const clientCommandIds = [
-  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find",
+  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find", "general.sync",
   "navigation.today", "navigation.upcoming", "navigation.projects", "navigation.labels", "navigation.filters",
   "navigation.settings", "navigation.account", "navigation.help", "navigation.theme", "navigation.inbox", "navigation.sections",
   "task.previous", "task.next", "view.first", "view.last",
@@ -109,7 +109,8 @@ export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () =>
   return clientCommands.flatMap(command => {
     const handle = handlers[command.id as ClientCommandId];
     // Composer and editor keys work in their fields and dialogs; their handlers decline elsewhere.
-    const owned = command.context === "editor" || command.context === "quick-add";
+    // Sync now also works while typing or in a dialog: a browser reload there would drop the draft.
+    const owned = command.context === "editor" || command.context === "quick-add" || command.id === "general.sync";
     const sheet = SHEET_COMMANDS.includes(command.id as ClientCommandId);
     return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned, allowInModal: owned || sheet, handle }] : [];
   });

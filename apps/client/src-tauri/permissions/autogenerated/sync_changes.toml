@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sync-changes"
+description = "Enables the sync_changes command without any pre-configured scope."
+commands.allow = ["sync_changes"]
+
+[[permission]]
+identifier = "deny-sync-changes"
+description = "Denies the sync_changes command without any pre-configured scope."
+commands.deny = ["sync_changes"]

@@ -192,9 +192,9 @@ export function nativeLiveTransport(): LiveTransport {
 export const liveTransport = (): LiveTransport => isTauri() ? nativeLiveTransport() : browserLiveTransport();
 
 /**
- * Query keys each live topic invalidates. Task changes from other devices arrive
- * by polling and foreground refetch (ticket 22, connection.ts) instead; a
- * topic this table does not know is ignored, so the server may add topics first.
+ * Query keys each live topic invalidates. The `sync` topic is not here: it pulls
+ * the delta instead (sync.ts); a topic neither knows is ignored, so the server
+ * may add topics first.
  */
 export const liveTopicKeys: Record<string, (userId: string) => QueryKey[]> = {
   calendar: (userId) => [calendarKeys.all(userId)],
@@ -206,21 +206,25 @@ export const liveTopicKeys: Record<string, (userId: string) => QueryKey[]> = {
  * to the foreground (iOS suspends streams), and the changed topic's queries on
  * each change. Reconnects with backoff; an expired session asks the account.
  */
-export function startLiveUpdates({ transport, cache, userId, onUnauthenticated, delays = [1_000, 2_000, 5_000, 15_000, 30_000], page = document }: {
+export function startLiveUpdates({ transport, cache, userId, onUnauthenticated, sync, delays = [1_000, 2_000, 5_000, 15_000, 30_000], page = document }: {
   transport: LiveTransport; cache: QueryClient; userId: string; onUnauthenticated(): void;
+  /** Pulls the delta (sync.ts): on each `sync` change, and to catch up on connect and resume. */
+  sync?: { pull(): Promise<void> };
   delays?: number[]; page?: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 }) {
   let close: (() => void) | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
   let stopped = false;
+  const pull = () => void sync?.pull().catch(() => {});
   const refresh = (topics: string[]) => {
+    if (topics.includes("sync")) pull();
     for (const topic of topics) for (const queryKey of liveTopicKeys[topic]?.(userId) ?? []) void cache.invalidateQueries({ queryKey });
   };
   function connect() {
     clearTimeout(timer);
     close = transport.open({
-      ready() { failures = 0; refresh(Object.keys(liveTopicKeys)); },
+      ready() { failures = 0; refresh([...Object.keys(liveTopicKeys), "sync"]); },
       change(topic) { refresh([topic]); },
       closed(error) {
         close = null;
@@ -234,7 +238,7 @@ export function startLiveUpdates({ transport, cache, userId, onUnauthenticated, 
   // (its ready frame refetches); the direct refresh covers a failed reconnect.
   const resume = () => {
     if (page.visibilityState !== "visible" || stopped) return;
-    refresh(Object.keys(liveTopicKeys));
+    refresh([...Object.keys(liveTopicKeys), "sync"]);
     close?.();
     failures = 0;
     connect();

@@ -21,14 +21,14 @@ export const change = <T,>(queryKey: QueryKey, patch: (data: T) => T): Change =>
 
 interface Layer { patches: Map<string, (data: unknown) => unknown>; done: boolean }
 interface Entry { key: QueryKey; base: unknown; layers: Layer[]; last: unknown }
-interface Book { entries: Map<string, Entry>; inflight: number; stale: QueryFilters[] }
+interface Book { entries: Map<string, Entry>; inflight: number; stale: QueryFilters[]; idle: (() => void)[] }
 /** An open write, returned by `begin` (TanStack: the onMutate context). */
 export interface Write { cache: QueryClient; layer: Layer; settled?: boolean }
 
 const books = new WeakMap<QueryClient, Book>();
 const book = (cache: QueryClient) => {
   let found = books.get(cache);
-  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, stale: [] });
+  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, stale: [], idle: [] });
   return found;
 };
 const dataOf = (cache: QueryClient, hash: string) => cache.getQueryCache().get(hash)?.state.data;
@@ -103,9 +103,20 @@ export function settle(write: Write, refresh: QueryFilters[] = []): Promise<unkn
   if (!write.settled) { write.settled = true; state.inflight--; }
   state.stale.push(...refresh);
   if (state.inflight > 0) return Promise.resolve();
+  for (const resolve of state.idle.splice(0)) resolve();
   const stale = state.stale.splice(0);
   const unique = [...new Map(stale.map(filters => [JSON.stringify(filters.queryKey ?? null) + String(filters.exact ?? false), filters])).values()];
   return Promise.all(unique.map(filters => write.cache.invalidateQueries(filters)));
+}
+
+/**
+ * Waits until no write is in flight, as refetches do: server changes from
+ * elsewhere (sync.ts) land only then, so they never replace a pending write's patch.
+ * Resolves at once when idle; a caller applying changes should do so synchronously.
+ */
+export async function idle(cache: QueryClient): Promise<void> {
+  const state = book(cache);
+  while (state.inflight > 0) await new Promise<void>(resolve => state.idle.push(resolve));
 }
 
 /** The pattern as TanStack mutation callbacks: spread into the mutation's options. */

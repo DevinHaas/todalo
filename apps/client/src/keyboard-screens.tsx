@@ -259,6 +259,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "navigation.ui": go("/ui"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
+      // ⌘R / Ctrl+R: the toolbar's Sync now (consumed, so the page never reloads).
+      "general.sync": () => press(document, "[data-sync-now]"),
       "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
       "navigation.labels": go("/labels"), "navigation.filters": go("/filters"), "navigation.settings": () => latest.current.openSettings(), "navigation.account": () => latest.current.openSettings("account"), "navigation.theme": () => theme.toggle(),
       "task.previous": listOrSheet(() => sheetRow(-1), () => moveRow(-1)), "task.next": listOrSheet(() => sheetRow(1), () => moveRow(1)),

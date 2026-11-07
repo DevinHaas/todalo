@@ -131,9 +131,12 @@ describe("updateTask", () => {
     expect(task("alice-task")).toMatchObject({ title: "Renamed", description: "Notes", priority: 2, dueDate: new Date(2026, 9, 20, 9), recurrence: details.recurrence });
     expect((task("alice-task")!.updatedAt as Date).getTime()).toBeGreaterThan(seen.getTime());
     expect(boundary.calendar).toEqual(["push:alice-task"]);
-    // An edit without a due date (title only) leaves the calendar alone.
+    // A scheduled task's title is on its event too (two-way sync), so a rename pushes;
+    // an edit that touches nothing the event shows leaves the calendar alone.
     await updateTask("alice", { id: "alice-task", title: "Again" });
-    expect(boundary.calendar).toEqual(["push:alice-task"]);
+    expect(boundary.calendar).toEqual(["push:alice-task", "push:alice-task"]);
+    await updateTask("alice", { id: "alice-task", priority: 1 });
+    expect(boundary.calendar).toEqual(["push:alice-task", "push:alice-task"]);
   });
 
   it("treats a retried edit as applied but refuses an edit from a copy another device changed", async () => {

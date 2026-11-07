@@ -138,7 +138,8 @@ export function createCalendarRoutes(store: CalendarStore) {
   // app stay valid once GOOGLE_WEBHOOK_BASE_URL routes this path to the API.
   return new Elysia().use(api).post("/api/calendar/webhook", async ({ request }) => {
     const outcome = await store.webhook(request.headers);
-    if (outcome.userId) store.publish(outcome.userId, "calendar");
+    // Event edits may have moved tasks too (two-way sync): devices also pull the delta.
+    if (outcome.userId) { store.publish(outcome.userId, "calendar"); store.publish(outcome.userId, "sync"); }
     return new Response(null, { status: outcome.status });
   });
 }

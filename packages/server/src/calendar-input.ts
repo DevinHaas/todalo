@@ -39,13 +39,14 @@ export const calendarVisibilityInput = z.object({
 export type CalendarVisibilityInput = z.infer<typeof calendarVisibilityInput>;
 
 /**
- * Live stream contract, GET /api/v1/stream (text/event-stream). Ticket 22 extends it.
+ * Live stream contract, GET /api/v1/stream (text/event-stream).
  * - `event: ready` once per connection: the client refetches every live topic,
  *   since changes may have been missed while it was disconnected or suspended.
  * - `event: change` with `data: {"topic": LiveTopic}` after a server-side change.
  * - `: heartbeat` comments keep idle proxies from closing the connection.
  * Clients ignore topics they do not know, so the server can add topics first.
  */
-export const liveTopics = ["calendar"] as const;
+/** `sync`: entities changed; the client pulls GET /api/v1/sync (sync-delta.ts) from its cursor. */
+export const liveTopics = ["calendar", "sync"] as const;
 export type LiveTopic = (typeof liveTopics)[number];
 export const liveChange = z.object({ topic: z.string() });

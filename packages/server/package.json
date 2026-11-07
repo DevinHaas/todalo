@@ -35,6 +35,8 @@
     "./calendar-sync": "./src/calendar-sync.ts",
     "./calendar-connections": "./src/calendar-connections.ts",
     "./live": "./src/live.ts",
+    "./sync": "./src/sync.ts",
+    "./sync-delta": "./src/sync-delta.ts",
     "./attachments": "./src/attachments.ts",
     "./attachment-limits": "./src/attachment-limits.ts",
     "./attachment-http": "./src/attachment-http.ts",

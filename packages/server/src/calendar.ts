@@ -8,6 +8,7 @@ export interface CalendarTask {
   title: string;
   description: string | null;
   dueDate: Date | null;
+  dueDateEnd?: Date | null;
   googleCalendarEventId: string | null;
 }
 
@@ -21,8 +22,8 @@ async function getCalendarClient(userId: string) {
   return google.calendar({ version: "v3", auth: oauth2Client });
 }
 
-// One-way push only: task -> calendar event. Never reads back edits made in
-// Google Calendar. Two-way sync is a natural next contribution, not built here.
+// Task -> calendar event. Edits made in Google come back through the tasks-only
+// calendar row (calendar-sync.ts applyTaskEvents, rules in calendar-inbound.ts).
 export async function pushTaskToCalendar(userId: string, task: CalendarTask) {
   try {
     const calendar = await getCalendarClient(userId);
@@ -46,11 +47,13 @@ export async function pushTaskToCalendar(userId: string, task: CalendarTask) {
       new Date(task.dueDate.getFullYear(), task.dueDate.getMonth(), task.dueDate.getDate() + 1),
       "yyyy-MM-dd",
     );
+    // A task with an end time (a schedule block) is a timed event; otherwise all-day.
     const event = {
       summary: task.title,
       description: task.description ?? undefined,
-      start: { date: startDate },
-      end: { date: endDate },
+      ...(task.dueDateEnd
+        ? { start: { dateTime: task.dueDate.toISOString() }, end: { dateTime: task.dueDateEnd.toISOString() } }
+        : { start: { date: startDate }, end: { date: endDate } }),
     };
 
     if (task.googleCalendarEventId) {
