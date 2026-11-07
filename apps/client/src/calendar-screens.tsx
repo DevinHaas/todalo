@@ -7,7 +7,8 @@ import { calendarMutations, startLiveUpdates, type CalendarEventDto } from "./ca
 import { CalendarSettings } from "./calendar-views";
 import { GoogleButton } from "./google";
 import { inlineError } from "./toasts";
-import { Button } from "./ui";
+import { Button, Spinner } from "./ui";
+import logo from "./assets/logo.png";
 
 const none: CalendarEventDto[] = [];
 /** The user's visible provider events; a failed read just shows no events (tasks still render). */
@@ -22,14 +23,26 @@ export function LiveUpdates({ userId }: { userId: string }) {
   return null;
 }
 
-/** The toolbar's quiet Synced / Syncing… label; pressing it (or ⌘R / Ctrl+R) refetches everything. */
+/** The toolbar's quiet Synced / Syncing… label; pressing it (or ⌘R / Ctrl+R) refetches everything behind a full-screen splash. */
 export function SyncStatus({ userId }: { userId: string }) {
   const sync = syncFor(userId);
   const state = useSyncExternalStore(sync.subscribe, () => sync.state);
-  return <Button variant="ghost" size="xs" className="text-muted-foreground" data-sync-now aria-live="polite"
-    title="Sync now" onClick={() => void sync.reload().catch(() => {})}>
-    {state === "syncing" ? "Syncing…" : "Synced"}
-  </Button>;
+  const [reloading, setReloading] = useState(false);
+  const reload = () => {
+    setReloading(true);
+    // ponytail: 400 ms floor so a fast reload reads as a reload, not a flicker.
+    void Promise.all([sync.reload().catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))]).finally(() => setReloading(false));
+  };
+  return <>
+    <Button variant="ghost" size="xs" className="text-muted-foreground" data-sync-now aria-live="polite"
+      title="Sync now" onClick={reload}>
+      {state === "syncing" ? "Syncing…" : "Synced"}
+    </Button>
+    {reloading && <div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
+      <img src={logo} alt="todalo" className="size-16" />
+      <Spinner />
+    </div>}
+  </>;
 }
 
 export function CalendarSettingsScreen({ userId }: { userId: string }) {
