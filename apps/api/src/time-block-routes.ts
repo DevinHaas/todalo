@@ -14,12 +14,23 @@ export interface TimeBlockStore {
   create(userId: string, input: CreateTimeBlockInput): Promise<TimeBlockRecord | null>;
   /** null when the block or the new goal is missing or foreign. */
   update(userId: string, id: string, patch: UpdateTimeBlockInput): Promise<TimeBlockRecord | null>;
-  /** false when missing or foreign. */
-  remove(userId: string, id: string): Promise<boolean>;
+  /** The deleted block's calendar event; null when missing or foreign. */
+  remove(userId: string, id: string): Promise<{ googleCalendarEventId: string | null } | null>;
   /** Ticket 08: puts a task into the block or takes it out (idempotent); null when either is missing or foreign. */
   setTask(userId: string, blockId: string, taskId: string, linked: boolean): Promise<TimeBlockRecord | null>;
   /** Ticket 09: records the outcome; "rescheduled" adds one to the count. null when missing or foreign. */
   setOutcome(userId: string, id: string, outcome: BlockOutcome): Promise<TimeBlockRecord | null>;
+  /** Ticket 10: remembers the block's Google Calendar event. */
+  setEventId(userId: string, id: string, googleCalendarEventId: string): Promise<void>;
+  /**
+   * Ticket 10: the task calendar push (@todalo/server/calendar). push creates or
+   * updates the block's event and returns its ID (null when Google is unlinked or
+   * failed, which never fails the request); remove deletes an event.
+   */
+  calendar: {
+    push(userId: string, block: TimeBlockRecord): Promise<string | null>;
+    remove(userId: string, googleCalendarEventId: string): Promise<void>;
+  };
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -31,6 +42,11 @@ const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try agai
 // tasks never come through here: their start and end stay on the task.
 export function createTimeBlockRoutes(store: TimeBlockStore) {
   const writer = (request: Request) => writeUser(store, request);
+  // Created, moved, resized, retitled or regoaled blocks keep their event in step.
+  const pushed = async (userId: string, block: TimeBlockRecord) => {
+    const eventId = await store.calendar.push(userId, block);
+    if (eventId && eventId !== block.googleCalendarEventId) await store.setEventId(userId, block.id, eventId);
+  };
 
   return new Elysia({ prefix: "/api/v1" })
     .onAfterHandle(({ set }) => { set.headers["cache-control"] = "no-store"; })
@@ -47,7 +63,9 @@ export function createTimeBlockRoutes(store: TimeBlockStore) {
       const input = createTimeBlockInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
       const block = await store.create(userId, input.data);
-      return block ? status(201, { block: toTimeBlockDto(block) satisfies TimeBlockDto }) : status(404, NOT_FOUND);
+      if (!block) return status(404, NOT_FOUND);
+      await pushed(userId, block);
+      return status(201, { block: toTimeBlockDto(block) satisfies TimeBlockDto });
     })
     .patch("/time-blocks/:id", async ({ request, params, body, status }) => {
       const userId = await writer(request);
@@ -56,13 +74,18 @@ export function createTimeBlockRoutes(store: TimeBlockStore) {
       const input = updateTimeBlockInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
       const block = await store.update(userId, params.id, input.data);
-      return block ? { block: toTimeBlockDto(block) satisfies TimeBlockDto } : status(404, NOT_FOUND);
+      if (!block) return status(404, NOT_FOUND);
+      await pushed(userId, block);
+      return { block: toTimeBlockDto(block) satisfies TimeBlockDto };
     })
     .delete("/time-blocks/:id", async ({ request, params, status }) => {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      return await store.remove(userId, params.id) ? { id: params.id } : status(404, NOT_FOUND);
+      const removed = await store.remove(userId, params.id);
+      if (!removed) return status(404, NOT_FOUND);
+      if (removed.googleCalendarEventId) await store.calendar.remove(userId, removed.googleCalendarEventId);
+      return { id: params.id };
     })
     // Ticket 08: a block holds zero or more tasks; PUT puts one in, DELETE takes it out.
     .put("/time-blocks/:id/tasks/:taskId", async ({ request, params, status }) => {

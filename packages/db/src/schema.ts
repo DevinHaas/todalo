@@ -298,6 +298,8 @@ export const timeBlocks = pgTable("time_blocks", {
   // skipped or rescheduled, and the count keeps every reschedule even once done.
   outcome: text("outcome").$type<"planned" | "done" | "skipped" | "rescheduled">().default("planned").notNull(),
   rescheduleCount: integer("reschedule_count").default(0).notNull(),
+  // Goals ticket 10: the block's event on the user's primary Google Calendar, as tasks have.
+  googleCalendarEventId: text("google_calendar_event_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [index("time_blocks_user_start_idx").on(table.userId, table.startAt)]);

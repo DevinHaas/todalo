@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createTimeBlockRoutes } from "./time-block-routes";
+import { createCalendarRoutes } from "./calendar-routes";
+import { memoryCalendarStore, type StubGoogleEvent } from "../test-fixtures/calendar-store";
+import { publish, subscribe } from "../../../packages/server/src/live";
 
-type Row = { id: string; userId: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: "planned" | "done" | "skipped" | "rescheduled"; rescheduleCount: number };
+type Row = { id: string; userId: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: "planned" | "done" | "skipped" | "rescheduled"; rescheduleCount: number; googleCalendarEventId?: string | null };
+// Fake Google Calendar (the primary calendar per user); `googleDown` models an unlinked or failing account.
+type FakeEvent = { userId: string; summary: string; start: Date; end: Date };
+let google = new Map<string, FakeEvent>();
+let googleDown = new Set<string>();
+let calls: string[] = [];
 const goals = [{ id: "alice-v2", userId: "alice" }, { id: "alice-fit", userId: "alice" }, { id: "bob-read", userId: "bob" }];
 const tasks = [{ id: "alice-spec", userId: "alice" }, { id: "alice-tests", userId: "alice" }, { id: "bob-book", userId: "bob" }];
 let rows: Row[] = [];
 let next = 0;
 beforeEach(() => {
   next = 0;
+  google = new Map();
+  googleDown = new Set();
+  calls = [];
   rows = [{ id: "bob-block", userId: "bob", goalId: "bob-read", title: null, startAt: new Date("2026-02-20T09:00:00Z"), endAt: new Date("2026-02-20T10:00:00Z"), taskIds: ["bob-book"], outcome: "planned", rescheduleCount: 0 }];
 });
 
@@ -33,9 +44,21 @@ const app = createTimeBlockRoutes({
     return row;
   },
   remove: async (userId, id) => {
-    const before = rows.length;
-    rows = rows.filter(row => !(row.userId === userId && row.id === id));
-    return rows.length < before;
+    const row = find(userId, id);
+    rows = rows.filter(other => other !== row);
+    return row ? { googleCalendarEventId: row.googleCalendarEventId ?? null } : null;
+  },
+  setEventId: async (userId, id, eventId) => { find(userId, id)!.googleCalendarEventId = eventId; },
+  // In-memory mirror of pushTimeBlock (summary: title, else goal, else "Time block") and deleteTaskFromCalendar.
+  calendar: {
+    push: async (userId, block) => {
+      calls.push(`push:${block.id}`);
+      if (googleDown.has(userId)) return null;
+      const id = block.googleCalendarEventId ?? `event-${google.size + 1}`;
+      google.set(id, { userId, summary: block.title ?? (block.goalId ? `Goal ${block.goalId}` : "Time block"), start: block.startAt, end: block.endAt });
+      return id;
+    },
+    remove: async (_userId, eventId) => { calls.push(`delete:${eventId}`); google.delete(eventId); },
   },
   setTask: async (userId, blockId, taskId, linked) => {
     const row = find(userId, blockId);
@@ -209,5 +232,82 @@ describe("time block API", () => {
     expect((await mark({ outcome: "done" }, "block-1", { origin: "http://localhost:5173" })).status).toBe(401);
     expect((await mark({ outcome: "done" }, "block-1", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
     expect(await list()).toMatchObject([{ outcome: "planned" }]);
+  });
+});
+
+describe("time blocks in Google Calendar (ticket 10)", () => {
+  const event = (id: string) => google.get(id);
+
+  it("creates an event for a new block, named after its title or goal", async () => {
+    await create(range);
+    await create({ ...range, goalId: "alice-v2" });
+    await create({ ...range, goalId: "alice-v2", title: "Deep work" });
+    expect([...google.entries()]).toEqual([
+      ["event-1", { userId: "alice", summary: "Time block", start: new Date(range.start), end: new Date(range.end) }],
+      ["event-2", { userId: "alice", summary: "Goal alice-v2", start: new Date(range.start), end: new Date(range.end) }],
+      ["event-3", { userId: "alice", summary: "Deep work", start: new Date(range.start), end: new Date(range.end) }],
+    ]);
+    expect(rows.find(row => row.id === "block-1")?.googleCalendarEventId).toBe("event-1");
+    // The event ID stays on the server.
+    expect(JSON.stringify(await list())).not.toContain("event-");
+  });
+
+  it("moves, resizes and retitles the same event, and deletes it with the block", async () => {
+    await create(range);
+    const moved = { start: "2026-02-22T14:00:00.000Z", end: "2026-02-22T16:00:00.000Z" };
+    await call("PATCH", "/time-blocks/block-1", { user: "alice", body: moved });
+    expect(event("event-1")).toMatchObject({ start: new Date(moved.start), end: new Date(moved.end) });
+    await call("PATCH", "/time-blocks/block-1", { user: "alice", body: { start: moved.start, end: "2026-02-22T14:30:00.000Z" } });
+    await call("PATCH", "/time-blocks/block-1", { user: "alice", body: { title: "Writing" } });
+    expect(google.size).toBe(1);
+    expect(event("event-1")).toEqual({ userId: "alice", summary: "Writing", start: new Date(moved.start), end: new Date("2026-02-22T14:30:00.000Z") });
+    expect((await call("DELETE", "/time-blocks/block-1", { user: "alice" })).status).toBe(200);
+    expect(google.size).toBe(0);
+    expect(calls.at(-1)).toBe("delete:event-1");
+  });
+
+  it("keeps the block when Google is unlinked or failing, and catches up on the next change", async () => {
+    googleDown.add("alice");
+    expect((await create(range)).status).toBe(201);
+    expect(google.size).toBe(0);
+    expect((await call("DELETE", "/time-blocks/block-1", { user: "alice" })).status).toBe(200);
+    expect(calls).toEqual(["push:block-1"]);
+    await create(range);
+    googleDown.delete("alice");
+    await call("PATCH", "/time-blocks/block-2", { user: "alice", body: { title: "Later" } });
+    expect([...google.values()]).toMatchObject([{ summary: "Later" }]);
+  });
+
+  it("does not push refused, foreign or outcome-only changes", async () => {
+    await create(range);
+    calls = [];
+    await call("PATCH", "/time-blocks/bob-block", { user: "alice", body: { title: "x" } });
+    await call("DELETE", "/time-blocks/bob-block", { user: "alice" });
+    await call("PATCH", "/time-blocks/block-1", { user: "alice", body: { goalId: "bob-read" } });
+    await call("POST", "/time-blocks/block-1/outcome", { user: "alice", body: { outcome: "done" } });
+    await call("PUT", "/time-blocks/block-1/tasks/alice-spec", { user: "alice" });
+    expect(calls).toEqual([]);
+  });
+
+  it("does not show a block's own event again among the calendar events when it syncs back", async () => {
+    // The pushed events come back through the existing inbound sync (webhook) into the event cache.
+    const inbound = new Map<string, StubGoogleEvent[]>([["alice@primary", [{ id: "standup", title: "Standup", start: new Date("2026-02-21T08:00:00Z"), end: new Date("2026-02-21T08:15:00Z") }]]]);
+    const ownEventIds = new Set<string>();
+    const fixture = memoryCalendarStore({
+      accounts: [{ id: "acct-alice", userId: "alice", email: "alice@example.test", calendars: [{ id: "alice@primary", summary: "Alice", color: "#ff0000" }] }],
+      google: inbound,
+      synced: [{ id: "cal-alice", userId: "alice", accountId: "acct-alice", googleCalendarId: "alice@primary", summary: "Alice", color: "#ff0000", enabled: true }],
+      ownEventIds, subscribe, publish,
+    });
+    const calendarApp = createCalendarRoutes({ ...fixture.store, verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? null, allowedOrigins: new Set(), heartbeatMs: 20 });
+    const titles = async () => ((await (await calendarApp.handle(new Request("http://localhost/api/v1/calendar/events", { headers: { authorization: "Bearer alice" } }))).json()) as { events: { title: string }[] }).events.map(item => item.title);
+
+    await create({ ...range, title: "Deep work" });
+    // Mirrors the server's echo filter: event IDs stored on the user's blocks.
+    for (const row of rows) if (row.userId === "alice" && row.googleCalendarEventId) ownEventIds.add(row.googleCalendarEventId);
+    for (const [id, item] of google) inbound.get("alice@primary")!.push({ id, title: item.summary, start: item.start, end: item.end });
+    expect((await calendarApp.handle(new Request("http://localhost/api/calendar/webhook", { method: "POST", headers: fixture.providerChanged("alice@primary")! }))).status).toBe(200);
+    expect(await titles()).toEqual(["Standup"]);
+    expect(await list()).toHaveLength(1);
   });
 });

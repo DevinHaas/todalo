@@ -1,0 +1,1 @@
+ALTER TABLE "time_blocks" ADD COLUMN "google_calendar_event_id" text;

@@ -1,13 +1,14 @@
-// Server-only time block operations (goals tickets 07, 08, 09). Every read and write is
+// Server-only time block operations (goals tickets 07, 08, 09, 10). Every read and write is
 // scoped to the owner, so a foreign block, goal or task ID behaves like a missing one.
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { tasks, timeBlockTasks, timeBlocks } from "@todalo/db/schema";
+import { pushBlockToCalendar } from "./calendar";
 import { getOwnedGoal } from "./goals";
 import type { BlockOutcome, CreateTimeBlockInput, TimeBlockRecord, UpdateTimeBlockInput } from "./time-block-dto";
 
 const owned = (userId: string, id: string) => and(eq(timeBlocks.id, id), eq(timeBlocks.userId, userId));
-const columns = { id: timeBlocks.id, goalId: timeBlocks.goalId, title: timeBlocks.title, startAt: timeBlocks.startAt, endAt: timeBlocks.endAt, outcome: timeBlocks.outcome, rescheduleCount: timeBlocks.rescheduleCount };
+const columns = { id: timeBlocks.id, goalId: timeBlocks.goalId, title: timeBlocks.title, startAt: timeBlocks.startAt, endAt: timeBlocks.endAt, outcome: timeBlocks.outcome, rescheduleCount: timeBlocks.rescheduleCount, googleCalendarEventId: timeBlocks.googleCalendarEventId };
 type BlockRow = Omit<TimeBlockRecord, "taskIds">;
 // ponytail: fixed look-back instead of a requested range; the schedule only shows this week and today.
 const LOOK_BACK_MS = 8 * 7 * 24 * 60 * 60_000;
@@ -56,10 +57,26 @@ export async function updateTimeBlock(userId: string, id: string, patch: UpdateT
   return one(userId, block);
 }
 
-/** false when missing or foreign (a repeated delete is a 404). */
+/** The deleted block's calendar event; null when missing or foreign (a repeated delete is a 404). */
 export async function deleteTimeBlock(userId: string, id: string) {
-  const deleted = await db.delete(timeBlocks).where(owned(userId, id)).returning({ id: timeBlocks.id });
-  return deleted.length > 0;
+  const [deleted] = await db.delete(timeBlocks).where(owned(userId, id)).returning({ googleCalendarEventId: timeBlocks.googleCalendarEventId });
+  return deleted ?? null;
+}
+
+/**
+ * Ticket 10: pushes the block to Google Calendar as an event named after its
+ * title or goal; the event's ID, or null when Google is unlinked or failed.
+ */
+export async function pushTimeBlock(userId: string, block: TimeBlockRecord) {
+  const goal = block.goalId ? await getOwnedGoal(userId, block.goalId) : null;
+  const result = await pushBlockToCalendar(userId, {
+    id: block.id, summary: block.title ?? goal?.title ?? "Time block", start: block.startAt, end: block.endAt, googleCalendarEventId: block.googleCalendarEventId ?? null,
+  });
+  return result?.googleCalendarEventId ?? null;
+}
+
+export async function setTimeBlockEventId(userId: string, id: string, googleCalendarEventId: string) {
+  await db.update(timeBlocks).set({ googleCalendarEventId }).where(owned(userId, id));
 }
 
 /**

@@ -2,6 +2,7 @@
 // Server-only. googleapis and the auth instance load lazily so importing task
 // operations (and their tests) never constructs a provider client up front.
 import { format } from "date-fns";
+import type { calendar_v3 } from "googleapis";
 
 export interface CalendarTask {
   id: string;
@@ -53,22 +54,39 @@ export async function pushTaskToCalendar(userId: string, task: CalendarTask) {
       end: { date: endDate },
     };
 
-    if (task.googleCalendarEventId) {
-      await calendar.events.update({
-        calendarId: "primary",
-        eventId: task.googleCalendarEventId,
-        requestBody: event,
-      });
-      return { googleCalendarEventId: task.googleCalendarEventId };
-    }
-
-    const { data } = await calendar.events.insert({
-      calendarId: "primary",
-      requestBody: event,
-    });
-    return { googleCalendarEventId: data.id ?? null };
+    return { googleCalendarEventId: await upsertEvent(calendar, task.googleCalendarEventId, event) };
   } catch (err) {
     console.error("Google Calendar sync failed for task", task.id, err);
+    return null;
+  }
+}
+
+type CalendarClient = Awaited<ReturnType<typeof getCalendarClient>>;
+
+/** Updates the event when there is one, otherwise inserts it; the event's ID. */
+async function upsertEvent(calendar: CalendarClient, eventId: string | null, event: calendar_v3.Schema$Event) {
+  if (eventId) {
+    await calendar.events.update({ calendarId: "primary", eventId, requestBody: event });
+    return eventId;
+  }
+  const { data } = await calendar.events.insert({ calendarId: "primary", requestBody: event });
+  return data.id ?? null;
+}
+
+export interface CalendarBlock { id: string; summary: string; start: Date; end: Date; googleCalendarEventId: string | null }
+
+/**
+ * Goals ticket 10: a time block as a timed event on the primary calendar, the
+ * same push as tasks (null when Google is unlinked or fails; the block stays).
+ * Deleting its event is deleteTaskFromCalendar, which takes any event ID.
+ */
+export async function pushBlockToCalendar(userId: string, block: CalendarBlock) {
+  try {
+    const calendar = await getCalendarClient(userId);
+    const event = { summary: block.summary, start: { dateTime: block.start.toISOString() }, end: { dateTime: block.end.toISOString() } };
+    return { googleCalendarEventId: await upsertEvent(calendar, block.googleCalendarEventId, event) };
+  } catch (err) {
+    console.error("Google Calendar sync failed for time block", block.id, err);
     return null;
   }
 }

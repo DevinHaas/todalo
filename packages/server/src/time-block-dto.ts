@@ -8,11 +8,12 @@ import { z } from "zod";
 export const blockOutcomes = ["planned", "done", "skipped", "rescheduled"] as const;
 export type BlockOutcome = typeof blockOutcomes[number];
 
-/** Instants are ISO strings, like task dates. taskIds in the order they were put in (ticket 08); outcome and how often it was rescheduled (09); 10 adds the calendar event. */
+/** Instants are ISO strings, like task dates. taskIds in the order they were put in (ticket 08); outcome and how often it was rescheduled (09). */
 export interface TimeBlockDto { id: string; goalId: string | null; title: string | null; start: string; end: string; taskIds: string[]; outcome: BlockOutcome; rescheduleCount: number }
 export interface TimeBlocksDto { blocks: TimeBlockDto[] }
 
-export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: BlockOutcome; rescheduleCount: number }
+/** googleCalendarEventId (ticket 10) is server-only and never in the DTO. */
+export interface TimeBlockRecord { id: string; goalId: string | null; title: string | null; startAt: Date; endAt: Date; taskIds: string[]; outcome: BlockOutcome; rescheduleCount: number; googleCalendarEventId?: string | null }
 export const toTimeBlockDto = (block: TimeBlockRecord): TimeBlockDto => ({
   id: block.id, goalId: block.goalId, title: block.title, start: block.startAt.toISOString(), end: block.endAt.toISOString(), taskIds: block.taskIds,
   outcome: block.outcome, rescheduleCount: block.rescheduleCount,
