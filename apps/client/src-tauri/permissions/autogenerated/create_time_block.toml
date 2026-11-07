@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-time-block"
+description = "Enables the create_time_block command without any pre-configured scope."
+commands.allow = ["create_time_block"]
+
+[[permission]]
+identifier = "deny-create-time-block"
+description = "Denies the create_time_block command without any pre-configured scope."
+commands.deny = ["create_time_block"]

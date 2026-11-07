@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
@@ -10,7 +10,7 @@ import {
 import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigation";
 import type { TaskDto } from "./tasks";
 import {
-  addMonths, blockFor, dayKey, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
+  addDays, addMonths, blockFor, blockItem, dayKey, defaultBlockRange, dragRange, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
   upcomingSections, upcomingWindow, weekOf,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
@@ -165,6 +165,23 @@ describe("schedule views", () => {
     expect(html).not.toContain("Done today");
   });
 
+  it("renders time blocks in their goal's colour next to task blocks and Google Calendar events (goals ticket 07)", () => {
+    process.env.TZ = "Europe/Zurich";
+    const events = [{ id: "e1", title: "Team sync", start: at(7, 13), end: at(7, 14), allDay: false, htmlLink: null, color: "#4285f4" }];
+    const blocks = {
+      blocks: [{ id: "b1", goalId: "g1", title: null, start: at(7, 10), end: at(7, 12) }],
+      goal: (goalId: string | null) => goalId === "g1" ? { title: "Ship v2", color: "oklch(0.62 0.16 250)" } : undefined,
+      taskColor: () => "oklch(0.64 0.16 150)", create() {}, open() {}, change: async () => {},
+    };
+    const html = render(createElement(TodaySchedule, { tasks, events, slots: { ...slots, blocks }, now: new Date(2026, 9, 7, 10) }));
+    expect(html).toContain("Team sync");
+    expect(html).toMatch(/data-block="time-block"[^>]*style="top:480px;height:96px;border-left:3px solid oklch\(0.62 0.16 250\)/);
+    expect(html).toContain("Ship v2");
+    // The scheduled task is a block holding just that task, from its own dates, in its goal's colour.
+    expect(html).toMatch(/data-block="task"[^>]*style="top:432px;height:72px;border-left:3px solid oklch\(0.64 0.16 150\)/);
+    expect(html).toContain('data-schedule-action="new-block"');
+  });
+
   it("renders the month grid (Sunday start) with task chips and the Monday week marker", () => {
     process.env.TZ = "Europe/Zurich";
     const html = render(createElement(CalendarView, { tasks, slots, now: new Date(2026, 9, 7, 10) }));
@@ -195,5 +212,69 @@ describe("schedule views", () => {
     const calendar = render(createElement(TodayView, { state, onRetry() {}, now, calendar: shown => createElement("p", null, `calendar ${shown.length}`) }));
     expect(calendar).toContain("3 tasks");
     expect(calendar).toContain("calendar 5");
+  });
+});
+
+describe("time blocks on the schedule (goals ticket 07)", () => {
+  // Built per test: other tests change process.env.TZ, which moves a Date made at load.
+  let day: Date;
+  beforeEach(() => { process.env.TZ = "Europe/Zurich"; day = new Date(2026, 1, 21); });
+  const at = (h: number, m = 0, d = day) => { const date = new Date(d); date.setHours(h, m, 0, 0); return date; };
+  const hm = (date: Date) => `${dayKey(date)} ${labels.time(date)}`;
+
+  it.each([
+    ["a downward drag", 9 * 48, 11 * 48, "09:00", "11:00"],
+    ["an upward drag", 11 * 48, 9 * 48 + 10, "09:15", "11:00"],
+    ["a tiny drag (at least 15 minutes)", 9 * 48, 9 * 48 + 7, "09:00", "09:15"],
+    ["a drag past midnight", 23 * 48, 30 * 48, "23:00", "00:00"],
+    ["a drag above the grid", -40, 48, "00:00", "01:00"],
+  ])("creates a block over %s, snapped to 15 minutes", (_name, from, to, start, end) => {
+    const range = rangeAt(day, from, to);
+    expect([labels.time(range.start), labels.time(range.end)]).toEqual([start, end]);
+    expect(range.end.getTime() - range.start.getTime()).toBeGreaterThanOrEqual(15 * 60_000);
+  });
+
+  it.each([
+    ["move down 1h", "move", 48, 0, "2026-02-21 10:00", "2026-02-21 12:00"],
+    ["move up 20 min (snaps to 15)", "move", -16, 0, "2026-02-21 08:45", "2026-02-21 10:45"],
+    ["move to the next day", "move", 0, 1, "2026-02-22 09:00", "2026-02-22 11:00"],
+    ["move past midnight stays in the day", "move", 20 * 48, 0, "2026-02-21 22:00", "2026-02-22 00:00"],
+    ["move above midnight stays in the day", "move", -20 * 48, -1, "2026-02-20 00:00", "2026-02-20 02:00"],
+    ["resize longer", "resize", 24, 0, "2026-02-21 09:00", "2026-02-21 11:30"],
+    ["resize to less than 15 minutes", "resize", -5 * 48, 0, "2026-02-21 09:00", "2026-02-21 09:15"],
+    ["resize past midnight", "resize", 20 * 48, 0, "2026-02-21 09:00", "2026-02-22 00:00"],
+  ] as const)("%s", (_name, mode, dy, shift, start, end) => {
+    const range = dragRange(mode, at(9), at(11), dy, shift);
+    expect([hm(range.start), hm(range.end)]).toEqual([start, end]);
+  });
+
+  it("keeps wall-clock times when a block moves across a DST change", () => {
+    const saturday = new Date(2026, 2, 28);
+    const range = dragRange("move", at(9, 0, saturday), at(10, 0, saturday), 0, 1);
+    expect([hm(range.start), hm(range.end)]).toEqual(["2026-03-29 09:00", "2026-03-29 10:00"]);
+  });
+
+  it("presents a scheduled task as a block holding just that task, from its own dates", () => {
+    const scheduled = task("Write", { dueDate: "2026-02-21T09:00:00.000Z", dueDateEnd: "2026-02-21T10:30:00.000Z" });
+    const item = taskItem(scheduled, "green");
+    expect(item).toMatchObject({ key: "task:Write", title: "Write", color: "green", done: false, task: scheduled });
+    expect([item.start.toISOString(), item.end.toISOString()]).toEqual([scheduled.dueDate, scheduled.dueDateEnd]);
+    // Without an end it is 30 minutes long, as before.
+    expect(taskItem(task("Call", { dueDate: "2026-02-21T09:00:00.000Z" }), null).end.toISOString()).toBe("2026-02-21T09:30:00.000Z");
+  });
+
+  it("titles a block by its own title, else its goal's, else Time block; colour from the goal", () => {
+    const block = { id: "b1", goalId: "g1", title: null, start: "2026-02-21T09:00:00.000Z", end: "2026-02-21T11:00:00.000Z" };
+    expect(blockItem(block, { title: "Ship v2", color: "blue" })).toMatchObject({ key: "block:b1", title: "Ship v2", color: "blue" });
+    expect(blockItem({ ...block, title: "Deep work" }, { title: "Ship v2", color: "blue" }).title).toBe("Deep work");
+    expect(blockItem({ ...block, goalId: null })).toMatchObject({ title: "Time block", color: null });
+    expect(spanFor(at(23), at(0, 0, addDays(day, 1)))).toEqual({ top: 23 * 48, height: 48 });
+  });
+
+  it("offers the next quarter hour today and 09:00 on other days for a keyboard block", () => {
+    const now = at(14, 7);
+    expect(labels.time(defaultBlockRange(day, now).start)).toBe("14:15");
+    expect(labels.time(defaultBlockRange(addDays(day, 1), now).start)).toBe("09:00");
+    expect(defaultBlockRange(day, now).end.getTime() - defaultBlockRange(day, now).start.getTime()).toBe(3_600_000);
   });
 });

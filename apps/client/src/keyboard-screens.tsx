@@ -386,6 +386,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         keepFocus(row);
       },
       "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
+      // Goals ticket 07: passes on when no schedule with blocks is shown.
+      "schedule.new-block": () => press(document.querySelector("main"), '[data-schedule-action="new-block"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),
     };
     const commands = dispatchCommands(handlers.current, id => effectiveBindings(id, effective, platform));

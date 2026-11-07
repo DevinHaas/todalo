@@ -4,15 +4,15 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Create a block by dragging over an empty slot
-- [ ] Dedicate a block to a goal with no tasks in it
-- [ ] Move and resize blocks by dragging
-- [ ] Blocks show the goal's colour
-- [ ] Existing scheduled tasks render as single-task blocks; their stored start/end are unchanged
-- [ ] Google Calendar events still show alongside blocks
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Create a block by dragging over an empty slot
+- [x] Dedicate a block to a goal with no tasks in it
+- [x] Move and resize blocks by dragging
+- [x] Blocks show the goal's colour
+- [x] Existing scheduled tasks render as single-task blocks; their stored start/end are unchanged
+- [x] Google Calendar events still show alongside blocks
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

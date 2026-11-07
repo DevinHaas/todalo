@@ -7,6 +7,7 @@
 // ones position with `blockFor` (start/end instants), next to tasks in each view.
 import type { TaskDto } from "./tasks";
 import { isOverdue, treeOrder } from "./tasks";
+import type { TimeBlockDto } from "./time-blocks";
 
 export type Layout = "list" | "board" | "calendar";
 export type CalendarRange = "week" | "month";
@@ -145,3 +146,61 @@ export function blockFor(startValue: string, endValue: string | null) {
 }
 /** Schedule columns split a day's tasks into the all-day row and timed blocks. */
 export const isTimed = (task: TaskDto) => task.dueDate !== null && hasDueTime(new Date(task.dueDate));
+
+// Goals ticket 07: time blocks and scheduled tasks share one presentation. A
+// scheduled task is a block holding just that task, positioned from its own
+// dueDate/dueDateEnd (never stored as a block); a time block is reserved time.
+/** One block on the grid: a stored time block, or a scheduled task shown as a single-task block. */
+export interface ScheduleItem { key: string; title: string; start: Date; end: Date; color: string | null; done: boolean; task?: TaskDto; block?: TimeBlockDto }
+export const taskItem = (task: TaskDto, color: string | null): ScheduleItem => {
+  const { start, end } = blockFor(task.dueDate!, task.dueDateEnd);
+  return { key: `task:${task.id}`, title: task.title, start, end, color, done: task.status === "done", task };
+};
+/** Untitled blocks take their goal's title, else "Time block". */
+export const blockItem = (block: TimeBlockDto, goal?: { title: string; color: string }): ScheduleItem =>
+  ({ key: `block:${block.id}`, title: block.title ?? goal?.title ?? "Time block", start: new Date(block.start), end: new Date(block.end), color: goal?.color ?? null, done: false, block });
+
+/** Top and height from the duration, so a block ending at midnight still reaches the bottom; at least 20px (legacy). */
+export const spanFor = (start: Date, end: Date) => ({ top: offsetFor(start), height: Math.max((end.getTime() - start.getTime()) / 3_600_000 * HOUR_HEIGHT, 20) });
+
+const MINUTE = 60_000;
+const snapped = (y: number) => Math.round((y / HOUR_HEIGHT) * 60 / CLICK_SLOT_MINUTES) * CLICK_SLOT_MINUTES;
+/** Further than this (px) is a drag; less is a click. */
+export const DRAG_THRESHOLD = 6;
+
+/** Dragging over an empty slot from `fromY` to `toY` (px in the day column): 15-minute snap, at least 15 minutes, within the day. */
+export function rangeAt(day: Date, fromY: number, toY: number) {
+  let from = Math.min(Math.max(snapped(Math.min(fromY, toY)), 0), 24 * 60 - CLICK_SLOT_MINUTES);
+  const to = Math.min(Math.max(snapped(Math.max(fromY, toY)), from + CLICK_SLOT_MINUTES), 24 * 60);
+  from = Math.min(from, to - CLICK_SLOT_MINUTES);
+  const start = startOfDay(day), end = startOfDay(day);
+  start.setHours(0, from, 0, 0);
+  end.setHours(0, to, 0, 0);
+  return { start, end };
+}
+
+/**
+ * A dragged block's new range. Move: keeps its length, shifts by `dy` (snapped)
+ * and `dayShift` columns, and stays within the day it lands on. Resize: keeps
+ * the start and drags the end, at least 15 minutes and at most to midnight.
+ */
+export function dragRange(mode: "move" | "resize", start: Date, end: Date, dy: number, dayShift = 0) {
+  const minutes = snapped(dy) * MINUTE;
+  if (mode === "resize") {
+    const midnight = addDays(startOfDay(start), 1).getTime();
+    return { start, end: new Date(Math.min(Math.max(end.getTime() + minutes, start.getTime() + CLICK_SLOT_MINUTES * MINUTE), midnight)) };
+  }
+  const length = end.getTime() - start.getTime();
+  const shifted = addDays(start, dayShift);
+  const day = startOfDay(shifted).getTime(), midnight = addDays(startOfDay(shifted), 1).getTime();
+  const next = Math.min(Math.max(shifted.getTime() + minutes, day), Math.max(midnight - length, day));
+  return { start: new Date(next), end: new Date(next + length) };
+}
+
+/** A new block from the keyboard: the next quarter hour today if `day` is today, else 09:00; one hour. */
+export function defaultBlockRange(day: Date, now = new Date()) {
+  const start = startOfDay(day);
+  if (sameDay(day, now)) start.setHours(0, Math.min(Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / CLICK_SLOT_MINUTES) * CLICK_SLOT_MINUTES, 23 * 60), 0, 0);
+  else start.setHours(9, 0, 0, 0);
+  return { start, end: new Date(start.getTime() + 60 * MINUTE) };
+}

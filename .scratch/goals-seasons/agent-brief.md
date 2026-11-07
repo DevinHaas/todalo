@@ -12,6 +12,8 @@ Work ONLY in the git worktree `/Users/devinhasler/projects/todalo-goals` (branch
 - Rules live in `packages/server`. Elysia API in `apps/api`: route factories `createXRoutes({ verify, allowedOrigins, ...deps })` wired in `apps/api/src/index.ts`.
 - Client: `apps/client` (React 19, react-router, TanStack Query, Vite), wrapped by Tauri 2 for Mac and iPhone and also run in the browser. Native calls go through typed Rust commands in `apps/client/src-tauri/src` registered in `lib.rs`, `build.rs` and `capabilities/default.json`. Follow an existing feature end to end.
 - Do NOT extend the legacy Next.js app in `apps/web`.
+- UI: follow `docs/agents/ui.md`. Build new UI only from `apps/client/src/ui` components and `src/ui/theme.css` tokens (no ad-hoc control CSS). Goals have a `color` in their DTO.
+- Browser checks: API runs on port 3011 (`RAMBLE_PORT=3011`); 3001 and 5173 are taken by other projects. See `docs/qa/ui-library/` for how the last agent ran Vite on a free port. Use the test user, never edit the user's real data in the browser.
 
 ## Rules
 - Vertical slice: schema, server, API, Rust, client UI, tests. Minimal code, match existing style, reuse existing helpers.

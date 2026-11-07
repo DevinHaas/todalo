@@ -17,6 +17,8 @@
     "./seasons": "./src/seasons.ts",
     "./season-dto": "./src/season-dto.ts",
     "./season-days": "./src/season-days.ts",
+    "./time-blocks": "./src/time-blocks.ts",
+    "./time-block-dto": "./src/time-block-dto.ts",
     "./settings": "./src/settings.ts",
     "./settings-input": "./src/settings-input.ts",
     "./keyboard": "./src/keyboard.ts",

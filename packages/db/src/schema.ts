@@ -282,6 +282,22 @@ export const seasonGoals = pgTable("season_goals", {
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [uniqueIndex("season_goals_season_goal_idx").on(table.seasonId, table.goalId), index("season_goals_userId_idx").on(table.userId)]);
 
+// Goals ticket 07: reserved time on the schedule, optionally dedicated to a goal.
+// A lone scheduled task is NOT stored here: it keeps tasks.dueDate/dueDateEnd and
+// the client presents it as a block holding just that task. Later tickets add
+// block↔task links (08), outcome columns (09) and the Google event ID (10).
+export const timeBlocks = pgTable("time_blocks", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  // Deleting a goal keeps its reserved time as an undedicated block.
+  goalId: text("goal_id").references(() => goals.id, { onDelete: "set null" }),
+  title: text("title"),
+  startAt: timestamp("start_at").notNull(),
+  endAt: timestamp("end_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [index("time_blocks_user_start_idx").on(table.userId, table.startAt)]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
