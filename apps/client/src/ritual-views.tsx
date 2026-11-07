@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { CircleCheck, Sunrise, X } from "lucide-react";
-import { progressRatings, ratingLabels, type ProgressRating, type RatingDto, type RitualSettingsDto, type RitualsDto } from "./rituals";
+import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RitualSettingsDto, type RitualsDto } from "./rituals";
 import { GoalDot } from "./goal-views";
 import {
   Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
@@ -61,36 +61,45 @@ export interface CheckInGoal { goalId: string; title: string; color: string }
 
 /**
  * The Check-in's step runner in the right sidebar: one step per current-season
- * goal (a progress rating for yesterday, optional context typed or spoken).
- * Skip records a skip; closing keeps nothing and asks nothing (do it later).
+ * goal (a progress rating for yesterday, optional context typed or spoken),
+ * then the planning question (ticket 12). Either answer finishes the Check-in;
+ * "help" also plans today. Skip records a skip; closing keeps nothing (do it later).
  */
 export function CheckInPanel({ goals, period, status, pending, voice, onFinish, onSkip, onClose }: {
   goals: CheckInGoal[]; period: string; status: RitualsDto["checkIn"]["status"]; pending: boolean;
   /** The spoken-context control for one goal's context: calls `append` with what was said. */
   voice?: (append: (text: string) => void) => ReactNode;
-  onFinish: (ratings: RatingDto[]) => void; onSkip: () => void; onClose: () => void;
+  onFinish: (ratings: RatingDto[], planning: PlanningAnswer) => void; onSkip: () => void; onClose: () => void;
 }) {
   const [step, setStep] = useState(0);
   const [ratings, setRatings] = useState<Record<string, { rating?: ProgressRating; context: string }>>({});
   const goal = goals[step];
   const current = goal ? ratings[goal.goalId] ?? { context: "" } : null;
   const set = (patch: Partial<{ rating: ProgressRating; context: string }>) => goal && setRatings(all => ({ ...all, [goal.goalId]: { ...(all[goal.goalId] ?? { context: "" }), ...patch } }));
-  const last = step >= goals.length - 1;
-  const finish = () => onFinish(goals.flatMap(({ goalId }) => {
+  // The planning question is the last step, after every goal.
+  const steps = goals.length + 1;
+  const finish = (planning: PlanningAnswer) => onFinish(goals.flatMap(({ goalId }) => {
     const item = ratings[goalId];
     return item?.rating ? [{ goalId, rating: item.rating, context: item.context.trim() || null }] : [];
-  }));
+  }), planning);
   return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label="Check-in" data-ritual-panel="checkIn"
     title="Check-in" actions={<>
       <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onSkip} data-ritual-action="skip">Skip</Button>
       <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Check-in" onClick={onClose}><X /></Button>
     </>}>
-    <Progress aria-label={`Step ${Math.min(step + 1, Math.max(goals.length, 1))} of ${Math.max(goals.length, 1)}`} value={goals.length ? Math.round((step + 1) / goals.length * 100) : 100} />
-    <Hint>How much did {dayLabel(period)} move you towards your goals?{status && <> Today's Check-in is already {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</>}</Hint>
-    {!goal ? <>
-      <Hint>No goals in the current season to rate. Add goals on the Season page; you can still finish today's Check-in.</Hint>
-      <Button type="button" disabled={pending} onClick={finish}>Finish</Button>
-    </> : <div className="flex flex-col gap-3" key={goal.goalId}>
+    <Progress aria-label={`Step ${step + 1} of ${steps}`} value={Math.round((step + 1) / steps * 100)} />
+    {status && <Hint>Today's Check-in is already {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</Hint>}
+    {!goal ? <div className="flex flex-col gap-3" data-ritual-step="planning">
+      {!goals.length && <Hint>No goals in the current season to rate. Add goals on the Season page.</Hint>}
+      <h3 className="text-sm font-semibold">Do you need help planning today?</h3>
+      <Hint>Yes opens today's schedule with your unscheduled tasks beside it: drag them onto a time.</Hint>
+      <div className="flex flex-col gap-2">
+        <Button type="button" disabled={pending} onClick={() => finish("help")} data-ritual-action="plan-help">Yes, help me plan today</Button>
+        <Button type="button" variant="outline" disabled={pending} onClick={() => finish("clear")} data-ritual-action="plan-clear">No, I've got a clear idea</Button>
+      </div>
+      {goals.length > 0 && <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setStep(step - 1)}>Back</Button>}
+    </div> : <div className="flex flex-col gap-3" key={goal.goalId}>
+      <Hint>How much did {dayLabel(period)} move you towards this goal?</Hint>
       <h3 className="flex items-center gap-2 text-sm font-semibold"><GoalDot color={goal.color} />{goal.title}</h3>
       <RadioGroup aria-label={`Progress on ${goal.title}`} value={current?.rating ?? ""} onValueChange={(value) => set({ rating: value as ProgressRating })} className="gap-2">
         {progressRatings.map(rating => <Label key={rating} className="flex cursor-pointer items-center gap-2 font-normal"><RadioGroupItem value={rating} />{ratingLabels[rating]}</Label>)}
@@ -106,8 +115,7 @@ export function CheckInPanel({ goals, period, status, pending, voice, onFinish, 
       </Field>
       <div className="flex items-center justify-between gap-2">
         <Button type="button" variant="outline" size="sm" disabled={step === 0} onClick={() => setStep(step - 1)}>Back</Button>
-        {last ? <Button type="button" size="sm" disabled={pending} onClick={finish} data-ritual-action="next">{pending ? "Saving…" : "Finish"}</Button>
-          : <Button type="button" size="sm" onClick={() => setStep(step + 1)} data-ritual-action="next">{current?.rating ? "Next" : "Skip goal"}</Button>}
+        <Button type="button" size="sm" onClick={() => setStep(step + 1)} data-ritual-action="next">{current?.rating ? "Next" : "Skip goal"}</Button>
       </div>
     </div>}
   </RightSidebar>;

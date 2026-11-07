@@ -55,6 +55,9 @@ pub struct RitualRun {
     period: String,
     status: String,
     ratings: Vec<Rating>,
+    /// Ticket 12: "clear" or "help", the planning question's answer.
+    #[serde(default)]
+    planning: Option<String>,
 }
 
 fn zone_query(path: &str, time_zone: String) -> Result<String, String> {
@@ -102,7 +105,13 @@ pub async fn record_ritual_run(
     time_zone: String,
     run: RitualRun,
 ) -> Result<Option<Value>, String> {
-    if !valid_date(&run.period) || run.ratings.len() > 100 {
+    if !valid_date(&run.period)
+        || run.ratings.len() > 100
+        || run
+            .planning
+            .as_deref()
+            .is_some_and(|answer| answer != "clear" && answer != "help")
+    {
         return Err(INVALID.to_owned());
     }
     if run.ratings.iter().any(|rating| !valid_id(&rating.goal_id)) {

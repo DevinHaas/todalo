@@ -4,13 +4,13 @@
 
 **Blocked by:** 11, 08
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Planning question with both answers
-- [ ] Yes opens today's schedule with the unscheduled sidebar
-- [ ] No completes the Check-in
-- [ ] Works without an AI provider
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Planning question with both answers
+- [x] Yes opens today's schedule with the unscheduled sidebar
+- [x] No completes the Check-in
+- [x] Works without an AI provider
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

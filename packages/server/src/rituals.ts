@@ -47,13 +47,13 @@ export async function recordRun(userId: string, input: RitualRunInput): Promise<
     const owned = await db.select({ id: goals.id }).from(goals).where(and(eq(goals.userId, userId), inArray(goals.id, goalIds), isNull(goals.archivedAt)));
     if (owned.length !== goalIds.length) return null;
   }
-  const [run] = await db.insert(ritualRuns).values({ userId, kind: kinds[input.kind], period: input.period, status: input.status })
-    .onConflictDoUpdate({ target: [ritualRuns.userId, ritualRuns.kind, ritualRuns.period], set: { status: input.status, updatedAt: new Date() } })
+  const [run] = await db.insert(ritualRuns).values({ userId, kind: kinds[input.kind], period: input.period, status: input.status, planning: input.planning })
+    .onConflictDoUpdate({ target: [ritualRuns.userId, ritualRuns.kind, ritualRuns.period], set: { status: input.status, planning: input.planning, updatedAt: new Date() } })
     .returning({ id: ritualRuns.id });
   // ponytail: delete-then-insert without a transaction (neon-http); a crash in between leaves the run with fewer ratings, a redo fixes it.
   await db.delete(progressRatings).where(and(eq(progressRatings.userId, userId), eq(progressRatings.runId, run.id)));
   if (input.ratings.length) await db.insert(progressRatings).values(input.ratings.map(rating => ({ userId, runId: run.id, ...rating })));
-  return { id: run.id, kind: input.kind, period: input.period, status: input.status, ratings: input.ratings };
+  return { id: run.id, kind: input.kind, period: input.period, status: input.status, ratings: input.ratings, planning: input.planning };
 }
 
 /** The Check-in task's current start, or null when there is none (never created, or deleted by hand). */

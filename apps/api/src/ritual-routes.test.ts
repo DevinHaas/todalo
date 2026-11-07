@@ -113,13 +113,31 @@ describe("ritual API", () => {
     const { run, rituals } = await response.json() as any;
     expect(run).toEqual({ id: "run-1", kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [
       { goalId: "alice-fit", rating: "massive", context: "Ran 10k" }, { goalId: "alice-v2", rating: "not_relevant", context: null },
-    ] });
+    ], planning: null });
     expect(rituals.checkIn.status).toBe("completed");
     expect(startOf(rituals.checkIn.taskId)).toBe("2026-03-11T08:00:00.000Z");
     // Redoing the same day replaces the run instead of adding another.
     await record({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [{ goalId: "alice-fit", rating: "solid" }] });
     expect(runs).toHaveLength(1);
     expect(runs[0]!.ratings).toEqual([{ goalId: "alice-fit", rating: "solid", context: null }]);
+  });
+
+  it("records the planning answer: 'No, I've got a clear idea' or help planning, both completing the Check-in", async () => {
+    await enable();
+    const clear = await (await record({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [{ goalId: "alice-fit", rating: "solid" }], planning: "clear" })).json() as any;
+    expect(clear.run.planning).toBe("clear");
+    expect(clear.rituals.checkIn.status).toBe("completed");
+    expect(startOf(clear.rituals.checkIn.taskId)).toBe("2026-03-11T08:00:00.000Z");
+    // Asking for help (planning by hand on today's schedule, no AI needed) completes it too; a redo replaces the answer.
+    const help = await (await record({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [], planning: "help" })).json() as any;
+    expect(help.run.planning).toBe("help");
+    expect(help.rituals.checkIn.status).toBe("completed");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.planning).toBe("help");
+    // Unanswered is null; a skip carries no answer; anything else is refused.
+    expect((await (await record({ kind: "checkIn", period: "2026-03-08", status: "completed", ratings: [] })).json() as any).run.planning).toBeNull();
+    expect((await record({ kind: "checkIn", period: "2026-03-09", status: "skipped", ratings: [], planning: "clear" })).status).toBe(400);
+    expect((await record({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [], planning: "maybe" })).status).toBe(400);
   });
 
   it("skipping is always possible, has no ratings and also moves the item on", async () => {

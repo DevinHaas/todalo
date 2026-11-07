@@ -313,6 +313,8 @@ export const ritualRuns = pgTable("ritual_runs", {
   kind: ritualKind("kind").notNull(),
   period: date("period", { mode: "string" }).notNull(),
   status: ritualRunStatus("status").notNull(),
+  /** Ticket 12: the planning question's answer ("clear" or "help"); null when skipped. */
+  planning: text("planning", { enum: ["clear", "help"] }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [uniqueIndex("ritual_runs_user_kind_period_idx").on(table.userId, table.kind, table.period)]);

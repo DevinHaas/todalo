@@ -183,6 +183,13 @@
       "when": 1794058705648,
       "tag": "0025_rituals",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794060170678,
+      "tag": "0026_ritual_planning",
+      "breakpoints": true
     }
   ]
 }

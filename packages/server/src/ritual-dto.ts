@@ -24,7 +24,13 @@ export interface RitualsDto {
   checkIn: { period: string; status: RunStatus | null; taskId: string | null };
 }
 export interface RatingDto { goalId: string; rating: ProgressRating; context: string | null }
-export interface RitualRunDto { id: string; kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[] }
+/**
+ * The answer to a ritual's planning question (ticket 12): "clear" is "No, I've
+ * got a clear idea"; "help" asked for help planning (by hand on the schedule
+ * for now; the Coach drafts a plan from it later). null when skipped or not asked.
+ */
+export type PlanningAnswer = "clear" | "help";
+export interface RitualRunDto { id: string; kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[]; planning: PlanningAnswer | null }
 
 export const defaultRitualSettings: RitualSettingsDto = {
   checkIn: { enabled: false, time: "09:00" }, weeklyReview: { enabled: false, day: 0, time: "17:00" }, seasonReview: { enabled: false },
@@ -44,7 +50,8 @@ export const ritualSettingsInput = z.object({
 
 /**
  * Finishing or skipping one ritual for one period. Recording the same kind and
- * period again replaces it (a replay or a redo), ratings included. A skip has no ratings.
+ * period again replaces it (a replay or a redo), ratings and planning answer
+ * included. A skip has neither.
  */
 export const ritualRunInput = z.object({
   kind: z.enum(["checkIn", "weeklyReview", "seasonReview"]),
@@ -55,7 +62,8 @@ export const ritualRunInput = z.object({
     rating: z.enum(progressRatings),
     context: z.string().trim().max(5_000).nullable().optional().transform(value => value || null),
   }).strict()).max(100).refine(items => new Set(items.map(item => item.goalId)).size === items.length, { message: "Duplicate goal" }),
-}).strict().refine(run => run.status === "completed" || run.ratings.length === 0, { message: "A skipped ritual has no ratings" });
+  planning: z.enum(["clear", "help"]).nullable().optional().transform(value => value ?? null),
+}).strict().refine(run => run.status === "completed" || (run.ratings.length === 0 && run.planning === null), { message: "A skipped ritual has no ratings or planning answer" });
 
 export type RitualSettingsInput = z.infer<typeof ritualSettingsInput>;
 export type RitualRunInput = z.infer<typeof ritualRunInput>;

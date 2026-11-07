@@ -1,0 +1,1 @@
+ALTER TABLE "ritual_runs" ADD COLUMN "planning" text;

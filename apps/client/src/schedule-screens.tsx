@@ -1,7 +1,7 @@
 // Upcoming and Today's calendar layouts (ticket 16). Both read the Today query:
 // it is the full owned-task collection (getTasksForUser), exactly what the legacy
 // Upcoming page loaded, so every task write already refreshes these views.
-import { useContext, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, metadataReads, projectReads, reads } from "./runtime";
@@ -53,6 +53,10 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
   return { writes, slots, overlay, now, sidebar: planner.sidebar };
 }
 
+const OPEN_UNSCHEDULED = "todalo:unscheduled";
+/** Opens the unscheduled sidebar on the schedule shown (the Check-in's planning step, ticket 12). */
+export const openUnscheduled = () => window.dispatchEvent(new Event(OPEN_UNSCHEDULED));
+
 /** The schedule with the right sidebar beside it (ticket 08). */
 const Planner = ({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) =>
   <div className="flex items-start gap-4"><div className="min-w-0 flex-1">{children}</div>{sidebar}</div>;
@@ -71,6 +75,11 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const priority = useMutation(useBulkWrites(userId).metadata);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filter, setFilter] = useState<UnscheduledFilter>({});
+  useEffect(() => {
+    const show = () => setSidebarOpen(true);
+    window.addEventListener(OPEN_UNSCHEDULED, show);
+    return () => window.removeEventListener(OPEN_UNSCHEDULED, show);
+  }, []);
   // Hidden Goals: no goal colours or goal filter.
   const goalList = goals.data?.hidden ? [] : goals.data?.goals ?? [];
   const goalLinks = links.data ?? { projects: [], tasks: [] };

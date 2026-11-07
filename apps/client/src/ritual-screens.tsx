@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
 import { ritualReads, rituals, seasonReads } from "./runtime";
-import { ritualMutations, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto } from "./rituals";
+import { ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto } from "./rituals";
 import { CheckInPanel, RitualSettingsForm, RitualsNav } from "./ritual-views";
 import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
+import { useDisplay } from "./schedule-views";
+import { openUnscheduled } from "./schedule-screens";
 import { LoadFailure, Loading } from "./goal-views";
 import { Button, Hint } from "./ui";
 
@@ -79,6 +82,18 @@ export function RitualHost({ userId }: { userId: string }) {
   const query = useQuery(ritualReads.state(userId));
   const season = useQuery({ ...seasonReads.current(userId), enabled: open !== null });
   const { record } = useRitualWrites(userId);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const display = useDisplay();
+  // Ticket 12: "help" plans today by hand: Today as a calendar with the unscheduled sidebar open.
+  // ponytail: no AI involved; ticket 19 adds the Coach's draft on this same schedule.
+  const [planToday, setPlanToday] = useState(false);
+  useEffect(() => {
+    if (!planToday || pathname !== "/today") return;
+    if (display.layout !== "calendar") display.set({ layout: "calendar" });
+    openUnscheduled();
+    setPlanToday(false);
+  }, [planToday, pathname, display]);
   useEffect(() => {
     const start = (event: Event) => setOpen((event as CustomEvent<RitualKind>).detail);
     window.addEventListener(OPEN, start);
@@ -92,5 +107,8 @@ export function RitualHost({ userId }: { userId: string }) {
   const goals = (season.data?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color }) => ({ goalId, title, color }));
   return <CheckInPanel key={period} goals={goals} period={period} status={status} pending={record.isPending}
     voice={append => <VoiceContext onText={append} />}
-    onFinish={(ratings: RatingDto[]) => done({ status: "completed", ratings })} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={() => setOpen(null)} />;
+    onFinish={(ratings: RatingDto[], planning: PlanningAnswer) => {
+      done({ status: "completed", ratings, planning });
+      if (planning === "help") { navigate("/today"); setPlanToday(true); }
+    }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={() => setOpen(null)} />;
 }

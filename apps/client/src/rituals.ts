@@ -3,12 +3,12 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { change, optimisticWrite } from "./optimistic";
 import { localZone } from "./seasons";
 import { taskKeys } from "./tasks";
-import type { ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus } from "../../../packages/server/src/ritual-dto";
+import type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus } from "../../../packages/server/src/ritual-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
-export type { ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus };
+export type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus };
 export { progressRatings, ratingLabels } from "../../../packages/server/src/ritual-dto";
-export interface RitualRun { kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[] }
+export interface RitualRun { kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[]; planning?: PlanningAnswer | null }
 
 export interface RitualTransport {
   /** The settings and today's Check-in in the given timezone. */
