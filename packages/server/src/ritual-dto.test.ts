@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, checkInDay, checkInPeriod, ritualRunInput } from "./ritual-dto";
+import { addDays, checkInDay, checkInPeriod, mondayOf, ritualRunInput, weeklyReviewPeriod } from "./ritual-dto";
 
 describe("ritual days", () => {
   it.each([
@@ -17,4 +17,14 @@ describe("ritual days", () => {
     const run = ritualRunInput.parse({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [{ goalId: "g", rating: "solid", context: "   " }] });
     expect(run.ratings[0]!.context).toBeNull();
   });
+});
+
+describe("weekly review week", () => {
+  // 2026-03-09 is a Monday.
+  it.each([
+    ["2026-03-15", "2026-03-09"], ["2026-03-12", "2026-03-09"], ["2026-03-11", "2026-03-02"],
+    ["2026-03-16", "2026-03-09"], ["2026-03-09", "2026-03-02"], ["2026-01-01", "2025-12-29"],
+  ])("a review on %s reviews the week of %s", (today, expected) => expect(weeklyReviewPeriod(today)).toBe(expected));
+
+  it.each([["2026-03-09", "2026-03-09"], ["2026-03-15", "2026-03-09"], ["2026-03-10", "2026-03-09"]])("%s is in the week of %s", (day, monday) => expect(mondayOf(day)).toBe(monday));
 });

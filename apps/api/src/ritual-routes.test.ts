@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { defaultRitualSettings, type RitualKind, type RitualRunDto, type RitualSettingsDto, type RunStatus } from "@todalo/server/ritual-dto";
+import { defaultRitualSettings, type RitualKind, type RitualRunDto, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeeklyReviewDto } from "@todalo/server/ritual-dto";
+import type { WeekTask } from "@todalo/server/weekly-review";
 import { createRitualRoutes } from "./ritual-routes";
 
 const goals = [
@@ -12,7 +13,12 @@ let settings: Map<string, { settings: RitualSettingsDto; checkInTaskId: string |
 let runs: (RitualRunDto & { userId: string })[];
 let taskStarts: Map<string, Date | null>;
 let clock: Date;
+// Ticket 13: the current season's goals per user, goal links and the users' tasks.
+const seasonGoals: Record<string, string[]> = { alice: ["alice-fit", "alice-v2"], bob: ["bob-read"] };
+const links = { projects: [{ goalId: "alice-v2", projectId: "p-v2" }], tasks: [{ goalId: "alice-fit", taskId: "run" }, { goalId: "bob-read", taskId: "bob-book" }] };
+let weekTasks: (WeekTask & { userId: string })[];
 beforeEach(() => {
+  weekTasks = [];
   settings = new Map();
   runs = [];
   taskStarts = new Map();
@@ -47,6 +53,17 @@ const app = createRitualRoutes({
     settings.set(userId, { ...current, checkInTaskId: id });
     return id;
   },
+  weekInputs: async (userId, { from, to, firstDay, lastDay }) => {
+    const within = (date: Date | null) => date !== null && date >= from && date < to;
+    const review = runs.find(run => run.userId === userId && run.kind === "weeklyReview" && run.period === firstDay) ?? null;
+    return {
+      goalIds: seasonGoals[userId] ?? [], links,
+      tasks: weekTasks.filter(task => task.userId === userId && (within(task.dueDate) || within(task.completedAt))),
+      checkIns: runs.filter(run => run.userId === userId && run.kind === "checkIn" && run.status === "completed" && run.period >= firstDay && run.period <= lastDay)
+        .flatMap(run => run.ratings.map(({ goalId, rating }) => ({ goalId, day: run.period, rating }))),
+      review: review && { id: review.id, kind: review.kind, period: review.period, status: review.status, ratings: review.ratings, planning: review.planning },
+    };
+  },
 });
 
 const call = (method: string, path: string, init: { user?: string; origin?: string; body?: unknown } = {}) => {
@@ -58,7 +75,7 @@ const call = (method: string, path: string, init: { user?: string; origin?: stri
 };
 const zone = "Europe/Zurich";
 const q = `?timeZone=${encodeURIComponent(zone)}`;
-const read = async (user = "alice") => (await (await call("GET", `/rituals${q}`, { user })).json()) as { settings: RitualSettingsDto; checkIn: { period: string; status: RunStatus | null; taskId: string | null } };
+const read = async (user = "alice") => (await (await call("GET", `/rituals${q}`, { user })).json()) as RitualsDto;
 const enable = (patch: Partial<RitualSettingsDto> = {}, user = "alice") =>
   call("PUT", `/rituals/settings${q}`, { user, body: { ...defaultRitualSettings, checkIn: { enabled: true, time: "09:00" }, ...patch } });
 const record = (body: unknown, user = "alice") => call("POST", `/rituals/runs${q}`, { user, body });
@@ -77,7 +94,7 @@ describe("ritual API", () => {
   it("starts with every ritual off and nothing on the schedule", async () => {
     const response = await call("GET", `/rituals${q}`, { user: "alice" });
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ settings: defaultRitualSettings, checkIn: { period: "2026-03-09", status: null, taskId: null } });
+    expect(await response.json()).toEqual({ settings: defaultRitualSettings, checkIn: { period: "2026-03-09", status: null, taskId: null }, weeklyReview: { period: "2026-03-02", status: null } });
     expect(taskStarts.size).toBe(0);
   });
 
@@ -186,5 +203,53 @@ describe("ritual API", () => {
     const { run } = await (await record({ kind: "weeklyReview", period: "2026-03-02", status: "completed", ratings: [{ goalId: "alice-fit", rating: "mixed" }] })).json() as any;
     expect(run).toMatchObject({ kind: "weeklyReview", period: "2026-03-02" });
     expect(startOf((await read()).checkIn.taskId)).toBe(before);
+  });
+
+  it("summarises each current-season goal's week: Check-in ratings, tasks completed, minutes scheduled and kept", async () => {
+    // Sunday 2026-03-15 in Zurich: the review looks back on the week of Monday 9 March.
+    clock = new Date("2026-03-15T16:00:00Z");
+    const task = (id: string, patch: Partial<WeekTask>, userId = "alice") => weekTasks.push({ id, userId, projectId: null, status: "todo", dueDate: null, dueDateEnd: null, completedAt: null, ...patch });
+    task("run", { status: "done", dueDate: new Date("2026-03-10T06:00:00Z"), dueDateEnd: new Date("2026-03-10T07:00:00Z"), completedAt: new Date("2026-03-10T07:00:00Z") });
+    task("spec", { projectId: "p-v2", dueDate: new Date("2026-03-12T13:00:00Z"), dueDateEnd: new Date("2026-03-12T15:00:00Z") });
+    task("ship", { projectId: "p-v2", status: "done", completedAt: new Date("2026-03-13T10:00:00Z") });
+    // Last week's work and another user's linked task stay out.
+    task("run-before", { projectId: "p-v2", status: "done", dueDate: new Date("2026-03-06T08:00:00Z"), completedAt: new Date("2026-03-06T09:00:00Z") });
+    task("bob-book", { status: "done", dueDate: new Date("2026-03-10T08:00:00Z"), completedAt: new Date("2026-03-10T09:00:00Z") }, "bob");
+    await record({ kind: "checkIn", period: "2026-03-10", status: "completed", ratings: [{ goalId: "alice-fit", rating: "massive" }] });
+    await record({ kind: "checkIn", period: "2026-03-08", status: "completed", ratings: [{ goalId: "alice-fit", rating: "little" }] });
+
+    const response = await call("GET", `/rituals/weekly-review${q}`, { user: "alice" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      period: "2026-03-09", nextWeek: "2026-03-16", status: null, ratings: [], planning: null,
+      goals: [
+        { goalId: "alice-fit", checkIns: [{ day: "2026-03-10", rating: "massive" }], completed: 1, scheduledMinutes: 60, keptMinutes: 60 },
+        { goalId: "alice-v2", checkIns: [], completed: 1, scheduledMinutes: 120, keptMinutes: 0 },
+      ],
+    } satisfies WeeklyReviewDto);
+    expect((await read()).weeklyReview).toEqual({ period: "2026-03-09", status: null });
+    expect((await call("GET", `/rituals/weekly-review${q}`)).status).toBe(401);
+  });
+
+  it("rates the week per goal and records the next-week planning answer; a redo replaces it", async () => {
+    clock = new Date("2026-03-15T16:00:00Z");
+    const created = await record({ kind: "weeklyReview", period: "2026-03-09", status: "completed", ratings: [
+      { goalId: "alice-fit", rating: "solid", context: "Three runs" }, { goalId: "alice-v2", rating: "little" },
+    ], planning: "help" });
+    expect(created.status).toBe(201);
+    expect((await created.json() as any).rituals.weeklyReview).toEqual({ period: "2026-03-09", status: "completed" });
+    const review = await (await call("GET", `/rituals/weekly-review${q}`, { user: "alice" })).json() as WeeklyReviewDto;
+    expect(review).toMatchObject({ status: "completed", planning: "help", ratings: [{ goalId: "alice-fit", rating: "solid", context: "Three runs" }, { goalId: "alice-v2", rating: "little", context: null }] });
+    await record({ kind: "weeklyReview", period: "2026-03-09", status: "completed", ratings: [{ goalId: "alice-fit", rating: "massive" }], planning: "clear" });
+    expect(runs.filter(run => run.kind === "weeklyReview")).toHaveLength(1);
+    expect(((await (await call("GET", `/rituals/weekly-review${q}`, { user: "alice" })).json()) as WeeklyReviewDto).planning).toBe("clear");
+    // Bob sees neither; a week must start on its Monday; foreign goals are refused.
+    expect(((await (await call("GET", `/rituals/weekly-review${q}`, { user: "bob" })).json()) as WeeklyReviewDto).status).toBeNull();
+    expect((await record({ kind: "weeklyReview", period: "2026-03-10", status: "completed", ratings: [] })).status).toBe(400);
+    expect((await record({ kind: "weeklyReview", period: "2026-03-09", status: "completed", ratings: [{ goalId: "bob-read", rating: "solid" }] })).status).toBe(404);
+    // Skipping the week is allowed and shows as skipped.
+    const skipped = await (await record({ kind: "weeklyReview", period: "2026-03-09", status: "skipped", ratings: [] })).json() as any;
+    expect(skipped.rituals.weeklyReview.status).toBe("skipped");
   });
 });

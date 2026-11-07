@@ -407,6 +407,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
       // Goals ticket 11: pass on while the Check-in is off, or with no ritual open.
       "ritual.check-in": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.checkIn.enabled) return false; openRitual("checkIn"); },
+      // Goals ticket 13: passes on while the Weekly review is off.
+      "ritual.weekly-review": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.weeklyReview.enabled) return false; openRitual("weeklyReview"); },
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 12: the Check-in's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),

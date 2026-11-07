@@ -4,12 +4,12 @@
 
 **Blocked by:** 11, 08
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Per-goal summary of the past week: goal-linked tasks completed, and time scheduled vs time on completed tasks (from the tasks' own start and duration)
-- [ ] Weekly progress rating per goal
-- [ ] Planning step for next week on the week schedule with the unscheduled sidebar
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Per-goal summary of the past week: goal-linked tasks completed, and time scheduled vs time on completed tasks (from the tasks' own start and duration)
+- [x] Weekly progress rating per goal
+- [x] Planning step for next week on the week schedule with the unscheduled sidebar
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

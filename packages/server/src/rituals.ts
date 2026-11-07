@@ -2,11 +2,14 @@
 // is scoped to the owner. The Check-in item on the schedule is an ordinary
 // daily recurring task, written through tasks.ts so Google Calendar sync and the
 // live delta treat it like any other scheduled task.
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, between, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db } from "@todalo/db";
 import { goals, progressRatings, ritualRuns, ritualSettings, tasks } from "@todalo/db/schema";
 import { createTask, deleteTask, updateTask } from "./tasks";
-import { defaultRitualSettings, type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RunStatus } from "./ritual-dto";
+import { getGoalLinks } from "./goals";
+import { getCurrentSeason } from "./seasons";
+import { defaultRitualSettings, type ProgressRating, type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RunStatus } from "./ritual-dto";
+import type { WeekLinks, WeekTask } from "./weekly-review";
 
 const kinds = { checkIn: "check_in", weeklyReview: "weekly_review", seasonReview: "season_review" } as const;
 /** The Check-in item's length on the schedule. */
@@ -54,6 +57,38 @@ export async function recordRun(userId: string, input: RitualRunInput): Promise<
   await db.delete(progressRatings).where(and(eq(progressRatings.userId, userId), eq(progressRatings.runId, run.id)));
   if (input.ratings.length) await db.insert(progressRatings).values(input.ratings.map(rating => ({ userId, runId: run.id, ...rating })));
   return { id: run.id, kind: input.kind, period: input.period, status: input.status, ratings: input.ratings, planning: input.planning };
+}
+
+/** The raw inputs of one week's summary (ticket 13); weekly-review.ts summarises them. */
+export interface WeekInputs {
+  goalIds: string[]; links: WeekLinks; tasks: WeekTask[];
+  checkIns: { goalId: string; day: string; rating: ProgressRating }[];
+  review: RitualRunDto | null;
+}
+
+/**
+ * The current season's goals (not archived), their links, the user's tasks
+ * scheduled or completed between `from` and `to`, the completed Check-in
+ * ratings for days `firstDay`…`lastDay`, and the Weekly review run for `firstDay`.
+ */
+export async function getWeekInputs(userId: string, { from, to, firstDay, lastDay }: { from: Date; to: Date; firstDay: string; lastDay: string }): Promise<WeekInputs> {
+  const current = await getCurrentSeason(userId);
+  const goalIds = (current?.goals ?? []).filter(goal => !goal.archivedAt).map(goal => goal.goalId);
+  const [links, weekTasks, ratings, [run]] = await Promise.all([
+    getGoalLinks(userId),
+    db.select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, completedAt: tasks.completedAt }).from(tasks)
+      .where(and(eq(tasks.userId, userId), or(and(gte(tasks.dueDate, from), lt(tasks.dueDate, to)), and(gte(tasks.completedAt, from), lt(tasks.completedAt, to))))),
+    db.select({ goalId: progressRatings.goalId, day: ritualRuns.period, rating: progressRatings.rating }).from(progressRatings)
+      .innerJoin(ritualRuns, eq(ritualRuns.id, progressRatings.runId))
+      .where(and(eq(progressRatings.userId, userId), eq(ritualRuns.kind, kinds.checkIn), eq(ritualRuns.status, "completed"), between(ritualRuns.period, firstDay, lastDay))),
+    db.select().from(ritualRuns).where(and(eq(ritualRuns.userId, userId), eq(ritualRuns.kind, kinds.weeklyReview), eq(ritualRuns.period, firstDay))),
+  ]);
+  const review = run ? {
+    id: run.id, kind: "weeklyReview" as const, period: run.period, status: run.status, planning: run.planning,
+    ratings: await db.select({ goalId: progressRatings.goalId, rating: progressRatings.rating, context: progressRatings.context }).from(progressRatings)
+      .where(and(eq(progressRatings.userId, userId), eq(progressRatings.runId, run.id))),
+  } : null;
+  return { goalIds, links, tasks: weekTasks, checkIns: ratings, review };
 }
 
 /** The Check-in task's current start, or null when there is none (never created, or deleted by hand). */

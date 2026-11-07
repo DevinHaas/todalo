@@ -70,6 +70,8 @@ export function deltaChanges(userId: string, delta: SyncDelta): { changes: Chang
     for (const id of delta.deleted.task) each({ queryKey: taskKeys.task(userId, id), exact: true }, () => null);
     // Filter results and search are the server's to decide.
     refresh.push({ queryKey: [...user, "metadata", "filter"] }, { queryKey: [...user, "search"] });
+    // The Weekly review's week is summed from tasks on the server (ticket 13).
+    refresh.push({ queryKey: [...user, "rituals", "weekly"] });
   }
   const projects = [...delta.projects.map(project => project.id), ...delta.deleted.project];
   if (projects.length) {
@@ -92,8 +94,8 @@ export function deltaChanges(userId: string, delta: SyncDelta): { changes: Chang
   }
   if (delta.changed.includes("section")) refresh.push({ queryKey: [...user, "project"] }, { queryKey: [...user, "destinations"] });
   // Season rows show goal titles and colours; links feed goal pages, milestones and suggestions.
-  if (delta.changed.includes("goal") || delta.changed.includes("goalLink")) refresh.push({ queryKey: [...user, "goals"] }, { queryKey: [...user, "seasons"] });
-  if (delta.changed.includes("season")) refresh.push({ queryKey: [...user, "seasons"] });
+  if (delta.changed.includes("goal") || delta.changed.includes("goalLink")) refresh.push({ queryKey: [...user, "goals"] }, { queryKey: [...user, "seasons"] }, { queryKey: [...user, "rituals", "weekly"] });
+  if (delta.changed.includes("season")) refresh.push({ queryKey: [...user, "seasons"] }, { queryKey: [...user, "rituals", "weekly"] });
   // Ritual settings, runs and ratings (goals ticket 11).
   if (delta.changed.includes("ritual")) refresh.push({ queryKey: [...user, "rituals"] });
   return { changes, refresh };

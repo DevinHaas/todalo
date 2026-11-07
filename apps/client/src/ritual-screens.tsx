@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
 import { ritualReads, rituals, seasonReads } from "./runtime";
-import { ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto } from "./rituals";
-import { CheckInPanel, RitualSettingsForm, RitualsNav } from "./ritual-views";
+import { addDays, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto } from "./rituals";
+import { checkInCopy, RitualPanel, RitualSettingsForm, RitualsNav, WeekSummary, weeklyReviewCopy } from "./ritual-views";
 import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
-import { useDisplay } from "./schedule-views";
+import { showCalendarDay, useDisplay } from "./schedule-views";
+import { parseDayKey } from "./schedule";
 import { openUnscheduled } from "./schedule-screens";
 import { LoadFailure, Loading } from "./goal-views";
 import { Button, Hint } from "./ui";
@@ -23,7 +24,7 @@ function useRitualWrites(userId: string) {
   const writes = useMemo(() => ritualMutations(rituals, cache, userId), [cache, userId]);
   return {
     save: useMutation({ mutationFn: writes.save, meta: { action: () => "save your ritual settings" } }),
-    record: useMutation({ mutationFn: writes.record, meta: { action: (run: RitualRun) => run.status === "skipped" ? "skip the Check-in" : "save the Check-in" } }),
+    record: useMutation({ mutationFn: writes.record, meta: { action: (run: RitualRun) => `${run.status === "skipped" ? "skip" : "save"} the ${run.kind === "weeklyReview" ? "Weekly review" : "Check-in"}` } }),
   };
 }
 
@@ -43,7 +44,7 @@ export function RitualSettingsScreen({ userId }: { userId: string }) {
 
 export function RitualsSidebar({ userId }: { userId: string }) {
   const query = useQuery(ritualReads.state(userId));
-  return query.data ? <RitualsNav rituals={query.data} onStart={() => openRitual("checkIn")} /> : null;
+  return query.data ? <RitualsNav rituals={query.data} onStart={openRitual} /> : null;
 }
 
 /**
@@ -81,34 +82,54 @@ export function RitualHost({ userId }: { userId: string }) {
   const [open, setOpen] = useState<RitualKind | null>(null);
   const query = useQuery(ritualReads.state(userId));
   const season = useQuery({ ...seasonReads.current(userId), enabled: open !== null });
+  const weekly = useQuery({ ...ritualReads.weekly(userId), enabled: open === "weeklyReview" });
   const { record } = useRitualWrites(userId);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const display = useDisplay();
-  // Ticket 12: "help" plans today by hand: Today as a calendar with the unscheduled sidebar open.
-  // ponytail: no AI involved; ticket 19 adds the Coach's draft on this same schedule.
-  const [planToday, setPlanToday] = useState(false);
+  // "help" plans by hand: Today (ticket 12) or next week on Upcoming (ticket 13) as a
+  // calendar with the unscheduled sidebar open. ponytail: no AI involved; tickets 19
+  // and 20 add the Coach's drafts on these same schedules.
+  const [plan, setPlan] = useState<{ path: "/today" | "/upcoming"; day?: string } | null>(null);
   useEffect(() => {
-    if (!planToday || pathname !== "/today") return;
+    if (!plan || pathname !== plan.path) return;
     if (display.layout !== "calendar") display.set({ layout: "calendar" });
+    if (plan.day) { if (display.calendarRange !== "week") display.set({ calendarRange: "week" }); showCalendarDay(parseDayKey(plan.day)); }
     openUnscheduled();
-    setPlanToday(false);
-  }, [planToday, pathname, display]);
+    setPlan(null);
+  }, [plan, pathname, display]);
   useEffect(() => {
     const start = (event: Event) => setOpen((event as CustomEvent<RitualKind>).detail);
     window.addEventListener(OPEN, start);
     return () => window.removeEventListener(OPEN, start);
   }, []);
-  // ponytail: only the Check-in has steps so far; Weekly and Season review panels come with tickets 13–14.
-  if (open !== "checkIn" || !query.data) return null;
-  const { period, status } = query.data.checkIn;
-  const done = (run: Omit<RitualRun, "kind" | "period">) => record.mutate({ kind: "checkIn", period, ...run }, { onSuccess: () => setOpen(null) });
-  if (season.status === "pending") return null;
+  // ponytail: the Season review panel comes with ticket 14.
+  if ((open !== "checkIn" && open !== "weeklyReview") || !query.data || season.status === "pending") return null;
   const goals = (season.data?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color }) => ({ goalId, title, color }));
-  return <CheckInPanel key={period} goals={goals} period={period} status={status} pending={record.isPending}
-    voice={append => <VoiceContext onText={append} />}
+  const voice = (append: (text: string) => void) => <VoiceContext onText={append} />;
+  const close = () => setOpen(null);
+  if (open === "checkIn") {
+    const { period, status } = query.data.checkIn;
+    const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "checkIn", period, ...run }); close(); };
+    return <RitualPanel key={period} copy={checkInCopy(period)} goals={goals} status={status} pending={record.isPending} voice={voice}
+      onFinish={(ratings: RatingDto[], planning: PlanningAnswer) => {
+        done({ status: "completed", ratings, planning });
+        if (planning === "help") { navigate("/today"); setPlan({ path: "/today" }); }
+      }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={close} />;
+  }
+  if (weekly.status === "pending") return null;
+  // The week summary failing to load never blocks rating the week.
+  const { period, status } = query.data.weeklyReview;
+  const nextWeek = weekly.data?.nextWeek ?? addDays(period, 7);
+  const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "weeklyReview", period, ...run }); close(); };
+  return <RitualPanel key={period} copy={weeklyReviewCopy(period)} goals={goals} status={status} pending={record.isPending} initial={weekly.data?.ratings} voice={voice}
+    summary={goalId => {
+      if (!weekly.data) return <LoadFailure error={weekly.error} onRetry={() => void weekly.refetch()} />;
+      const week = weekly.data.goals.find(item => item.goalId === goalId);
+      return week && <WeekSummary week={week} />;
+    }}
     onFinish={(ratings: RatingDto[], planning: PlanningAnswer) => {
       done({ status: "completed", ratings, planning });
-      if (planning === "help") { navigate("/today"); setPlanToday(true); }
-    }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={() => setOpen(null)} />;
+      if (planning === "help") { navigate("/upcoming"); setPlan({ path: "/upcoming", day: nextWeek }); }
+    }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={close} />;
 }

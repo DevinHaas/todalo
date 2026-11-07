@@ -140,6 +140,7 @@ pub fn run() {
             rituals::rituals,
             rituals::update_ritual_settings,
             rituals::record_ritual_run,
+            rituals::weekly_review,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

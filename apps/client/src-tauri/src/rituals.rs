@@ -126,3 +126,15 @@ pub async fn record_ritual_run(
         )
         .await?)
 }
+
+/// Ticket 13: each current-season goal's week for the Weekly review, in the webview's timezone.
+#[tauri::command]
+pub async fn weekly_review(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+) -> Result<Value, String> {
+    state
+        .read(&zone_query("/api/v1/rituals/weekly-review", time_zone)?)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}

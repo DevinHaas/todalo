@@ -2,9 +2,11 @@ import { Elysia } from "elysia";
 import { todayIn } from "@todalo/server/season-days";
 import { zonedTaskDate } from "@todalo/server/dates";
 import {
-  checkInDay, checkInPeriod, ritualRunInput, ritualSettingsInput,
-  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RitualsDto, type RunStatus,
+  addDays, checkInDay, checkInPeriod, ritualRunInput, ritualSettingsInput, weeklyReviewPeriod,
+  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RitualsDto, type RunStatus, type WeeklyReviewDto,
 } from "@todalo/server/ritual-dto";
+import type { WeekInputs } from "@todalo/server/rituals";
+import { summariseWeek } from "@todalo/server/weekly-review";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
 
@@ -19,6 +21,8 @@ export interface RitualStore {
   checkInTask(userId: string): Promise<{ id: string; dueDate: Date | null } | null>;
   /** Moves (or creates) the Check-in task to start at `start`; null deletes it. Returns its ID. */
   placeCheckIn(userId: string, start: Date | null): Promise<string | null>;
+  /** Ticket 13: one week's raw inputs (see getWeekInputs). */
+  weekInputs(userId: string, week: { from: Date; to: Date; firstDay: string; lastDay: string }): Promise<WeekInputs>;
   /** The clock (tests pin it). */
   now?: () => Date;
 }
@@ -55,7 +59,8 @@ export function createRitualRoutes(store: RitualStore) {
       if (force || !task?.dueDate || todayIn(zone, task.dueDate) < day) taskId = await store.placeCheckIn(userId, zonedTaskDate(day, settings.checkIn.time, zone));
       else taskId = task.id;
     }
-    return { settings, checkIn: { period, status, taskId } };
+    const week = weeklyReviewPeriod(today);
+    return { settings, checkIn: { period, status, taskId }, weeklyReview: { period: week, status: await store.runStatus(userId, "weeklyReview", week) } };
   }
 
   return new Elysia({ prefix: "/api/v1" })
@@ -65,6 +70,21 @@ export function createRitualRoutes(store: RitualStore) {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
       return state(userId, zoneOf(request), false);
+    })
+    // Ticket 13: each current-season goal's week (Monday to Sunday on the user's clock) for the Weekly review.
+    .get("/rituals/weekly-review", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const zone = zoneOf(request);
+      const period = weeklyReviewPeriod(todayIn(zone, now()));
+      const nextWeek = addDays(period, 7);
+      const from = zonedTaskDate(period, "00:00", zone)!, to = zonedTaskDate(nextWeek, "00:00", zone)!;
+      const inputs = await store.weekInputs(userId, { from, to, firstDay: period, lastDay: addDays(period, 6) });
+      const review = inputs.review;
+      return {
+        period, nextWeek, status: review?.status ?? null, ratings: review?.ratings ?? [], planning: review?.planning ?? null,
+        goals: summariseWeek({ ...inputs, from, to, zone }),
+      } satisfies WeeklyReviewDto;
     })
     .put("/rituals/settings", async ({ request, body, status }) => {
       const userId = await writer(request);

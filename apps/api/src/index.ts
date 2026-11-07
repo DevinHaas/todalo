@@ -132,6 +132,7 @@ const app = createApi(dependencies)
   record: rituals.recordRun,
   checkInTask: rituals.getCheckInTask,
   placeCheckIn: rituals.placeCheckIn,
+  weekInputs: rituals.getWeekInputs,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

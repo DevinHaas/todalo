@@ -435,10 +435,24 @@ function MonthGrid({ tasks, events, month, setMonth, onNavigate, slots, now }: {
   </div>;
 }
 
+const SHOW_DAY = "todalo:calendar-day";
+let shownDay: Date | null = null;
+/**
+ * Puts the calendar on `day`'s week (the Weekly review's planning step, ticket 13).
+ * Kept until a calendar takes it, so it also works when the calendar mounts after the call.
+ */
+export const showCalendarDay = (day: Date) => { shownDay = day; window.dispatchEvent(new Event(SHOW_DAY)); };
+const takeShownDay = () => { const day = shownDay; shownDay = null; return day; };
+
 /** Legacy CalendarView: one anchor date shared by month and week, Week/Month from Display. */
 export function CalendarView({ tasks, events = [], slots, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; now?: Date }) {
   const { calendarRange } = useDisplay();
-  const [anchor, setAnchor] = useState(now);
+  const [anchor, setAnchor] = useState(() => takeShownDay() ?? now);
+  useEffect(() => {
+    const show = () => { const day = takeShownDay(); if (day) setAnchor(day); };
+    window.addEventListener(SHOW_DAY, show);
+    return () => window.removeEventListener(SHOW_DAY, show);
+  }, []);
   const navigate = (action: ViewDateAction) => setAnchor(current => navigateViewDate(current, action, new Date()));
   return <div aria-label="Calendar view" className="calendar">{calendarRange === "week"
     ? <WeekSchedule tasks={tasks} events={events} anchor={anchor} onNavigate={navigate} slots={slots} now={now} />
