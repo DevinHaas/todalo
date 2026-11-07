@@ -98,7 +98,19 @@ export function seasonMutations(transport: SeasonTransport, cache: QueryClient, 
   return {
     async start(startDate: string, lengthDays: number) { try { return await transport.start(startDate, lengthDays); } finally { await stale(); } },
     async addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) { try { return done(await transport.addGoal(seasonId, goalId, tier, target)); } finally { await stale(); } },
-    async updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) { try { return done(await transport.updateGoal(seasonId, goalId, patch)); } finally { await stale(); } },
+    /**
+     * Shown at once: the server write plus the refetch took ~2 s, and until then the
+     * goal stayed in its old tier section, so a tier change looked like it did nothing.
+     */
+    async updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) {
+      const key = seasonKeys.current(userId);
+      await cache.cancelQueries({ queryKey: key });
+      const before = cache.getQueryData<CurrentSeasonDto>(key);
+      if (before?.season?.id === seasonId) cache.setQueryData<CurrentSeasonDto>(key, { ...before, season: { ...before.season, goals: before.season.goals.map(goal => goal.goalId === goalId ? { ...goal, ...patch } : goal) } });
+      try { return done(await transport.updateGoal(seasonId, goalId, patch)); }
+      catch (error) { if (before) cache.setQueryData(key, before); throw error; }
+      finally { await stale(); }
+    },
     async removeGoal(seasonId: string, goalId: string) { try { return done(await transport.removeGoal(seasonId, goalId) || null); } finally { await stale(); } },
     async end(seasonId: string, next: NextSeason | null) { try { return done(await transport.end(seasonId, next)); } finally { await stale(); } },
   };

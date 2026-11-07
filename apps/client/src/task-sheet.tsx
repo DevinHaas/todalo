@@ -17,6 +17,7 @@ import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
 import { GoalPicker, GoalSuggestion, MilestoneToggle, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { moveCriterion, type CriterionDto } from "./goals";
+import { Button, Checkbox, Input, cn } from "./ui";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -304,6 +305,16 @@ function Progress({ done, total }: { done: number; total: number }) {
   </svg>;
 }
 
+/** The sheet's collapsible section header (Sub-tasks, Done criteria, Comments): chevron left, bold title, then extras. */
+function SectionHeader({ title, open, onToggle, children }: { title: ReactNode; open: boolean; onToggle(): void; children?: ReactNode }) {
+  return <div className="sheet-section-header">
+    <button type="button" className="section-toggle" aria-expanded={open} onClick={onToggle}>
+      <ChevronDown className={open ? "" : "closed"} />{title}
+    </button>
+    {children}
+  </div>;
+}
+
 function Subtasks({ task, tree, onComplete, onOpen, onAdd }: {
   task: TaskDto; tree: readonly TaskDto[] | null; onComplete?: (task: TaskDto) => void; onOpen?: (id: string) => void; onAdd?: (task: NewTask) => Promise<unknown>;
 }) {
@@ -326,13 +337,10 @@ function Subtasks({ task, tree, onComplete, onOpen, onAdd }: {
     </div>;
   };
   return <section className="sheet-section" aria-label="Sub-tasks">
-    <div className="sheet-section-header">
-      <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <ChevronDown className={open ? "" : "closed"} />Sub-tasks
-      </button>
+    <SectionHeader title="Sub-tasks" open={open} onToggle={() => setOpen(value => !value)}>
       {direct.total > 0 && <span className="subtask-progress" aria-label={`${direct.done.length} of ${direct.total} done`}><Progress done={direct.done.length} total={direct.total} />{direct.done.length}/{direct.total}</span>}
       {direct.done.length > 0 && <button type="button" className="hide-completed" aria-pressed={hideDone} onClick={() => setHideDone(value => !value)}>{hideDone ? "Show completed" : "Hide completed"}</button>}
-    </div>
+    </SectionHeader>
     {open && <div className="sheet-subtasks">
       {before.map(row)}
       {onAdd && (adding ? <div className="dialog quick-add inline-quick-add">
@@ -350,14 +358,15 @@ function CriterionRow({ item, index, count, onChange, onMove, onRemove }: {
 }) {
   const [text, setText] = useState(item.text);
   const commit = () => { const trimmed = text.trim(); if (!trimmed) setText(item.text); else if (trimmed !== item.text) onChange({ ...item, text: trimmed }); };
-  return <div className="sheet-subtask criterion" data-done={item.done || undefined}>
-    <input type="checkbox" className="criterion-check" aria-label={`Done: ${item.text}`} checked={item.done} onChange={(event) => onChange({ ...item, done: event.target.checked })} />
-    <input className="criterion-text" aria-label={`Criterion ${index + 1}`} value={text} maxLength={500} onChange={(event) => setText(event.target.value)} onBlur={commit}
-      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } }} />
-    <span className="criterion-tools">
-      <button type="button" className="icon-button" aria-label={`Move ${item.text} up`} title="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp /></button>
-      <button type="button" className="icon-button" aria-label={`Move ${item.text} down`} title="Move down" disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown /></button>
-      <button type="button" className="icon-button" aria-label={`Remove ${item.text}`} title="Remove" onClick={onRemove}><X /></button>
+  return <div data-slot="criterion" data-done={item.done || undefined} className="group/row flex min-h-row items-center gap-2 border-b border-border-subtle">
+    <Checkbox aria-label={`Done: ${item.text}`} checked={item.done} onCheckedChange={(done) => onChange({ ...item, done })} />
+    <Input data-slot="criterion-text" aria-label={`Criterion ${index + 1}`} value={text} maxLength={500} onChange={(event) => setText(event.target.value)} onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } }}
+      className={cn("-ml-1 flex-1 border-transparent px-1 hover:!border-transparent focus:!border-border-strong", item.done && "text-muted-foreground line-through")} />
+    <span className="flex shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100">
+      <Button variant="ghost" size="icon-sm" aria-label={`Move ${item.text} up`} title="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={`Move ${item.text} down`} title="Move down" disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label={`Remove ${item.text}`} title="Remove" onClick={onRemove}><X /></Button>
     </span>
   </div>;
 }
@@ -373,19 +382,17 @@ function DoneCriteria({ slots }: { slots: MilestoneSlots }) {
   const save = (next: CriterionDto[]) => slots.onChange({ ...milestone, criteria: next });
   const add = () => { if (!adding.trim()) return; save([...criteria, { text: adding.trim(), done: false }]); setAdding(""); };
   return <section className="sheet-section" aria-label="Done criteria">
-    <div className="sheet-section-header">
-      <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <ChevronDown className={open ? "" : "closed"} />Done criteria
-      </button>
+    <SectionHeader title="Done criteria" open={open} onToggle={() => setOpen(value => !value)}>
       {criteria.length > 0 && <span className="subtask-progress" aria-label={`${done} of ${criteria.length} ticked`}><Progress done={done} total={criteria.length} />{done}/{criteria.length}</span>}
-    </div>
+    </SectionHeader>
     {open && <div className="sheet-subtasks">
       {criteria.map((item, index) => <CriterionRow key={`${index}:${item.text}`} item={item} index={index} count={criteria.length}
         onChange={(changed) => save(criteria.map((other, at) => at === index ? changed : other))}
         onMove={(by) => save(moveCriterion(criteria, index, by))}
         onRemove={() => save(criteria.filter((_, at) => at !== index))} />)}
       {criteria.length < 50 && <label className="sheet-add criterion-add"><Plus />
-        <input aria-label="New done criterion" placeholder={criteria.length ? "Add done criterion" : "Add a done criterion: what must be true to reach this milestone?"} value={adding} maxLength={500}
+        <Input aria-label="New done criterion" placeholder={criteria.length ? "Add done criterion" : "Add a done criterion: what must be true to reach this milestone?"} value={adding} maxLength={500}
+          className="-ml-1 flex-1 border-transparent px-1 hover:!border-transparent focus:!border-border-strong"
           onChange={(event) => setAdding(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } }} />
       </label>}
     </div>}
@@ -428,11 +435,7 @@ function Comments({ task, slots }: { task: TaskDto; slots: CommentSlots }) {
     try { await slots.add(body.trim()); setBody(""); } catch { /* shown through slots.error; the text is kept */ } finally { setBusy(false); }
   }
   return <section className="sheet-section" aria-label="Comments">
-    <div className="sheet-section-header">
-      <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <ChevronDown className={open ? "" : "closed"} />Comments{count > 0 && <span className="muted-count">{count}</span>}
-      </button>
-    </div>
+    <SectionHeader title={<>Comments{count > 0 && <span className="muted-count">{count}</span>}</>} open={open} onToggle={() => setOpen(value => !value)} />
     {open && <>
       {slots.state.status === "pending" && <p className="state" role="status">Loading comments…</p>}
       {slots.state.status === "error" && <p className="state"><span role="alert">{slots.state.error?.message ?? "Comments could not be loaded."}</span> <button type="button" className="text-action" onClick={slots.onRetry}>Try again</button></p>}

@@ -8,6 +8,7 @@ import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
 import { GoalScreen, PastSeasonScreen, SeasonScreen } from "./goal-screens";
+import { UiGallery } from "./ui-gallery";
 import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
@@ -98,6 +99,7 @@ function SignedIn({ account, error }: { account: Account; error: string | null }
         <Route path="/account" element={<Navigate to={legacySettingsPath(location.hash)} replace />} />
         <Route path="/ramble" element={<RambleScreen />} />
         <Route path="/search" element={<SearchScreen account={account} />} />
+        <Route path="/ui" element={<UiGallery />} />
         {/* /home and unknown routes redirect to Today. */}
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>

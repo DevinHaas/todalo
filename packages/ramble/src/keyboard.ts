@@ -55,6 +55,7 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("task.goals", "Link task to goals", "Goals", "task", ["Shift+l"], 5, { availability: "available", note: "Goals ticket 02: opens the task's details on its Goals field." }),
   command("editor.goal-suggestion-accept", "Link suggested goal", "Goals", "editor", ["Primary+Shift+g"], 5, { availability: "available", note: "Goals ticket 03: links the goal suggested in the open task's details." }),
   command("editor.goal-suggestion-dismiss", "Dismiss suggested goal", "Goals", "editor", ["Primary+Shift+x"], 5, { availability: "available", note: "Goals ticket 03: hides that suggestion for this task." }),
+  command("navigation.ui", "Component gallery", "Navigation", "global", ["o then c"], 5, { availability: "available", note: "The /ui gallery of src/ui components, light and dark (docs/agents/ui.md)." }),
   command("navigation.season", "Season", "Goals", "global", ["g then s"], 5, { availability: "available", note: "Goals ticket 04; passes on while Goals is hidden in Settings." }),
   command("season.start", "Start season", "Goals", "global", ["Shift+b"], 5, { availability: "available", note: "Goals ticket 04: on the Season page before a season is running." }),
   command("season.add-goal", "New goal in season", "Goals", "global", ["Shift+n"], 5, { availability: "available", note: "Goals ticket 04: on the Season page; creates a goal and adds it to the season. Existing goals have a switch each." }),

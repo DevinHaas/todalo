@@ -1,13 +1,18 @@
-import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { CalendarRange, History, Pencil, Plus } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type NewGoal } from "./goals";
-import { ColorPicker, GoalDot } from "./goal-views";
+import { ColorPicker, FormError, GoalDot, LoadFailure, Loading, SeasonTarget } from "./goal-views";
 import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
-import { Failure, type ReadState } from "./views";
+import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
+import {
+  Alert, AlertDescription, Button, Checkbox, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field,
+  FieldLabel, FieldLegend, FieldSet, Hint, Input, Label, List, ListRow, PageHeader, PageSection, Progress, RadioGroup, RadioGroupItem, Select,
+  SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, ToggleGroup, ToggleGroupItem, cn, sidebarItemClassName,
+} from "./ui";
 
-// Pure season views (goals tickets 04-05): no runtime imports.
+// Pure season views (goals tickets 04-05): no runtime imports. Built only from src/ui (docs/agents/ui.md).
 type Write = { pending: boolean; error: string | null };
 type Season = NonNullable<CurrentSeasonDto["season"]>;
 
@@ -28,27 +33,27 @@ export const seasonRange = (season: Pick<SeasonDto, "startDate" | "lengthDays">)
 export const seasonShortLabel = ({ phase, day, length, startsIn }: Season["progress"]) =>
   phase === "upcoming" ? `Starts in ${plural(startsIn, "day")}` : phase === "over" ? "Over" : `Day ${day} of ${length}`;
 
+const goalPath = (goalId: string) => `/goals/${encodeURIComponent(goalId)}`;
+
 /** The sidebar's Seasons section, separate from Goals: the current season (or a way to start one) and the latest past ones. */
 export function SeasonsNav({ current, past }: { current: Season | null; past: SeasonDto[] }) {
-  return <section className="goal-nav season-nav" aria-label="Seasons">
-    <div className="nav-group-head"><span>Seasons</span></div>
-    {current ? <NavLink to="/season" end className="nav-item"><CalendarRange /><span>Current season</span><span className="nav-badge">{seasonShortLabel(current.progress)}</span></NavLink>
-      : <NavLink to="/season" end className="nav-item muted-item"><Plus /><span>Start a season</span></NavLink>}
+  return <section className="ui mb-3 flex flex-col" aria-label="Seasons">
+    <SidebarSectionHeader title="Seasons" />
+    {current ? <NavLink to="/season" end className={sidebarItemClassName}><CalendarRange /><span className="flex-1 truncate">Current season</span><span className="text-xs text-subtle-foreground">{seasonShortLabel(current.progress)}</span></NavLink>
+      : <NavLink to="/season" end className={cn(sidebarItemClassName, "text-muted-foreground")}><Plus /><span className="truncate">Start a season</span></NavLink>}
     {/* ponytail: the latest three; the season page lists them all. */}
-    {past.slice(0, 3).map(season => <NavLink key={season.id} to={`/season/${encodeURIComponent(season.id)}`} className="nav-item muted-item"><History /><span>{seasonRange(season)}</span></NavLink>)}
+    {past.slice(0, 3).map(season => <NavLink key={season.id} to={`/season/${encodeURIComponent(season.id)}`} className={cn(sidebarItemClassName, "text-muted-foreground")}><History /><span className="truncate">{seasonRange(season)}</span></NavLink>)}
   </section>;
 }
 
 /** Primary/Secondary as a two-button switch; `data-season-goal-action="tier"` is the other tier (Shift+P). */
 function TierToggle({ value, onChange, disabled, action }: { value: SeasonTier; onChange(tier: SeasonTier): void; disabled?: boolean; action?: boolean }) {
-  return <div className="segmented tier-toggle" role="group" aria-label="Tier">
-    {(["primary", "secondary"] as const).map(tier => <button key={tier} type="button" aria-pressed={value === tier} disabled={disabled}
-      data-season-goal-action={action && value !== tier ? "tier" : undefined} onClick={() => { if (value !== tier) onChange(tier); }}>{tier === "primary" ? "Primary" : "Secondary"}</button>)}
-  </div>;
+  return <ToggleGroup aria-label="Tier" variant="outline" size="sm" value={[value]} disabled={disabled}
+    onValueChange={(next) => { const tier = next[0] as SeasonTier | undefined; if (tier && tier !== value) onChange(tier); }}>
+    {(["primary", "secondary"] as const).map(tier => <ToggleGroupItem key={tier} value={tier} className="px-2.5 text-xs-plus"
+      data-season-goal-action={action && value !== tier ? "tier" : undefined}>{tier === "primary" ? "Primary" : "Secondary"}</ToggleGroupItem>)}
+  </ToggleGroup>;
 }
-
-/** A season target with its label, so it never reads as the goal's description. */
-const Target = ({ text }: { text: string }) => <p className="season-target"><span className="target-label">Target</span>{text}</p>;
 
 /** "Day 52 of 84 · 32 days left", or when it starts / that its last day passed. */
 export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Season["progress"]) {
@@ -68,83 +73,78 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
   onEnd: (next: NextSeason | null) => Promise<unknown>; write: Write;
 }) {
   const [ending, setEnding] = useState(false);
-  if (state.status === "pending") return <p className="state" role="status">Loading season…</p>;
-  if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
+  if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
+  if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   const season = state.data?.season;
-  if (!season) return <div className="season-page">
-    <h1 className="page-title">Season</h1>
-    <p className="state">A season is the time box your goals are planned against. Start one, then choose which goals it commits to.</p>
+  if (!season) return <div className="ui max-w-page">
+    <PageHeader title="Season" />
+    <Hint className="text-sm">A season is the time box your goals are planned against. Start one, then choose which goals it commits to.</Hint>
     <StartSeason onStart={onStart} write={write} />
     <PastSeasons seasons={past} />
   </div>;
   const available = goals.filter(goal => !season.goals.some(item => item.goalId === goal.id));
   const primary = season.goals.filter(goal => goal.tier === "primary");
   const { day, length, phase } = season.progress;
-  return <div className="season-page" data-season-id={season.id}>
-    <div className="project-header">
-      <h1 className="page-title">Season</h1>
-      {!ending && <button type="button" className="button outline small" data-season-action="end" onClick={() => setEnding(true)}>End season</button>}
-    </div>
-    <p className="season-days" data-season-phase={phase}><strong>{seasonDayLabel(season.progress)}</strong><span> · {seasonRange(season)}</span></p>
-    <div className="season-bar" aria-hidden="true"><span style={{ "--share": `${phase === "upcoming" ? 0 : Math.round(day / length * 100)}%` } as CSSProperties} /></div>
-    {tooManyPrimary(season.goals) && <p className="season-warning" role="status">
+  return <div className="ui max-w-page" data-season-id={season.id}>
+    <PageHeader title="Season" actions={<Button variant="outline" size="sm" data-season-action="end" onClick={() => setEnding(true)}>End season</Button>} />
+    <p className="text-muted-foreground" data-season-phase={phase}><strong className="font-semibold text-foreground">{seasonDayLabel(season.progress)}</strong> · {seasonRange(season)}</p>
+    <Progress aria-hidden="true" className="mt-2 mb-4" value={phase === "upcoming" ? 0 : Math.round(day / length * 100)} />
+    {tooManyPrimary(season.goals) && <div role="status" className="mb-4"><Alert><AlertDescription>
       {primary.length} primary goals. Around {primaryGuideline} keeps your best time protected; consider making some secondary.
-    </p>}
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
-    {ending ? <EndSeason season={season} onEnd={onEnd} onCancel={() => setEnding(false)} write={write} /> : <>
-      <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
-        empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
-      <section className="goal-links" aria-label="Other goals">
-        <h2 className="section-heading">Not in this season</h2>
-        {available.length ? <ul className="goal-link-list season-goals">{available.map(goal => <OtherGoalRow key={goal.id} goal={goal} onAdd={onAdd} write={write} />)}</ul>
-          : <p className="state">Every active goal is in this season.</p>}
-        <NewSeasonGoal count={goals.length} onCreate={onCreate} write={write} />
-      </section>
-    </>}
+    </AlertDescription></Alert></div>}
+    {write.error && <FormError>{write.error}</FormError>}
+    <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
+      empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
+    <PageSection title="Not in this season" aria-label="Other goals">
+      {available.length ? <List>{available.map(goal => <OtherGoalRow key={goal.id} goal={goal} onAdd={onAdd} write={write} />)}</List>
+        : <Hint className="py-2">Every active goal is in this season.</Hint>}
+      <NewSeasonGoal count={goals.length} onCreate={onCreate} write={write} />
+    </PageSection>
     <PastSeasons seasons={past} />
+    <Dialog open={ending} onOpenChange={setEnding}>
+      <DialogContent size="xl">{ending && <EndSeason season={season} onEnd={onEnd} onCancel={() => setEnding(false)} write={write} />}</DialogContent>
+    </Dialog>
   </div>;
 }
 
 function TierSections({ goals, row, empty }: { goals: SeasonGoalDto[]; row: (goal: SeasonGoalDto) => ReactNode; empty: Record<SeasonTier, string> }) {
   return (["primary", "secondary"] as const).map(tier => {
     const items = goals.filter(goal => goal.tier === tier);
-    return <section key={tier} className="goal-links" aria-label={tier === "primary" ? "Primary goals" : "Secondary goals"}>
-      <h2 className="section-heading">{tier === "primary" ? "Primary" : "Secondary"}</h2>
-      {items.length ? <ul className="goal-link-list season-goals">{items.map(row)}</ul> : <p className="state">{empty[tier]}</p>}
-    </section>;
+    return <PageSection key={tier} title={tier === "primary" ? "Primary" : "Secondary"} aria-label={tier === "primary" ? "Primary goals" : "Secondary goals"}>
+      {items.length ? <List>{items.map(row)}</List> : <Hint className="py-2">{empty[tier]}</Hint>}
+    </PageSection>;
   });
 }
 
 function PastSeasons({ seasons }: { seasons: SeasonDto[] }) {
   if (!seasons.length) return null;
-  return <section className="goal-links season-past" aria-label="Past seasons">
-    <h2 className="section-heading">Past seasons</h2>
-    <ul className="goal-link-list">{seasons.map(season => <li key={season.id}>
-      <Link to={`/season/${encodeURIComponent(season.id)}`}>{seasonRange(season)}</Link>
-      <span className="state">{plural(season.goals.length, "goal")}</span>
-    </li>)}</ul>
-  </section>;
+  return <PageSection title="Past seasons" aria-label="Past seasons" className="mt-9">
+    <List>{seasons.map(season => <ListRow key={season.id} className="justify-between">
+      <Link className="hover:underline hover:underline-offset-4" to={`/season/${encodeURIComponent(season.id)}`}>{seasonRange(season)}</Link>
+      <span className="text-xs-plus text-muted-foreground">{plural(season.goals.length, "goal")}</span>
+    </ListRow>)}</List>
+  </PageSection>;
 }
+
+const GoalTitle = ({ goalId, color, title, archived }: { goalId: string; color: string; title: string; archived?: boolean }) =>
+  <Link className="inline-flex min-w-0 items-center gap-2 self-start font-medium [overflow-wrap:anywhere] hover:underline hover:underline-offset-4" to={goalPath(goalId)}>
+    <GoalDot color={color} />{title}{archived && <span className="font-normal text-muted-foreground"> (archived)</span>}
+  </Link>;
 
 /** A past season, read-only: its goals with the tiers and targets they had. */
 export function PastSeasonView({ state, id, onRetry }: { state: ReadState<SeasonDto[]>; id: string; onRetry: () => void }) {
-  if (state.status === "pending") return <p className="state" role="status">Loading season…</p>;
-  if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
+  if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
+  if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   const season = state.data?.find(item => item.id === id);
-  if (!season) return <div className="season-page"><h1 className="page-title">Season</h1>
-    <p className="state">This season does not exist or is still running.</p><Link className="button outline small" to="/season">Current season</Link></div>;
-  return <div className="season-page" data-season-id={season.id}>
-    <div className="project-header">
-      <h1 className="page-title">Season {seasonRange(season)}</h1>
-      <Link className="button outline small" to="/season">Current season</Link>
-    </div>
-    <p className="season-days">{plural(season.lengthDays, "day")}{season.endedAt && ` · ended ${fullDay.format(new Date(season.endedAt))}`}</p>
-    <TierSections goals={season.goals} empty={{ primary: "No primary goals.", secondary: "No secondary goals." }} row={goal => <li key={goal.id} data-season-goal={goal.goalId}>
-      <div className="season-goal">
-        <Link className="season-goal-title" to={`/goals/${encodeURIComponent(goal.goalId)}`}><GoalDot color={goal.color} />{goal.title}</Link>
-        <Target text={goal.target} />
-      </div>
-    </li>} />
+  const back = <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Current season</Button>;
+  if (!season) return <div className="ui flex max-w-page flex-col items-start gap-3"><PageHeader title="Season" />
+    <Hint>This season does not exist or is still running.</Hint>{back}</div>;
+  return <div className="ui max-w-page" data-season-id={season.id}>
+    <PageHeader title={`Season ${seasonRange(season)}`} actions={back} />
+    <p className="text-muted-foreground">{plural(season.lengthDays, "day")}{season.endedAt && ` · ended ${fullDay.format(new Date(season.endedAt))}`}</p>
+    <TierSections goals={season.goals} empty={{ primary: "No primary goals.", secondary: "No secondary goals." }} row={goal => <ListRow key={goal.id} data-season-goal={goal.goalId}>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5"><GoalTitle goalId={goal.goalId} color={goal.color} title={goal.title} /><SeasonTarget text={goal.target} /></div>
+    </ListRow>} />
   </div>;
 }
 
@@ -156,19 +156,21 @@ function useSeasonDates(initialStart: string) {
   const lengthDays = choice === "custom" ? Number(custom) : seasonLengths[choice];
   const valid = Boolean(startDate) && Number.isInteger(lengthDays) && lengthDays >= 1 && lengthDays <= 366;
   const fields = <>
-    <label>Start date<input type="date" required value={startDate} onChange={event => setStartDate(event.target.value)} /></label>
-    <fieldset className="season-lengths"><legend>Length</legend>
-      <label><input type="radio" name="season-length" checked={choice === "long"} onChange={() => setChoice("long")} />12 weeks</label>
-      <label><input type="radio" name="season-length" checked={choice === "short"} onChange={() => setChoice("short")} />4 weeks</label>
-      <label><input type="radio" name="season-length" checked={choice === "custom"} onChange={() => setChoice("custom")} />Custom</label>
-      {choice === "custom" && <label>Days<input type="number" min={1} max={366} step={1} required value={custom} onChange={event => setCustom(event.target.value)} /></label>}
-    </fieldset>
+    <Field className="max-w-48"><FieldLabel htmlFor="season-start">Start date</FieldLabel><Input id="season-start" type="date" required value={startDate} onChange={event => setStartDate(event.target.value)} /></Field>
+    <FieldSet className="gap-2"><FieldLegend variant="label">Length</FieldLegend>
+      <div className="flex min-h-control flex-wrap items-center gap-x-5 gap-y-2">
+        <RadioGroup aria-label="Length" value={choice} onValueChange={(value) => setChoice(value as typeof choice)} className="flex w-auto flex-wrap gap-x-5 gap-y-2">
+          {([["long", "12 weeks"], ["short", "4 weeks"], ["custom", "Custom"]] as const).map(([value, label]) => <Label key={value} className="flex cursor-pointer items-center gap-2 font-normal"><RadioGroupItem value={value} />{label}</Label>)}
+        </RadioGroup>
+        {choice === "custom" && <Label className="flex items-center gap-2 font-normal"><Input type="number" aria-label="Days" className="w-20" min={1} max={366} step={1} required value={custom} onChange={event => setCustom(event.target.value)} />days</Label>}
+      </div>
+    </FieldSet>
   </>;
   return { startDate, lengthDays, valid, fields };
 }
 
 /**
- * Season review in one form: which goals continue, each with a fresh tier and
+ * Season review in one dialog: which goals continue, each with a fresh tier and
  * target, and the next season's dates. Ending and starting are one server write.
  */
 function EndSeason({ season, onEnd, onCancel, write }: { season: SeasonDto; onEnd: (next: NextSeason | null) => Promise<unknown>; onCancel: () => void; write: Write }) {
@@ -184,30 +186,36 @@ function EndSeason({ season, onEnd, onCancel, write }: { season: SeasonDto; onEn
     const next = startNext ? { startDate: dates.startDate, lengthDays: dates.lengthDays, goals: chosen.map(goal => ({ goalId: goal.goalId, tier: carry[goal.goalId]!.tier, target: carry[goal.goalId]!.target })) } : null;
     try { await onEnd(next); } catch { /* shown through write.error */ }
   }
-  return <form ref={releaseFocus} className="goal-edit season-end" aria-label="End season" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onCancel(); } }}>
-    <p className="state">This season and its goals, tiers and targets are kept as history.</p>
-    <label className="season-check"><input type="checkbox" checked={startNext} onChange={event => setStartNext(event.target.checked)} />Start the next season now</label>
-    {startNext && <>
-      {dates.fields}
-      <fieldset className="season-carry"><legend>Goals that continue</legend>
-        {season.goals.length ? season.goals.map(goal => {
-          const item = carry[goal.goalId]!;
-          return <div key={goal.id} className="season-carry-goal" data-season-carry={goal.goalId}>
-            <label className="season-check"><input type="checkbox" checked={item.on} disabled={goal.archived} onChange={event => set(goal.goalId, { on: event.target.checked })} />
-              {goal.title}{goal.archived && " (archived)"}</label>
-            {item.on && <>
-              <label>Tier<select value={item.tier} onChange={event => set(goal.goalId, { tier: event.target.value as SeasonTier })}><option value="primary">Primary</option><option value="secondary">Secondary</option></select></label>
-              <label>Next target<input value={item.target} onChange={event => set(goal.goalId, { target: event.target.value })} required maxLength={1_000} /></label>
-            </>}
-          </div>;
-        }) : <p className="state">No goals in this season. Add goals to the next one after it starts.</p>}
-      </fieldset>
-      {tooManyPrimary(chosen.map(goal => carry[goal.goalId]!)) && <p className="season-warning" role="status">More than {primaryGuideline} primary goals; consider making some secondary.</p>}
-    </>}
-    <div className="project-actions">
-      <button type="submit" className="button" data-season-action="confirm-end" disabled={write.pending || !valid}>{startNext ? "End and start next" : "End season"}</button>
-      <button type="button" className="button outline" onClick={onCancel}>Cancel</button>
-    </div>
+  return <form ref={releaseFocus} className="flex min-h-0 flex-col gap-4" aria-label="End season" onSubmit={submit}>
+    <DialogHeader><DialogTitle>End season</DialogTitle><DialogDescription>This season and its goals, tiers and targets are kept as history.</DialogDescription></DialogHeader>
+    <DialogBody className="flex flex-col gap-4">
+      <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={startNext} onCheckedChange={setStartNext} />Start the next season now</Label>
+      {startNext && <>
+        {dates.fields}
+        <FieldSet className="gap-0"><FieldLegend variant="label">Goals that continue</FieldLegend>
+          {season.goals.length ? season.goals.map(goal => {
+            const item = carry[goal.goalId]!;
+            return <div key={goal.id} className="flex flex-col gap-2 border-t border-border-subtle py-2.5" data-season-carry={goal.goalId}>
+              <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={item.on} disabled={goal.archived} onCheckedChange={(on) => set(goal.goalId, { on })} />
+                <GoalDot color={goal.color} />{goal.title}{goal.archived && <span className="text-muted-foreground"> (archived)</span>}</Label>
+              {item.on && <div className="flex flex-wrap items-center gap-2 pl-6">
+                <Select items={[{ value: "primary", label: "Primary" }, { value: "secondary", label: "Secondary" }]} value={item.tier} onValueChange={(tier) => { if (tier) set(goal.goalId, { tier: tier as SeasonTier }); }}>
+                  <SelectTrigger aria-label="Tier" className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="primary">Primary</SelectItem><SelectItem value="secondary">Secondary</SelectItem></SelectContent>
+                </Select>
+                <Input aria-label="Next target" placeholder="Next target" className="min-w-48 flex-1" value={item.target} onChange={event => set(goal.goalId, { target: event.target.value })} required maxLength={1_000} />
+              </div>}
+            </div>;
+          }) : <Hint>No goals in this season. Add goals to the next one after it starts.</Hint>}
+        </FieldSet>
+        {tooManyPrimary(chosen.map(goal => carry[goal.goalId]!)) && <div role="status"><Alert><AlertDescription>More than {primaryGuideline} primary goals; consider making some secondary.</AlertDescription></Alert></div>}
+      </>}
+      {write.error && <FormError>{write.error}</FormError>}
+    </DialogBody>
+    <DialogFooter>
+      <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
+      <Button type="submit" data-season-action="confirm-end" disabled={write.pending || !valid}>{startNext ? "End and start next" : "End season"}</Button>
+    </DialogFooter>
   </form>;
 }
 
@@ -217,12 +225,14 @@ function StartSeason({ onStart, write }: { onStart: (startDate: string, lengthDa
     event.preventDefault();
     try { await onStart(startDate, lengthDays); } catch { /* shown through write.error */ }
   }
-  return <form className="goal-edit season-start" onSubmit={submit}>
+  return <form className="my-5 flex flex-col gap-4 rounded-xl border border-border p-4" onSubmit={submit}>
     {fields}
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
-    <div className="project-actions"><button type="submit" className="button" data-season-action="start" disabled={write.pending || !valid}>Start season</button></div>
+    {write.error && <FormError>{write.error}</FormError>}
+    <div><Button type="submit" data-season-action="start" disabled={write.pending || !valid}>Start season</Button></div>
   </form>;
 }
+
+const escape = (close: () => void) => (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
 
 /** A goal not in the season: switching it on asks for its tier and target, then adds it. */
 function OtherGoalRow({ goal, onAdd, write }: { goal: GoalDto; onAdd: (goalId: string, tier: SeasonTier, target: string) => Promise<unknown>; write: Write }) {
@@ -233,21 +243,20 @@ function OtherGoalRow({ goal, onAdd, write }: { goal: GoalDto; onAdd: (goalId: s
     event.preventDefault();
     try { await onAdd(goal.id, tier, target); } catch { /* shown through write.error */ }
   }
-  return <li data-season-goal={goal.id} className="season-goal-row">
-    <input type="checkbox" role="switch" className="switch" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked={open} disabled={write.pending}
-      onChange={(event) => setOpen(event.target.checked)} />
-    <div className="season-goal">
-      <Link className="season-goal-title" to={`/goals/${encodeURIComponent(goal.id)}`}><GoalDot color={goal.color} />{goal.title}</Link>
-      {open && <form ref={releaseFocus} className="season-include" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }}>
+  return <ListRow data-season-goal={goal.id} className="items-start gap-3">
+    <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked={open} disabled={write.pending} onCheckedChange={setOpen} />
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <GoalTitle goalId={goal.id} color={goal.color} title={goal.title} />
+      {open && <form ref={releaseFocus} className="flex flex-col items-start gap-2" onSubmit={submit} onKeyDown={escape(() => setOpen(false))}>
         <TierToggle value={tier} onChange={setTier} />
-        <input aria-label={`Target for ${goal.title} this season`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="Target: what does done look like by the season's end?" />
-        <div className="project-actions">
-          <button type="submit" className="button small" disabled={write.pending || !target.trim()}>Add to season</button>
-          <button type="button" className="button ghost small" onClick={() => setOpen(false)}>Cancel</button>
+        <Input aria-label={`Target for ${goal.title} this season`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="Target: what does done look like by the season's end?" />
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={write.pending || !target.trim()}>Add to season</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
         </div>
       </form>}
     </div>
-  </li>;
+  </ListRow>;
 }
 
 /** A brand-new goal made here: created with its colour and added to this season in one step. */
@@ -262,16 +271,17 @@ function NewSeasonGoal({ count, onCreate, write }: { count: number; onCreate: (g
     event.preventDefault();
     try { await onCreate({ title, description, color }, tier, target); setTitle(""); setDescription(""); setTarget(""); setOpen(false); } catch { /* shown through write.error */ }
   }
-  if (!open) return <button type="button" className="sheet-add season-new" data-season-action="add-goal" onClick={() => { setColor(nextGoalColor(count)); setOpen(true); }}><Plus />New goal</button>;
-  return <form ref={releaseFocus} className="goal-edit season-new-form" aria-label="New goal" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }}>
-    <label>Goal<input autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} placeholder="e.g. Ship the beta" /></label>
-    <label>Description <span className="field-hint">optional, shown on the goal page</span><textarea value={description} onChange={event => setDescription(event.target.value)} rows={2} maxLength={10_000} placeholder="Why this goal matters" /></label>
+  if (!open) return <Button variant="ghost" className="mt-1 -ml-2 font-normal text-muted-foreground hover:text-brand" data-season-action="add-goal" onClick={() => { setColor(nextGoalColor(count)); setOpen(true); }}><Plus className="text-brand" />New goal</Button>;
+  return <form ref={releaseFocus} className="mt-3 flex flex-col gap-4 rounded-xl border border-border p-4" aria-label="New goal" onSubmit={submit} onKeyDown={escape(() => setOpen(false))}>
+    <Field><FieldLabel htmlFor="season-goal-title">Goal</FieldLabel><Input id="season-goal-title" autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} placeholder="e.g. Ship the beta" /></Field>
+    <Field><FieldLabel htmlFor="season-goal-description">Description <span className="font-normal text-muted-foreground">optional, shown on the goal page</span></FieldLabel>
+      <Textarea id="season-goal-description" value={description} onChange={event => setDescription(event.target.value)} rows={2} maxLength={10_000} placeholder="Why this goal matters" /></Field>
     <ColorPicker value={color} onChange={setColor} />
-    <div className="field">Tier<TierToggle value={tier} onChange={setTier} /></div>
-    <label>Target this season<input value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="What does done look like by the season's end?" /></label>
-    <div className="project-actions">
-      <button type="submit" className="button" disabled={write.pending || !title.trim() || !target.trim()}>Create and add</button>
-      <button type="button" className="button outline" onClick={() => setOpen(false)}>Cancel</button>
+    <FieldSet className="gap-2"><FieldLegend variant="label">Tier</FieldLegend><TierToggle value={tier} onChange={setTier} /></FieldSet>
+    <Field><FieldLabel htmlFor="season-goal-target">Target this season</FieldLabel><Input id="season-goal-target" value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="What does done look like by the season's end?" /></Field>
+    <div className="flex justify-end gap-2">
+      <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+      <Button type="submit" disabled={write.pending || !title.trim() || !target.trim()}>Create and add</Button>
     </div>
   </form>;
 }
@@ -286,21 +296,21 @@ function SeasonGoalRow({ goal, onUpdate, onRemove, write }: {
     event.preventDefault();
     try { await onUpdate(goal.goalId, { target }); setEditing(false); } catch { /* shown through write.error */ }
   }
-  return <li data-season-goal={goal.goalId} className="season-goal-row">
+  return <ListRow data-season-goal={goal.goalId} className="items-start gap-3 py-2.5">
     {/* ponytail: no confirm; only this season's row and target go, the goal itself stays. */}
-    <input type="checkbox" role="switch" className="switch" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked disabled={write.pending}
-      onChange={() => void onRemove(goal.goalId).catch(() => undefined)} />
-    <div className="season-goal">
-      <Link className="season-goal-title" to={`/goals/${encodeURIComponent(goal.goalId)}`}><GoalDot color={goal.color} />{goal.title}{goal.archived && <span className="state"> (archived)</span>}</Link>
-      {editing ? <form className="inline-form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setEditing(false); } }}>
-        <input aria-label={`Target for ${goal.title}`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} />
-        <button type="submit" className="button small" disabled={write.pending || !target.trim()}>Save</button>
-      </form> : <Target text={goal.target} />}
+    <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked disabled={write.pending}
+      onCheckedChange={() => void onRemove(goal.goalId).catch(() => undefined)} />
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <GoalTitle goalId={goal.goalId} color={goal.color} title={goal.title} archived={goal.archived} />
+      {editing ? <form className="flex gap-2" onSubmit={submit} onKeyDown={escape(() => setEditing(false))}>
+        <Input aria-label={`Target for ${goal.title}`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} />
+        <Button type="submit" disabled={write.pending || !target.trim()}>Save</Button>
+      </form> : <SeasonTarget text={goal.target} />}
     </div>
-    <div className="season-goal-tools">
+    <div className="flex shrink-0 items-center gap-1">
       <TierToggle value={goal.tier} action disabled={write.pending} onChange={(tier) => void onUpdate(goal.goalId, { tier }).catch(() => undefined)} />
-      <button type="button" className="icon-button" data-season-goal-action="target" aria-label={`Move target for ${goal.title}`} title="Move target" aria-expanded={editing}
-        onClick={() => { setTarget(goal.target); setEditing(!editing); }}><Pencil /></button>
+      <Button variant="ghost" size="icon-sm" data-season-goal-action="target" aria-label={`Move target for ${goal.title}`} title="Move target" aria-expanded={editing}
+        onClick={() => { setTarget(goal.target); setEditing(!editing); }}><Pencil /></Button>
     </div>
-  </li>;
+  </ListRow>;
 }

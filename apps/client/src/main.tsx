@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { queries } from "./runtime";
 import "@fontsource-variable/geist";
-import "./styles.css";
+import "./ui/styles.css"; // includes ./styles.css (legacy layer)
 import { trackSoftwareKeyboard } from "./software-keyboard";
 import { isTauri } from "@tauri-apps/api/core";
 import { followNativeLinks } from "./links";

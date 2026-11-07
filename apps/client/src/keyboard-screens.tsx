@@ -251,7 +251,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
     });
     handlers.current = {
-      "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "general.sidebar": () => latest.current.onSidebar(),
+      "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "navigation.ui": go("/ui"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
       "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),

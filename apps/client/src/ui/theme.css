@@ -1,0 +1,184 @@
+/*
+ * Todalo design tokens: the ONE place for colours, type, spacing, radii,
+ * shadows, row heights and focus. PROVISIONAL UNTIL MEASURED: best
+ * Todoist-faithful guesses; replace the values with ones measured from live
+ * Todoist (light and dark) without renaming anything.
+ *
+ * Tailwind v4 reads `@theme` (so `bg-primary`, `text-muted-foreground`,
+ * `h-control`, `rounded-lg`, `shadow-popover` all resolve here); `.dark`
+ * overrides the same variables. Components in src/ui use only these.
+ * The legacy plain-CSS screens (src/styles.css) read the bridge at the bottom.
+ */
+
+@theme static {
+  /* Brand */
+  --color-brand: #dc4c3e;
+  --color-brand-hover: #c3392c;
+  --color-brand-tint: #ffefe5;            /* selected sidebar item */
+  --color-brand-tint-foreground: #c3392c;
+
+  /* Surfaces and text */
+  --color-background: #ffffff;
+  --color-foreground: #202020;
+  --color-muted: #f5f4f2;                 /* quiet fills: hover, chips */
+  --color-muted-foreground: #666666;      /* secondary text */
+  --color-subtle-foreground: #808080;     /* tertiary text, placeholders, icons */
+  --color-card: #ffffff;
+  --color-card-foreground: #202020;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #202020;
+
+  /* Roles */
+  --color-primary: #dc4c3e;               /* primary buttons are brand red, as in Todoist */
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f5f5f5;             /* secondary buttons */
+  --color-secondary-foreground: #444444;
+  --color-secondary-hover: #e5e5e5;
+  --color-accent: #f5f4f2;                /* hovered menu item / row */
+  --color-accent-foreground: #202020;
+  --color-destructive: #d1453b;
+  --color-destructive-foreground: #ffffff;
+  --color-link: #dc4c3e;                  /* links */
+  --color-selected: #ffefe5;              /* pressed toggles, checked menu items, selected rows */
+  --color-attention: #eb8909;
+  --color-today: #058527;
+
+  /* Priorities (p1..p4) */
+  --color-priority-1: #d1453b;
+  --color-priority-2: #eb8909;
+  --color-priority-3: #246fe0;
+  --color-priority-4: #808080;
+
+  /* Lines and fields */
+  --color-border-subtle: #f0f0f0;         /* list dividers */
+  --color-border: #e6e6e6;                /* inputs, cards, popovers */
+  --color-border-hover: #cccccc;
+  --color-border-strong: #999999;         /* focused field, open trigger */
+  --color-input: #e6e6e6;                 /* shadcn: input border */
+  --color-field: transparent;             /* input / outline-button fill */
+  --color-field-hover: rgb(0 0 0 / 0.04);
+  --color-ring: #246fe0;                  /* keyboard focus */
+
+  /* Sidebar */
+  --color-sidebar: #fcfaf8;
+  --color-sidebar-foreground: #202020;
+  --color-sidebar-accent: #f2efed;        /* hover */
+  --color-sidebar-accent-foreground: #202020;
+  --color-sidebar-border: #f0eeeb;
+  --color-sidebar-ring: #246fe0;
+
+  /* Type */
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Noto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --text-2xs: 0.6875rem;     --text-2xs--line-height: 0.875rem;     /* 11/14 */
+  --text-xs: 0.75rem;        --text-xs--line-height: 1rem;          /* 12/16 meta */
+  --text-xs-plus: 0.8125rem; --text-xs-plus--line-height: 1.125rem; /* 13/18 buttons, menus */
+  --text-sm: 0.875rem;       --text-sm--line-height: 1.3125rem;     /* 14/21 body */
+  --text-base: 1rem;         --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;       --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;        --text-xl--line-height: 1.75rem;       /* dialog titles */
+  --text-2xl: 1.625rem;      --text-2xl--line-height: 2.1875rem;    /* page titles 26/35 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Spacing (4px grid) and row heights: h-row, h-control, h-sidebar-item */
+  --spacing: 0.25rem;
+  --spacing-control: 2rem;        /* buttons, inputs: 32 */
+  --spacing-control-sm: 1.75rem;  /* small buttons, icon buttons: 28 */
+  --spacing-row: 2.25rem;         /* list rows: 36 */
+  --spacing-sidebar-item: 2.125rem; /* sidebar rows: 34 */
+  --spacing-sidebar: 17.5rem;     /* sidebar width: 280 */
+  --spacing-page: 50rem;          /* content column: 800 */
+
+  /* Radii */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 5px;    /* buttons, inputs, menu items */
+  --radius-xl: 10px;   /* popovers, cards, dialogs */
+  --radius-2xl: 12px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 4px rgb(0 0 0 / 0.08);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.08), 0 0 1px rgb(0 0 0 / 0.16);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.12), 0 0 1px rgb(0 0 0 / 0.16);
+  --shadow-xl: 0 15px 50px rgb(0 0 0 / 0.35);
+  --shadow-popover: 0 1px 8px rgb(0 0 0 / 0.08), 0 0 1px rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 15px 50px rgb(0 0 0 / 0.35);
+
+  /* Focus */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+}
+
+:root.dark, .dark {
+  color-scheme: dark;
+  --color-brand: #de4c4a;
+  --color-brand-hover: #e86c62;
+  --color-brand-tint: #3b2724;
+  --color-brand-tint-foreground: #ff7066;
+
+  --color-background: #1e1e1e;
+  --color-foreground: #e6e6e6;
+  --color-muted: #2a2a2a;
+  --color-muted-foreground: #a3a3a3;
+  --color-subtle-foreground: #808080;
+  --color-card: #262626;
+  --color-card-foreground: #e6e6e6;
+  --color-popover: #282828;
+  --color-popover-foreground: #e6e6e6;
+
+  --color-primary: #de4c4a;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #333333;
+  --color-secondary-foreground: #e6e6e6;
+  --color-secondary-hover: #3d3d3d;
+  --color-accent: #2e2e2e;
+  --color-accent-foreground: #e6e6e6;
+  --color-destructive: #ff7066;
+  --color-destructive-foreground: #1e1e1e;
+  --color-link: #ff7066;
+  --color-selected: #3b2724;
+  --color-attention: #ff9a14;
+  --color-today: #25b84c;
+
+  --color-priority-1: #ff7066;
+  --color-priority-2: #ff9a14;
+  --color-priority-3: #5297ff;
+  --color-priority-4: #a3a3a3;
+
+  --color-border-subtle: #2b2b2b;
+  --color-border: #3d3d3d;
+  --color-border-hover: #555555;
+  --color-border-strong: #777777;
+  --color-input: #3d3d3d;
+  --color-field: transparent;
+  --color-field-hover: rgb(255 255 255 / 0.05);
+  --color-ring: #5297ff;
+
+  --color-sidebar: #262626;
+  --color-sidebar-foreground: #e6e6e6;
+  --color-sidebar-accent: #333333;
+  --color-sidebar-accent-foreground: #e6e6e6;
+  --color-sidebar-border: #2e2e2e;
+  --color-sidebar-ring: #5297ff;
+
+  --shadow-popover: 0 1px 8px rgb(0 0 0 / 0.4), 0 0 1px rgb(255 255 255 / 0.2);
+  --shadow-dialog: 0 15px 50px rgb(0 0 0 / 0.6);
+}
+
+/* Bridge: the legacy plain-CSS screens (src/styles.css) read these names. Remove one once no legacy rule uses it. */
+:root {
+  --background: var(--color-background); --foreground: var(--color-foreground);
+  --primary: var(--color-foreground); --primary-foreground: var(--color-background); /* legacy primary is ink, not brand */
+  --muted: var(--color-muted); --muted-foreground: var(--color-muted-foreground);
+  --border: var(--color-border); --input: var(--color-border); --ring: var(--color-ring);
+  --accent: var(--color-accent); --destructive: var(--color-destructive);
+  --brand: var(--color-brand); --today: var(--color-today);
+  --sidebar: var(--color-sidebar); --sidebar-accent: var(--color-sidebar-accent);
+  --row-tint: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+  font-family: var(--font-sans);
+}

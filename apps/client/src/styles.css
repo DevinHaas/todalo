@@ -1,24 +1,7 @@
 :root {
-  color-scheme: light;
-  --row-tint: color-mix(in oklch, var(--primary) 10%, transparent);
-  --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0); --primary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0); --destructive: oklch(0.577 0.245 27.325);
-  --brand: oklch(0.637 0.237 25.331); --sidebar: oklch(0.985 0 0); --sidebar-accent: oklch(0.97 0 0);
-  --accent: oklch(0.97 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0); --today: oklch(0.58 0.17 148);
-  font-family: "Geist Variable", system-ui, sans-serif; color: var(--foreground); background: var(--background);
+  /* Colours and fonts: src/ui/theme.css (its legacy bridge maps these screens' variable names). */
+  color-scheme: light; color: var(--foreground); background: var(--background);
   font-synthesis: none; -webkit-font-smoothing: antialiased;
-}
-/* Legacy apps/web globals.css .dark, same values; toggled by theme.ts. */
-:root.dark {
-  color-scheme: dark;
-  --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0); --primary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0);
-  --border: oklch(1 0 0 / 10%); --destructive: oklch(0.704 0.191 22.216);
-  --brand: oklch(0.704 0.191 22.216); --sidebar: oklch(0.205 0 0); --sidebar-accent: oklch(0.269 0 0);
-  --accent: oklch(0.269 0 0); --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); --today: oklch(0.75 0.17 148);
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -59,7 +42,7 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .icon-button.brand svg { width: 1.25rem; height: 1.25rem; }
 .nav { list-style: none; margin: 0; padding: 0; display: grid; }
 .nav-item { display: flex; align-items: center; gap: .5rem; height: 2rem; padding: 0 .5rem; border-radius: .375rem; color: inherit; text-decoration: none; }
-.nav-item.active { background: var(--sidebar-accent); font-weight: 500; }
+.nav-item.active { background: var(--color-brand-tint); color: var(--color-brand-tint-foreground); font-weight: 500; }
 .nav .muted .nav-item { opacity: .5; }
 .nav-badge { margin-left: auto; font-size: .75rem; font-weight: 500; padding-right: .25rem; }
 .nav-beta { margin-left: auto; border-radius: .25rem; background: var(--accent); padding: 0 .25rem; font-size: 10px; font-weight: 600; }
@@ -823,109 +806,7 @@ button.property-value:hover { background: var(--accent); }
 .ramble-card-edit.nested { margin-left: 1.5rem; }
 .ramble-card-edit .dialog.quick-add.inline-quick-add { margin: 0; }
 
-/* Goals ticket 01: the sidebar's Goals section and the goal page. */
-.goal-nav { display: grid; margin-bottom: .5rem; }
-.nav-group-head { display: flex; align-items: center; justify-content: space-between; min-height: 1.75rem; padding: 0 .5rem; font-size: .75rem; font-weight: 600; color: var(--muted-foreground); }
-.goal-nav .sortable-row { margin-left: 0; background: none; }
-.goal-nav .sortable-row > .nav-item { flex: 1; min-width: 0; }
-.goal-nav .nav-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goal-nav .nav-item .nav-badge { flex: none; color: var(--muted-foreground); font-weight: 400; }
-.nav-item.muted-item { color: var(--muted-foreground); }
-.nav-item.muted-item.active { color: var(--foreground); }
-.goal-add { padding: .25rem .5rem; }
-.goal-add input { flex: 1; min-width: 0; }
-/* A goal's colour as its icon (the sidebar's 1rem icon box, so titles line up with Projects). */
-.goal-dot { flex: none; display: inline-block; width: .625rem; height: .625rem; margin: 0 .1875rem; border-radius: 999px; }
-.nav-item .goal-dot { margin-inline: .1875rem; }
-.page-title.goal-title { display: flex; align-items: center; gap: .625rem; }
-.page-title.goal-title .goal-dot { width: .875rem; height: .875rem; }
-.color-picker { margin: 0; padding: 0; border: 0; }
-.color-picker legend { margin-bottom: .375rem; padding: 0; }
-.color-swatches { display: flex; flex-wrap: wrap; gap: .5rem; }
-.color-swatch { position: relative; display: inline-flex; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: var(--swatch); cursor: pointer; }
-.color-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 999px; background: none; box-shadow: none; -webkit-appearance: none; appearance: none; cursor: pointer; }
-.color-swatch:has(input:checked) { box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--swatch); }
-.color-swatch input:focus-visible { outline: 2px solid var(--foreground); outline-offset: 3px; }
-.goal-edit { display: grid; gap: .75rem; margin: 1rem 0; }
-.goal-edit label { display: grid; gap: .25rem; }
-.field-hint { font-weight: 400; font-size: .8125rem; color: var(--muted-foreground); }
-.goal-description { margin: .75rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted-foreground); line-height: 1.5; }
-.sheet-add.goal-describe { justify-self: start; margin-top: .5rem; border: 0; }
-.goal-links { margin-top: 1.75rem; }
-.goal-links .section-heading { padding-bottom: .375rem; border-bottom: 1px solid var(--border); margin-bottom: 0; }
-.goal-link-list { list-style: none; margin: 0; padding: 0; }
-.goal-link-list > li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 2.75rem; padding: .25rem 0; border-bottom: 1px solid var(--border); }
-.goal-link-list > li:hover .row-delete, .goal-link-list > li:focus-within .row-delete { opacity: 1; }
-.goal-link-list a { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
-.goal-link-list a:hover { text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--border); }
-.goal-link-list a > svg { width: 1rem; height: 1rem; flex: none; color: var(--muted-foreground); }
-.goal-link-list li[data-done] a { text-decoration: line-through; color: var(--muted-foreground); }
-.goal-season { display: flex; align-items: flex-start; gap: .75rem; margin-top: 1.25rem; padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .5rem; background: color-mix(in oklch, var(--accent) 40%, transparent); }
-.goal-season > svg { width: 1.125rem; height: 1.125rem; flex: none; margin-top: .125rem; color: var(--muted-foreground); }
-.goal-season-body { flex: 1; min-width: 0; display: grid; gap: .25rem; }
-.goal-season-head { margin: 0; font-size: .875rem; font-weight: 600; }
-/* Goals ticket 06: milestones. */
+/* Goals and seasons screens are built from src/ui (docs/agents/ui.md); only the row flag stays here. */
 .milestone-mark { display: inline-flex; vertical-align: -.125rem; margin-left: .375rem; color: var(--brand); }
 .milestone-mark svg { width: .875rem; height: .875rem; }
-.milestone-toggle { display: grid; gap: .375rem; justify-items: start; }
-.milestone-switch { display: inline-flex; align-items: center; gap: .5rem; min-height: 2rem; cursor: pointer; }
-.milestone-switch:has(input:disabled) { color: var(--muted-foreground); cursor: default; }
-.property-hint { margin: 0; font-size: .8125rem; color: var(--muted-foreground); }
-.milestone-goal { display: inline-flex; align-items: center; gap: .25rem; }
-.label-option .goal-dot, .label-chip .goal-dot { margin: 0 .125rem; }
-.sheet-subtask.criterion { gap: .5rem; }
-input.criterion-check { -webkit-appearance: auto; appearance: auto; width: 1rem; height: 1rem; min-height: 0; flex: none; margin: 0 .125rem; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; accent-color: var(--primary); cursor: pointer; }
-input.criterion-text, .criterion-add input { flex: 1; min-width: 0; min-height: 2rem; padding: .25rem .375rem; margin-left: -.375rem; border: 1px solid transparent; border-radius: .375rem; background: none; box-shadow: none; font-size: .9375rem; }
-input.criterion-text:focus, .criterion-add input:focus { border-color: var(--border); outline: none; background: var(--background); }
-.criterion[data-done] .criterion-text { text-decoration: line-through; color: var(--muted-foreground); }
-.criterion-tools { display: flex; flex: none; color: var(--muted-foreground); opacity: 0; }
-.criterion:hover .criterion-tools, .criterion:focus-within .criterion-tools { opacity: 1; }
-@media (hover: none) { .criterion-tools { opacity: 1; } }
-.criterion-tools .icon-button:disabled { opacity: .35; cursor: default; }
-.criterion-tools svg { width: 1rem; height: 1rem; }
-.sheet-add.criterion-add { cursor: text; }
-.criterion-add input::placeholder { color: var(--muted-foreground); opacity: 1; }
-.milestone-progress { font-size: .8125rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.dialog-backdrop.criteria-confirm { z-index: 40; align-items: center; }
-.dialog-backdrop.criteria-confirm .dialog { max-width: 24rem; padding: 1rem; }
-.goal-suggestion { grid-column: 1 / -1; display: flex; align-items: center; gap: .375rem; margin: 0; padding-top: .25rem; font-size: .8125rem; color: var(--muted-foreground); }
-.goal-suggestion > svg { width: .875rem; height: .875rem; flex: none; }
-.goal-suggestion > span { min-width: 0; overflow-wrap: anywhere; }
-.goal-suggestion .text-action { text-decoration: none; font-weight: 500; color: var(--foreground); }
 
-/* Goals ticket 04: the season page. */
-.season-days { margin: .25rem 0 .5rem; color: var(--muted-foreground); }
-.season-days strong { color: var(--foreground); font-weight: 600; }
-.season-bar { height: .25rem; margin-bottom: 1rem; border-radius: 999px; background: var(--muted); overflow: hidden; }
-.season-bar span { display: block; width: var(--share); height: 100%; border-radius: inherit; background: var(--primary); }
-.season-warning { margin: 0 0 1rem; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: .5rem; font-size: .875rem; }
-.season-lengths { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 0; padding: 0; border: 0; }
-.season-lengths legend { margin-bottom: .25rem; padding: 0; }
-.season-lengths label { display: inline-flex; align-items: center; gap: .375rem; }
-.season-lengths input[type="number"] { width: 5rem; }
-.season-goals > li.season-goal-row { align-items: flex-start; gap: .75rem; padding: .625rem 0; }
-.season-goal-row > input.switch { margin-top: .1875rem; }
-.season-goal { display: grid; gap: .25rem; min-width: 0; flex: 1; }
-a.season-goal-title { justify-self: start; font-weight: 500; }
-.season-goal-tools { display: flex; align-items: center; gap: .25rem; flex: none; }
-.season-goal-tools .icon-button { color: var(--muted-foreground); }
-.season-goal-tools .icon-button:hover { color: var(--foreground); }
-.season-goal-tools svg { width: 1rem; height: 1rem; }
-.tier-toggle { padding: .125rem; }
-.tier-toggle button { min-height: 1.5rem; padding: 0 .5rem; font-size: .75rem; color: var(--muted-foreground); }
-.tier-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--foreground); }
-.tier-toggle button:disabled { cursor: default; }
-.season-target { margin: 0; color: var(--muted-foreground); font-size: .875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-.target-label { margin-right: .375rem; font-size: .6875rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
-.season-include { display: grid; justify-items: start; gap: .5rem; margin-top: .25rem; }
-.season-include > input { width: 100%; }
-.sheet-add.season-new { width: 100%; margin-top: .25rem; }
-.season-new-form { padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; }
-/* Goals ticket 05: ending a season and past seasons. */
-.season-check { display: inline-flex; align-items: center; gap: .375rem; }
-.season-carry { display: grid; gap: .75rem; margin: 0; padding: 0; border: 0; }
-.season-carry legend { margin-bottom: .25rem; padding: 0; }
-.season-carry-goal { display: grid; gap: .375rem; padding: .5rem 0; border-top: 1px solid var(--border); }
-.season-past { margin-top: 2rem; }
-.season-past li { gap: .5rem; }
-.season-past li .state { margin: 0; font-size: .8125rem; }

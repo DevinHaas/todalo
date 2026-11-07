@@ -1,29 +1,45 @@
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { CalendarRange, Hash, Pencil, Plus, Target, X } from "lucide-react";
 import { criteriaProgress, goalColorKeys, goalColorValue, type GoalColor, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
 import type { SeasonTier } from "./seasons";
 import { taskPath } from "./links";
-import { Dropdown, Popover } from "./popover";
 import type { ReorderPosition } from "./bulk";
 import { SortableRow, SortableTasks } from "./bulk-views";
-import { Failure, MilestoneMark, type ReadState } from "./views";
+import { MilestoneMark, type ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
+import {
+  Alert, AlertDescription, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, Badge, Button, Card, CardContent, Checkbox, Field, FieldLabel, FieldLegend, FieldSet, Hint, Input, Label, List,
+  ListRow, PageHeader, PageSection, Popover, PopoverContent, PopoverTitle, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger,
+  SelectValue, SidebarSectionHeader, Spinner, SwatchPicker, Switch, Textarea, cn, sidebarItemClassName, type Swatch,
+} from "./ui";
 
-// Pure goal views (goals ticket 01): no runtime imports.
+// Pure goal views (goals ticket 01): no runtime imports. Built only from src/ui (docs/agents/ui.md).
 type Write = { pending: boolean; error: string | null };
 
 /** A goal's colour as its icon: sidebar, goal page, season page, task sheet chips. */
-export const GoalDot = ({ color }: { color: string }) => <span className="goal-dot" aria-hidden="true" style={{ background: goalColorValue(color) }} />;
+export const GoalDot = ({ color, className }: { color: string; className?: string }) =>
+  <span data-slot="goal-dot" aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ background: goalColorValue(color) }} />;
 
 const colorNames: Record<GoalColor, string> = { blue: "Blue", green: "Green", orange: "Orange", violet: "Violet", pink: "Pink", teal: "Teal", amber: "Amber", red: "Red", indigo: "Indigo", slate: "Slate" };
+export const goalSwatches: Swatch<GoalColor>[] = goalColorKeys.map(color => ({ value: color, label: colorNames[color], color: goalColorValue(color) }));
+
 /** The fixed palette as radio swatches (arrow keys move between them). */
 export function ColorPicker({ value, onChange }: { value: GoalColor; onChange(color: GoalColor): void }) {
-  return <fieldset className="color-picker"><legend>Colour</legend>
-    <div className="color-swatches">{goalColorKeys.map(color => <label key={color} className="color-swatch" title={colorNames[color]} style={{ "--swatch": goalColorValue(color) } as CSSProperties}>
-      <input type="radio" name="goal-color" value={color} checked={value === color} aria-label={colorNames[color]} onChange={() => onChange(color)} />
-    </label>)}</div>
-  </fieldset>;
+  return <FieldSet className="gap-2"><FieldLegend variant="label">Colour</FieldLegend>
+    <SwatchPicker aria-label="Colour" swatches={goalSwatches} value={value} onValueChange={onChange} />
+  </FieldSet>;
+}
+
+/** A form-level error line. */
+export const FormError = ({ children }: { children: ReactNode }) => <p role="alert" className="text-xs-plus text-destructive">{children}</p>;
+/** Loading and load-failure states for a page. */
+export const Loading = ({ children }: { children: ReactNode }) => <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner />{children}</p>;
+export function LoadFailure({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
+  return <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center gap-2">
+    <span>{error?.message ?? "This could not be loaded."}</span><Button size="sm" variant="outline" onClick={onRetry}>Try again</Button>
+  </AlertDescription></Alert>;
 }
 
 /** The sidebar's Goals section, above Projects: drag (or keyboard) to reorder; + adds one. */
@@ -36,19 +52,17 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
     event.preventDefault();
     try { await onCreate(title); setTitle(""); onAdding(false); } catch { /* shown through write.error */ }
   }
-  return <section className="goal-nav" aria-label="Goals">
-    <div className="nav-group-head">
-      <span>Goals</span>
-      <button type="button" className="icon-button" aria-label="Add goal" aria-expanded={adding} data-goal-action="create" onClick={() => onAdding(!adding)}><Plus /></button>
-    </div>
-    {adding && <form className="inline-form goal-add" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onAdding(false); } }}>
-      <input aria-label="New goal title" placeholder="New goal" autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} />
-      <button type="submit" className="button" disabled={write.pending || !title.trim()}>Add</button>
+  return <section className="ui mb-3 flex flex-col" aria-label="Goals">
+    <SidebarSectionHeader title="Goals" action={<Button variant="ghost" size="icon-sm" aria-label="Add goal" aria-expanded={adding} data-goal-action="create" onClick={() => onAdding(!adding)}><Plus /></Button>} />
+    {adding && <form className="flex gap-1.5 px-1 py-1" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onAdding(false); } }}>
+      <Input aria-label="New goal title" placeholder="New goal" autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} />
+      <Button type="submit" disabled={write.pending || !title.trim()}>Add</Button>
     </form>}
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
+    {write.error && <div className="px-2"><FormError>{write.error}</FormError></div>}
     <SortableTasks ids={goals.map(goal => goal.id)} label={(id) => goals.find(goal => goal.id === id)?.title ?? "goal"} onReorder={onReorder}>
-      {goals.map(goal => <SortableRow key={goal.id} id={goal.id} title={goal.title}>
-        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className="nav-item"><GoalDot color={goal.color} /><span>{goal.title}</span></NavLink>
+      {goals.map(goal => <SortableRow key={goal.id} id={goal.id} title={goal.title} className="group/row -ml-6 flex items-center"
+        handleClassName="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-subtle-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5">
+        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className={sidebarItemClassName}><span className="grid size-4 place-content-center"><GoalDot color={goal.color} /></span><span className="truncate">{goal.title}</span></NavLink>
       </SortableRow>)}
     </SortableTasks>
   </section>;
@@ -65,12 +79,16 @@ export interface GoalSlots {
 export function GoalSuggestion({ slots }: { slots: GoalSlots }) {
   const goal = slots.suggested?.[0];
   if (!goal) return null;
-  return <p className="goal-suggestion" data-goal-suggestion={goal.id}>
-    <Target /><span>Suggested: {goal.title}</span>
-    <button type="button" className="text-action" data-suggestion="accept" onClick={() => slots.onToggle(goal.id, true)}>Link</button>
-    <button type="button" className="icon-button" data-suggestion="dismiss" aria-label={`Dismiss suggestion ${goal.title}`} title="Dismiss" onClick={() => slots.onDismiss?.(goal.id)}><X /></button>
+  return <p className="ui col-span-full flex items-center gap-1.5 pt-1 text-xs-plus text-muted-foreground" data-goal-suggestion={goal.id}>
+    <Target className="size-3.5" /><span className="min-w-0 [overflow-wrap:anywhere]">Suggested: {goal.title}</span>
+    <Button variant="link" size="xs" data-suggestion="accept" onClick={() => slots.onToggle(goal.id, true)}>Link</Button>
+    <Button variant="ghost" size="icon-xs" data-suggestion="dismiss" aria-label={`Dismiss suggestion ${goal.title}`} title="Dismiss" onClick={() => slots.onDismiss?.(goal.id)}><X /></Button>
   </p>;
 }
+
+/** A goal as a chip: its colour dot and title. */
+export const GoalChip = ({ goal }: { goal: Pick<GoalDto, "color" | "title"> }) =>
+  <Badge variant="outline" className="h-6 max-w-full gap-1.5 px-2 text-xs-plus font-normal"><GoalDot color={goal.color} /><span className="truncate">{goal.title}</span></Badge>;
 
 /**
  * Checkboxes over the active goals; each tick links or unlinks at once.
@@ -78,19 +96,24 @@ export function GoalSuggestion({ slots }: { slots: GoalSlots }) {
  */
 export function GoalPicker({ slots, variant, data }: { slots: GoalSlots; variant: "property" | "button"; data?: Partial<Record<`data-${string}`, string>> }) {
   const chosen = slots.goals.filter(goal => slots.linked.includes(goal.id));
-  const chips = <span className="label-chips">{chosen.map(goal => <span key={goal.id} className="label-chip"><GoalDot color={goal.color} />{goal.title}</span>)}</span>;
+  const label = chosen.length ? `Goals: ${chosen.map(goal => goal.title).join(", ")}` : "Link goals";
+  const trigger = variant === "button"
+    ? <Button variant="outline" aria-label={label} {...data}><Target />{chosen.length ? `Goals · ${chosen.length}` : "Goals"}</Button>
+    : chosen.length
+      ? <button type="button" aria-label={label} className="ui flex min-w-0 flex-wrap gap-1 rounded-lg p-0.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring" {...data}>{chosen.map(goal => <GoalChip key={goal.id} goal={goal} />)}</button>
+      : <Button variant="ghost" size="icon-sm" aria-label={label} {...data}><Plus /></Button>;
   return <>
-    <Popover label={chosen.length ? `Goals: ${chosen.map(goal => goal.title).join(", ")}` : "Link goals"} data={data}
-      triggerClassName={variant === "button" ? "button outline" : chosen.length ? "property-value" : "icon-button property-add"}
-      trigger={variant === "button" ? <><Target />{chosen.length ? `Goals · ${chosen.length}` : "Goals"}</> : chosen.length ? chips : <Plus />}>
-      {() => <fieldset className="label-choices property-panel"><legend>Goals</legend>
-        {slots.goals.length > 0 && <div className="label-options">{slots.goals.map(goal => <label key={goal.id} className="label-option">
-          <input type="checkbox" checked={slots.linked.includes(goal.id)} onChange={(event) => slots.onToggle(goal.id, event.target.checked)} /><GoalDot color={goal.color} />{goal.title}
-        </label>)}</div>}
-        {!slots.goals.length && <p className="state">Create a goal with + next to Goals in the sidebar.</p>}
-      </fieldset>}
+    <Popover>
+      <PopoverTrigger render={trigger} />
+      <PopoverContent align="start" className="w-64 gap-1 p-2">
+        <PopoverTitle className="px-1.5 pb-1 text-xs-plus font-semibold text-muted-foreground">Goals</PopoverTitle>
+        {slots.goals.length > 0 ? <div role="group" aria-label="Goals" className="flex flex-col">{slots.goals.map(goal => <Label key={goal.id} className="flex h-control cursor-pointer items-center gap-2 rounded-lg px-1.5 text-sm font-normal hover:bg-accent">
+          <Checkbox checked={slots.linked.includes(goal.id)} onCheckedChange={(checked) => slots.onToggle(goal.id, checked)} /><GoalDot color={goal.color} /><span className="truncate">{goal.title}</span>
+        </Label>)}</div>
+          : <Hint className="px-1.5">Create a goal with + next to Goals in the sidebar.</Hint>}
+      </PopoverContent>
     </Popover>
-    {slots.error && <p className="form-error" role="alert">{slots.error}</p>}
+    {slots.error && <FormError>{slots.error}</FormError>}
   </>;
 }
 
@@ -109,37 +132,46 @@ export function MilestoneToggle({ slots }: { slots: MilestoneSlots }) {
   const { goals, milestone } = slots;
   const goal = milestone && goals.find(item => item.id === milestone.goalId);
   const unlinked = !goals.length && !milestone;
-  return <div className="milestone-toggle">
-    <label className="milestone-switch">
-      <input type="checkbox" role="switch" className="switch" data-field="milestone" checked={Boolean(milestone)} disabled={unlinked}
-        onChange={(event) => slots.onChange(event.target.checked ? { goalId: goals[0]!.id, criteria: [] } : null)} />
+  return <div className="ui flex flex-col items-start gap-1.5">
+    <Label className={cn("flex min-h-control-sm cursor-pointer items-center gap-2 font-normal", unlinked && "cursor-default text-muted-foreground")}>
+      <Switch data-field="milestone" checked={Boolean(milestone)} disabled={unlinked}
+        onCheckedChange={(checked) => slots.onChange(checked ? { goalId: goals[0]!.id, criteria: [] } : null)} />
       <span>{milestone ? "Milestone" : "Not a milestone"}</span>
-    </label>
-    {unlinked && <p className="property-hint">Link this task to a goal first; a milestone marks progress toward one.</p>}
-    {milestone && goals.length > 1 && <Dropdown label="Milestone for" value={milestone.goalId} className="property-value" chevron={false}
-      options={goals.map(item => ({ value: item.id, label: item.title, icon: <GoalDot color={item.color} /> }))}
-      onChange={(goalId) => slots.onChange({ ...milestone, goalId })} />}
-    {milestone && goals.length <= 1 && goal && <span className="property-hint milestone-goal"><GoalDot color={goal.color} />for {goal.title}</span>}
-    {slots.error && <p className="form-error" role="alert">{slots.error}</p>}
+    </Label>
+    {unlinked && <Hint>Link this task to a goal first; a milestone marks progress toward one.</Hint>}
+    {milestone && goals.length > 1 && <Select items={goals.map(item => ({ value: item.id, label: item.title }))} value={milestone.goalId}
+      onValueChange={(goalId) => { if (goalId) slots.onChange({ ...milestone, goalId: goalId as string }); }}>
+      <SelectTrigger size="sm" aria-label="Milestone for" className="max-w-full"><SelectValue /></SelectTrigger>
+      <SelectContent>{goals.map(item => <SelectItem key={item.id} value={item.id}><GoalDot color={item.color} />{item.title}</SelectItem>)}</SelectContent>
+    </Select>}
+    {milestone && goals.length <= 1 && goal && <Hint className="flex items-center gap-1.5"><GoalDot color={goal.color} />for {goal.title}</Hint>}
+    {slots.error && <FormError>{slots.error}</FormError>}
   </div>;
 }
 
-/** The in-page confirm for completing a milestone with open done criteria (native confirm() is unreliable in iOS WKWebView). */
+/** The confirm for completing a milestone with open done criteria (native confirm() is unreliable in iOS WKWebView). */
 export function CriteriaConfirm({ onAnswer }: { onAnswer(confirmed: boolean): void }) {
-  return <div className="dialog-backdrop criteria-confirm" onClick={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}>
-    <div role="alertdialog" aria-modal="true" aria-label="Complete milestone" aria-describedby="criteria-confirm" className="dialog"
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onAnswer(false); } }}>
-      <p id="criteria-confirm">This milestone has open done criteria. Complete it and tick them all?</p>
-      <div className="project-actions">
-        <button type="button" className="button" autoFocus onClick={() => onAnswer(true)}>Complete and tick all</button>
-        <button type="button" className="button outline" onClick={() => onAnswer(false)}>Cancel</button>
-      </div>
-    </div>
-  </div>;
+  return <AlertDialog open onOpenChange={(open) => { if (!open) onAnswer(false); }}>
+    <AlertDialogContent>
+      <AlertDialogHeader><AlertDialogTitle>Complete milestone</AlertDialogTitle>
+        <AlertDialogDescription>This milestone has open done criteria. Complete it and tick them all?</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel onClick={() => onAnswer(false)}>Cancel</AlertDialogCancel>
+        <AlertDialogAction autoFocus onClick={() => onAnswer(true)}>Complete and tick all</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>;
 }
 
 /** The goal's place in the current season (null when it is not in one). */
 export interface GoalSeason { tier: SeasonTier; target: string }
+
+/** A season target with its label, so it never reads as the goal's description. */
+export const SeasonTarget = ({ text, className }: { text: string; className?: string }) => <p data-slot="season-target" className={cn("text-sm text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap", className)}>
+  <span className="mr-1.5 text-2xs font-semibold tracking-wide text-subtle-foreground uppercase">Target</span>{text}
+</p>;
+
+const linkClass = "inline-flex min-w-0 items-center gap-2 [overflow-wrap:anywhere] hover:underline hover:decoration-border-hover hover:underline-offset-4 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-subtle-foreground";
 
 /**
  * A goal's page: title, colour and description, edited in place; archiving
@@ -155,9 +187,10 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<GoalColor>("blue");
-  if (state.status === "pending") return <p className="state" role="status">Loading goal…</p>;
-  if (state.status === "error") return <Failure error={state.error} onRetry={onRetry} />;
-  if (!state.data) return <div><h1 className="page-title">Goal not found</h1><p className="state">This goal does not exist or you do not have access to it.</p><Link className="button outline small" to="/today">Back to Today</Link></div>;
+  if (state.status === "pending") return <div className="ui"><Loading>Loading goal…</Loading></div>;
+  if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
+  if (!state.data) return <div className="ui flex flex-col items-start gap-3"><PageHeader title="Goal not found" />
+    <Hint>This goal does not exist or you do not have access to it.</Hint><Button variant="outline" size="sm" nativeButton={false} render={<Link to="/today" />}>Back to Today</Button></div>;
   const { goal, projects, tasks, milestones } = state.data;
   const marked = new Set(milestones.map(item => item.task.id));
   const edit = () => { setTitle(goal.title); setDescription(goal.description ?? ""); setColor(goal.color); setEditing(true); };
@@ -165,54 +198,48 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
     event.preventDefault();
     try { await onSave({ title, description, color }); setEditing(false); } catch { /* shown through write.error */ }
   }
-  return <div className="goal-page" data-goal-id={goal.id}>
-    <div className="project-header">
-      <h1 className="page-title goal-title"><GoalDot color={goal.color} />{goal.title}</h1>
-      <div className="project-actions">
-        {!goal.archived && <button type="button" className="button outline small" data-goal-action="edit" aria-expanded={editing} onClick={() => editing ? setEditing(false) : edit()}><Pencil />Edit</button>}
-        <button type="button" className="button ghost small" disabled={write.pending} onClick={() => onArchive(!goal.archived)}>{goal.archived ? "Restore" : "Archive"}</button>
-      </div>
-    </div>
-    {goal.archived && <p className="state" role="status">This goal is archived. It is hidden from the sidebar and keeps its data.</p>}
-    {editing ? <form ref={releaseFocus} className="goal-edit" onSubmit={save} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }}>
-      <label>Title<input value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} /></label>
-      <label>Description<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} maxLength={10_000} placeholder="Why this goal matters and what reaching it looks like" /></label>
+  const unlink = (kind: GoalLinkKind, id: string, name: string) => <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"
+    aria-label={`Unlink ${name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink(kind, id)}><X /></Button>;
+  return <div className="ui max-w-page" data-goal-id={goal.id}>
+    <PageHeader icon={<GoalDot color={goal.color} className="size-3.5" />} title={goal.title} actions={<>
+      {!goal.archived && <Button variant="outline" size="sm" data-goal-action="edit" aria-expanded={editing} onClick={() => editing ? setEditing(false) : edit()}><Pencil />Edit</Button>}
+      <Button variant="ghost" size="sm" disabled={write.pending} onClick={() => onArchive(!goal.archived)}>{goal.archived ? "Restore" : "Archive"}</Button>
+    </>} />
+    {goal.archived && <Hint role="status">This goal is archived. It is hidden from the sidebar and keeps its data.</Hint>}
+    {editing ? <form ref={releaseFocus} className="my-4 flex flex-col gap-4 rounded-xl border border-border p-4" onSubmit={save} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }}>
+      <Field><FieldLabel htmlFor="goal-title">Title</FieldLabel><Input id="goal-title" value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} /></Field>
+      <Field><FieldLabel htmlFor="goal-description">Description</FieldLabel><Textarea id="goal-description" value={description} onChange={event => setDescription(event.target.value)} rows={4} maxLength={10_000} placeholder="Why this goal matters and what reaching it looks like" /></Field>
       <ColorPicker value={color} onChange={setColor} />
-      <div className="project-actions">
-        <button type="submit" className="button" disabled={write.pending || !title.trim()}>Save goal</button>
-        <button type="button" className="button outline" onClick={() => setEditing(false)}>Cancel</button>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
+        <Button type="submit" disabled={write.pending || !title.trim()}>Save goal</Button>
       </div>
-    </form> : goal.description ? <p className="goal-description">{goal.description}</p>
-      : !goal.archived && <button type="button" className="sheet-add goal-describe" onClick={edit}><Plus />Add a description</button>}
-    {write.error && <p className="form-error" role="alert">{write.error}</p>}
-    {season && <section className="goal-season" aria-label="This season">
-      <CalendarRange aria-hidden="true" />
-      <div className="goal-season-body">
-        <p className="goal-season-head">This season · {season.tier === "primary" ? "Primary" : "Secondary"}</p>
-        <p className="season-target"><span className="target-label">Target</span>{season.target}</p>
-      </div>
-      <Link className="button outline small" to="/season">Season</Link>
-    </section>}
-    <section className="goal-links" aria-label="Milestones">
-      <h2 className="section-heading">Milestones</h2>
-      {milestones.length ? <ol className="goal-link-list milestones">{milestones.map(({ task, criteria, reached }) => <li key={task.id} data-done={reached || undefined}>
-        <Link to={taskPath(task.id)}>{task.title}<MilestoneMark /></Link>
-        <span className="milestone-progress" aria-label={reached ? "Reached" : `${criteriaProgress(criteria)} done criteria ticked`}>{reached ? "Reached" : criteria.length ? criteriaProgress(criteria) : "No criteria"}</span>
-      </li>)}</ol> : <p className="state">No milestones. Turn on Milestone in a linked task's details.</p>}
-    </section>
-    <section className="goal-links" aria-label="Linked projects">
-      <h2 className="section-heading">Projects</h2>
-      {projects.length ? <ul className="goal-link-list">{projects.map(project => <li key={project.id}>
-        <Link to={`/projects/${encodeURIComponent(project.id)}`}><Hash />{project.name}</Link>
-        <button type="button" className="icon-button row-delete" aria-label={`Unlink ${project.name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink("projects", project.id)}><X /></button>
-      </li>)}</ul> : <p className="state">No linked projects. Link one from its project page.</p>}
-    </section>
-    <section className="goal-links" aria-label="Linked tasks">
-      <h2 className="section-heading">Tasks</h2>
-      {tasks.length ? <ul className="goal-link-list">{tasks.map(task => <li key={task.id} data-done={task.status === "done" || undefined}>
-        <Link to={taskPath(task.id)}>{task.title}{marked.has(task.id) && <MilestoneMark />}</Link>
-        <button type="button" className="icon-button row-delete" aria-label={`Unlink ${task.title}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink("tasks", task.id)}><X /></button>
-      </li>)}</ul> : <p className="state">No linked tasks. Link one from its task details.</p>}
-    </section>
+    </form> : goal.description ? <p data-slot="goal-description" className="mt-1 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">{goal.description}</p>
+      : !goal.archived && <Button variant="ghost" size="sm" className="-ml-2 mt-1 text-muted-foreground" onClick={edit}><Plus className="text-brand" />Add a description</Button>}
+    {write.error && <FormError>{write.error}</FormError>}
+    {season && <section aria-label="This season" className="mt-5"><Card className="flex-row items-start gap-3 p-4">
+      <CalendarRange className="mt-0.5 size-4.5 shrink-0 text-subtle-foreground" aria-hidden="true" />
+      <CardContent className="flex min-w-0 flex-1 flex-col gap-1 p-0">
+        <p className="text-sm font-semibold">This season · {season.tier === "primary" ? "Primary" : "Secondary"}</p>
+        <SeasonTarget text={season.target} />
+      </CardContent>
+      <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Season</Button>
+    </Card></section>}
+    <PageSection title="Milestones" aria-label="Milestones">
+      {milestones.length ? <List>{milestones.map(({ task, criteria, reached }) => <ListRow key={task.id} data-done={reached || undefined} className="justify-between">
+        <Link className={cn(linkClass, reached && "text-muted-foreground line-through")} to={taskPath(task.id)}>{task.title}<MilestoneMark /></Link>
+        <span className="text-xs-plus text-muted-foreground tabular-nums" aria-label={reached ? "Reached" : `${criteriaProgress(criteria)} done criteria ticked`}>{reached ? "Reached" : criteria.length ? criteriaProgress(criteria) : "No criteria"}</span>
+      </ListRow>)}</List> : <Hint className="py-2">No milestones. Turn on Milestone in a linked task's details.</Hint>}
+    </PageSection>
+    <PageSection title="Projects" aria-label="Linked projects">
+      {projects.length ? <List>{projects.map(project => <ListRow key={project.id} className="justify-between">
+        <Link className={linkClass} to={`/projects/${encodeURIComponent(project.id)}`}><Hash />{project.name}</Link>{unlink("projects", project.id, project.name)}
+      </ListRow>)}</List> : <Hint className="py-2">No linked projects. Link one from its project page.</Hint>}
+    </PageSection>
+    <PageSection title="Tasks" aria-label="Linked tasks">
+      {tasks.length ? <List>{tasks.map(task => <ListRow key={task.id} data-done={task.status === "done" || undefined} className="justify-between">
+        <Link className={cn(linkClass, task.status === "done" && "text-muted-foreground line-through")} to={taskPath(task.id)}>{task.title}{marked.has(task.id) && <MilestoneMark />}</Link>{unlink("tasks", task.id, task.title)}
+      </ListRow>)}</List> : <Hint className="py-2">No linked tasks. Link one from its task details.</Hint>}
+    </PageSection>
   </div>;
 }

@@ -1,0 +1,100 @@
+/*
+ * The client's one stylesheet entry (main.tsx). Order matters:
+ * - legacy: src/styles.css, the plain-CSS screens, layered lowest so Tailwind
+ *   utilities always win on library components while legacy screens keep
+ *   their look (no global preflight; see the scoped reset below).
+ * - theme/base/components/utilities: Tailwind v4.
+ */
+@layer legacy, theme, base, components, utilities;
+@import "../styles.css" layer(legacy);
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "./theme.css";
+@source "..";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Tailwind preflight, scoped: only library parts (every component sets
+ * data-slot) and `.ui` containers (screens built from the library). Legacy
+ * screens keep browser defaults. It sits above the legacy layer, so legacy
+ * element rules (input, label, form, svg sizes) never leak into components.
+ */
+@layer base {
+  :where(.ui, .ui *, [data-slot], [data-slot] *),
+  :where(.ui, .ui *, [data-slot], [data-slot] *)::before,
+  :where(.ui, .ui *, [data-slot], [data-slot] *)::after {
+    box-sizing: border-box; margin: 0; padding: 0; border: 0 solid var(--color-border);
+  }
+  :where(.ui) { font-family: var(--font-sans); font-size: var(--text-sm); line-height: var(--text-sm--line-height); color: var(--color-foreground); }
+  :where(.ui, [data-slot]) :where(h1, h2, h3, h4, h5, h6) { font-size: inherit; font-weight: inherit; }
+  :where(.ui, [data-slot]) :where(ol, ul, menu) { list-style: none; }
+  :where(.ui, [data-slot]) :where(a) { color: inherit; text-decoration: inherit; }
+  :where(.ui, [data-slot]) :where(img, svg, video, canvas) { display: block; vertical-align: middle; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(button, input, select, optgroup, textarea, label, form, fieldset) {
+    font: inherit; letter-spacing: inherit; color: inherit; background-color: transparent; border-radius: 0;
+    min-height: 0; width: auto; box-shadow: none; display: revert; gap: normal;
+  }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(input, textarea, select) { width: 100%; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(input[type="checkbox"], input[type="radio"]) { width: auto; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(button) { cursor: pointer; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *)::placeholder { color: var(--color-subtle-foreground); opacity: 1; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(textarea) { resize: vertical; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(label) { display: revert; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(form) { display: block; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(dl, dt, dd) { margin: 0; font-size: inherit; color: inherit; }
+  :where(.ui, .ui *, [data-slot], [data-slot] *):where(svg) { width: 1rem; height: 1rem; flex-shrink: 0; } /* lucide default, as legacy .app-shell svg */
+  :where(.ui, .ui *, [data-slot], [data-slot] *):focus-visible { outline: var(--focus-ring-width) solid var(--color-ring); outline-offset: var(--focus-ring-offset); }
+}
+
+/* Vendored from Toolcraft ui/styles.css (MIT): the variants and helpers its components use. */
+@custom-variant after-compound-divider {
+  [data-control-list] > [data-control-item-compound-context]:not([data-control-item-compound-divider-placement='top']):has([data-control-section-divider='compound']) + &:has([data-control-section-divider='compound']) { @slot; }
+}
+@custom-variant after-plain-curve {
+  [data-control-list] > :has([data-slot='curves-control']):not([data-control-item-compound-context]:has([data-control-section-divider='compound'])) + & { @slot; }
+}
+@custom-variant data-open { &:where([data-state='open']), &:where([data-open]:not([data-open='false'])) { @slot; } }
+@custom-variant data-closed { &:where([data-state='closed']), &:where([data-closed]:not([data-closed='false'])) { @slot; } }
+@custom-variant data-checked { &[data-state='checked'], &[data-checked]:not([data-checked='false']) { @slot; } }
+@custom-variant data-unchecked { &[data-state='unchecked'], &[data-unchecked]:not([data-unchecked='false']) { @slot; } }
+@custom-variant data-selected { &:where([data-selected='true']) { @slot; } }
+@custom-variant data-disabled { &:where([data-disabled='true']), &:where([data-disabled]:not([data-disabled='false'])) { @slot; } }
+@custom-variant data-active { &:where([data-state='active']), &:where([data-active]:not([data-active='false'])) { @slot; } }
+@custom-variant data-horizontal { &:where([data-orientation='horizontal']) { @slot; } }
+@custom-variant data-vertical { &:where([data-orientation='vertical']) { @slot; } }
+
+@layer components {
+  .button-radius-tab-control { border-radius: var(--radius-lg); }
+  .floating-popup-surface {
+    border-color: var(--color-border);
+    background-color: var(--color-popover);
+    box-shadow: var(--shadow-popover);
+  }
+  .floating-popup-fill { background-color: var(--color-popover); }
+  .floating-popup-separator { background-color: var(--color-border-subtle); }
+  .popup-text-xs-plus { font-size: var(--text-xs-plus); line-height: var(--text-xs-plus--line-height); font-weight: 400; }
+  .button-xl-icon-size svg:not([class*="size-"]) { width: var(--button-xl-icon-size, 1.125rem); height: var(--button-xl-icon-size, 1.125rem); }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  :where(.button-loader-indicator) { animation: button-loader-sweep 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+  [data-slot="scroll-fade"] { --scroll-fade-size: 1.5rem; }
+  [data-slot="scroll-fade-viewport"], [data-scroll-fade-viewport] {
+    --scroll-fade-leading-solid: 0px; --scroll-fade-leading-fade: 0px; --scroll-fade-trailing-solid: 0px; --scroll-fade-trailing-fade: 0px;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--color-foreground) 10%, transparent) transparent;
+    -webkit-mask-image: var(--scroll-fade-mask-image); mask-image: var(--scroll-fade-mask-image);
+    mask-size: 100% 100%; mask-repeat: no-repeat;
+    transition: --scroll-fade-leading-solid 80ms linear, --scroll-fade-leading-fade 80ms linear, --scroll-fade-trailing-solid 80ms linear, --scroll-fade-trailing-fade 80ms linear;
+  }
+}
+@keyframes button-loader-sweep {
+  0%, 100% { left: 0%; right: 65%; }
+  25%, 75% { left: 0%; right: 0%; }
+  50% { left: 65%; right: 0%; }
+}
+@property --scroll-fade-leading-solid { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --scroll-fade-leading-fade { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --scroll-fade-trailing-solid { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --scroll-fade-trailing-fade { syntax: "<length>"; inherits: false; initial-value: 0px; }

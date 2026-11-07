@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 // Tauri runs this as beforeDev/BuildCommand in the CLI's own environment. Its
@@ -10,7 +12,8 @@ if (process.env.TAURI_ENV_PLATFORM === "ios" && requestedApi && requestedApi !==
   throw new Error("iOS builds cannot see TODALO_API_BASE_URL. Export TAURI_TODALO_API_BASE_URL with the same origin instead.");
 }
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   clearScreen: false,
   server: {
     port: 5173, strictPort: true, host: host || false,

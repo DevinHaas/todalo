@@ -30,16 +30,16 @@ describe("goal page", () => {
     const html = page({}, { tier: "primary", target: "A testable version for others" });
     expect(html).toContain('aria-label="This season"');
     expect(html).toContain("This season · Primary");
-    expect(html).toContain('<span class="target-label">Target</span>A testable version for others');
+    expect(html).toMatch(/data-slot="season-target"[^>]*><span[^>]*>Target<\/span>A testable version for others/);
     expect(html).toContain("Add a description");
   });
 
   it("shows the description itself, the colour as its icon, and no season card outside a season", () => {
     const html = page({ goal: goal({ description: "Why it matters" }) });
-    expect(html).toContain('<p class="goal-description">Why it matters</p>');
+    expect(html).toMatch(/data-slot="goal-description"[^>]*>Why it matters<\/p>/);
     expect(html).not.toContain("Add a description");
     expect(html).not.toContain("This season");
-    expect(html).toMatch(/class="goal-dot"[^>]*style="background:oklch\(0.65 0.11 190\)"/);
+    expect(html).toMatch(/data-slot="goal-dot"[^>]*style="background:oklch\(0.65 0.11 190\)"/);
   });
 
   it("flags linked tasks that are milestones", () => {
@@ -58,7 +58,7 @@ describe("milestone in the task sheet", () => {
   it("is a switch for the only linked goal", () => {
     expect(render(createElement(MilestoneToggle, { slots: slots() }))).toContain("Not a milestone");
     const on = render(createElement(MilestoneToggle, { slots: slots({ milestone: { goalId: "todalo", criteria: [] } }) }));
-    expect(on).toMatch(/role="switch"[^>]*checked/);
+    expect(on).toMatch(/role="switch"[^>]*aria-checked="true"/);
     expect(on).toContain("for Finish Todalo");
   });
 
@@ -67,7 +67,7 @@ describe("milestone in the task sheet", () => {
     const html = render(createElement(TaskEditor, { task, onSave: async () => undefined, onClose: () => undefined, milestone }));
     expect(html).toContain('aria-label="Done criteria"');
     expect(html).toContain('aria-label="1 of 2 ticked"');
-    expect(html).toMatch(/class="criterion-text"[^>]*value="Register"/);
+    expect(html).toMatch(/data-slot="criterion-text"[^>]*value="Register"|value="Register"[^>]*data-slot="criterion-text"/);
     expect(html).toContain('aria-label="New done criterion"');
     // Not a milestone: no section.
     expect(render(createElement(TaskEditor, { task, onSave: async () => undefined, onClose: () => undefined, milestone: slots() }))).not.toContain("Done criteria");

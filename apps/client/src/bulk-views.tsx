@@ -197,11 +197,12 @@ export function dragAnnouncements(label: (id: string) => string): Announcements 
 }
 
 /** A row inside SortableTasks: the grip handle starts drags; the row itself keeps its taps and links. */
-export function SortableRow({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+/** `className`/`handleClassName` replace the legacy row and handle styling (library screens). */
+export function SortableRow({ id, title, children, className = "sortable-row", handleClassName = "drag-handle" }: { id: string; title: string; children: ReactNode; className?: string; handleClassName?: string }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: CSSProperties = { transform: CSS.Transform.toString(transform), transition };
-  return <div ref={setNodeRef} style={style} className="sortable-row" data-dragging={isDragging || undefined}>
-    <button type="button" ref={setActivatorNodeRef} className="drag-handle" aria-label={`Reorder ${title}`} {...attributes} {...listeners}><GripVertical aria-hidden="true" /></button>
+  return <div ref={setNodeRef} style={style} className={className} data-dragging={isDragging || undefined}>
+    <button type="button" ref={setActivatorNodeRef} className={handleClassName} aria-label={`Reorder ${title}`} {...attributes} {...listeners}><GripVertical aria-hidden="true" /></button>
     {children}
   </div>;
 }
