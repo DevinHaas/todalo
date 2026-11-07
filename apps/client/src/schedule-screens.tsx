@@ -1,13 +1,13 @@
 // Upcoming and Today's calendar layouts (ticket 16). Both read the Today query:
 // it is the full owned-task collection (getTasksForUser), exactly what the legacy
 // Upcoming page loaded, so every task write already refreshes these views.
-import { useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, metadataReads, projectReads, reads } from "./runtime";
 import { goalColorValue } from "./goals";
-import { useEditorExtras, useTaskWrites } from "./task-writes";
-import { Composer, Failure, listTree, TaskEditor, TaskRow, type SelectionSlots } from "./views";
+import { useTaskWrites } from "./task-writes";
+import { Composer, Failure, listTree, TaskDialogs, TaskRow, type SelectionSlots } from "./views";
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type PlannerSlots, type ScheduleSlots } from "./schedule-views";
 import { dayKey, dropRange, durationOf, goalOf, labels, nextSlot, parseDayKey, scheduledDetails, startOfDay, unscheduledDetails, unscheduledTasks, type UnscheduledFilter } from "./schedule";
 import { UnscheduledSidebar, useTaskDrag } from "./unscheduled-views";
@@ -23,7 +23,8 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
   const writes = useTaskWrites(account.user.id);
   const projects = useQuery(projectReads.list(account.user.id));
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
-  const [editing, setEditing] = useState<string | null>(null);
+  // Opening a task uses the shell's full sheet (sub-tasks, comments, goals, milestone), as list rows do.
+  const dialog = useContext(TaskDialogs);
   const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
   const now = new Date();
   // Indent a sub-task under its parent when both are listed on the same day.
@@ -32,19 +33,14 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
   const treeOf = (task: TaskDto) => { const key = day(task); if (!trees.has(key)) trees.set(key, listTree(tasks.filter(item => day(item) === key))); return trees.get(key)!(task); };
   const slots: ScheduleSlots = {
     row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} selection={selection?.row(task)} {...treeOf(task)} />,
-    open: task => setEditing(task.id),
+    open: task => dialog?.open(task.id),
     complete: writes.actions.complete,
     remove: writes.actions.remove,
     slot: (start, end) => setSlot({ start, end }),
   };
   const planner = usePlanner(account.user.id, tasks, writes, withPlanner, slots.open, projectNames);
   if (withPlanner) slots.planner = planner.slots;
-  // The editor follows the latest cached copy (a pristine form picks up other devices' edits).
-  const task = editing ? tasks.find(item => item.id === editing) : undefined;
-  const extras = useEditorExtras(account.user.id, task?.id ?? null);
   const overlay = <>
-    {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={() => setEditing(null)}
-      onSave={async (details) => { await writes.update.mutateAsync({ id: task.id, details }); setEditing(null); }} />}
     {slot && <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSlot(null); }}>
       <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog">
         <Composer startOpen projectId={projectId} dueDate={() => slot.start.toISOString()} dueDateEnd={() => slot.end.toISOString()}
