@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Bell, CalendarRange, Inbox, Plus, Settings, Target, Trash2 } from "lucide-react";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger, Alert, AlertDescription, AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -10,7 +10,8 @@ import {
   FieldLabel, Hint, Input, Label, Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger, PortalLayerContainerProvider, Progress,
   RadioGroup, RadioGroupItem, RightSidebar, SegmentedControl, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Sheet, SheetContent,
   SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SliderControl, Spinner, Switch, SwatchPicker, Table, TableBody, TableCell, TableHead,
-  TableHeader, TableRow, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, ToggleGroup, ToggleGroupItem, Tooltip, TooltipContent, TooltipTrigger,
+  TableHeader, TableRow, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, Toaster, ToggleGroup, ToggleGroupItem, Tooltip, TooltipContent, TooltipTrigger,
+  createToastManager,
 } from "./ui";
 import { goalColorKeys, goalColorValue } from "./goals";
 import { goalSwatches } from "./goal-views";
@@ -103,6 +104,7 @@ function Showcase() {
       <div className="max-w-xs"><ColorControl name="Free colour" hex={hex} onValueChange={(value) => setHex(value.hex)} /></div>
     </Group>
 
+    <ToastDemo />
     <Group title="Badges and status">
       <Row>
         <Badge>Default</Badge><Badge variant="secondary">Secondary</Badge><Badge variant="outline">Outline</Badge>
@@ -192,4 +194,22 @@ function SidebarItem({ icon, label, count, active }: { icon: ReactNode; label: s
   return <a href="#" data-active={active || undefined} className="flex h-sidebar-item items-center gap-2 rounded-lg px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent data-active:bg-brand-tint data-active:text-brand-tint-foreground [&_svg]:size-4 [&_svg]:text-subtle-foreground data-active:[&_svg]:text-brand-tint-foreground">
     {icon}<span className="min-w-0 flex-1 truncate">{label}</span>{count !== undefined && <span className="text-xs text-subtle-foreground">{count}</span>}
   </a>;
+}
+
+/** Toast: the write-failure toast (toasts.ts) as it appears, pinned to this pane's top right. */
+function ToastDemo() {
+  const [manager] = useState(createToastManager);
+  const fail = (timeout?: number) => manager.add({
+    type: "error", priority: "high", timeout, title: 'Couldn\'t move "Buy milk" to Tuesday',
+    description: "You're offline. Your change was undone.", actionProps: { children: "Retry", onClick: () => {} },
+  });
+  useEffect(() => { const id = fail(0); return () => manager.close(id); }, []);
+  return <Group title="Toast">
+    <Row>
+      <Button variant="outline" onClick={() => fail()}>Show failure toast</Button>
+      <Button variant="outline" onClick={() => manager.add({ title: "Saved", description: "Plain toast without an action." })}>Show info toast</Button>
+    </Row>
+    <p className="text-xs-plus text-muted-foreground">F6 focuses the toasts; Tab reaches Retry and Dismiss; Escape dismisses.</p>
+    <Toaster manager={manager} className="absolute top-8 right-8 bottom-auto" />
+  </Group>;
 }

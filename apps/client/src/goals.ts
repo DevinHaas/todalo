@@ -1,5 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
+import type { CurrentSeasonDto } from "../../../packages/server/src/season-dto";
+import { change, optimisticWrite, type Change } from "./optimistic";
 import type { CriterionDto, GoalColor, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
@@ -118,69 +120,69 @@ export function goalQueries(transport: GoalTransport) {
 
 /** The latest milestone save per task: the next one waits for it. */
 const milestoneSaves = new Map<string, Promise<boolean>>();
+let drafts = 0;
 
-/** Writes plus the cache entries each one makes stale (every goal read is small). */
+/**
+ * Goal writes, all optimistic (optimistic.ts): the sidebar, goal page,
+ * pickers, milestone and season rows change at once; a failure takes back only
+ * that write's change. Goal reads and seasons (they show goal titles and
+ * colours) refresh once no write is in flight.
+ */
 export function goalMutations(transport: GoalTransport, cache: QueryClient, userId: string) {
-  // Seasons show goal titles and colours too, so goal writes refresh them as well.
-  const stale = () => Promise.all([cache.invalidateQueries({ queryKey: goalKeys.all(userId) }), cache.invalidateQueries({ queryKey: ["user", userId, "seasons"] })]);
+  const refresh: QueryFilters[] = [{ queryKey: goalKeys.all(userId) }, { queryKey: ["user", userId, "seasons"] }];
+  const write = <R,>(changes: Change[], run: () => Promise<R>, reconcile?: (result: R) => Change[]) => optimisticWrite(cache, changes, run, refresh, reconcile);
+  const list = goalKeys.list(userId);
+  const sidebar = (edit: (goals: GoalDto[]) => GoalDto[]) => change<GoalsDto | undefined>(list, data => data && { ...data, goals: edit(data.goals).filter(goal => !goal.archived) });
+  // The sidebar, the goal page and the current season's rows.
+  const everywhere = (id: string, edit: (goal: GoalDto) => GoalDto) => [
+    sidebar(goals => goals.map(goal => goal.id === id ? edit(goal) : goal)),
+    change<GoalDetailDto | null | undefined>(goalKeys.detail(userId, id), data => data && { ...data, goal: edit(data.goal) }),
+    change<CurrentSeasonDto | undefined>(["user", userId, "seasons", "current"], data => data?.season ? { ...data, season: { ...data.season, goals: data.season.goals.map(row => {
+      if (row.goalId !== id) return row;
+      const goal = edit({ id, title: row.title, description: null, color: row.color, archived: row.archived });
+      return { ...row, title: goal.title, color: goal.color, archived: goal.archived };
+    }) } } : data),
+  ];
+  const ok = (done: boolean, code: "GOAL_NOT_FOUND" | "TASK_NOT_FOUND" = "GOAL_NOT_FOUND") => { if (!done) throw new AccountTransportError(code); return done; };
   return {
-    async create(goal: NewGoal) { const created = await transport.create(goal); await stale(); return created; },
-    async update(id: string, patch: GoalPatch) { const goal = await transport.update(id, patch); await stale(); return goal; },
-    /** A refused link (goal or target gone) is an error, so the picker shows it. */
-    async link(id: string, kind: GoalLinkKind, targetId: string, linked: boolean) {
-      // The checkbox moves at once; a failed save puts it back.
-      const key = goalKeys.links(userId);
-      const previous = cache.getQueryData<GoalLinksDto>(key);
-      if (previous) cache.setQueryData(key, toggleLink(previous, id, kind, targetId, linked));
-      try { if (!await transport.link(id, kind, targetId, linked)) throw new AccountTransportError("SAVE_FAILED"); }
-      catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
-      finally { await stale(); }
+    create(goal: NewGoal) {
+      const draft: GoalDto = { id: `draft-goal-${++drafts}`, title: goal.title, description: goal.description ?? null, color: goal.color ?? "blue", archived: false };
+      return write([sidebar(goals => [...goals, draft])], () => transport.create(goal), created => [sidebar(goals => goals.map(item => item.id === draft.id ? created : item))]);
     },
-    /** The hint disappears at once; a failed save brings it back. */
-    async dismiss(taskId: string, goalId: string) {
-      const key = goalKeys.suggestions(userId, taskId);
-      const previous = cache.getQueryData<GoalSuggestionsDto | null>(key);
-      if (previous) cache.setQueryData(key, { goalIds: previous.goalIds.filter(id => id !== goalId) });
-      try { if (!await transport.dismiss(taskId, goalId)) throw new AccountTransportError("SAVE_FAILED"); }
-      catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
-      finally { await stale(); }
+    update(id: string, patch: GoalPatch) {
+      return write(everywhere(id, goal => ({ ...goal, ...patch })), async () => { const goal = await transport.update(id, patch); if (!goal) throw new AccountTransportError("GOAL_NOT_FOUND"); return goal; },
+        goal => everywhere(id, () => goal));
+    },
+    /** A refused link (goal or target gone) is an error, so the picker shows it. */
+    link(id: string, kind: GoalLinkKind, targetId: string, linked: boolean) {
+      return write([change<GoalLinksDto | undefined>(goalKeys.links(userId), data => data && toggleLink(data, id, kind, targetId, linked))],
+        async () => { ok(await transport.link(id, kind, targetId, linked)); });
+    },
+    dismiss(taskId: string, goalId: string) {
+      return write([change<GoalSuggestionsDto | null | undefined>(goalKeys.suggestions(userId, taskId), data => data && { goalIds: data.goalIds.filter(id => id !== goalId) })],
+        async () => { ok(await transport.dismiss(taskId, goalId)); });
     },
     /**
-     * Ticket 06: the milestone (mark, criteria, ticks) changes at once; a failed save puts it back.
-     * Each PUT replaces the whole list, so one task's saves run in order and the read refreshes
-     * only after the last one (an earlier save's refetch would drop a criterion added meanwhile).
+     * Ticket 06: the milestone (mark, criteria, ticks) and the rows' flag change at once.
+     * Each PUT replaces the whole list, so one task's saves run in order; reads refresh only
+     * after the last write settles (an earlier save's refetch would drop a criterion added meanwhile).
      */
-    async setMilestone(taskId: string, milestone: MilestoneDto | null) {
-      const key = goalKeys.milestone(userId, taskId);
-      await cache.cancelQueries({ queryKey: key });
-      const previous = cache.getQueryData<MilestoneDto | null>(key);
-      cache.setQueryData(key, milestone);
-      // The rows' flag follows at once too.
-      const linksKey = goalKeys.links(userId);
-      const links = cache.getQueryData<GoalLinksDto>(linksKey);
-      if (links) cache.setQueryData(linksKey, { ...links, tasks: links.tasks.map(link => link.taskId === taskId ? { ...link, milestone: link.goalId === milestone?.goalId } : link) });
-      const save = (milestoneSaves.get(taskId) ?? Promise.resolve()).catch(() => undefined).then(() => transport.setMilestone(taskId, milestone));
-      milestoneSaves.set(taskId, save);
-      try { if (!await save) throw new AccountTransportError("TASK_NOT_FOUND"); }
-      catch (error) { cache.setQueryData(key, previous); if (links) cache.setQueryData(linksKey, links); throw error; }
-      finally { if (milestoneSaves.get(taskId) === save) { milestoneSaves.delete(taskId); await stale(); } }
+    setMilestone(taskId: string, milestone: MilestoneDto | null) {
+      return write([
+        change<MilestoneDto | null | undefined>(goalKeys.milestone(userId, taskId), () => milestone),
+        change<GoalLinksDto | undefined>(goalKeys.links(userId), data => data && { ...data, tasks: data.tasks.map(link => link.taskId === taskId ? { ...link, milestone: link.goalId === milestone?.goalId } : link) }),
+      ], async () => {
+        const save = (milestoneSaves.get(taskId) ?? Promise.resolve()).catch(() => undefined).then(() => transport.setMilestone(taskId, milestone));
+        milestoneSaves.set(taskId, save);
+        try { ok(await save, "TASK_NOT_FOUND"); }
+        finally { if (milestoneSaves.get(taskId) === save) milestoneSaves.delete(taskId); }
+      });
     },
-    /** The sidebar moves at once; a failed save puts it back. */
-    async reorder(id: string, anchorId: string, position: ReorderPosition) {
-      const key = goalKeys.list(userId);
-      const previous = cache.getQueryData<GoalsDto>(key);
-      if (previous) cache.setQueryData(key, { ...previous, goals: moveGoal(previous.goals, id, anchorId, position) });
-      try { return await transport.reorder(id, anchorId, position); }
-      catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
-      finally { await stale(); }
+    reorder(id: string, anchorId: string, position: ReorderPosition) {
+      return write([sidebar(goals => moveGoal(goals, id, anchorId, position))], () => transport.reorder(id, anchorId, position));
     },
-    async setHidden(hidden: boolean) {
-      const key = goalKeys.list(userId);
-      const previous = cache.getQueryData<GoalsDto>(key);
-      if (previous) cache.setQueryData(key, { ...previous, hidden });
-      try { return await transport.setHidden(hidden); }
-      catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
-      finally { await stale(); }
+    setHidden(hidden: boolean) {
+      return write([change<GoalsDto | undefined>(list, data => data && { ...data, hidden })], () => transport.setHidden(hidden));
     },
   };
 }

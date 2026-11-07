@@ -25,8 +25,8 @@ export function GoalsSidebar({ userId, adding, onAdding }: { userId: string; add
   const navigate = useNavigate();
   const query = useQuery(goalReads.list(userId));
   const writes = useGoalMutations(userId);
-  const create = useMutation({ mutationFn: (title: string) => writes.create({ title }), onSuccess: (goal) => navigate(`/goals/${encodeURIComponent(goal.id)}`) });
-  const reorder = useMutation({ mutationFn: ({ id, anchorId, position }: { id: string; anchorId: string; position: ReorderPosition }) => writes.reorder(id, anchorId, position) });
+  const create = useMutation({ mutationFn: (title: string) => writes.create({ title }), meta: { action: (title: string) => `add the goal "${title}"` }, onSuccess: (goal) => navigate(`/goals/${encodeURIComponent(goal.id)}`) });
+  const reorder = useMutation({ mutationFn: ({ id, anchorId, position }: { id: string; anchorId: string; position: ReorderPosition }) => writes.reorder(id, anchorId, position), meta: { action: () => "move the goal" } });
   if (!query.data || query.data.hidden) return null;
   return <GoalsNav goals={query.data.goals} adding={adding} onAdding={onAdding}
     onCreate={(title) => create.mutateAsync(title)}
@@ -57,8 +57,8 @@ export function GoalScreen({ account }: { account: Account }) {
   const current = useQuery(seasonReads.current(account.user.id));
   const inSeason = current.data?.season?.goals.find(goal => goal.goalId === id);
   const writes = useGoalMutations(account.user.id);
-  const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch) });
-  const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false) });
+  const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch), meta: { action: (patch: GoalPatch) => patch.archived === undefined ? "save the goal" : patch.archived ? "archive the goal" : "restore the goal" } });
+  const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false), meta: { action: ({ kind }: { kind: GoalLinkKind }) => `unlink the ${kind === "projects" ? "project" : "task"} from the goal` } });
   return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target } : null} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
     onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
@@ -73,10 +73,10 @@ export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: strin
   const list = useQuery(goalReads.list(userId));
   const links = useQuery({ ...goalReads.links(userId), enabled: Boolean(targetId) && list.data?.hidden === false });
   const writes = useGoalMutations(userId);
-  const toggle = useMutation({ mutationFn: ({ goalId, linked }: { goalId: string; linked: boolean }) => writes.link(goalId, kind, targetId!, linked) });
+  const toggle = useMutation({ mutationFn: ({ goalId, linked }: { goalId: string; linked: boolean }) => writes.link(goalId, kind, targetId!, linked), meta: { action: ({ linked }: { linked: boolean }) => linked ? "link the goal" : "unlink the goal" } });
   // Ticket 03: tasks only. Refetched each time the sheet opens, so label or project edits show on reopen.
   const suggestions = useQuery({ ...goalReads.suggestions(userId, targetId ?? ""), enabled: kind === "tasks" && Boolean(targetId) && list.data?.hidden === false });
-  const dismiss = useMutation({ mutationFn: (goalId: string) => writes.dismiss(targetId!, goalId) });
+  const dismiss = useMutation({ mutationFn: (goalId: string) => writes.dismiss(targetId!, goalId), meta: { action: () => "dismiss the suggestion" } });
   if (!targetId || !list.data || list.data.hidden || !links.data) return undefined;
   const linked = linkedGoalIds(links.data, kind, targetId);
   const active = list.data.goals;
@@ -99,7 +99,7 @@ export function useMilestoneSlots(userId: string, taskId: string | null | undefi
   const links = useQuery({ ...goalReads.links(userId), enabled: shown });
   const milestone = useQuery({ ...goalReads.milestone(userId, taskId ?? ""), enabled: shown });
   const writes = useGoalMutations(userId);
-  const change = useMutation({ mutationFn: (next: MilestoneDto | null) => writes.setMilestone(taskId!, next) });
+  const change = useMutation({ mutationFn: (next: MilestoneDto | null) => writes.setMilestone(taskId!, next), meta: { action: (next: MilestoneDto | null) => next ? "save the milestone" : "remove the milestone" } });
   if (!taskId || !shown || !list.data || !links.data || milestone.data === undefined) return undefined;
   const linked = linkedGoalIds(links.data, "tasks", taskId);
   const goals = list.data.goals.filter(goal => linked.includes(goal.id));
@@ -130,7 +130,7 @@ export function ProjectGoals({ userId, projectId }: { userId: string; projectId:
 export function GoalsHiddenSettingScreen({ userId }: { userId: string }) {
   const query = useQuery(goalReads.list(userId));
   const writes = useGoalMutations(userId);
-  const update = useMutation({ mutationFn: (hidden: boolean) => writes.setHidden(hidden) });
+  const update = useMutation({ mutationFn: (hidden: boolean) => writes.setHidden(hidden), meta: { action: (hidden: boolean) => hidden ? "hide Goals" : "show Goals" } });
   if (!query.data) return null;
   return <>
     <SettingSwitch title="Show goals and seasons" hint="Show Goals and Seasons at the top of the sidebar, goal fields on tasks and projects, and milestone flags. Projects and tasks work the same either way." checked={!query.data.hidden}
@@ -148,17 +148,17 @@ export function SeasonScreen({ account }: { account: Account }) {
   const past = useQuery(seasonReads.past(userId));
   const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   const seasonId = query.data?.season?.id ?? "";
-  const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays) });
-  const add = useMutation({ mutationFn: ({ goalId, tier, target }: { goalId: string; tier: SeasonTier; target: string }) => writes.addGoal(seasonId, goalId, tier, target) });
+  const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays), meta: { action: () => "start the season" } });
+  const add = useMutation({ mutationFn: ({ goalId, tier, target }: { goalId: string; tier: SeasonTier; target: string }) => writes.addGoal(seasonId, goalId, tier, target), meta: { action: () => "add the goal to the season" } });
   const goalWrites = useGoalMutations(userId);
   // A goal made on the season page joins this season at once.
   const create = useMutation({ mutationFn: async ({ goal, tier, target }: { goal: NewGoal; tier: SeasonTier; target: string }) => {
     const created = await goalWrites.create(goal);
     return writes.addGoal(seasonId, created.id, tier, target);
-  } });
-  const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch) });
-  const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId) });
-  const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next) });
+  }, meta: { action: ({ goal }: { goal: NewGoal }) => `add "${goal.title}" to the season` } });
+  const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch), meta: { action: ({ patch }: { patch: SeasonGoalPatch }) => patch.tier ? `move the goal to ${patch.tier}` : "save the target" } });
+  const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId), meta: { action: () => "remove the goal from the season" } });
+  const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next), meta: { action: () => "end the season" } });
   const writing = [start, add, create, update, remove, end];
   return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}

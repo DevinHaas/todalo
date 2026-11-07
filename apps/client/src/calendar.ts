@@ -3,6 +3,7 @@ import { queryOptions, type QueryClient, type QueryKey } from "@tanstack/react-q
 import type { CalendarAccountDto, CalendarEventDto, CalendarVisibilityInput } from "../../../packages/server/src/calendar-input";
 import { AccountTransportError, nativeAccountError, type AccountErrorCode } from "./errors";
 import { dayKey } from "./schedule";
+import { change, optimistic } from "./optimistic";
 
 export type { CalendarAccountDto, CalendarEventDto, CalendarVisibilityInput };
 
@@ -108,36 +109,29 @@ export const calendarQueries = (transport: CalendarTransport) => ({
 
 type Accounts = CalendarAccountDto[];
 /**
- * Toggles flip at once and roll back on failure (legacy waited on a transition).
+ * Toggles flip and a disconnected account goes at once (optimistic.ts); a failure takes back only that change.
  * Every write refetches accounts and events; the live stream also tells the
  * user's other devices.
  */
 export function calendarMutations(transport: CalendarTransport, cache: QueryClient, userId: string) {
   const key = calendarKeys.accounts(userId);
-  const optimistic = <T,>(change: (accounts: Accounts, input: T) => Accounts) => ({
-    onMutate: async (input: T) => {
-      await cache.cancelQueries({ queryKey: key });
-      const previous = cache.getQueryData<Accounts>(key);
-      if (previous) cache.setQueryData(key, change(previous, input));
-      return { previous };
-    },
-    onError: (_error: Error, _input: T, snapshot?: { previous?: Accounts }) => { if (snapshot?.previous) cache.setQueryData(key, snapshot.previous); },
-  });
-  const onSettled = () => cache.invalidateQueries({ queryKey: calendarKeys.all(userId) });
+  const refresh = () => [{ queryKey: calendarKeys.all(userId) }];
+  const accounts = <T,>(edit: (accounts: Accounts, input: T) => Accounts) => optimistic<T>(cache, { apply: (input) => [change<Accounts | undefined>(key, data => data && edit(data, input))], refresh });
   return {
     showEvents: {
       mutationFn: ({ accountId, showEvents }: { accountId: string; showEvents: boolean }) => transport.showEvents(accountId, showEvents),
-      ...optimistic<{ accountId: string; showEvents: boolean }>((accounts, input) => accounts.map(account => account.id === input.accountId ? { ...account, showEvents: input.showEvents } : account)),
-      onSettled,
+      ...accounts<{ accountId: string; showEvents: boolean }>((list, input) => list.map(account => account.id === input.accountId ? { ...account, showEvents: input.showEvents } : account)),
+      meta: { action: ({ showEvents }: { showEvents: boolean }) => showEvents ? "show this calendar account's events" : "hide this calendar account's events" },
     },
     setVisible: {
       mutationFn: ({ accountId, calendar }: { accountId: string; calendar: CalendarVisibilityInput }) => transport.setVisible(accountId, calendar),
-      ...optimistic<{ accountId: string; calendar: CalendarVisibilityInput }>((accounts, { accountId, calendar }) => accounts.map(account => account.id !== accountId ? account
+      ...accounts<{ accountId: string; calendar: CalendarVisibilityInput }>((list, { accountId, calendar }) => list.map(account => account.id !== accountId ? account
         : { ...account, calendars: account.calendars.map(cal => cal.id === calendar.googleCalendarId ? { ...cal, enabled: calendar.visible } : cal) })),
-      onSettled,
+      meta: { action: ({ calendar }: { calendar: CalendarVisibilityInput }) => calendar.visible ? "show the calendar" : "hide the calendar" },
     },
-    resync: { mutationFn: (accountId: string) => transport.resync(accountId), onSettled },
-    disconnect: { mutationFn: (accountId: string) => transport.disconnect(accountId), onSettled },
+    // Nothing to show before the server has synced; only the toast on failure.
+    resync: { mutationFn: (accountId: string) => transport.resync(accountId), ...accounts<string>(list => list), meta: { action: () => "resync the calendar" } },
+    disconnect: { mutationFn: (accountId: string) => transport.disconnect(accountId), ...accounts<string>((list, accountId) => list.filter(account => account.id !== accountId)), meta: { action: () => "disconnect the calendar account" } },
   };
 }
 

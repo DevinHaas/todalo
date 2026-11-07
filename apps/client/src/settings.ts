@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
 import type { SettingsDto } from "../../../packages/server/src/settings-input";
+import { change, optimistic, type Write } from "./optimistic";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
 export type { SettingsDto };
@@ -63,16 +64,8 @@ export function settingsMutations(transport: SettingsTransport, cache: QueryClie
       mutationFn: (settings: SettingsDto) => transport.update(settings),
       retry: (failures: number, error: unknown) => failures < 2 && error instanceof AccountTransportError && (error.code === "CONNECTION_FAILED" || error.code === "SAVE_FAILED"),
       retryDelay: (failures: number) => 300 * 2 ** failures,
-      onMutate: async (settings: SettingsDto) => {
-        await cache.cancelQueries({ queryKey: key });
-        const previous = cache.getQueryData<SettingsDto>(key);
-        cache.setQueryData(key, settings);
-        return { previous };
-      },
-      onError: (_error: Error, _settings: SettingsDto, snapshot?: { previous?: SettingsDto }) => {
-        if (snapshot?.previous) cache.setQueryData(key, snapshot.previous);
-      },
-      onSettled: () => cache.invalidateQueries({ queryKey: key }),
-    } satisfies MutationOptions<SettingsDto, Error, SettingsDto, { previous?: SettingsDto }>,
+      ...optimistic<SettingsDto>(cache, { apply: (settings) => [change(key, () => settings)], refresh: () => [{ queryKey: key }] }),
+      meta: { action: () => "save your preference" },
+    } satisfies MutationOptions<SettingsDto, Error, SettingsDto, Write>,
   };
 }

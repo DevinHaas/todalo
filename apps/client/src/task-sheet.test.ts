@@ -137,10 +137,8 @@ describe("comment transport and writes", () => {
     cache.setQueryData(commentKeys.task("alice", "t"), []);
     cache.setQueryData(["user", "alice", "today"], { tasks: [], openCount: 0 });
     const writes = commentMutations({ list: async () => [], add: async () => comment, remove: async () => true }, cache, "alice");
-    const added = await writes.add.mutationFn({ taskId: "t", body: "hi", id: "c" });
-    writes.add.onSuccess(added);
+    await cache.getMutationCache().build(cache, writes.add).execute({ taskId: "t", body: "hi", id: "c" });
     expect(cache.getQueryData(commentKeys.task("alice", "t"))).toEqual([comment]);
-    await writes.add.onSettled(added, null, { taskId: "t", body: "hi", id: "c" });
     expect(cache.getQueryState(["user", "alice", "today"])?.isInvalidated).toBe(true);
   });
 });

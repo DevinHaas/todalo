@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type MutationOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
+import { change, optimistic, type Write } from "./optimistic";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { taskKeys } from "./tasks";
@@ -69,13 +70,14 @@ export interface RemovedComment { taskId: string; id: string }
 // An add carries its operation ID and a delete is idempotent, so unclear failures may be repeated.
 const retry = (failures: number, error: unknown) => failures < 2 && error instanceof AccountTransportError && (error.code === "CONNECTION_FAILED" || error.code === "SAVE_FAILED");
 
-/** Comment writes; each refreshes the task's comments and the lists' comment counts. */
+/**
+ * Comment writes, optimistic (optimistic.ts): the comment appears or goes at
+ * once and a failure takes back only that change. Each then refreshes the
+ * task's comments and the lists' comment counts.
+ */
 export function commentMutations(transport: CommentTransport, cache: QueryClient, userId: string) {
-  const changed = (taskId: string) => Promise.all([
-    cache.invalidateQueries({ queryKey: commentKeys.task(userId, taskId) }),
-    cache.invalidateQueries({ queryKey: taskKeys.today(userId) }),
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "project"] }),
-  ]);
+  const changed = (taskId: string): QueryFilters[] => [{ queryKey: commentKeys.task(userId, taskId) }, { queryKey: taskKeys.today(userId) }, { queryKey: [...taskKeys.user(userId), "project"] }];
+  const comments = (taskId: string, edit: (list: CommentDto[]) => CommentDto[]) => change<CommentDto[] | null | undefined>(commentKeys.task(userId, taskId), list => list && edit(list));
   return {
     add: {
       mutationFn: async ({ taskId, body, id }: NewComment) => {
@@ -84,14 +86,19 @@ export function commentMutations(transport: CommentTransport, cache: QueryClient
         return comment;
       },
       retry,
-      onSuccess: (comment: CommentDto) => cache.setQueryData<CommentDto[] | null>(commentKeys.task(userId, comment.taskId), list => list && !list.some(item => item.id === comment.id) ? [...list, comment] : list),
-      onSettled: (_comment: CommentDto | undefined, _error: Error | null, { taskId }: NewComment) => changed(taskId),
-    } satisfies MutationOptions<CommentDto, Error, NewComment>,
+      ...optimistic<NewComment, CommentDto>(cache, {
+        // ponytail: "You" until the server's copy (with the author's name) arrives a moment later.
+        apply: ({ taskId, body, id }) => [comments(taskId, list => list.some(item => item.id === id) ? list : [...list, { id, taskId, body, createdAt: new Date().toISOString(), author: { name: "You", image: null } }])],
+        reconcile: (comment) => [comments(comment.taskId, list => list.map(item => item.id === comment.id ? comment : item))],
+        refresh: ({ taskId }) => changed(taskId),
+      }),
+      meta: { action: () => "add your comment" },
+    } satisfies MutationOptions<CommentDto, Error, NewComment, Write>,
     remove: {
       mutationFn: ({ id }: RemovedComment) => transport.remove(id),
       retry,
-      onMutate: ({ taskId, id }: RemovedComment) => { cache.setQueryData<CommentDto[] | null>(commentKeys.task(userId, taskId), list => list?.filter(item => item.id !== id)); },
-      onSettled: (_removed: boolean | undefined, _error: Error | null, { taskId }: RemovedComment) => changed(taskId),
-    } satisfies MutationOptions<boolean, Error, RemovedComment>,
+      ...optimistic<RemovedComment>(cache, { apply: ({ taskId, id }) => [comments(taskId, list => list.filter(item => item.id !== id))], refresh: ({ taskId }) => changed(taskId) }),
+      meta: { action: () => "delete the comment" },
+    } satisfies MutationOptions<boolean, Error, RemovedComment, Write>,
   };
 }

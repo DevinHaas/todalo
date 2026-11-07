@@ -8,6 +8,8 @@ import "./ui/styles.css"; // includes ./styles.css (legacy layer)
 import { trackSoftwareKeyboard } from "./software-keyboard";
 import { isTauri } from "@tauri-apps/api/core";
 import { followNativeLinks } from "./links";
+import { toasts } from "./toasts";
+import { Toaster } from "./ui";
 
 // ponytail: before render, not pre-paint; the Tauri CSP forbids an inline <head> script.
 theme.apply();
@@ -15,5 +17,5 @@ trackSoftwareKeyboard();
 // Task deep links Rust accepted (cold or warm launch); before render so none waits.
 if (isTauri()) void followNativeLinks();
 const root = createRoot(document.getElementById("root")!);
-root.render(<QueryClientProvider client={queries}><App /></QueryClientProvider>);
+root.render(<QueryClientProvider client={queries}><App /><Toaster manager={toasts} /></QueryClientProvider>);
 if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());

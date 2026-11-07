@@ -2,6 +2,7 @@ import { connectionMonitor, userQueryClient } from "./connection";
 import { SessionController } from "./session";
 import { accountTransport, googleTransport } from "./transport";
 import { AccountTransportError } from "./errors";
+import { reportWriteError } from "./toasts";
 import { taskQueries, taskTransport } from "./tasks";
 import { projectQueries, projectTransport } from "./projects";
 import { goalQueries, goalTransport } from "./goals";
@@ -21,7 +22,7 @@ import { commentQueries, commentTransport } from "./comments";
 // signs the UI out (and clears every user-scoped query) when the server agrees.
 const onError = (error: Error) => { if (error instanceof AccountTransportError && error.code === "UNAUTHENTICATED") void session.refresh(); };
 export const connection = connectionMonitor();
-export const queries = userQueryClient(connection, onError);
+export const queries = userQueryClient(connection, onError, (error, input, mutation) => reportWriteError(queries, error, input, mutation));
 export const session = new SessionController(accountTransport(), () => queries.clear(), googleTransport());
 export const tasks = taskTransport();
 export const reads = taskQueries(tasks);

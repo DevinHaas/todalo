@@ -28,3 +28,4 @@ export * from "./table";
 export * from "./tabs";
 export * from "./swatch-picker";
 export * from "./page";
+export * from "./toast";

@@ -24,7 +24,7 @@ function useProjectMutations(userId: string) {
 export function ProjectsScreen({ account }: { account: Account }) {
   const query = useQuery(projectReads.list(account.user.id));
   const writes = useProjectMutations(account.user.id);
-  const create = useMutation({ mutationFn: writes.create });
+  const create = useMutation({ mutationFn: writes.create, meta: { action: (name: string) => `add the project "${name}"` } });
   return <ProjectsView state={query} onRetry={() => void query.refetch()} onCreate={create.mutateAsync} write={{ pending: create.isPending, error: create.error?.message ?? null }} />;
 }
 
@@ -34,9 +34,9 @@ export function ProjectScreen({ account }: { account: Account }) {
   const query = useQuery(projectReads.detail(account.user.id, id));
   const writes = useProjectMutations(account.user.id);
   const organization = useOrganizationMutations(account.user.id);
-  const rename = useMutation({ mutationFn: (name: string) => writes.rename(id, name) });
+  const rename = useMutation({ mutationFn: (name: string) => writes.rename(id, name), meta: { action: () => "rename the project" } });
   // Legacy: its tasks move to the Inbox, which opens.
-  const remove = useMutation({ mutationFn: () => writes.remove(id), onSuccess: () => navigate("/inbox", { replace: true }) });
+  const remove = useMutation({ mutationFn: () => writes.remove(id), meta: { action: () => "delete the project" }, onSuccess: () => navigate("/inbox", { replace: true }) });
   const createSection = useMutation(organization.createSection);
   const removeSection = useMutation(organization.removeSection);
   const order = useReorder(account.user.id);

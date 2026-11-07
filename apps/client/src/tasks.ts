@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type MutationOptions, type QueryClient, type QueryFilters, type QueryKey } from "@tanstack/react-query";
+import { optimistic, type Change, type Write } from "./optimistic";
 import type { RecurrenceDto, TaskDto, TodayDto } from "../../../packages/server/src/task-dto";
 import type { TaskDetailsInput } from "../../../packages/server/src/task-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
@@ -145,13 +146,75 @@ const counted = (task: TaskDto, now = new Date()) => {
   return task.status !== "done" && task.dueDate !== null && new Date(task.dueDate) < tomorrow;
 };
 
-type Snapshot = { previous?: TodayDto };
+/**
+ * Every cached read that lists tasks gets `change`: Today (the full task
+ * collection) with its sidebar count, project pages, label and filter pages,
+ * goal pages, and each cached task. A task the change adds or moves appears in
+ * a project or label page only when it belongs there; filter and goal pages
+ * keep only tasks they already listed (their membership is the server's).
+ */
+export function taskChanges(userId: string, change: (tasks: TaskDto[]) => TaskDto[]): Change[] {
+  const user = taskKeys.user(userId);
+  const open = (tasks: TaskDto[]) => tasks.filter(task => counted(task)).length;
+  const lists = (member: (task: TaskDto, key: QueryKey) => boolean | undefined) => (data: { tasks?: TaskDto[] } | null | undefined, key: QueryKey) => {
+    if (!data || !Array.isArray(data.tasks)) return data;
+    const had = new Set(data.tasks.map(task => task.id));
+    return { ...data, tasks: change(data.tasks).filter(task => member(task, key) ?? had.has(task.id)) };
+  };
+  return [
+    { filters: { queryKey: taskKeys.today(userId), exact: true }, patch: (data: TodayDto | null | undefined) => {
+      if (!data) return data;
+      const tasks = change(data.tasks);
+      return { tasks, openCount: data.openCount + open(tasks) - open(data.tasks) };
+    } },
+    { filters: { queryKey: [...user, "project"] }, patch: lists((task, key) => task.projectId === key[3]) },
+    { filters: { queryKey: [...user, "metadata"] }, patch: lists((task, key) => key[3] === "label" ? task.labelIds.includes(String(key[4])) : undefined) },
+    { filters: { queryKey: [...user, "goals", "detail"] }, patch: lists(() => undefined) },
+    { filters: { queryKey: [...user, "task"], predicate: query => query.queryKey.length === 4 }, patch: (data: TaskDto | null | undefined) => data && (change([data]).find(task => task.id === data.id) ?? data) },
+  ];
+}
+
+/** The row a create shows until the server answers (same ID: the create's operation ID). */
+export function draftTask(task: NewTask, parent?: TaskDto): TaskDto {
+  return {
+    id: task.id, title: task.title, description: task.description ?? null, status: "todo", priority: task.priority ?? 4,
+    projectId: parent ? parent.projectId : task.projectId ?? null, sectionId: parent ? parent.sectionId : task.sectionId ?? null, parentId: task.parentId ?? null,
+    dueDate: task.dueDate, dueDateEnd: task.dueDateEnd ?? null, deadline: task.deadline ?? null, completedAt: null,
+    labelIds: task.labelIds ?? [], recurrence: task.recurrence ?? null, updatedAt: null, commentCount: 0,
+  };
+}
+
+/** Puts `task` where its placement says (top, bottom, above or below a row). */
+export function placeTask(tasks: TaskDto[], task: TaskDto, placement?: Placement): TaskDto[] {
+  const at = placement?.anchorId ? tasks.findIndex(item => item.id === placement.anchorId) : -1;
+  if (placement?.edge === "top") return [task, ...tasks];
+  if (at < 0) return [...tasks, task];
+  const index = placement!.edge === "above" ? at : at + 1;
+  return [...tasks.slice(0, index), task, ...tasks.slice(index)];
+}
+
+/** An edit's fields on the task (the version stays until the server answers). */
+export const editedTask = (task: TaskDto, { updatedAt: _version, ...details }: TaskDetails): TaskDto => ({ ...task, ...details, recurrence: details.recurrence && { ...details.recurrence, until: details.recurrence.until ?? null }, labelIds: details.labelIds ?? task.labelIds });
+
+/** What an edit did, for its failure toast: `move "Buy milk" to Tuesday`. */
+export function editAction(before: TaskDto | undefined, details: TaskDetails, now = new Date()) {
+  const name = `"${details.title}"`;
+  if (!before) return `save ${name}`;
+  if (before.dueDate !== details.dueDate || before.dueDateEnd !== details.dueDateEnd) {
+    return details.dueDate ? `move ${name} to ${shortDateLabel(details, now)}` : `unschedule ${name}`;
+  }
+  if (before.title !== details.title) return `rename "${before.title}"`;
+  if (before.priority !== details.priority) return `set ${name} to priority ${details.priority}`;
+  if (details.labelIds && details.labelIds.join() !== before.labelIds.join()) return `change the labels of ${name}`;
+  return `save your changes to ${name}`;
+}
 
 /**
- * Task writes against the user's cache. Completion and deletion apply
- * optimistically to Today (list and sidebar count) and roll back on failure;
- * every write then refetches Today and the task so server results (such as a
- * recurring task's next date) win.
+ * Task writes against the user's cache, all optimistic (optimistic.ts): every
+ * list showing the task changes at once and takes the server's copy when it
+ * answers; a failure takes back only this write's change, and the root
+ * toaster says what failed (meta.action). Reads refresh once no write is in
+ * flight, so server results (a recurring task's next date) still win.
  *
  * Completion feedback plays in onMutate, with the optimistic check-off, so it
  * matches what the user sees instead of lagging by a round trip; onMutate runs
@@ -159,29 +222,17 @@ type Snapshot = { previous?: TodayDto };
  * neither delay nor fail the write; a later rollback shows the error instead.
  */
 export function taskMutations(transport: TaskTransport, cache: QueryClient, userId: string, feedback?: Feedback) {
-  const today = taskKeys.today(userId);
-  // Today (and the sidebar count), the task, and every open project list.
-  const settle = (id: string) => Promise.all([
-    cache.invalidateQueries({ queryKey: today }),
-    cache.invalidateQueries({ queryKey: taskKeys.task(userId, id) }),
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "project"] }),
-    // Label and saved-filter task lists (metadataKeys.all, ticket 14).
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "metadata"] }),
-    // Search results and Quick Find items (searchKeys.all, ticket 18).
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "search"] }),
-    // Goal pages and milestones (goalKeys.all): a completed milestone ticks its criteria.
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "goals"] }),
-  ]);
-  async function optimistic(task: TaskDto, change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
-    await cache.cancelQueries({ queryKey: today });
-    const previous = cache.getQueryData<TodayDto>(today);
-    if (previous) {
-      const was = previous.tasks.find(item => item.id === task.id);
-      cache.setQueryData<TodayDto>(today, { tasks: change(previous.tasks), openCount: previous.openCount - (was && counted(was) ? 1 : 0) });
-    }
-    return { previous };
-  }
-  const rollback = (_error: Error, _input: unknown, snapshot?: Snapshot) => { if (snapshot?.previous) cache.setQueryData(today, snapshot.previous); };
+  const user = taskKeys.user(userId);
+  // Today (and the sidebar count), the task, project, label/filter, search and goal reads
+  // (a completed milestone ticks its criteria).
+  const refresh = (id: string): QueryFilters[] => [
+    { queryKey: taskKeys.today(userId) }, { queryKey: taskKeys.task(userId, id) }, { queryKey: [...user, "project"] },
+    { queryKey: [...user, "metadata"] }, { queryKey: [...user, "search"] }, { queryKey: [...user, "goals"] },
+  ];
+  const cached = (id: string) => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id);
+  const saved = (task: TaskDto) => taskChanges(userId, tasks => tasks.map(item => item.id === task.id ? task : item));
+  // The task's own read gets the server copy even when it wasn't loaded yet (the sheet opens it next).
+  const keep = <V,>(plan: ReturnType<typeof optimistic<V, TaskDto>>) => ({ ...plan, onSuccess: (task: TaskDto, input: V, write?: Write) => { plan.onSuccess(task, input, write); cache.setQueryData(taskKeys.task(userId, task.id), task); } });
   // Edits of one task run one at a time, and an edit based on the version this
   // client's own earlier edit replaced is rebased onto that edit's result. A
   // second drag (or any write) started before the first settled — and before
@@ -205,41 +256,48 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
     run.then(done, done);
     return run;
   };
+  const completed = optimistic<Completion, TaskDto | null>(cache, {
+    apply: ({ task }) => taskChanges(userId, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item)),
+    reconcile: (task) => task ? saved(task) : [],
+    refresh: ({ task }) => refresh(task.id),
+  });
   return {
     create: {
       mutationFn: (task: NewTask) => transport.create(task),
       retry, retryDelay,
-      onSuccess: (task: TaskDto) => { cache.setQueryData(taskKeys.task(userId, task.id), task); },
-      onSettled: (_task: TaskDto | undefined, _error: Error | null, input: NewTask) => settle(input.id),
-    } satisfies MutationOptions<TaskDto, Error, NewTask>,
+      ...keep(optimistic<NewTask, TaskDto>(cache, {
+        apply: (input) => taskChanges(userId, tasks => tasks.some(item => item.id === input.id) ? tasks : placeTask(tasks, draftTask(input, input.parentId ? cached(input.parentId) : undefined), input.placement)),
+        reconcile: saved,
+        refresh: (input) => refresh(input.id),
+      })),
+      meta: { action: (task: NewTask) => `add "${task.title}"` },
+    } satisfies MutationOptions<TaskDto, Error, NewTask, Write>,
     complete: {
       mutationFn: ({ task, operationId }: Completion) => confirmingCriteria(confirm => transport.complete(task.id, task.dueDate, operationId, confirm)),
       retry, retryDelay,
-      onMutate: ({ task }: Completion) => {
-        feedback?.play("taskCompleted");
-        return optimistic(task, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item));
-      },
-      onError: rollback,
-      onSettled: (_result: unknown, _error: Error | null, { task }: Completion) => settle(task.id),
-    } satisfies MutationOptions<TaskDto | null, Error, Completion, Snapshot>,
-    // Not optimistic (the legacy dialog waited too); the editor keeps its draft until saved.
+      ...completed,
+      onMutate: (input: Completion) => { feedback?.play("taskCompleted"); return completed.onMutate(input); },
+      meta: { action: ({ task }: Completion) => `complete "${task.title}"` },
+    } satisfies MutationOptions<TaskDto | null, Error, Completion, Write>,
+    // Schedule drag, resize and unschedule, the editor, priority and labels.
     update: {
       mutationFn: ({ id, details }: { id: string; details: TaskDetails }) => edit(id, details),
       retry, retryDelay,
-      // Today gets the saved copy at once too, so the next write starts from the new version.
-      onSuccess: (task: TaskDto) => {
-        cache.setQueryData(taskKeys.task(userId, task.id), task);
-        cache.setQueryData<TodayDto>(today, current => current && { ...current, tasks: current.tasks.map(item => item.id === task.id ? task : item) });
-      },
-      onSettled: (_task: TaskDto | undefined, _error: Error | null, { id }: { id: string }) => settle(id),
-    } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }>,
+      ...keep(optimistic<{ id: string; details: TaskDetails }, TaskDto>(cache, {
+        apply: ({ id, details }) => taskChanges(userId, tasks => tasks.map(item => item.id === id ? editedTask(item, details) : item)),
+        // The saved copy at once too, so the next write starts from the new version.
+        reconcile: saved,
+        refresh: ({ id }) => refresh(id),
+      })),
+      meta: { action: ({ id, details }: { id: string; details: TaskDetails }) => editAction(cached(id), details) },
+    } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }, Write>,
     remove: {
       mutationFn: (task: TaskDto) => transport.remove(task.id),
       retry, retryDelay,
-      onMutate: (task: TaskDto) => optimistic(task, tasks => tasks.filter(item => item.id !== task.id)),
-      onError: rollback,
-      onSettled: (_result: unknown, _error: Error | null, task: TaskDto) => settle(task.id),
-    } satisfies MutationOptions<boolean, Error, TaskDto, Snapshot>,
+      // Its sub-tasks go with it.
+      ...optimistic<TaskDto>(cache, { apply: (task) => taskChanges(userId, tasks => tasks.filter(item => item.id !== task.id && item.parentId !== task.id)), refresh: (task) => refresh(task.id) }),
+      meta: { action: (task: TaskDto) => `delete "${task.title}"` },
+    } satisfies MutationOptions<boolean, Error, TaskDto, Write>,
   };
 }
 

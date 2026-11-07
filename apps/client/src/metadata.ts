@@ -1,10 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
+import { change, optimisticWrite } from "./optimistic";
 import type {
   FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto,
 } from "../../../packages/server/src/metadata-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { taskKeys } from "./tasks";
+import { taskChanges, taskKeys } from "./tasks";
 
 export type { FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto };
 export interface LabelFields { name: string; color: string | null }
@@ -100,28 +101,46 @@ export function metadataQueries(transport: MetadataTransport) {
 }
 
 /**
- * Writes plus the cache entries each makes stale. Not optimistic (the legacy
- * directory waited too). Any label or filter change refreshes every label/filter
- * read; deleting a label also changes tasks (their labelIds), so every task
- * read for the user is refreshed, as project deletion does.
+ * Label and filter writes, optimistic (optimistic.ts): the directory and pages
+ * change at once and a failure takes back only that change. Any label or
+ * filter change then refreshes every label/filter read; deleting a label also
+ * changes tasks (their labelIds), so every task read for the user is refreshed.
  */
 export function metadataMutations(transport: MetadataTransport, cache: QueryClient, userId: string) {
-  const refresh = () => cache.invalidateQueries({ queryKey: metadataKeys.all(userId) });
+  const refresh: QueryFilters[] = [{ queryKey: metadataKeys.all(userId) }];
+  const byName = <T extends { name: string }>(items: T[]) => [...items].sort((a, b) => a.name.localeCompare(b.name));
+  const directory = (edit: (data: MetadataDto) => MetadataDto) => change<MetadataDto | undefined>(metadataKeys.list(userId), data => data && edit(data));
+  const found = <T,>(value: T | null) => { if (!value) throw new AccountTransportError("SAVE_FAILED"); return value; };
   return {
-    async createLabel(id: string, label: LabelFields) { const created = await transport.createLabel(id, label); await refresh(); return created; },
-    async updateLabel(id: string, label: LabelFields) { const updated = await transport.updateLabel(id, label); await refresh(); return updated; },
+    createLabel(id: string, label: LabelFields) {
+      return optimisticWrite(cache, [directory(data => ({ ...data, labels: byName([...data.labels.filter(item => item.id !== id), { id, ...label }]) }))], () => transport.createLabel(id, label), refresh);
+    },
+    updateLabel(id: string, label: LabelFields) {
+      return optimisticWrite(cache, [
+        directory(data => ({ ...data, labels: byName(data.labels.map(item => item.id === id ? { ...item, ...label } : item)) })),
+        change<LabelDetailDto | null | undefined>(metadataKeys.label(userId, id), data => data && { ...data, label: { ...data.label, ...label } }),
+      ], async () => found(await transport.updateLabel(id, label)), refresh);
+    },
     async removeLabel(id: string) {
-      const removed = await transport.removeLabel(id);
+      const removed = await optimisticWrite(cache, [
+        directory(data => ({ ...data, labels: data.labels.filter(item => item.id !== id) })),
+        ...taskChanges(userId, tasks => tasks.map(task => task.labelIds.includes(id) ? { ...task, labelIds: task.labelIds.filter(label => label !== id) } : task)),
+      ], () => transport.removeLabel(id), [{ queryKey: taskKeys.user(userId) }]);
       cache.removeQueries({ queryKey: metadataKeys.label(userId, id) });
-      await cache.invalidateQueries({ queryKey: taskKeys.user(userId) });
       return removed;
     },
-    async createFilter(id: string, filter: FilterFields) { const created = await transport.createFilter(id, filter); await refresh(); return created; },
-    async updateFilter(id: string, filter: FilterFields) { const updated = await transport.updateFilter(id, filter); await refresh(); return updated; },
+    createFilter(id: string, filter: FilterFields) {
+      return optimisticWrite(cache, [directory(data => ({ ...data, filters: byName([...data.filters.filter(item => item.id !== id), { id, ...filter }]) }))], () => transport.createFilter(id, filter), refresh);
+    },
+    updateFilter(id: string, filter: FilterFields) {
+      return optimisticWrite(cache, [
+        directory(data => ({ ...data, filters: byName(data.filters.map(item => item.id === id ? { ...item, ...filter } : item)) })),
+        change<FilterDetailDto | null | undefined>(metadataKeys.filter(userId, id), data => data && { ...data, filter: { ...data.filter, ...filter } }),
+      ], async () => found(await transport.updateFilter(id, filter)), refresh);
+    },
     async removeFilter(id: string) {
-      const removed = await transport.removeFilter(id);
+      const removed = await optimisticWrite(cache, [directory(data => ({ ...data, filters: data.filters.filter(item => item.id !== id) }))], () => transport.removeFilter(id), refresh);
       cache.removeQueries({ queryKey: metadataKeys.filter(userId, id) });
-      await refresh();
       return removed;
     },
   };

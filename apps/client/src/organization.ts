@@ -1,10 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type MutationOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type MutationOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
+import { change, optimistic, type Write } from "./optimistic";
 import type { DestinationsDto, SectionDto } from "../../../packages/server/src/project-dto";
 import type { TaskOrganizationInput } from "../../../packages/server/src/organization-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { projectKeys } from "./projects";
-import { taskKeys, type TaskDto } from "./tasks";
+import { projectKeys, type ProjectDetailDto } from "./projects";
+import { taskChanges, taskKeys, type TaskDto } from "./tasks";
 import { taskTree, validateTaskParent } from "../../../packages/db/src/task-parent-validation";
 
 export type { DestinationsDto, SectionDto };
@@ -85,21 +86,25 @@ const retry = (failures: number, error: unknown) => failures < 2 && error instan
 const retryDelay = (failures: number) => 300 * 2 ** failures;
 
 /**
- * Section and hierarchy writes plus the cache entries each makes stale. A move
- * also changes carried sub-tasks, and a section delete un-sections its tasks,
- * so both refresh every cached task, project and Today read. Not optimistic:
- * the legacy dialogs waited for the server too.
+ * Section and hierarchy writes, optimistic (optimistic.ts): the section or
+ * the moved task shows at once and a failure takes back only that change. A
+ * move also changes carried sub-tasks, and a section delete un-sections its
+ * tasks, so both then refresh every cached task, project and Today read.
  */
 export function organizationMutations(transport: OrganizationTransport, cache: QueryClient, userId: string) {
-  const tasksChanged = () => Promise.all([
-    cache.invalidateQueries({ queryKey: taskKeys.today(userId) }),
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "task"] }),
-    cache.invalidateQueries({ queryKey: [...taskKeys.user(userId), "project"] }),
-  ]);
-  const sectionsChanged = (projectId: string) => Promise.all([
-    cache.invalidateQueries({ queryKey: projectKeys.detail(userId, projectId) }),
-    cache.invalidateQueries({ queryKey: organizationKeys.destinations(userId) }),
-  ]);
+  const user = taskKeys.user(userId);
+  const tasksChanged: QueryFilters[] = [{ queryKey: taskKeys.today(userId) }, { queryKey: [...user, "task"] }, { queryKey: [...user, "project"] }];
+  const sectionsChanged = (projectId: string): QueryFilters[] => [{ queryKey: projectKeys.detail(userId, projectId) }, { queryKey: organizationKeys.destinations(userId) }];
+  const sections = (projectId: string, edit: (sections: SectionDto[]) => SectionDto[]) => [
+    change<ProjectDetailDto | null | undefined>(projectKeys.detail(userId, projectId), data => data && { ...data, sections: edit(data.sections) }),
+    change<DestinationsDto | undefined>(organizationKeys.destinations(userId), data => data && { ...data, sections: edit(data.sections) }),
+  ];
+  const organized = optimistic<Organize, TaskDto>(cache, {
+    apply: ({ task, change }) => taskChanges(userId, tasks => tasks.map(item => item.id === task.id ? { ...item, ...change } : item)),
+    reconcile: (moved) => taskChanges(userId, tasks => tasks.map(item => item.id === moved.id ? moved : item)),
+    refresh: () => tasksChanged,
+  });
+  const draft = ({ projectId, name }: { projectId: string; name: string }): SectionDto => ({ id: `draft-section-${projectId}-${name}`, projectId, name });
   return {
     createSection: {
       mutationFn: async ({ projectId, name }: { projectId: string; name: string }) => {
@@ -107,13 +112,23 @@ export function organizationMutations(transport: OrganizationTransport, cache: Q
         if (!section) throw new AccountTransportError("PROJECT_NOT_FOUND");
         return section;
       },
-      onSettled: (_section: SectionDto | undefined, _error: Error | null, { projectId }: { projectId: string }) => sectionsChanged(projectId),
-    } satisfies MutationOptions<SectionDto, Error, { projectId: string; name: string }>,
+      ...optimistic<{ projectId: string; name: string }, SectionDto>(cache, {
+        apply: (input) => sections(input.projectId, list => [...list, draft(input)]),
+        reconcile: (section, input) => sections(input.projectId, list => list.map(item => item.id === draft(input).id ? section : item)),
+        refresh: ({ projectId }) => sectionsChanged(projectId),
+      }),
+      meta: { action: ({ name }: { name: string }) => `add the section "${name}"` },
+    } satisfies MutationOptions<SectionDto, Error, { projectId: string; name: string }, Write>,
     removeSection: {
       mutationFn: (section: SectionDto) => transport.removeSection(section.id),
       retry, retryDelay,
-      onSettled: (_removed: boolean | undefined, _error: Error | null, section: SectionDto) => Promise.all([sectionsChanged(section.projectId), tasksChanged()]),
-    } satisfies MutationOptions<boolean, Error, SectionDto>,
+      ...optimistic<SectionDto>(cache, {
+        apply: (section) => [...sections(section.projectId, list => list.filter(item => item.id !== section.id)),
+          ...taskChanges(userId, tasks => tasks.map(task => task.sectionId === section.id ? { ...task, sectionId: null } : task))],
+        refresh: (section) => [...sectionsChanged(section.projectId), ...tasksChanged],
+      }),
+      meta: { action: (section: SectionDto) => `delete the section "${section.name}"` },
+    } satisfies MutationOptions<boolean, Error, SectionDto, Write>,
     organize: {
       // `updatedAt` from the copy the user acted on, so another device's change is never overwritten.
       mutationFn: async ({ task, change }: Organize) => {
@@ -122,9 +137,10 @@ export function organizationMutations(transport: OrganizationTransport, cache: Q
         return moved;
       },
       retry, retryDelay,
-      onSuccess: (task: TaskDto) => { cache.setQueryData(taskKeys.task(userId, task.id), task); },
-      onSettled: () => tasksChanged(),
-    } satisfies MutationOptions<TaskDto, Error, Organize>,
+      ...organized,
+      onSuccess: (moved: TaskDto, input: Organize, write?: Write) => { organized.onSuccess(moved, input, write); cache.setQueryData(taskKeys.task(userId, moved.id), moved); },
+      meta: { action: ({ task, change }: Organize) => "parentId" in change ? (change.parentId ? `nest "${task.title}"` : `un-nest "${task.title}"`) : `move "${task.title}"` },
+    } satisfies MutationOptions<TaskDto, Error, Organize, Write>,
   };
 }
 

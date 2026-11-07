@@ -39,7 +39,8 @@ describe("search transport", () => {
     cache.setQueryData(searchKeys.find("alice"), { items: [] });
     const transport = { update: async () => task("a") } as unknown as TaskTransport;
     const update = taskMutations(transport, cache, "alice").update;
-    await update.onSettled(undefined, null, { id: "a" });
+    const details = { updatedAt: "2026-10-15T08:00:00.000Z", title: "a", description: "", priority: 4, deadline: null, dueDate: null, dueDateEnd: null, recurrence: null };
+    await cache.getMutationCache().build(cache, update).execute({ id: "a", details });
     expect(cache.getQueryState(searchKeys.results("alice", "plan"))?.isInvalidated).toBe(true);
     expect(cache.getQueryState(searchKeys.find("alice"))?.isInvalidated).toBe(true);
   });

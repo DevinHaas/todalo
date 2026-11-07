@@ -1,5 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
+import { change, optimisticWrite } from "./optimistic";
+import { goalKeys, type GoalsDto } from "./goals";
 import type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier } from "../../../packages/server/src/season-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
@@ -91,27 +93,33 @@ export function seasonQueries(transport: SeasonTransport) {
   };
 }
 
-/** Writes refresh the season page; a refused write (gone, ended or archived) is an error the page shows. */
+/**
+ * Season writes. Adding, changing and removing a season goal show at once
+ * (optimistic.ts) and a failure takes back only that change: the server write
+ * plus the refetch took ~2 s, and until then a tier change looked like it did
+ * nothing. Starting and ending wait for the server, which computes the dates,
+ * progress and carried goals. A refused write (gone, ended or archived) is an error.
+ */
 export function seasonMutations(transport: SeasonTransport, cache: QueryClient, userId: string) {
-  const stale = () => cache.invalidateQueries({ queryKey: seasonKeys.all(userId) });
+  const refresh: QueryFilters[] = [{ queryKey: seasonKeys.all(userId) }];
   const done = <T,>(value: T | null) => { if (!value) throw new AccountTransportError("SAVE_FAILED"); return value; };
+  const rows = (seasonId: string, edit: (goals: SeasonGoalDto[]) => SeasonGoalDto[]) => change<CurrentSeasonDto | undefined>(seasonKeys.current(userId),
+    data => data?.season?.id === seasonId ? { ...data, season: { ...data.season, goals: edit(data.season.goals) } } : data);
+  const settled = async <T,>(run: () => Promise<T>) => { try { return await run(); } finally { await cache.invalidateQueries({ queryKey: seasonKeys.all(userId) }); } };
   return {
-    async start(startDate: string, lengthDays: number) { try { return await transport.start(startDate, lengthDays); } finally { await stale(); } },
-    async addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) { try { return done(await transport.addGoal(seasonId, goalId, tier, target)); } finally { await stale(); } },
-    /**
-     * Shown at once: the server write plus the refetch took ~2 s, and until then the
-     * goal stayed in its old tier section, so a tier change looked like it did nothing.
-     */
-    async updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) {
-      const key = seasonKeys.current(userId);
-      await cache.cancelQueries({ queryKey: key });
-      const before = cache.getQueryData<CurrentSeasonDto>(key);
-      if (before?.season?.id === seasonId) cache.setQueryData<CurrentSeasonDto>(key, { ...before, season: { ...before.season, goals: before.season.goals.map(goal => goal.goalId === goalId ? { ...goal, ...patch } : goal) } });
-      try { return done(await transport.updateGoal(seasonId, goalId, patch)); }
-      catch (error) { if (before) cache.setQueryData(key, before); throw error; }
-      finally { await stale(); }
+    start: (startDate: string, lengthDays: number) => settled(() => transport.start(startDate, lengthDays)),
+    addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) {
+      const goal = cache.getQueryData<GoalsDto>(goalKeys.list(userId))?.goals.find(item => item.id === goalId);
+      const draft: SeasonGoalDto = { id: `draft-${goalId}`, goalId, title: goal?.title ?? "", color: goal?.color ?? "blue", archived: false, tier, target, carriedFromId: null };
+      return optimisticWrite(cache, [rows(seasonId, goals => [...goals.filter(item => item.goalId !== goalId), draft])], async () => done(await transport.addGoal(seasonId, goalId, tier, target)), refresh,
+        added => [rows(seasonId, goals => goals.map(item => item.goalId === goalId ? added : item))]);
     },
-    async removeGoal(seasonId: string, goalId: string) { try { return done(await transport.removeGoal(seasonId, goalId) || null); } finally { await stale(); } },
-    async end(seasonId: string, next: NextSeason | null) { try { return done(await transport.end(seasonId, next)); } finally { await stale(); } },
+    updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) {
+      return optimisticWrite(cache, [rows(seasonId, goals => goals.map(goal => goal.goalId === goalId ? { ...goal, ...patch } : goal))], async () => done(await transport.updateGoal(seasonId, goalId, patch)), refresh);
+    },
+    removeGoal(seasonId: string, goalId: string) {
+      return optimisticWrite(cache, [rows(seasonId, goals => goals.filter(goal => goal.goalId !== goalId))], async () => done(await transport.removeGoal(seasonId, goalId) || null), refresh);
+    },
+    end: (seasonId: string, next: NextSeason | null) => settled(async () => done(await transport.end(seasonId, next))),
   };
 }

@@ -67,13 +67,13 @@ describe("calendar settings writes", () => {
     cache.setQueryData(calendarKeys.accounts("u"), accounts);
     cache.setQueryData(calendarKeys.events("u"), []);
     const writes = calendarMutations(transport(true), cache, "u");
-    const snapshot = await writes.setVisible.onMutate({ accountId: "a", calendar: { googleCalendarId: "work", summary: "Work", color: "#ff0000", visible: false } });
-    expect(cache.getQueryData<CalendarAccountDto[]>(calendarKeys.accounts("u"))![0].calendars[0].enabled).toBe(false);
-    writes.setVisible.onError(new Error("x"), { accountId: "a", calendar: { googleCalendarId: "work", summary: "Work", color: "#ff0000", visible: false } }, snapshot);
+    const run = <V,>(options: object, input: V) => cache.getMutationCache().build(cache, options as never).execute(input as never);
+    const hiding = run(writes.setVisible, { accountId: "a", calendar: { googleCalendarId: "work", summary: "Work", color: "#ff0000", visible: false } });
+    await expect(hiding).rejects.toThrow();
     expect(cache.getQueryData(calendarKeys.accounts("u"))).toEqual(accounts);
-    await writes.showEvents.onMutate({ accountId: "a", showEvents: false });
+    const ok = calendarMutations(transport(false), cache, "u");
+    await run(ok.showEvents, { accountId: "a", showEvents: false });
     expect(cache.getQueryData<CalendarAccountDto[]>(calendarKeys.accounts("u"))![0].showEvents).toBe(false);
-    await writes.resync.onSettled();
     expect(cache.getQueryState(calendarKeys.events("u"))!.isInvalidated).toBe(true);
   });
 });

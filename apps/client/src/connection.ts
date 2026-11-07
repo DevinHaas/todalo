@@ -1,4 +1,4 @@
-import { MutationCache, onlineManager, QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, onlineManager, QueryCache, QueryClient, type Mutation } from "@tanstack/react-query";
 import { AccountTransportError } from "./errors";
 
 /**
@@ -44,12 +44,13 @@ export type ConnectionMonitor = ReturnType<typeof connectionMonitor>;
  * is queued and replayed later. Only the per-feature retries for writes that are
  * safe to repeat (operation IDs, versions) remain.
  */
-export function userQueryClient(connection: ConnectionMonitor, onError: (error: Error) => void) {
+/** `onWriteError`: a write failed after its retries (the failure toast, toasts.ts). */
+export function userQueryClient(connection: ConnectionMonitor, onError: (error: Error) => void, onWriteError?: (error: Error, input: unknown, mutation: Mutation<unknown, unknown, unknown, unknown>) => void) {
   const failed = (error: Error) => { connection.failed(error); onError(error); };
   const reached = () => connection.reached();
   return new QueryClient({
     queryCache: new QueryCache({ onError: failed, onSuccess: reached }),
-    mutationCache: new MutationCache({ onError: failed, onSuccess: reached }),
+    mutationCache: new MutationCache({ onError: (error, input, _context, mutation) => { failed(error); onWriteError?.(error, input, mutation); }, onSuccess: reached }),
     defaultOptions: {
       queries: { retry: false, refetchInterval: POLL_INTERVAL_MS, refetchIntervalInBackground: false, refetchOnWindowFocus: true, refetchOnReconnect: true },
       mutations: { retry: false, networkMode: "always" },

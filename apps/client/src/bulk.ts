@@ -1,9 +1,9 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { MutationOptions, QueryClient } from "@tanstack/react-query";
+import type { MutationOptions, QueryClient, QueryFilters } from "@tanstack/react-query";
+import { optimistic, type Write } from "./optimistic";
 import { planReorder, type BulkCompletionDto, type BulkMetadataChange, type ReorderInput, type ReorderPosition, type TaskStatus } from "../../../packages/server/src/bulk-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { operationId as newOperationId, taskKeys, treeOrder, type TaskDto, type TodayDto } from "./tasks";
-import type { ProjectDetailDto } from "./projects";
+import { operationId as newOperationId, taskChanges, taskKeys, treeOrder, type TaskDto } from "./tasks";
 import type { Feedback } from "./feedback";
 import { confirmingCriteria } from "./goals";
 
@@ -121,47 +121,34 @@ const retry = (failures: number, error: unknown) => failures < 2 && ambiguous(er
 const retryDelay = (failures: number) => 300 * 2 ** failures;
 const ids = ({ tasks }: BulkSelection) => tasks.map(task => task.id);
 
-type Snapshot = { entries: [readonly unknown[], unknown][] };
+/** "Buy milk" for one task, "3 tasks" for more. */
+export const selectionName = ({ tasks }: BulkSelection) => tasks.length === 1 ? `"${tasks[0]!.title}"` : `${tasks.length} tasks`;
+const priorityName = (change: BulkMetadataChange, selection: BulkSelection) =>
+  change.priority !== undefined ? `set ${selectionName(selection)} to priority ${change.priority}`
+    : change.labelIds !== undefined ? `change the labels of ${selectionName(selection)}` : `change the deadline of ${selectionName(selection)}`;
 
 /**
- * Bulk writes and reorder against the user's cache. Completion, deletion and
- * clear-date apply optimistically to Today and every open project list and roll
- * back on failure; reorder moves the row in the project list. Every write then
- * refreshes Today, every task, project and metadata read (bulk moves carry
- * sub-tasks; labels feed label and filter lists). Metadata and move wait for the
- * server, as the legacy dialogs did.
+ * Bulk writes and reorder (row drag, board moves), all optimistic
+ * (optimistic.ts) on every task list: completion, deletion, clear-date,
+ * priority/labels/deadline, move and reorder show at once, and a failure takes
+ * back only its own change with a toast (meta.action). Reads then refresh: bulk
+ * moves carry sub-tasks; labels feed label and filter lists; a confirmed
+ * completion ticks goal criteria.
  */
 export function bulkMutations(transport: BulkTransport, cache: QueryClient, userId: string, feedback?: Feedback) {
   const user = taskKeys.user(userId);
-  const projects = [...user, "project"] as const;
-  const settle = () => Promise.all([
-    cache.invalidateQueries({ queryKey: taskKeys.today(userId) }),
-    cache.invalidateQueries({ queryKey: [...user, "task"] }),
-    cache.invalidateQueries({ queryKey: projects }),
-    cache.invalidateQueries({ queryKey: [...user, "metadata"] }),
-    cache.invalidateQueries({ queryKey: [...user, "search"] }),
-    // Goal pages and milestones: a confirmed completion ticks criteria.
-    cache.invalidateQueries({ queryKey: [...user, "goals"] }),
-  ]);
-  async function optimistic(change: (tasks: TaskDto[]) => TaskDto[]): Promise<Snapshot> {
-    await Promise.all([cache.cancelQueries({ queryKey: taskKeys.today(userId) }), cache.cancelQueries({ queryKey: projects })]);
-    const entries: Snapshot["entries"] = [];
-    const apply = <T extends { tasks: TaskDto[] }>(key: readonly unknown[], data: T | null | undefined) => {
-      if (!data?.tasks) return;
-      entries.push([key, data]);
-      cache.setQueryData<T>(key, { ...data, tasks: change(data.tasks) });
-    };
-    apply<TodayDto>(taskKeys.today(userId), cache.getQueryData<TodayDto>(taskKeys.today(userId)));
-    for (const [key, data] of cache.getQueriesData<ProjectDetailDto | null>({ queryKey: projects })) apply(key, data);
-    return { entries };
-  }
-  const rollback = (_error: Error, _input: unknown, snapshot?: Snapshot) => { for (const [key, data] of snapshot?.entries ?? []) cache.setQueryData(key, data); };
+  const refresh = (): QueryFilters[] => [
+    { queryKey: taskKeys.today(userId) }, { queryKey: [...user, "task"] }, { queryKey: [...user, "project"] },
+    { queryKey: [...user, "metadata"] }, { queryKey: [...user, "search"] }, { queryKey: [...user, "goals"] },
+  ];
+  const lists = <V,>(change: (input: V) => (tasks: TaskDto[]) => TaskDto[]) => optimistic<V>(cache, { apply: (input) => taskChanges(userId, change(input)), refresh });
   // A 404 means some selected task is gone or not the user's: nothing changed.
   const written = (done: boolean) => { if (!done) throw new AccountTransportError("TASK_NOT_FOUND"); };
   // A retried delete that finds everything gone was applied by the lost attempt.
   const attempts = new WeakMap<object, number>();
-  const only = (selection: BulkSelection) => (tasks: TaskDto[]) => tasks.filter(task => !selection.tasks.some(selected => selected.id === task.id));
+  const only = (selection: BulkSelection) => (tasks: TaskDto[]) => tasks.filter(task => !selection.tasks.some(selected => selected.id === task.id || selected.id === task.parentId));
   const matching = (selection: BulkSelection, patch: Partial<TaskDto>) => (tasks: TaskDto[]) => tasks.map(task => selection.tasks.some(selected => selected.id === task.id) ? { ...task, ...patch } : task);
+  const completed = lists<BulkCompletion>(selection => matching(selection, { status: "done", completedAt: new Date().toISOString() }));
   return {
     complete: {
       mutationFn: async (selection: BulkCompletion) => {
@@ -170,13 +157,10 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
         return result;
       },
       retry, retryDelay,
-      onMutate: (selection: BulkCompletion) => {
-        feedback?.play("taskCompleted");
-        return optimistic(matching(selection, { status: "done", completedAt: new Date().toISOString() }));
-      },
-      onError: rollback,
-      onSettled: settle,
-    } satisfies MutationOptions<BulkCompletionDto, Error, BulkCompletion, Snapshot>,
+      ...completed,
+      onMutate: (selection: BulkCompletion) => { feedback?.play("taskCompleted"); return completed.onMutate(selection); },
+      meta: { action: (selection: BulkCompletion) => `complete ${selectionName(selection)}` },
+    } satisfies MutationOptions<BulkCompletionDto, Error, BulkCompletion, Write>,
     remove: {
       mutationFn: async (selection: BulkSelection) => {
         const attempt = (attempts.get(selection) ?? 0) + 1;
@@ -186,38 +170,38 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
         return true;
       },
       retry, retryDelay,
-      onMutate: (selection: BulkSelection) => optimistic(only(selection)),
-      onError: rollback,
-      onSettled: settle,
-    } satisfies MutationOptions<boolean, Error, BulkSelection, Snapshot>,
+      ...lists<BulkSelection>(only),
+      meta: { action: (selection: BulkSelection) => `delete ${selectionName(selection)}` },
+    } satisfies MutationOptions<boolean, Error, BulkSelection, Write>,
     clearDates: {
       mutationFn: async (selection: BulkSelection) => written(await transport.clearDates(ids(selection))),
       retry, retryDelay,
-      onMutate: (selection: BulkSelection) => optimistic(matching(selection, { dueDate: null, dueDateEnd: null })),
-      onError: rollback,
-      onSettled: settle,
-    } satisfies MutationOptions<void, Error, BulkSelection, Snapshot>,
+      ...lists<BulkSelection>(selection => matching(selection, { dueDate: null, dueDateEnd: null })),
+      meta: { action: (selection: BulkSelection) => `clear the date of ${selectionName(selection)}` },
+    } satisfies MutationOptions<void, Error, BulkSelection, Write>,
     metadata: {
       mutationFn: async ({ tasks, change }: BulkSelection & { change: BulkMetadataChange }) => written(await transport.metadata(tasks.map(task => task.id), change)),
       retry, retryDelay,
-      onSettled: settle,
-    } satisfies MutationOptions<void, Error, BulkSelection & { change: BulkMetadataChange }>,
+      ...lists<BulkSelection & { change: BulkMetadataChange }>(({ change, ...selection }) => matching(selection, change)),
+      meta: { action: ({ change, ...selection }: BulkSelection & { change: BulkMetadataChange }) => priorityName(change, selection) },
+    } satisfies MutationOptions<void, Error, BulkSelection & { change: BulkMetadataChange }, Write>,
     move: {
       mutationFn: async ({ tasks, destination }: BulkSelection & { destination: Destination }) => written(await transport.move(tasks.map(task => task.id), destination)),
       retry, retryDelay,
-      onSettled: settle,
-    } satisfies MutationOptions<void, Error, BulkSelection & { destination: Destination }>,
+      ...lists<BulkSelection & { destination: Destination }>(({ destination, ...selection }) => matching(selection, destination)),
+      meta: { action: (selection: BulkSelection) => `move ${selectionName(selection)}` },
+    } satisfies MutationOptions<void, Error, BulkSelection & { destination: Destination }, Write>,
     reorder: {
       // A drop into Done of a milestone with open criteria asks first; Cancel rolls the card back to its column.
       mutationFn: async ({ task, ...move }: Reorder) => written(await confirmingCriteria(confirm => transport.reorder(task.id, confirm ? { ...move, confirmCriteria: true } : move))),
       retry, retryDelay,
-      // Today and every project list: the row moves (to the end for a board column) and takes the status.
-      onMutate: ({ task, anchorId, position, status }: Reorder) => optimistic(tasks => reorderTasks(status ? matching({ tasks: [task] }, { status })(tasks) : tasks, task.id, anchorId ?? null, position)),
-      onError: rollback,
-      onSettled: settle,
-    } satisfies MutationOptions<void, Error, Reorder, Snapshot>,
+      // Every list: the row moves (to the end for a board column) and takes the status.
+      ...lists<Reorder>(({ task, anchorId, position, status }) => tasks => reorderTasks(status ? matching({ tasks: [task] }, { status })(tasks) : tasks, task.id, anchorId ?? null, position)),
+      meta: { action: ({ task, status }: Reorder) => status ? `move "${task.title}" to ${statusNames[status]}` : `move "${task.title}"` },
+    } satisfies MutationOptions<void, Error, Reorder, Write>,
   };
 }
+const statusNames: Record<TaskStatus, string> = { todo: "To do", in_progress: "In progress", done: "Done" };
 
 /** One tap ID per bulk completion, reused by that tap's retries. */
 export const completion = (tasks: TaskDto[]): BulkCompletion => ({ tasks, operationId: newOperationId() });

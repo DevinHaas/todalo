@@ -2,7 +2,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { ProjectDetailDto, ProjectDto, ProjectsDto } from "../../../packages/server/src/project-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { taskKeys } from "./tasks";
+import { change, optimisticWrite } from "./optimistic";
+import { taskChanges, taskKeys } from "./tasks";
 
 export type { ProjectDetailDto, ProjectDto };
 
@@ -81,28 +82,33 @@ export function projectQueries(transport: ProjectTransport) {
   };
 }
 
-/** Writes plus the cache entries each one makes stale. */
+let drafts = 0;
+/**
+ * Project writes, optimistic (optimistic.ts): the sidebar and page change at
+ * once and a failure takes back only that change. Deleting moves member tasks
+ * to Inbox (projectId → null), so every cached task read is then refreshed.
+ */
 export function projectMutations(transport: ProjectTransport, cache: QueryClient, userId: string) {
+  const list = projectKeys.list(userId);
+  const sidebar = (edit: (projects: ProjectDto[]) => ProjectDto[]) => change<ProjectsDto | undefined>(list, data => data && { ...data, projects: edit(data.projects) });
+  const renamed = (id: string, name: string) => [
+    sidebar(projects => projects.map(project => project.id === id ? { ...project, name } : project)),
+    change<ProjectDetailDto | null | undefined>(projectKeys.detail(userId, id), data => data && { ...data, project: { ...data.project, name } }),
+  ];
   return {
-    async create(name: string) {
-      const project = await transport.create(name);
-      await cache.invalidateQueries({ queryKey: projectKeys.list(userId) });
-      return project;
+    create(name: string) {
+      const draft: ProjectDto = { id: `draft-project-${++drafts}`, name, color: null };
+      return optimisticWrite(cache, [sidebar(projects => [...projects, draft])], () => transport.create(name), [{ queryKey: list }],
+        project => [sidebar(projects => projects.map(item => item.id === draft.id ? project : item))]);
     },
-    async rename(id: string, name: string) {
-      const project = await transport.rename(id, name);
-      await Promise.all([
-        cache.invalidateQueries({ queryKey: projectKeys.list(userId) }),
-        cache.invalidateQueries({ queryKey: projectKeys.detail(userId, id) }),
-      ]);
-      return project;
+    rename(id: string, name: string) {
+      return optimisticWrite(cache, renamed(id, name), async () => { const project = await transport.rename(id, name); if (!project) throw new AccountTransportError("PROJECT_NOT_FOUND"); return project; },
+        [{ queryKey: list }, { queryKey: projectKeys.detail(userId, id) }]);
     },
-    // Deleting moves member tasks to Inbox (projectId → null), so every cached
-    // task read for this user is stale; the Today count itself is unchanged.
     async remove(id: string) {
-      const removed = await transport.remove(id);
+      const removed = await optimisticWrite(cache, [sidebar(projects => projects.filter(project => project.id !== id)), ...taskChanges(userId, tasks => tasks.map(task => task.projectId === id ? { ...task, projectId: null, sectionId: null } : task))],
+        () => transport.remove(id), [{ queryKey: taskKeys.user(userId) }]);
       cache.removeQueries({ queryKey: projectKeys.detail(userId, id) });
-      await cache.invalidateQueries({ queryKey: taskKeys.user(userId) });
       return removed;
     },
   };

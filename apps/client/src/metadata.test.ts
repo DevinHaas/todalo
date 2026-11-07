@@ -89,8 +89,7 @@ describe("metadata cache", () => {
     seed(cache);
     const update = taskMutations(transport, cache, "alice").update;
     const details = { updatedAt: "2026-10-15T08:00:00.000Z", title: "t", description: "", priority: 4, deadline: null, dueDate: null, dueDateEnd: null, recurrence: null, labelIds: ["urgent"] };
-    const result = await update.mutationFn({ id: "t", details });
-    await update.onSettled(result, null, { id: "t" });
+    await cache.getMutationCache().build(cache, update).execute({ id: "t", details });
     expect(stale(cache)).toEqual(expect.arrayContaining(["user/alice/metadata/filter/f", "user/alice/metadata/label/urgent", "user/alice/today"]));
     expect(stale(cache)).not.toContain("user/bob/metadata/list");
   });
