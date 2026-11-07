@@ -127,6 +127,13 @@
       "when": 1794005763016,
       "tag": "0017_milestones",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794036761513,
+      "tag": "0018_goal_colors",
+      "breakpoints": true
     }
   ]
 }

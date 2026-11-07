@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useContext, useEffect, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useInRouterContext } from "react-router";
 import {
-  CalendarDays, ChevronDown, ChevronRight, ChevronUp, Circle as CircleIcon, CircleCheck, Ellipsis, Flag, GitBranch, Goal, Hash, Inbox, Plus, Repeat, Tag, TextAlignStart, Trash2, X,
+  ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Circle as CircleIcon, CircleCheck, Ellipsis, Flag, GitBranch, Goal, Hash, Inbox, Plus, Repeat, Tag, TextAlignStart, Trash2, X,
 } from "lucide-react";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
@@ -15,7 +15,8 @@ import { copyText, taskPath } from "./links";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
-import { GoalPicker, GoalSuggestion, MilestoneField, type GoalSlots, type MilestoneSlots } from "./goal-views";
+import { GoalPicker, GoalSuggestion, MilestoneToggle, type GoalSlots, type MilestoneSlots } from "./goal-views";
+import { moveCriterion, type CriterionDto } from "./goals";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -73,7 +74,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   comments?: CommentSlots;
   /** Goals ticket 02: links save at once (not a draft field); absent while Goals is hidden. */
   goals?: GoalSlots;
-  /** Goals ticket 06: saves at once; absent while Goals is hidden or the task has no linked goal. */
+  /** Goals ticket 06: saves at once; absent while Goals is hidden. Without a linked goal the switch explains why it is off. */
   milestone?: MilestoneSlots;
 }) {
   const tree = useContext(TaskTree);
@@ -194,6 +195,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
               <button type="button" className="button" data-save disabled={!draft.title.trim()} onClick={() => void save()}>{pending ? "Saving…" : "Save"}</button>
             </div>
             <Subtasks task={task} tree={tree} onComplete={onComplete} onOpen={openOther} onAdd={ancestors.length < MAX_SUBTASK_DEPTH ? onAddSubtask : undefined} />
+            {milestone?.milestone && <DoneCriteria slots={milestone} />}
             {comments && <Comments task={task} slots={comments} />}
           </div>
           <aside className="sheet-side" aria-label="Task properties" data-dimmed={writing || undefined}>
@@ -234,8 +236,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
               <GoalPicker slots={goals} variant="property" data={{ "data-field": "goals" }} />
               <GoalSuggestion slots={goals} />
             </Property>}
-            {milestone && <Property label="Milestone" add={!milestone.milestone}>
-              <MilestoneField slots={milestone} />
+            {milestone && <Property label="Milestone">
+              <MilestoneToggle slots={milestone} />
             </Property>}
           </aside>
         </fieldset>
@@ -338,6 +340,54 @@ function Subtasks({ task, tree, onComplete, onOpen, onAdd }: {
       </div>
         : <button type="button" className="sheet-add" onClick={() => setAdding(true)}><Plus />Add sub-task</button>)}
       {after.map(row)}
+    </div>}
+  </section>;
+}
+
+/** One done criterion, like a sub-task row: tick it, edit its text in place (saved on Enter or leaving it), move it, remove it. */
+function CriterionRow({ item, index, count, onChange, onMove, onRemove }: {
+  item: CriterionDto; index: number; count: number; onChange(item: CriterionDto): void; onMove(by: -1 | 1): void; onRemove(): void;
+}) {
+  const [text, setText] = useState(item.text);
+  const commit = () => { const trimmed = text.trim(); if (!trimmed) setText(item.text); else if (trimmed !== item.text) onChange({ ...item, text: trimmed }); };
+  return <div className="sheet-subtask criterion" data-done={item.done || undefined}>
+    <input type="checkbox" className="criterion-check" aria-label={`Done: ${item.text}`} checked={item.done} onChange={(event) => onChange({ ...item, done: event.target.checked })} />
+    <input className="criterion-text" aria-label={`Criterion ${index + 1}`} value={text} maxLength={500} onChange={(event) => setText(event.target.value)} onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } }} />
+    <span className="criterion-tools">
+      <button type="button" className="icon-button" aria-label={`Move ${item.text} up`} title="Move up" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp /></button>
+      <button type="button" className="icon-button" aria-label={`Move ${item.text} down`} title="Move down" disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown /></button>
+      <button type="button" className="icon-button" aria-label={`Remove ${item.text}`} title="Remove" onClick={onRemove}><X /></button>
+    </span>
+  </div>;
+}
+
+/** Goals ticket 06: a milestone's ordered done criteria, collapsible like Sub-tasks; reached once all are ticked. */
+function DoneCriteria({ slots }: { slots: MilestoneSlots }) {
+  const [open, setOpen] = useState(true);
+  const [adding, setAdding] = useState("");
+  const { milestone } = slots;
+  if (!milestone) return null;
+  const { criteria } = milestone;
+  const done = criteria.filter(item => item.done).length;
+  const save = (next: CriterionDto[]) => slots.onChange({ ...milestone, criteria: next });
+  const add = () => { if (!adding.trim()) return; save([...criteria, { text: adding.trim(), done: false }]); setAdding(""); };
+  return <section className="sheet-section" aria-label="Done criteria">
+    <div className="sheet-section-header">
+      <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        <ChevronDown className={open ? "" : "closed"} />Done criteria
+      </button>
+      {criteria.length > 0 && <span className="subtask-progress" aria-label={`${done} of ${criteria.length} ticked`}><Progress done={done} total={criteria.length} />{done}/{criteria.length}</span>}
+    </div>
+    {open && <div className="sheet-subtasks">
+      {criteria.map((item, index) => <CriterionRow key={`${index}:${item.text}`} item={item} index={index} count={criteria.length}
+        onChange={(changed) => save(criteria.map((other, at) => at === index ? changed : other))}
+        onMove={(by) => save(moveCriterion(criteria, index, by))}
+        onRemove={() => save(criteria.filter((_, at) => at !== index))} />)}
+      {criteria.length < 50 && <label className="sheet-add criterion-add"><Plus />
+        <input aria-label="New done criterion" placeholder={criteria.length ? "Add done criterion" : "Add a done criterion: what must be true to reach this milestone?"} value={adding} maxLength={500}
+          onChange={(event) => setAdding(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } }} />
+      </label>}
     </div>}
   </section>;
 }

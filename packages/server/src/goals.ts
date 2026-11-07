@@ -6,7 +6,7 @@ import { db } from "@todalo/db";
 import { goalProjects, goalSuggestionDismissals, goalTasks, goals, projects, tasks, userSettings } from "@todalo/db/schema";
 import { planReorder } from "./bulk-input";
 import { getTasksForUser } from "./today";
-import type { CreateGoalInput, GoalLinkKind, GoalLinksDto, ReorderGoalInput, UpdateGoalInput } from "./goal-dto";
+import { nextGoalColor, type CreateGoalInput, GoalLinkKind, GoalLinksDto, ReorderGoalInput, UpdateGoalInput } from "./goal-dto";
 
 const owned = (userId: string, id: string) => and(eq(goals.id, id), eq(goals.userId, userId));
 const order = [asc(goals.sortOrder), asc(goals.createdAt), asc(goals.id)] as const;
@@ -22,10 +22,11 @@ export async function getOwnedGoal(userId: string, id: string) {
   return goal ?? null;
 }
 
-/** New goals go to the end of the sidebar. */
+/** New goals go to the end of the sidebar, in the next palette colour unless one is chosen. */
 export async function createGoal(userId: string, input: CreateGoalInput) {
+  const [{ count } = { count: 0 }] = input.color ? [] : await db.select({ count: sql<number>`count(*)::int` }).from(goals).where(eq(goals.userId, userId));
   const [goal] = await db.insert(goals).values({
-    userId, title: input.title, description: input.description ?? null,
+    userId, title: input.title, description: input.description ?? null, color: input.color ?? nextGoalColor(count),
     sortOrder: sql`(select coalesce(max(${goals.sortOrder}), -1) + 1 from ${goals} where ${goals.userId} = ${userId})`,
   }).returning();
   return goal!;
@@ -68,7 +69,7 @@ export async function setGoalsHidden(userId: string, hidden: boolean) {
 export async function getGoalLinks(userId: string): Promise<GoalLinksDto> {
   const [projectLinks, taskLinks] = await Promise.all([
     db.select({ goalId: goalProjects.goalId, projectId: goalProjects.projectId }).from(goalProjects).where(eq(goalProjects.userId, userId)),
-    db.select({ goalId: goalTasks.goalId, taskId: goalTasks.taskId }).from(goalTasks).where(eq(goalTasks.userId, userId)),
+    db.select({ goalId: goalTasks.goalId, taskId: goalTasks.taskId, milestone: sql<boolean>`${goalTasks.milestoneCriteria} is not null` }).from(goalTasks).where(eq(goalTasks.userId, userId)),
   ]);
   return { projects: projectLinks, tasks: taskLinks };
 }

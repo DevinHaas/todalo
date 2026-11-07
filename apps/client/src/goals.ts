@@ -1,18 +1,21 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { CriterionDto, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
+import type { CriterionDto, GoalColor, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
 
-export type { CriterionDto, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
-export interface GoalPatch { title?: string; description?: string; archived?: boolean }
+export type { CriterionDto, GoalColor, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
+export { goalColorKeys, goalColorValue, nextGoalColor } from "../../../packages/server/src/goal-dto";
+export interface GoalPatch { title?: string; description?: string; color?: GoalColor; archived?: boolean }
+/** A new goal; without a colour the server picks the next palette one. */
+export interface NewGoal { title: string; description?: string; color?: GoalColor }
 
 export interface GoalTransport {
   /** Active goals in the user's order, and whether the sidebar hides them. */
   goals(): Promise<GoalsDto>;
   /** The goal page with its linked projects and tasks; null when missing or not the signed-in user's (archived goals open). */
   goal(id: string): Promise<GoalDetailDto | null>;
-  create(title: string, description?: string): Promise<GoalDto>;
+  create(goal: NewGoal): Promise<GoalDto>;
   /** null when the goal is missing or not the signed-in user's. */
   update(id: string, patch: GoalPatch): Promise<GoalDto | null>;
   /** false when either goal is missing, foreign or archived. */
@@ -55,7 +58,7 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
   return {
     goals: async () => required(await request<GoalsDto>("GET", "/api/v1/goals"), "TASKS_UNAVAILABLE"),
     goal: (id) => request<GoalDetailDto>("GET", path(id)),
-    create: async (title, description) => required(await request<{ goal: GoalDto }>("POST", "/api/v1/goals", { title, ...(description && { description }) }), "SAVE_FAILED").goal,
+    create: async ({ title, description, color }) => required(await request<{ goal: GoalDto }>("POST", "/api/v1/goals", { title, ...(description && { description }), ...(color && { color }) }), "SAVE_FAILED").goal,
     update: async (id, patch) => (await request<{ goal: GoalDto }>("PATCH", path(id), patch))?.goal ?? null,
     reorder: async (id, anchorId, position) => (await request("POST", `${path(id)}/reorder`, { anchorId, position })) !== null,
     setHidden: async (hidden) => required(await request<{ hidden: boolean }>("PUT", "/api/v1/goals-visibility", { hidden }), "SAVE_FAILED").hidden,
@@ -78,7 +81,7 @@ export function goalTransport(): GoalTransport {
   return {
     goals: () => command<GoalsDto>("goals"),
     goal: (id) => command<GoalDetailDto | null>("goal", { id }),
-    create: async (title, description) => (await command<{ goal: GoalDto }>("create_goal", { title, description: description || null })).goal,
+    create: async ({ title, description, color }) => (await command<{ goal: GoalDto }>("create_goal", { title, description: description || null, color: color ?? null })).goal,
     update: async (id, patch) => (await command<{ goal: GoalDto } | null>("update_goal", { id, patch }))?.goal ?? null,
     reorder: async (id, anchorId, position) => (await command<{ id: string } | null>("reorder_goal", { id, anchorId, position })) !== null,
     setHidden: async (hidden) => (await command<{ hidden: boolean }>("set_goals_hidden", { hidden })).hidden,
@@ -113,11 +116,15 @@ export function goalQueries(transport: GoalTransport) {
   };
 }
 
+/** The latest milestone save per task: the next one waits for it. */
+const milestoneSaves = new Map<string, Promise<boolean>>();
+
 /** Writes plus the cache entries each one makes stale (every goal read is small). */
 export function goalMutations(transport: GoalTransport, cache: QueryClient, userId: string) {
-  const stale = () => cache.invalidateQueries({ queryKey: goalKeys.all(userId) });
+  // Seasons show goal titles and colours too, so goal writes refresh them as well.
+  const stale = () => Promise.all([cache.invalidateQueries({ queryKey: goalKeys.all(userId) }), cache.invalidateQueries({ queryKey: ["user", userId, "seasons"] })]);
   return {
-    async create(title: string, description?: string) { const goal = await transport.create(title, description); await stale(); return goal; },
+    async create(goal: NewGoal) { const created = await transport.create(goal); await stale(); return created; },
     async update(id: string, patch: GoalPatch) { const goal = await transport.update(id, patch); await stale(); return goal; },
     /** A refused link (goal or target gone) is an error, so the picker shows it. */
     async link(id: string, kind: GoalLinkKind, targetId: string, linked: boolean) {
@@ -138,14 +145,25 @@ export function goalMutations(transport: GoalTransport, cache: QueryClient, user
       catch (error) { if (previous) cache.setQueryData(key, previous); throw error; }
       finally { await stale(); }
     },
-    /** Ticket 06: the milestone (mark, criteria, ticks) changes at once; a failed save puts it back. */
+    /**
+     * Ticket 06: the milestone (mark, criteria, ticks) changes at once; a failed save puts it back.
+     * Each PUT replaces the whole list, so one task's saves run in order and the read refreshes
+     * only after the last one (an earlier save's refetch would drop a criterion added meanwhile).
+     */
     async setMilestone(taskId: string, milestone: MilestoneDto | null) {
       const key = goalKeys.milestone(userId, taskId);
+      await cache.cancelQueries({ queryKey: key });
       const previous = cache.getQueryData<MilestoneDto | null>(key);
       cache.setQueryData(key, milestone);
-      try { if (!await transport.setMilestone(taskId, milestone)) throw new AccountTransportError("TASK_NOT_FOUND"); }
-      catch (error) { cache.setQueryData(key, previous); throw error; }
-      finally { await stale(); }
+      // The rows' flag follows at once too.
+      const linksKey = goalKeys.links(userId);
+      const links = cache.getQueryData<GoalLinksDto>(linksKey);
+      if (links) cache.setQueryData(linksKey, { ...links, tasks: links.tasks.map(link => link.taskId === taskId ? { ...link, milestone: link.goalId === milestone?.goalId } : link) });
+      const save = (milestoneSaves.get(taskId) ?? Promise.resolve()).catch(() => undefined).then(() => transport.setMilestone(taskId, milestone));
+      milestoneSaves.set(taskId, save);
+      try { if (!await save) throw new AccountTransportError("TASK_NOT_FOUND"); }
+      catch (error) { cache.setQueryData(key, previous); if (links) cache.setQueryData(linksKey, links); throw error; }
+      finally { if (milestoneSaves.get(taskId) === save) { milestoneSaves.delete(taskId); await stale(); } }
     },
     /** The sidebar moves at once; a failed save puts it back. */
     async reorder(id: string, anchorId: string, position: ReorderPosition) {
@@ -188,8 +206,11 @@ export function toggleLink(links: GoalLinksDto, goalId: string, kind: GoalLinkKi
     return { ...links, projects: linked ? [...rest, { goalId, projectId: targetId }] : rest };
   }
   const rest = links.tasks.filter(link => !(link.goalId === goalId && link.taskId === targetId));
-  return { ...links, tasks: linked ? [...rest, { goalId, taskId: targetId }] : rest };
+  return { ...links, tasks: linked ? [...rest, { goalId, taskId: targetId, milestone: false }] : rest };
 }
+
+/** Task IDs that are milestones, from the user's links (every task row's flag). */
+export const milestoneTaskIds = (links: GoalLinksDto | undefined): ReadonlySet<string> => new Set(links?.tasks.filter(link => link.milestone).map(link => link.taskId));
 
 /** "2/3": ticked of all done criteria. */
 export const criteriaProgress = (criteria: readonly CriterionDto[]) => `${criteria.filter(item => item.done).length}/${criteria.length}`;

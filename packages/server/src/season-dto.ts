@@ -2,10 +2,11 @@
 // only, no database imports, so the shared client may import these).
 import { z } from "zod";
 import type { SeasonProgress } from "./season-days";
+import { goalColorKeys, type GoalColor } from "./goal-dto";
 
 export type SeasonTier = "primary" | "secondary";
 /** A goal within one season: its tier and target in words. carriedFromId is the earlier season's row (ticket 05). */
-export interface SeasonGoalDto { id: string; goalId: string; title: string; archived: boolean; tier: SeasonTier; target: string; carriedFromId: string | null }
+export interface SeasonGoalDto { id: string; goalId: string; title: string; color: GoalColor; archived: boolean; tier: SeasonTier; target: string; carriedFromId: string | null }
 export interface SeasonDto { id: string; startDate: string; lengthDays: number; endedAt: string | null; goals: SeasonGoalDto[] }
 /** The season page: the one current season with its day count in the user's zone, or null before the first. */
 export interface CurrentSeasonDto { season: (SeasonDto & { progress: SeasonProgress }) | null }
@@ -15,7 +16,7 @@ export interface PastSeasonsDto { seasons: SeasonDto[] }
 export interface EndSeasonDto { ended: SeasonDto; next: SeasonDto | null }
 
 export interface SeasonRecord { id: string; startDate: string; lengthDays: number; endedAt: Date | null }
-export interface SeasonGoalRecord { id: string; goalId: string; title: string; archivedAt: Date | null; tier: SeasonTier; target: string; carriedFromId: string | null }
+export interface SeasonGoalRecord { id: string; goalId: string; title: string; color: string; archivedAt: Date | null; tier: SeasonTier; target: string; carriedFromId: string | null }
 
 /** Lengths the season form offers besides a custom number of days. */
 export const seasonLengths = { long: 84, short: 28 } as const;
@@ -24,7 +25,7 @@ export const primaryGuideline = 3;
 export const tooManyPrimary = (goals: readonly { tier: SeasonTier }[]) => goals.filter(goal => goal.tier === "primary").length > primaryGuideline;
 
 export const toSeasonGoalDto = (row: SeasonGoalRecord): SeasonGoalDto => ({
-  id: row.id, goalId: row.goalId, title: row.title, archived: row.archivedAt !== null, tier: row.tier, target: row.target, carriedFromId: row.carriedFromId,
+  id: row.id, goalId: row.goalId, title: row.title, color: goalColorKeys.includes(row.color as GoalColor) ? row.color as GoalColor : "blue", archived: row.archivedAt !== null, tier: row.tier, target: row.target, carriedFromId: row.carriedFromId,
 });
 export const toSeasonDto = (season: SeasonRecord, goals: SeasonGoalRecord[]): SeasonDto => ({
   id: season.id, startDate: season.startDate, lengthDays: season.lengthDays, endedAt: season.endedAt?.toISOString() ?? null, goals: goals.map(toSeasonGoalDto),

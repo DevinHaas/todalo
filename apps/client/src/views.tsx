@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { CalendarDays, ChevronDown, ChevronRight, Flag, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Flag, FlagTriangleRight, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
 import {
   dateInputValue, deadlineLabel, dueLabel, isDueToday, isOverdue, localInstant, repeatChoice, repeatLabel, repeatPresets, shortDateLabel, timeInputValue,
   todayHeading, todaySections, treeDepths, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto, type TodayDto,
@@ -13,7 +13,7 @@ import { dayKey } from "./schedule";
 import { copyText, taskPath } from "./links";
 import { Dropdown, type Option } from "./popover";
 import { ComposerChoices } from "./composer";
-import { TaskTree, subtasksOf } from "./task-tree";
+import { MilestoneTasks, TaskTree, subtasksOf } from "./task-tree";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -83,6 +83,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   inToday?: boolean;
 }) {
   const tree = useContext(TaskTree);
+  const milestone = useContext(MilestoneTasks).has(task.id);
   const closed = useSyncExternalStore(collapsedTasks.subscribe, collapsedTasks.get, collapsedTasks.get);
   const hidden = hiddenBy(task, tree, closed);
   const [expanded, setExpanded] = useState(false);
@@ -107,7 +108,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} onClick={() => actions.complete(task)} />
       : <span className="checkbox" data-priority={task.priority} aria-hidden="true" />}
     <div className="row-body">
-      <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}</Link>
+      <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}{milestone && <MilestoneMark />}</Link>
       {dialog?.edit && <button type="button" hidden data-edit onClick={() => dialog.edit!(task.id)}>Edit {task.title}</button>}
       <div className="row-meta">
         {date && <span className={isOverdue(task, now) ? "pill due overdue" : isDueToday(task, now) ? "pill due today" : "pill due"}><CalendarDays />{date}</span>}
@@ -129,6 +130,9 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}
   {dialog?.slot(task.id, "below")}</>;
 }
+
+/** The small flag after a milestone's title (task rows, board cards, the goal page). */
+export const MilestoneMark = () => <span className="milestone-mark" title="Milestone"><FlagTriangleRight aria-hidden="true" /><span className="sr-only">Milestone</span></span>;
 
 // The task composer with smart quick add (tickets 5, 12) lives in composer.tsx.
 export { Composer } from "./composer";

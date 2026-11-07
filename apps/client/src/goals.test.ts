@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AccountTransportError } from "./errors";
-import { confirmingCriteria, criteriaProgress, linkedGoalIds, moveCriterion, setCriteriaPrompt, toggleLink, type GoalLinksDto } from "./goals";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { confirmingCriteria, criteriaProgress, goalKeys, goalMutations, goalQueries, linkedGoalIds, moveCriterion, setCriteriaPrompt, toggleLink, type GoalLinksDto, type GoalTransport, type MilestoneDto } from "./goals";
 
-const links: GoalLinksDto = { projects: [{ goalId: "fit", projectId: "run" }], tasks: [{ goalId: "fit", taskId: "protein" }] };
+const links: GoalLinksDto = { projects: [{ goalId: "fit", projectId: "run" }], tasks: [{ goalId: "fit", taskId: "protein", milestone: false }] };
 
 describe("optimistic goal links", () => {
   it.each([
@@ -50,5 +51,34 @@ describe("milestone completion confirm (ticket 06)", () => {
 
   it("shows progress as ticked/total", () => {
     expect(criteriaProgress([{ text: "a", done: true }, { text: "b", done: false }, { text: "c", done: true }])).toBe("2/3");
+  });
+});
+
+describe("milestone saves", () => {
+  // The user's report: turning Milestone on and quickly adding criteria lost the first
+  // one, because the switch's refetch landed after it and the next add built on that.
+  it("run in order and refresh only after the last, so a quick edit is never dropped", async () => {
+    let server: MilestoneDto | null = null;
+    const saved: (MilestoneDto | null)[] = [];
+    const transport = {
+      milestone: async () => server,
+      setMilestone: async (_taskId: string, next: MilestoneDto | null) => { await new Promise(resolve => setTimeout(resolve, 5)); saved.push(next); server = next; return true; },
+    } as unknown as GoalTransport;
+    const cache = new QueryClient();
+    await cache.fetchQuery(goalQueries(transport).milestone("u", "t"));
+    // The open sheet watches the read, so invalidating refetches it.
+    const unwatch = new QueryObserver(cache, goalQueries(transport).milestone("u", "t")).subscribe(() => undefined);
+    const writes = goalMutations(transport, cache, "u");
+    const on = { goalId: "g", criteria: [] }, one = { goalId: "g", criteria: [{ text: "A", done: false }] };
+    const first = writes.setMilestone("t", on);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const second = writes.setMilestone("t", one);
+    await first;
+    // The switch's save finished, but the added criterion is still what the sheet shows.
+    expect(cache.getQueryData(goalKeys.milestone("u", "t"))).toEqual(one);
+    await second;
+    expect(saved).toEqual([on, one]);
+    expect(cache.getQueryData(goalKeys.milestone("u", "t"))).toEqual(one);
+    unwatch();
   });
 });

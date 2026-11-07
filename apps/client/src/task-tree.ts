@@ -8,6 +8,8 @@ import type { TaskDto } from "./tasks";
  * it (tests, QA) rows show no sub-task indicator.
  */
 export const TaskTree = createContext<readonly TaskDto[] | null>(null);
+/** Goals ticket 06: task IDs that are milestones (from the goal links; empty while Goals is hidden). Rows show a flag. */
+export const MilestoneTasks = createContext<ReadonlySet<string>>(new Set());
 
 /** Direct children (open, done) and their count. */
 export function subtasksOf(id: string, tasks: readonly TaskDto[] | null) {

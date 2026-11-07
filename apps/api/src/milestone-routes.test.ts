@@ -35,7 +35,7 @@ const complete = (userId: string, id: string, confirm?: boolean) => {
 const unused = async (): Promise<never> => { throw new Error("not used here"); };
 const store: GoalStore = {
   verify, allowedOrigins: new Set([ORIGIN]),
-  get: async (userId, id) => goals.some(goal => goal.userId === userId && goal.id === id) ? { id, title: id, description: null, archivedAt: null } : null,
+  get: async (userId, id) => goals.some(goal => goal.userId === userId && goal.id === id) ? { id, title: id, description: null, color: "blue", archivedAt: null } : null,
   work: async (userId, goalId) => ({ projects: [], tasks: tasks.filter(item => item.userId === userId && links.some(link => link.goalId === goalId && link.taskId === item.id)) }),
   milestone: async (userId, taskId) => {
     if (!owned(userId, taskId)) return false;
@@ -55,8 +55,10 @@ const store: GoalStore = {
     for (const link of links) if (link.taskId === taskId) link.criteria = null;
     return true;
   },
+  // Rows mark milestone tasks from the same links (the client's flag icon).
+  links: async () => ({ projects: [], tasks: links.map(link => ({ goalId: link.goalId, taskId: link.taskId, milestone: link.criteria !== null })) }),
   milestones: async (_userId, goalId) => links.filter(link => link.goalId === goalId && link.criteria).map(link => ({ taskId: link.taskId, criteria: link.criteria! })),
-  list: unused, create: unused, update: unused, reorder: unused, hidden: unused, setHidden: unused, links: unused, link: unused, unlink: unused, tasks: unused, dismissed: unused, dismiss: unused,
+  list: unused, create: unused, update: unused, reorder: unused, hidden: unused, setHidden: unused, link: unused, unlink: unused, tasks: unused, dismissed: unused, dismiss: unused,
 };
 const app = new Elysia()
   .use(createGoalRoutes(store))
@@ -107,6 +109,13 @@ describe("milestones", () => {
     expect(await call("DELETE", "/tasks/alice-race/milestone")).toEqual({ status: 200, body: { milestone: null } });
     expect(links.every(link => link.criteria === null)).toBe(true);
     expect(links).toHaveLength(4);
+  });
+
+  it("goal links flag milestone tasks, so every task list can mark them", async () => {
+    await call("PUT", "/tasks/alice-race/milestone", { goalId: "alice-fit", criteria: [] });
+    const { tasks: flagged } = (await call("GET", "/goal-links")).body as { tasks: { taskId: string; goalId: string; milestone: boolean }[] };
+    expect(flagged.filter(link => link.milestone)).toEqual([{ goalId: "alice-fit", taskId: "alice-race", milestone: true }]);
+    expect(flagged.filter(link => !link.milestone)).toHaveLength(3);
   });
 
   it("requires a goal link, an owned task and valid criteria", async () => {

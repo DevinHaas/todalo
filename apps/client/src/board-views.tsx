@@ -3,12 +3,14 @@
 // and persists drops. Cards drag by their grip handle (pointer: mouse and touch,
 // or keyboard: Space/Enter picks up, arrows move between cards and columns,
 // Space drops, Escape cancels), so swiping elsewhere still scrolls the board.
-import { useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { DndContext, DragOverlay, closestCorners, pointerWithin, useDroppable, type CollisionDetection, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { boardColumns, boardDrop, columnId, type ReorderInput, type TaskStatus } from "./bulk";
 import { SortableRow, dragAnnouncements, useDragSensors } from "./bulk-views";
 import { treeOrder, type TaskDto } from "./tasks";
+import { MilestoneTasks } from "./task-tree";
+import { MilestoneMark } from "./views";
 
 // The card under the pointer wins over its column; keyboard drags (no pointer) take the nearest corners.
 const collision: CollisionDetection = (args) => {
@@ -26,8 +28,9 @@ function Column({ status, label, target, children }: { status: TaskStatus; label
 }
 
 function Card({ task, onOpen }: { task: TaskDto; onOpen?: (task: TaskDto) => void }) {
+  const milestone = useContext(MilestoneTasks).has(task.id);
   return <div className={task.parentId ? "board-card sub-task" : "board-card"} data-task-id={task.id}>
-    <button type="button" className="board-card-title" onClick={() => onOpen?.(task)}>{task.title}</button>
+    <button type="button" className="board-card-title" onClick={() => onOpen?.(task)}>{task.title}{milestone && <MilestoneMark />}</button>
   </div>;
 }
 

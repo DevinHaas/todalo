@@ -22,7 +22,8 @@ import { LiveUpdates, useCalendarEvents } from "./calendar-screens";
 import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
 import { useOpenSettings } from "./settings-nav";
-import { CriteriaConfirmHost, GoalsSidebar, useGoalsShown } from "./goal-screens";
+import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds } from "./goal-screens";
+import { MilestoneTasks } from "./task-tree";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -94,6 +95,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
     placeholderData: () => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id) });
   // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
+  const milestones = useMilestoneTaskIds(userId);
   const { pathname } = useLocation();
   useEffect(() => { setId(null); setInserting(null); setEditing(null); }, [pathname]);
   const create = writes.create.mutateAsync;
@@ -117,7 +119,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
   const sheet = useTaskSheet(account, task, close);
-  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}>
+  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}>
     {children}
     {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
@@ -125,7 +127,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       onSave={(details) => writes.update.mutateAsync({ id: task.id, details })}
       onOpen={setId}
       onInsert={(edge) => { close(); setInserting({ edge, task }); }} />}
-  </TaskTree.Provider></TaskDialogs.Provider>;
+  </MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
 }
 
 /** The page column: lists keep a readable width; board and calendar layouts use the full width. */
@@ -159,7 +161,7 @@ export function Shell({ account }: { account: Account }) {
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
-      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><ul className="nav">
+      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><ul className="nav">
         <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>

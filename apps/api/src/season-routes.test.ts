@@ -28,7 +28,7 @@ beforeEach(() => {
 const current = (userId: string, id?: string) => seasons.find(season => season.userId === userId && !season.endedAt && (id === undefined || season.id === id)) ?? null;
 const record = (row: Row): SeasonGoalRecord => {
   const goal = goals.find(item => item.id === row.goalId)!;
-  return { id: row.id, goalId: row.goalId, title: goal.title, archivedAt: goal.archivedAt, tier: row.tier, target: row.target, carriedFromId: row.carriedFromId };
+  return { id: row.id, goalId: row.goalId, title: goal.title, color: "green", archivedAt: goal.archivedAt, tier: row.tier, target: row.target, carriedFromId: row.carriedFromId };
 };
 const app = createSeasonRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
@@ -154,7 +154,7 @@ describe("season API", () => {
     await start();
     const added = await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-fit", tier: "primary", target: "  Run a half marathon " } });
     expect(added.status).toBe(201);
-    expect(await added.json()).toEqual({ goal: { id: "sg-alice-fit", goalId: "alice-fit", title: "Become fit", archived: false, tier: "primary", target: "Run a half marathon", carriedFromId: null } });
+    expect(await added.json()).toEqual({ goal: { id: "sg-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", archived: false, tier: "primary", target: "Run a half marathon", carriedFromId: null } });
     await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-v2", tier: "secondary", target: "Beta to 10 users" } });
     expect((await page()).season?.goals.map(goal => [goal.goalId, goal.tier, goal.target])).toEqual([["alice-fit", "primary", "Run a half marathon"], ["alice-v2", "secondary", "Beta to 10 users"]]);
     const twice = await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-fit", tier: "secondary", target: "Again" } });
@@ -242,8 +242,8 @@ describe("season API", () => {
     expect(body.next).toMatchObject({ id: "season-2", startDate: "2026-03-26", lengthDays: 28, endedAt: null });
     // The new season is current, holding only the carried goals, linked back to last season's rows.
     expect((await page()).season?.goals).toEqual([
-      { id: "sg-season-2-alice-fit", goalId: "alice-fit", title: "Become fit", archived: false, tier: "secondary", target: "Run a half marathon", carriedFromId: "sg-alice-fit" },
-      { id: "sg-season-2-alice-sleep", goalId: "alice-sleep", title: "Sleep 8h", archived: false, tier: "primary", target: "Sleep 8h", carriedFromId: "sg-alice-sleep" },
+      { id: "sg-season-2-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", archived: false, tier: "secondary", target: "Run a half marathon", carriedFromId: "sg-alice-fit" },
+      { id: "sg-season-2-alice-sleep", goalId: "alice-sleep", title: "Sleep 8h", color: "green", archived: false, tier: "primary", target: "Sleep 8h", carriedFromId: "sg-alice-sleep" },
     ]);
     // The ended season keeps every goal, tier and target as they were.
     expect((await past()).seasons).toEqual([expect.objectContaining({ id: "season-1", endedAt: "2026-03-26T08:00:00.000Z", goals: [

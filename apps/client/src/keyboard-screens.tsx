@@ -346,7 +346,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "season.add-goal": () => press(document.querySelector("main"), '[data-season-action="add-goal"]'),
       "season.move-target": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="target"]'),
       "season.toggle-tier": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="tier"]'),
-      "season.remove-goal": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="remove"]'),
+      // The focused goal's switch: included goals leave the season, others open their tier and target.
+      "season.remove-goal": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="include"]'),
       "season.end": () => press(document.querySelector("main"), '[data-season-action="end"]'),
       // d: a focused row's deadline wins; focus the page (Escape) to sort.
       "project.sort-date": () => sort("date", true), "project.sort-name": () => sort("name"), "project.sort-priority": () => sort("priority"),

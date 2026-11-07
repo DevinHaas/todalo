@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { goalReads, goals, seasonReads, seasons } from "./runtime";
 import { seasonMutations, type NextSeason, type SeasonGoalPatch, type SeasonTier } from "./seasons";
-import { PastSeasonView, SeasonView } from "./season-views";
-import { goalMutations, linkedGoalIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
+import { PastSeasonView, SeasonsNav, SeasonView } from "./season-views";
+import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
@@ -25,7 +25,7 @@ export function GoalsSidebar({ userId, adding, onAdding }: { userId: string; add
   const navigate = useNavigate();
   const query = useQuery(goalReads.list(userId));
   const writes = useGoalMutations(userId);
-  const create = useMutation({ mutationFn: (title: string) => writes.create(title), onSuccess: (goal) => navigate(`/goals/${encodeURIComponent(goal.id)}`) });
+  const create = useMutation({ mutationFn: (title: string) => writes.create({ title }), onSuccess: (goal) => navigate(`/goals/${encodeURIComponent(goal.id)}`) });
   const reorder = useMutation({ mutationFn: ({ id, anchorId, position }: { id: string; anchorId: string; position: ReorderPosition }) => writes.reorder(id, anchorId, position) });
   if (!query.data || query.data.hidden) return null;
   return <GoalsNav goals={query.data.goals} adding={adding} onAdding={onAdding}
@@ -34,13 +34,32 @@ export function GoalsSidebar({ userId, adding, onAdding }: { userId: string; add
     write={{ pending: create.isPending, error: (create.error ?? reorder.error)?.message ?? null }} />;
 }
 
+/** Goals ticket 04: the current season and the past ones, below Goals (hidden with Goals). */
+export function SeasonsSidebar({ userId }: { userId: string }) {
+  const shown = useGoalsShown(userId);
+  const current = useQuery({ ...seasonReads.current(userId), enabled: shown });
+  const past = useQuery({ ...seasonReads.past(userId), enabled: shown });
+  if (!shown || !current.data) return null;
+  return <SeasonsNav current={current.data.season} past={past.data ?? []} />;
+}
+
+/** Task IDs that are milestones, for every row's flag; empty while Goals is hidden. */
+export function useMilestoneTaskIds(userId: string) {
+  const shown = useGoalsShown(userId);
+  const links = useQuery({ ...goalReads.links(userId), enabled: shown });
+  return useMemo(() => milestoneTaskIds(shown ? links.data : undefined), [shown, links.data]);
+}
+
 export function GoalScreen({ account }: { account: Account }) {
   const { id = "" } = useParams();
   const query = useQuery(goalReads.detail(account.user.id, id));
+  // The season target lives on the season; the goal page shows it too.
+  const current = useQuery(seasonReads.current(account.user.id));
+  const inSeason = current.data?.season?.goals.find(goal => goal.goalId === id);
   const writes = useGoalMutations(account.user.id);
   const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch) });
   const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false) });
-  return <GoalView key={id} state={query} onRetry={() => void query.refetch()}
+  return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target } : null} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
     onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
     write={{ pending: update.isPending || unlink.isPending, error: (update.error ?? unlink.error)?.message ?? null }} />;
@@ -72,7 +91,7 @@ export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: strin
 
 /**
  * Ticket 06: the task sheet's Milestone property. Undefined while Goals is
- * hidden or loading, and while the task has no linked goal (a milestone needs one).
+ * hidden or loading; without a linked goal its switch is off and says why.
  */
 export function useMilestoneSlots(userId: string, taskId: string | null | undefined): MilestoneSlots | undefined {
   const list = useQuery(goalReads.list(userId));
@@ -84,7 +103,6 @@ export function useMilestoneSlots(userId: string, taskId: string | null | undefi
   if (!taskId || !shown || !list.data || !links.data || milestone.data === undefined) return undefined;
   const linked = linkedGoalIds(links.data, "tasks", taskId);
   const goals = list.data.goals.filter(goal => linked.includes(goal.id));
-  if (!goals.length && !milestone.data) return undefined;
   return { goals, milestone: milestone.data, onChange: (next) => change.mutate(next), error: change.error?.message ?? null };
 }
 
@@ -108,14 +126,14 @@ export function ProjectGoals({ userId, projectId }: { userId: string; projectId:
   return slots ? <GoalPicker slots={slots} variant="button" data={{ "data-project-action": "goals" }} /> : null;
 }
 
-/** Settings › General: hiding Goals only changes the sidebar. */
+/** Settings › General: one switch hides Goals and Seasons together (seasons plan goals, so neither stands alone in the sidebar). */
 export function GoalsHiddenSettingScreen({ userId }: { userId: string }) {
   const query = useQuery(goalReads.list(userId));
   const writes = useGoalMutations(userId);
   const update = useMutation({ mutationFn: (hidden: boolean) => writes.setHidden(hidden) });
   if (!query.data) return null;
   return <>
-    <SettingSwitch title="Show goals" hint="Show Goals at the top of the sidebar. Projects and tasks work the same either way." checked={!query.data.hidden}
+    <SettingSwitch title="Show goals and seasons" hint="Show Goals and Seasons at the top of the sidebar, goal fields on tasks and projects, and milestone flags. Projects and tasks work the same either way." checked={!query.data.hidden}
       disabled={update.isPending} onChange={(shown) => update.mutate(!shown)} />
     {update.error && <p className="error" role="alert">{update.error.message} The setting was not changed.</p>}
   </>;
@@ -132,13 +150,20 @@ export function SeasonScreen({ account }: { account: Account }) {
   const seasonId = query.data?.season?.id ?? "";
   const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays) });
   const add = useMutation({ mutationFn: ({ goalId, tier, target }: { goalId: string; tier: SeasonTier; target: string }) => writes.addGoal(seasonId, goalId, tier, target) });
+  const goalWrites = useGoalMutations(userId);
+  // A goal made on the season page joins this season at once.
+  const create = useMutation({ mutationFn: async ({ goal, tier, target }: { goal: NewGoal; tier: SeasonTier; target: string }) => {
+    const created = await goalWrites.create(goal);
+    return writes.addGoal(seasonId, created.id, tier, target);
+  } });
   const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch) });
   const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId) });
   const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next) });
-  const writing = [start, add, update, remove, end];
+  const writing = [start, add, create, update, remove, end];
   return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
     onAdd={(goalId, tier, target) => add.mutateAsync({ goalId, tier, target })}
+    onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
     onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)}
     write={{ pending: writing.some(write => write.isPending), error: writing.find(write => write.error)?.error?.message ?? null }} />;

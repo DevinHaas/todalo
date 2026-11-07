@@ -18,6 +18,9 @@ pub struct GoalPatch {
     title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    /// A goal palette key; the server checks it against the palette.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     archived: Option<bool>,
 }
@@ -46,10 +49,12 @@ pub async fn create_goal(
     state: tauri::State<'_, NativeAuth>,
     title: String,
     description: Option<String>,
+    color: Option<String>,
 ) -> Result<Value, String> {
     let body = patch_body(GoalPatch {
         title: Some(title),
         description,
+        color,
         archived: None,
     })?;
     state
@@ -258,6 +263,11 @@ fn patch_body(mut patch: GoalPatch) -> Result<Value, &'static str> {
     {
         return Err(INVALID);
     }
+    if patch.color.as_ref().is_some_and(|color| {
+        color.is_empty() || color.len() > 20 || !color.bytes().all(|byte| byte.is_ascii_lowercase())
+    }) {
+        return Err(INVALID);
+    }
     let body = serde_json::to_value(&patch).map_err(|_| INVALID)?;
     if body.as_object().is_none_or(|fields| fields.is_empty()) {
         return Err(INVALID);
@@ -315,10 +325,10 @@ mod tests {
     #[test]
     fn goal_bodies_carry_only_typed_validated_fields() {
         let patch: GoalPatch =
-            serde_json::from_value(json!({ "title": "  Get fit ", "archived": true })).unwrap();
+            serde_json::from_value(json!({ "title": "  Get fit ", "color": "teal", "archived": true })).unwrap();
         assert_eq!(
             patch_body(patch).unwrap(),
-            json!({ "title": "Get fit", "archived": true })
+            json!({ "title": "Get fit", "color": "teal", "archived": true })
         );
         assert!(
             serde_json::from_value::<GoalPatch>(json!({ "title": "A", "userId": "bob" })).is_err()
@@ -335,6 +345,10 @@ mod tests {
             },
             GoalPatch {
                 description: Some("x".repeat(10_001)),
+                ..Default::default()
+            },
+            GoalPatch {
+                color: Some("#ff0000".into()),
                 ..Default::default()
             },
         ] {
