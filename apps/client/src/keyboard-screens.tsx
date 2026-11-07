@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useOpenSettings } from "./settings-nav";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
-import { reads, shortcutReads, shortcuts } from "./runtime";
+import { reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
@@ -16,7 +16,7 @@ import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from ".
 import { collapsedTasks } from "./views";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
-import { inlineError } from "./toasts";
+import { inlineError, toasts } from "./toasts";
 import { useTaskWrites } from "./task-writes";
 import { isTimed, unscheduledDetails } from "./schedule";
 import { theme } from "./theme";
@@ -257,6 +257,17 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     const keepFocus = (row: HTMLElement | null) => requestAnimationFrame(() => {
       if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
     });
+    // Rituals read from the cache; before it has loaded (e.g. goals hidden in the sidebar), fetch it first.
+    const withRituals = (run: (state: RitualsDto) => unknown) => {
+      const state = latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId));
+      if (state) { run(state); return; }
+      void latest.current.cache.fetchQuery(ritualReads.state(userId)).then(run).catch(() => {});
+    };
+    const ritualOff = (name: string) => {
+      const id = `ritual-off-${name}`;
+      toasts.add({ id, title: `${name} is off`, description: "Turn it on in Settings › Rituals to start it from here.",
+        actionProps: { children: "Open settings", onClick: () => { toasts.close(id); latest.current.openSettings("rituals"); } } });
+    };
     handlers.current = {
       "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "navigation.ui": go("/ui"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
@@ -405,12 +416,11 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         write(async () => { const { task } = await focusedTask(row); if (task && isTimed(task)) await latest.current.update.mutateAsync({ id: task.id, details: unscheduledDetails(task) }); });
       },
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
-      // Goals ticket 11: pass on while the Check-in is off, or with no ritual open.
-      "ritual.check-in": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.checkIn.enabled) return false; openRitual("checkIn"); },
-      // Goals ticket 13: passes on while the Weekly review is off.
-      "ritual.weekly-review": () => { if (!latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId))?.settings.weeklyReview.enabled) return false; openRitual("weeklyReview"); },
-      // Goals ticket 14: passes on while the Season review is off or no season is running.
-      "ritual.season-review": () => { const state = latest.current.cache.getQueryData<RitualsDto>(ritualKeys.all(userId)); if (!state?.settings.seasonReview.enabled || !state.seasonReview.period) return false; openRitual("seasonReview"); },
+      // Goals ticket 11: a ritual that is off says so and offers its settings, instead of doing nothing.
+      "ritual.check-in": () => withRituals(state => state.settings.checkIn.enabled ? openRitual("checkIn") : ritualOff("Check-in")),
+      "ritual.weekly-review": () => withRituals(state => state.settings.weeklyReview.enabled ? openRitual("weeklyReview") : ritualOff("Weekly review")),
+      "ritual.season-review": () => withRituals(state => !state.settings.seasonReview.enabled ? ritualOff("Season review")
+        : state.seasonReview.period ? openRitual("seasonReview") : toasts.add({ title: "No season is running", description: "Start a season to review it." })),
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 12: the Check-in's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),
