@@ -4,6 +4,7 @@ import { CoachSecretError } from "@todalo/server/coach-secret";
 import { createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "@todalo/server/coach-chatgpt";
 import { fakeOpenaiAuth } from "../../../packages/server/src/coach-chatgpt.fake";
 import type { StatusInputs } from "@todalo/server/goal-status";
+import type { TaskMove } from "@todalo/server/coach-recommendations";
 import type { SeasonGoalRecord } from "@todalo/server/season-dto";
 import { createCoachRoutes, type CoachStore } from "./coach-routes";
 
@@ -34,6 +35,10 @@ const inputs = (reviewed: boolean): StatusInputs => ({
   ratings: [{ goalId: "fit", day: "2026-02-02", rating: "solid" }], milestones: [], reviewed,
 });
 let reviewed: boolean;
+/** Ticket 21: cached recommendations by "user:goal", the task moves, and the fake model's recommendation reply. */
+let recs: Map<string, { inputsHash: string; text: string; dismissedAt: Date | null }>;
+let moveRows: TaskMove[];
+let advise: (facts: { goal?: string }) => string;
 
 beforeEach(() => {
   providers = new Map();
@@ -44,6 +49,9 @@ beforeEach(() => {
   reply = (facts) => JSON.stringify({ explanation: `${facts.goal} explained.` });
   secretReady = true;
   reviewed = true;
+  recs = new Map();
+  moveRows = [];
+  advise = (facts) => JSON.stringify({ recommendation: `Move ${facts.goal} to your mornings.` });
   clock = new Date("2026-02-18T12:00:00Z");
   chatgptRows = new Map();
   clients = new Map();
@@ -95,6 +103,7 @@ const store: CoachStore = {
       calls.push({ config, messages, schema: schema?.name });
       if (config.model === "broken") throw new CoachModelError("The provider rejected the API key.");
       if (schema?.name === "ping") return config.model === "no-json" ? "pong" : '{"ok":true}';
+      if (schema?.name === "goal_recommendation") return advise(JSON.parse(messages.at(-1)!.content));
       return reply(JSON.parse(messages.at(-1)!.content));
     },
   }),
@@ -105,6 +114,16 @@ const store: CoachStore = {
   statusInputs: async (userId) => userId === "alice" ? inputs(reviewed) : inputs(false),
   cached: async (userId) => [...cache].filter(([key]) => key.startsWith(`${userId}:`)).map(([key, row]) => ({ goalId: key.split(":")[1]!, ...row })),
   cache: async (userId, goalId, inputsHash, text) => { cache.set(`${userId}:${goalId}`, { inputsHash, text }); },
+  recommendations: async (userId) => [...recs].filter(([key]) => key.startsWith(`${userId}:`)).map(([key, row]) => ({ goalId: key.split(":")[1]!, ...row })),
+  cacheRecommendation: async (userId, goalId, inputsHash, text) => {
+    recs.set(`${userId}:${goalId}`, { inputsHash, text, dismissedAt: recs.get(`${userId}:${goalId}`)?.dismissedAt ?? null });
+  },
+  dismissRecommendation: async (userId, goalId, at) => {
+    const row = recs.get(`${userId}:${goalId}`);
+    if (row) row.dismissedAt = at;
+    return Boolean(row);
+  },
+  moves: async (userId, since) => userId === "alice" ? moveRows.filter(move => move.movedAt >= since) : [],
   now: () => clock,
 };
 const app = createCoachRoutes(store);
@@ -476,5 +495,67 @@ describe("goal status explanations", () => {
     const response = await call("GET", "/coach/explanations", { user: "alice" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ explanations: {} });
+  });
+});
+
+describe("recommendations (ticket 21)", () => {
+  const recommendations = async (user = "alice") => (await (await call("GET", "/coach/recommendations?timeZone=UTC", { user })).json() as { recommendations: { goalId: string; text: string }[] }).recommendations;
+  const dismiss = (goalId: string, init: { user?: string; cookie?: string; origin?: string } = { user: "alice" }) => call("POST", `/coach/recommendations/${goalId}/dismiss`, init);
+  const recommendationCalls = () => calls.filter(item => item.schema === "goal_recommendation");
+  // Thursday afternoons in weeks 1 and 2 (the season starts Sunday 1 Feb).
+  const thursdayMove = (day: string): TaskMove => ({ taskId: "a", projectId: null, fromDate: new Date(`${day}T14:00:00Z`), movedAt: new Date(`${day}T15:00:00Z`) });
+
+  it("is empty and calls no model without a provider, a season or a measured status", async () => {
+    expect(await recommendations()).toEqual([]);
+    await connect("bob", { provider: "openai", model: "m", apiKey: "sk-12345678" });
+    expect(await recommendations("bob")).toEqual([]);
+    reviewed = false;
+    await connect("alice", { provider: "openai", model: "m", apiKey: "sk-12345678" });
+    expect(await recommendations()).toEqual([]);
+    expect(calls).toEqual([]);
+    expect((await call("GET", "/coach/recommendations")).status).toBe(401);
+  });
+
+  it("recommends for each goal off track from its status, tasks and moves", async () => {
+    moveRows = [thursdayMove("2026-02-05"), thursdayMove("2026-02-12"), { ...thursdayMove("2026-02-12"), taskId: "elsewhere" }];
+    await connect("alice", { provider: "openrouter", model: "m", apiKey: "sk-12345678" });
+    expect(await recommendations()).toEqual([
+      { goalId: "fit", text: "Move Become fit to your mornings." }, { goalId: "ship", text: "Move Ship v2 to your mornings." },
+    ]);
+    const facts = JSON.parse(recommendationCalls().find(item => item.messages.at(-1)!.content.includes("Become fit"))!.messages.at(-1)!.content);
+    expect(facts).toMatchObject({
+      goal: "Become fit", status: "Off track",
+      weeks: [{ week: 1, tasksMoved: 1, goalTasksCompleted: 2 }, { week: 2, tasksMoved: 1 }, { week: 3, tasksMoved: 0 }],
+      movedFrom: [{ weekday: "Thursday", partOfDay: "afternoon", times: 2, sinceWeek: 1 }],
+      doneAt: [{ partOfDay: "morning", tasks: 3 }], nextSevenDays: { tasksScheduled: 0, minutesScheduled: 0 },
+    });
+    // Ship v2 has no linked tasks: a move of another task is not its own.
+    expect(JSON.parse(recommendationCalls().find(item => item.messages.at(-1)!.content.includes("Ship v2"))!.messages.at(-1)!.content).movedFrom).toEqual([]);
+    await recommendations();
+    expect(recommendationCalls()).toHaveLength(2);
+  });
+
+  it("dismiss hides one recommendation for the rest of the season week, without asking the model again", async () => {
+    await connect("alice", { provider: "openai", model: "m", apiKey: "sk-12345678" });
+    await recommendations();
+    expect((await dismiss("ship", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    expect((await dismiss("ship")).status).toBe(200);
+    expect((await dismiss("nope")).status).toBe(404);
+    expect((await recommendations()).map(item => item.goalId)).toEqual(["fit"]);
+    // Next day, same season week (week 3 runs 15-21 Feb): still hidden, and not asked for.
+    clock = new Date("2026-02-20T12:00:00Z");
+    const before = recommendationCalls().length;
+    expect((await recommendations()).map(item => item.goalId)).toEqual(["fit"]);
+    expect(recommendationCalls().length - before).toBe(1);
+    // Week 4: a fresh recommendation.
+    clock = new Date("2026-02-22T12:00:00Z");
+    expect((await recommendations()).map(item => item.goalId)).toEqual(["fit", "ship"]);
+  });
+
+  it("drops only a failed recommendation and caches none of it", async () => {
+    await connect("alice", { provider: "openai", model: "m", apiKey: "sk-12345678" });
+    advise = (facts) => facts.goal === "Ship v2" ? JSON.stringify({ recommendation: " " }) : JSON.stringify({ recommendation: "Fine." });
+    expect(await recommendations()).toEqual([{ goalId: "fit", text: "Fine." }]);
+    expect([...recs.keys()]).toEqual(["alice:fit"]);
   });
 });

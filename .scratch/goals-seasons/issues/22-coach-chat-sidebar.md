@@ -4,12 +4,12 @@
 
 **Blocked by:** 19
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Chat in the right sidebar with goal and schedule context
-- [ ] Proposed changes become drafts, never direct edits
-- [ ] Chat history kept per user
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Chat in the right sidebar with goal and schedule context
+- [x] Proposed changes become drafts, never direct edits
+- [x] Chat history kept per user
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

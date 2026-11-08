@@ -421,7 +421,7 @@ export const coachExplanations = pgTable("coach_explanations", {
 export const coachDrafts = pgTable("coach_drafts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["day", "week"] }).notNull(),
+  kind: text("kind", { enum: ["day", "week", "chat"] }).notNull(),
   period: date("period", { mode: "string" }).notNull(),
   summary: text("summary").notNull(),
   status: text("status", { enum: ["open", "closed"] }).default("open").notNull(),
@@ -447,6 +447,41 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   seenUpdatedAt: timestamp("seen_updated_at"),
   state: text("state", { enum: ["pending", "accepted", "declined"] }).default("pending").notNull(),
 }, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
+
+// Goals ticket 21: a goal's last Coach recommendation, reused while inputsHash
+// (facts, provider, model, day) is unchanged. dismissedAt hides it for the rest
+// of that season week; a new text keeps the dismissal.
+export const coachRecommendations = pgTable("coach_recommendations", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  inputsHash: text("inputs_hash").notNull(),
+  text: text("text").notNull(),
+  dismissedAt: timestamp("dismissed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.userId, table.goalId] })]);
+
+// Ticket 21: one row each time an open task's date or time changed, written by
+// the task_moves_log() trigger (drizzle/0034) so every write path counts.
+// `fromDate` is where it was; recurring completions are not moves.
+export const taskMoves = pgTable("task_moves", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  fromDate: timestamp("from_date").notNull(),
+  toDate: timestamp("to_date"),
+  movedAt: timestamp("moved_at").defaultNow().notNull(),
+}, table => [index("task_moves_user_moved_idx").on(table.userId, table.movedAt)]);
+
+// Goals ticket 22: the Coach chat, kept per user. An assistant turn that
+// proposed changes points at its Draft (kind "chat"); the draft holds them.
+export const coachChatMessages = pgTable("coach_chat_messages", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["user", "assistant"] }).notNull(),
+  content: text("content").notNull(),
+  draftId: text("draft_id").references(() => coachDrafts.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("coach_chat_messages_user_created_idx").on(table.userId, table.createdAt)]);
 
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

@@ -36,7 +36,7 @@ export function hasTimeIn(date: Date, zone: string) {
   return parts !== "00:00";
 }
 
-const serves = (task: WeekTask, goalId: string, links: WeekLinks) =>
+export const serves = (task: Pick<WeekTask, "id" | "projectId">, goalId: string, links: WeekLinks) =>
   links.tasks.some(link => link.goalId === goalId && link.taskId === task.id)
   || (task.projectId !== null && links.projects.some(link => link.goalId === goalId && link.projectId === task.projectId));
 

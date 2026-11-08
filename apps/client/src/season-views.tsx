@@ -2,8 +2,9 @@ import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "re
 import { Link, NavLink } from "react-router";
 import { CalendarRange, History, Pencil, Plus } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
-import { CoachExplanation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
+import { CoachExplanation, CoachRecommendation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
 import { TrajectoryChart } from "./trajectory-chart";
+import type { RecommendationSlot } from "./goal-views";
 import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type GoalStatusDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
@@ -63,9 +64,10 @@ export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Seaso
   return `Day ${day} of ${length} · ${daysLeft ? `${plural(daysLeft, "day")} left` : "last day"}`;
 }
 
-export function SeasonView({ state, goals, past, explanations, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, write }: {
+export function SeasonView({ state, goals, past, explanations, recommendations, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, write }: {
   state: ReadState<CurrentSeasonDto>; goals: GoalDto[]; past: SeasonDto[]; onRetry: () => void;
   /** Ticket 17: the Coach's status explanations by goal ID (empty without a provider). */ explanations?: Record<string, string>;
+  /** Ticket 21: the Coach's recommendations by goal ID (none without a provider). */ recommendations?: Record<string, RecommendationSlot>;
   onStart: (startDate: string, lengthDays: number) => Promise<unknown>;
   /** Creates a goal and adds it to this season. */
   onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>;
@@ -108,7 +110,7 @@ export function SeasonView({ state, goals, past, explanations, onRetry, onStart,
         ? <TrajectoryChart goals={season.goals} statuses={season.statuses} day={phase === "upcoming" ? 0 : day} length={length} />
         : <Hint className="py-2" data-trajectory-pending="">Your trajectory appears after your first Weekly review, once a week of ratings and tasks has been measured. Until then every goal shows Too early.</Hint>}
     </PageSection>}
-    <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} explanation={explanations?.[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
+    <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} explanation={explanations?.[goal.goalId]} recommendation={recommendations?.[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
       empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
     {/* Choosing among existing goals belongs to setting up a season (Start / End season); a running season only adds new ones. */}
     <NewSeasonGoal count={goals.length} onCreate={onCreate} write={write} />
@@ -298,8 +300,8 @@ function NewSeasonGoal({ count, onCreate, write }: { count: number; onCreate: (g
 }
 
 /** One goal in the season: switch it off to remove it (the goal stays), change its tier, move its target (the text is replaced). */
-function SeasonGoalRow({ goal, status, explanation, onUpdate, onRemove, write }: {
-  goal: SeasonGoalDto; status?: GoalStatusDto; explanation?: string; onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>; onRemove: (goalId: string) => Promise<unknown>; write: Write;
+function SeasonGoalRow({ goal, status, explanation, recommendation, onUpdate, onRemove, write }: {
+  goal: SeasonGoalDto; status?: GoalStatusDto; explanation?: string; recommendation?: RecommendationSlot; onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>; onRemove: (goalId: string) => Promise<unknown>; write: Write;
 }) {
   const [editing, setEditing] = useState(false);
   const [target, setTarget] = useState(goal.target);
@@ -318,6 +320,7 @@ function SeasonGoalRow({ goal, status, explanation, onUpdate, onRemove, write }:
         <Button type="submit" disabled={write.pending || !target.trim()}>Save</Button>
       </form> : <SeasonTarget text={goal.target} />}
       <CoachExplanation text={explanation} />
+      <CoachRecommendation goalId={goal.goalId} title={goal.title} slot={recommendation} />
     </div>
     <div className="flex shrink-0 items-center gap-1">
       <TierToggle value={goal.tier} action disabled={write.pending} onChange={(tier) => void onUpdate(goal.goalId, { tier }).catch(() => undefined)} />

@@ -26,6 +26,7 @@ import { useOpenSettings } from "./settings-nav";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds, useTaskGoalOf } from "./goal-screens";
 import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
+import { CoachChatButton, CoachChatHost } from "./coach-chat-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -187,12 +188,13 @@ export function Shell({ account }: { account: Account }) {
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
           <LayoutSwitcher />
         </div>
-        <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><DisplayMenu /></div>
+        <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><CoachChatButton userId={account.user.id} /><DisplayMenu /></div>
       </div>
       <ConnectionStatus />
       <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>
     </div>
     <RitualHost userId={account.user.id} />
+    <CoachChatHost userId={account.user.id} />
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
     <CriteriaConfirmHost />

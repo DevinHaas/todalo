@@ -193,8 +193,10 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
   const draft = drafts.data?.drafts.find(item => item.kind === scope.kind && item.period === scope.period) ?? null;
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
+  // Ticket 22: a draft from the Coach chat shows dashed too (it is decided in the chat).
+  const chatPending = drafts.data?.drafts.filter(item => item.kind === "chat").flatMap(item => item.items.filter(row => row.state === "pending")) ?? [];
   return {
-    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => pending.map(item => ({
+    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].map(item => ({
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
     })),
     panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}

@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import {
   Apple, Baby, Bike, BookOpen, Brain, Briefcase, CalendarRange, Camera, Code, Dog, Dumbbell, Flame, Footprints, GraduationCap, Hash, Heart, House, Leaf,
+  CalendarClock, Lightbulb, MessageCircle,
   Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Sparkles, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { criteriaProgress, goalColorKeys, goalColorValue, goalIcons, type GoalColor, type GoalIcon as GoalIconName, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
@@ -215,6 +216,33 @@ export interface GoalSeason {
 export const CoachExplanation = ({ text }: { text?: string }) => text
   ? <p data-coach-explanation="" className="flex items-start gap-1.5 text-xs-plus text-muted-foreground [overflow-wrap:anywhere]">
     <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden="true" /><span><span className="sr-only">Coach: </span>{text}</span></p>
+  : null;
+
+/** Ticket 21: a goal's Coach recommendation and what the screen does with it. */
+export interface RecommendationSlot {
+  text: string;
+  /** Update schedule is drafting. */ drafting: boolean;
+  /** Why the last Update schedule drafted nothing. */ message: string | null;
+  onSchedule(): void; onChat(): void; onDismiss(): void;
+}
+
+/** Ticket 21: the Coach's recommendation for a goal at Adjust or Off track; absent without a provider. */
+export const CoachRecommendation = ({ goalId, title, slot }: { goalId: string; title: string; slot?: RecommendationSlot }) => slot
+  ? <div data-coach-recommendation={goalId} className="mt-1 flex flex-col gap-1.5 rounded-lg border border-border-subtle p-2">
+    <div className="flex items-start gap-1.5">
+      <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-xs-plus [overflow-wrap:anywhere]"><span className="sr-only">Coach recommends: </span>{slot.text}</p>
+      <Button type="button" variant="ghost" size="icon-xs" className="-my-0.5" aria-label={`Dismiss the recommendation for ${title}`} title="Dismiss"
+        onClick={slot.onDismiss} data-recommendation-action="dismiss"><X /></Button>
+    </div>
+    <div className="flex flex-wrap items-center gap-1.5 pl-5">
+      <Button type="button" variant="outline" size="sm" disabled={slot.drafting} onClick={slot.onSchedule} data-recommendation-action="schedule">
+        {slot.drafting ? <Spinner /> : <CalendarClock />}{slot.drafting ? "Drafting…" : "Update schedule"}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={slot.onChat} data-recommendation-action="chat"><MessageCircle />Chat with coach</Button>
+    </div>
+    {slot.message && !slot.drafting && <Hint className="pl-5 text-xs" aria-live="polite">{slot.message}</Hint>}
+  </div>
   : null;
 
 /** A season target with its label, so it never reads as the goal's description. */

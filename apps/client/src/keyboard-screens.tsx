@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
 import { coach, coachReads, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
 import { coachMutations, coachProviderInfo, nextCoachProvider, usableCoachProviders } from "./coach";
+import { openCoachChat } from "./coach-chat-screens";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
@@ -96,6 +97,10 @@ function clickAndRefocus(selector: string) {
 const composerForm = () => document.activeElement?.closest<HTMLFormElement>("form.composer-form") ?? null;
 const inComposerTitle = () => Boolean(document.activeElement?.closest(".quick-add-title")) && composerForm();
 const editorForm = () => document.activeElement?.closest<HTMLElement>(".task-editor :is(form, .sheet-form)") ?? null;
+/** Ticket 21: the recommendation in the focused season goal, else the first on the page. */
+const recommendation = () => document.activeElement?.closest("[data-season-goal]")?.querySelector("[data-coach-recommendation]")
+  ?? document.querySelector("main [data-coach-recommendation]");
+
 function press(scope: ParentNode | null, selector: string) {
   const control = scope?.querySelector<HTMLButtonElement>(selector);
   if (!control || control.disabled) return false;
@@ -476,8 +481,15 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "coach.draft-day": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-day"]'),
       // Ticket 20: the week's draft beside the week calendar.
       "coach.draft-week": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-week"]'),
-      "coach.accept-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="accept-all"]'),
-      "coach.decline-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="decline-all"]'),
+      "coach.accept-draft": () => press(document, '[data-coach-draft] [data-draft-action="accept-all"]'),
+      "coach.decline-draft": () => press(document, '[data-coach-draft] [data-draft-action="decline-all"]'),
+      // Ticket 22: the toolbar's Coach button exists only with a provider connected.
+      "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; openCoachChat(); },
+      "coach.chat-clear": () => press(document.querySelector("[data-coach-chat]"), '[data-coach-chat-action="clear"]'),
+      // Ticket 21: the Season page's recommendation holding focus, else the first.
+      "coach.recommendation-schedule": () => press(recommendation(), '[data-recommendation-action="schedule"]'),
+      "coach.recommendation-chat": () => press(recommendation(), '[data-recommendation-action="chat"]'),
+      "coach.recommendation-dismiss": () => press(recommendation(), '[data-recommendation-action="dismiss"]'),
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 13: the Weekly review's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),

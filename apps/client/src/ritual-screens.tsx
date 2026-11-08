@@ -22,6 +22,9 @@ import { Button, Hint } from "./ui";
 const OPEN = "todalo:ritual";
 /** Opens a ritual's panel from anywhere (sidebar, schedule item, keyboard). */
 export const openRitual = (kind: RitualKind = "checkIn") => window.dispatchEvent(new CustomEvent(OPEN, { detail: kind }));
+const SHOW_PLAN = "todalo:show-plan";
+/** Ticket 21: the week of `day` on Upcoming as a calendar with the Plan open (where a week draft shows), from any page. */
+export const showWeekPlan = (day: string) => window.dispatchEvent(new CustomEvent(SHOW_PLAN, { detail: day }));
 
 const ritualNames: Record<RitualKind, string> = { checkIn: "Check-in", eveningReview: "Evening review", weeklyReview: "Weekly review", seasonReview: "Season review" };
 
@@ -175,9 +178,11 @@ export function RitualHost({ userId }: { userId: string }) {
   }, [plan, pathname, display]);
   useEffect(() => {
     const start = (event: Event) => setOpen((event as CustomEvent<RitualKind>).detail);
+    const show = (event: Event) => { navigate("/upcoming"); setPlan({ path: "/upcoming", day: (event as CustomEvent<string>).detail }); };
     window.addEventListener(OPEN, start);
-    return () => window.removeEventListener(OPEN, start);
-  }, []);
+    window.addEventListener(SHOW_PLAN, show);
+    return () => { window.removeEventListener(OPEN, start); window.removeEventListener(SHOW_PLAN, show); };
+  }, [navigate]);
   if (!open || !query.data || season.status === "pending") return null;
   const goals = (shown?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color, icon }) => ({ goalId, title, color, icon }));
   const voice = (append: (text: string) => void) => <VoiceContext onText={append} />;

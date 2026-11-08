@@ -319,7 +319,7 @@ pub fn open_chatgpt_sign_in(app: tauri::AppHandle, url: String) -> Result<(), St
 }
 
 /// `/api/v1/coach/...?timeZone=…` for the webview's IANA zone.
-fn zoned(path: &str, time_zone: String) -> Result<String, String> {
+pub(crate) fn zoned(path: &str, time_zone: String) -> Result<String, String> {
     let query = reqwest::Url::parse_with_params("http://x/", [("timeZone", time_zone)])
         .map_err(|_| INVALID)?;
     Ok(format!("{path}?{}", query.query().unwrap_or_default()))
@@ -410,6 +410,50 @@ fn decision_body(id: &str, item_ids: Option<Vec<String>>) -> Result<Value, &'sta
     })
 }
 
+/// Goals ticket 21: the Coach's recommendation per goal off track, in the webview's timezone.
+#[tauri::command]
+pub async fn coach_recommendations(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+) -> Result<Value, String> {
+    state
+        .read(&zoned("/api/v1/coach/recommendations", time_zone)?)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// Goal IDs are server UUIDs, checked like draft IDs so they stay one path segment.
+fn recommendation_path(goal_id: &str, action: &str) -> Result<String, String> {
+    if !draft_id(goal_id) {
+        return Err(INVALID.to_owned());
+    }
+    Ok(format!("/api/v1/coach/recommendations/{goal_id}/{action}"))
+}
+
+/// Hides the goal's recommendation for the rest of the season week.
+#[tauri::command]
+pub async fn dismiss_recommendation(
+    state: tauri::State<'_, NativeAuth>,
+    goal_id: String,
+) -> Result<Option<Value>, String> {
+    Ok(state
+        .write(Method::POST, &recommendation_path(&goal_id, "dismiss")?, None)
+        .await?)
+}
+
+/// Update schedule: a week draft carrying out the goal's recommendation; as `draft_week`.
+#[tauri::command]
+pub async fn draft_recommendation(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+    goal_id: String,
+) -> Result<Option<Value>, String> {
+    let path = recommendation_path(&goal_id, "draft")?;
+    Ok(state
+        .write(Method::POST, &zoned(&path, time_zone)?, None)
+        .await?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,6 +535,16 @@ mod tests {
         assert_eq!(decision_body("../tasks", None), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec![])), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec!["a/b".into()])), Err(INVALID));
+    }
+
+    #[test]
+    fn recommendations_name_only_a_plain_goal_id() {
+        assert_eq!(
+            recommendation_path("g-1", "dismiss").unwrap(),
+            "/api/v1/coach/recommendations/g-1/dismiss"
+        );
+        assert!(recommendation_path("../tasks", "draft").is_err());
+        assert!(recommendation_path("", "draft").is_err());
     }
 
     #[test]

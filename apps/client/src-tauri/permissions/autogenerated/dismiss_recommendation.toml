@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dismiss-recommendation"
+description = "Enables the dismiss_recommendation command without any pre-configured scope."
+commands.allow = ["dismiss_recommendation"]
+
+[[permission]]
+identifier = "deny-dismiss-recommendation"
+description = "Denies the dismiss_recommendation command without any pre-configured scope."
+commands.deny = ["dismiss_recommendation"]

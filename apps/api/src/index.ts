@@ -20,6 +20,8 @@ import * as coach from "@todalo/server/coach-store";
 import { createCoachModel } from "@todalo/server/coach";
 import { createDraftRoutes } from "./draft-routes";
 import * as drafts from "@todalo/server/drafts-store";
+import { createCoachChatRoutes } from "./coach-chat-routes";
+import * as coachChat from "@todalo/server/coach-chat-store";
 import * as rituals from "@todalo/server/rituals";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
@@ -161,6 +163,10 @@ const app = createApi(dependencies)
   statusInputs: rituals.getStatusInputs,
   cached: coach.getCachedExplanations,
   cache: coach.cacheExplanation,
+  recommendations: coach.getCachedRecommendations,
+  cacheRecommendation: coach.cacheRecommendation,
+  dismissRecommendation: coach.dismissRecommendation,
+  moves: coach.getTaskMoves,
 })).use(createDraftRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
@@ -171,6 +177,19 @@ const app = createApi(dependencies)
   save: drafts.saveDraft,
   tasks: drafts.getDraftTasks,
   resolve: drafts.resolveDraft,
+  recommendation: coach.getRecommendation,
+})).use(createCoachChatRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  model: (config) => createCoachModel(config),
+  dayContext: drafts.getDayContext,
+  season: seasons.getCurrentSeason,
+  statusInputs: rituals.getStatusInputs,
+  messages: coachChat.getChatMessages,
+  append: coachChat.appendChatMessages,
+  clear: coachChat.clearChat,
+  saveDraft: drafts.saveDraft,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

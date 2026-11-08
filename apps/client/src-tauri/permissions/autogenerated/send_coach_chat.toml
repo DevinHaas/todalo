@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-send-coach-chat"
+description = "Enables the send_coach_chat command without any pre-configured scope."
+commands.allow = ["send_coach_chat"]
+
+[[permission]]
+identifier = "deny-send-coach-chat"
+description = "Denies the send_coach_chat command without any pre-configured scope."
+commands.deny = ["send_coach_chat"]

@@ -2,9 +2,10 @@
 // read and write is scoped to the caller's userId. Ticket 18 adds the ChatGPT
 // sign-in; ticket 17c one configuration per provider kind and the user's pick
 // of the active one (pickCoachProvider in coach.ts).
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { coachChatgpt, coachChatgptClients, coachExplanations, coachProviderConfigs, coachProviders, coachSettings } from "@todalo/db/schema";
+import { coachChatgpt, coachChatgptClients, coachExplanations, coachProviderConfigs, coachProviders, coachRecommendations, coachSettings, taskMoves, tasks } from "@todalo/db/schema";
+import type { TaskMove } from "./coach-recommendations";
 import { openSecret, sealSecret } from "./coach-secret";
 import { ChatgptRefusedError, chatgptSharingScope, createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "./coach-chatgpt";
 import { coachProviderInfo, pickCoachProvider, type ChatgptDto, type CoachConfig, type CoachModelKind, type CoachProviderKind, type CoachState, type ConfiguredProvider, type StoredCoachProvider } from "./coach";
@@ -176,6 +177,7 @@ export async function removeCoachProvider(userId: string, provider?: CoachProvid
   await db.delete(coachProviderConfigs).where(and(eq(coachProviderConfigs.userId, userId), provider && eq(coachProviderConfigs.provider, provider)));
   await db.delete(coachProviders).where(and(eq(coachProviders.userId, userId), provider && eq(coachProviders.provider, provider)));
   await db.delete(coachExplanations).where(eq(coachExplanations.userId, userId));
+  await db.delete(coachRecommendations).where(eq(coachRecommendations.userId, userId));
 }
 
 export const getCachedExplanations = (userId: string) =>
@@ -186,3 +188,35 @@ export async function cacheExplanation(userId: string, goalId: string, inputsHas
   await db.insert(coachExplanations).values({ userId, goalId, inputsHash, text })
     .onConflictDoUpdate({ target: [coachExplanations.userId, coachExplanations.goalId], set: { inputsHash, text, createdAt: new Date() } });
 }
+
+// ---- Ticket 21: recommendations ----
+
+export const getCachedRecommendations = (userId: string) =>
+  db.select({ goalId: coachRecommendations.goalId, inputsHash: coachRecommendations.inputsHash, text: coachRecommendations.text, dismissedAt: coachRecommendations.dismissedAt })
+    .from(coachRecommendations).where(eq(coachRecommendations.userId, userId));
+
+/** A new text keeps the goal's dismissal (it hides for the rest of that season week either way). */
+export async function cacheRecommendation(userId: string, goalId: string, inputsHash: string, text: string) {
+  await db.insert(coachRecommendations).values({ userId, goalId, inputsHash, text })
+    .onConflictDoUpdate({ target: [coachRecommendations.userId, coachRecommendations.goalId], set: { inputsHash, text, createdAt: new Date() } });
+}
+
+/** False when the goal has no recommendation to dismiss. */
+export async function dismissRecommendation(userId: string, goalId: string, at: Date) {
+  const rows = await db.update(coachRecommendations).set({ dismissedAt: at })
+    .where(and(eq(coachRecommendations.userId, userId), eq(coachRecommendations.goalId, goalId))).returning({ goalId: coachRecommendations.goalId });
+  return rows.length > 0;
+}
+
+/** The goal's recommendation text unless dismissed (Update schedule drafts from it). */
+export async function getRecommendation(userId: string, goalId: string) {
+  const [row] = await db.select({ text: coachRecommendations.text, dismissedAt: coachRecommendations.dismissedAt }).from(coachRecommendations)
+    .where(and(eq(coachRecommendations.userId, userId), eq(coachRecommendations.goalId, goalId)));
+  return row && !row.dismissedAt ? row.text : null;
+}
+
+/** Moves of the user's tasks since `since`, with each task's project (goal links run through it). */
+export const getTaskMoves = (userId: string, since: Date): Promise<TaskMove[]> =>
+  db.select({ taskId: taskMoves.taskId, projectId: tasks.projectId, fromDate: taskMoves.fromDate, movedAt: taskMoves.movedAt }).from(taskMoves)
+    .innerJoin(tasks, eq(tasks.id, taskMoves.taskId))
+    .where(and(eq(taskMoves.userId, userId), gte(taskMoves.movedAt, since)));

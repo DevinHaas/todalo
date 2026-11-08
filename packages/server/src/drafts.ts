@@ -13,8 +13,11 @@ import { zonedTaskDate } from "./dates";
 export const draftOps = ["add", "move", "remove"] as const;
 export type DraftOp = typeof draftOps[number];
 export type DraftItemState = "pending" | "accepted" | "declined";
-/** "day": today's plan (period: the day). "week": a week's plan (period: its first day, a Monday from the client). */
-export type DraftKind = "day" | "week";
+/**
+ * "day": today's plan (period: the day). "week": a week's plan (period: its first day, a Monday from the client).
+ * Ticket 22 "chat": proposed in the Coach chat over the seven days from `period` (the day it was asked).
+ */
+export type DraftKind = "day" | "week" | "chat";
 
 /**
  * One operation. `start`/`end` are the task's new dueDate/dueDateEnd: "add"
@@ -271,9 +274,9 @@ export function weekDraftStart(start: string | null, today: string): string | nu
   if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start) || plusDays(start, 0) !== start) return null;
   return plusDays(start, 6) >= today && start <= plusDays(today, WEEK_DRAFT_AHEAD_DAYS) ? start : null;
 }
-/** Still worth showing: a day draft from today on, a week draft until its last day. */
+/** Still worth showing: a day draft from today on, a week (or chat) draft until its last day. */
 export const draftCurrent = (draft: Pick<DraftRecord, "kind" | "period">, today: string) =>
-  (draft.kind === "week" ? plusDays(draft.period, 6) : draft.period) >= today;
+  (draft.kind === "day" ? draft.period : plusDays(draft.period, 6)) >= today;
 
 const reply = z.object({
   summary: z.string(),

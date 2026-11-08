@@ -14,6 +14,8 @@ let calls: { messages: CoachMessage[]; schema?: string }[];
 /** The fake model's reply; it sees the facts it was sent. */
 let reply: (facts: { toPlan: { ref: string; title: string }[]; scheduled: { ref: string; title: string }[] }) => string;
 let pushed: string[];
+/** Ticket 21: each user's current (not dismissed) recommendation by goal. */
+let advice: Map<string, string>;
 
 const task = (userId: string, id: string, extra: Partial<DraftTask> = {}) =>
   tasks.set(id, { userId, id, title: id, status: "todo", projectId: null, parentId: null, dueDate: null, dueDateEnd: null, updatedAt: v1, goalIds: [], ...extra });
@@ -27,6 +29,7 @@ beforeEach(() => {
   drafts = [];
   calls = [];
   pushed = [];
+  advice = new Map([["alice:fit", "Run in the mornings — your evening runs were moved twice."]]);
   task("alice", "run", { dueDate: new Date("2026-02-05T23:00:00Z"), goalIds: ["fit"] } as Partial<DraftTask>); // overdue
   task("alice", "meeting", { dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") }); // 10:00-11:00
   task("alice", "admin", { dueDate: new Date("2026-02-09T14:00:00Z") }); // 15:00-15:30
@@ -86,6 +89,7 @@ const app = createDraftRoutes({
     }
     if (stored.items.every(row => row.state !== "pending")) stored.status = "closed";
   },
+  recommendation: async (userId, goalId) => advice.get(`${userId}:${goalId}`) ?? null,
   now: () => clock,
 });
 
@@ -321,5 +325,41 @@ describe("accepting and declining", () => {
     for (const body of [{ itemIds: [] }, { itemIds: "x" }, { all: true }]) expect((await call("POST", path, { user: "alice", body })).status).toBe(400);
     expect((await call("POST", path, { cookie: "alice", origin: "http://localhost:5173", body: { itemIds: [draft!.items[0]!.id] } })).status).toBe(200);
     expect(await open("bob")).toEqual([]);
+  });
+});
+
+describe("Update schedule on a recommendation (ticket 21)", () => {
+  const update = (goalId: string, init: { user?: string; cookie?: string; origin?: string } = { user: "alice" }) =>
+    call("POST", `/coach/recommendations/${goalId}/draft?timeZone=${zone}`, init);
+  beforeEach(() => {
+    reply = (raw) => JSON.stringify({ summary: "Mornings for running.", items: [item("add", { task: ref(raw.toPlan, "run"), day: "2026-02-10", start: "07:00", minutes: 45 })] });
+  });
+
+  it("drafts this week with the recommendation in focus and changes no task", async () => {
+    const before = snapshot();
+    const { draft } = await (await update("fit")).json() as DraftDayDto;
+    expect(calls[0]!.schema).toBe("week_draft");
+    const sent = JSON.parse(calls[0]!.messages.at(-1)!.content) as { days: { day: string }[]; focus: unknown };
+    expect(sent.focus).toEqual({ goal: "g1", recommendation: "Run in the mornings — your evening runs were moved twice." });
+    expect(sent.days[0]!.day).toBe("2026-02-09");
+    expect(calls[0]!.messages[0]!.content).toContain("carries it out first");
+    expect(draft).toMatchObject({ kind: "week", period: "2026-02-09", items: [{ op: "add", taskId: "run", goalId: "fit" }] });
+    expect(snapshot()).toBe(before);
+  });
+
+  it("drafts next week once this one is nearly over", async () => {
+    clock = new Date("2026-02-13T08:00:00Z"); // Friday
+    reply = (raw) => JSON.stringify({ summary: "x", items: [item("add", { task: ref(raw.toPlan, "run"), day: "2026-02-16", start: "07:00", minutes: 45 })] });
+    expect((await (await update("fit")).json() as DraftDayDto).draft).toMatchObject({ kind: "week", period: "2026-02-16" });
+  });
+
+  it("needs a current recommendation, a provider and an allowed origin; otherwise no model call", async () => {
+    expect((await update("side")).status).toBe(404);
+    expect((await update("fit", { user: "bob" })).status).toBe(404);
+    expect((await update("fit", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    // A recommendation for a goal no longer in the season.
+    advice.set("alice:gone", "Do it.");
+    expect((await update("gone")).status).toBe(404);
+    expect(calls).toEqual([]);
   });
 });

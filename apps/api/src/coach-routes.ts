@@ -9,9 +9,13 @@ import {
   type ChatgptAuth, type ChatgptClient, type ChatgptPending, type ChatgptTokens,
 } from "@todalo/server/coach-chatgpt";
 import { CoachSecretError } from "@todalo/server/coach-secret";
+import {
+  dismissedThisWeek, parseRecommendation, recommendationFacts, recommendationMessages, recommendationSchema, type CoachRecommendationsDto, type TaskMove,
+} from "@todalo/server/coach-recommendations";
 import { goalStatus, seasonSignals, type StatusInputs } from "@todalo/server/goal-status";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
 import { todayIn } from "@todalo/server/season-days";
+import { zonedTaskDate } from "@todalo/server/dates";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
 
@@ -44,6 +48,12 @@ export interface CoachStore {
   statusInputs(userId: string, season: { startDate: string; lengthDays: number }): Promise<StatusInputs>;
   cached(userId: string): Promise<{ goalId: string; inputsHash: string; text: string }[]>;
   cache(userId: string, goalId: string, inputsHash: string, text: string): Promise<void>;
+  /** Ticket 21: cached recommendations (with their dismissal), one per goal. */
+  recommendations(userId: string): Promise<{ goalId: string; inputsHash: string; text: string; dismissedAt: Date | null }[]>;
+  cacheRecommendation(userId: string, goalId: string, inputsHash: string, text: string): Promise<void>;
+  /** False when the goal has no recommendation. */
+  dismissRecommendation(userId: string, goalId: string, at: Date): Promise<boolean>;
+  moves(userId: string, since: Date): Promise<TaskMove[]>;
   now?: () => Date;
 }
 
@@ -53,6 +63,7 @@ const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try agai
 const NO_PROVIDER = { code: "NO_PROVIDER", message: "Connect an AI provider first." } as const;
 const NEEDS_KEY = { code: "INVALID_INPUT", message: "Enter an API key." } as const;
 const LOCAL_ONLY = { code: "INVALID_INPUT", message: "Ollama must run on this computer: use a localhost address." } as const;
+const NO_RECOMMENDATION = { code: "NOT_FOUND", message: "This recommendation is no longer there." } as const;
 const NO_SECRET = { code: "COACH_NOT_CONFIGURED", message: "This server cannot store API keys yet (COACH_SECRET_KEY is missing)." } as const;
 
 /** The client's view: never the key, only its last four characters. */
@@ -267,36 +278,80 @@ export function createCoachRoutes(store: CoachStore) {
     .get("/coach/explanations", async ({ request, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const none = { explanations: {} } satisfies CoachExplanationsDto;
-      const saved = await active(userId);
-      if (!saved) return none;
-      const current = await store.season(userId);
-      if (!current) return none;
-      const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
-      const clock = now(), today = todayIn(zone, clock);
-      const { season } = current;
-      const goals = current.goals.filter(goal => !goal.archivedAt);
-      const inputs = await store.statusInputs(userId, season);
-      const { day, perGoal } = seasonSignals({ ...season, today, now: clock, zone, goalIds: goals.map(goal => goal.goalId), inputs });
+      const measured = await seasonFacts(userId, request);
+      if (!measured) return { explanations: {} } satisfies CoachExplanationsDto;
       const cached = new Map((await store.cached(userId)).map(row => [row.goalId, row]));
-      const model = store.model(saved);
-      const entries = await Promise.all(goals.map(async (goal): Promise<[string, string] | null> => {
-        const weeks = perGoal.get(goal.goalId)!;
-        const facts = explanationFacts({ goal, weeks, day, length: season.lengthDays, status: goalStatus({ day, length: season.lengthDays, weeks, reviewed: inputs.reviewed }) });
-        if (!facts) return null;
-        const hash = createHash("sha256").update(JSON.stringify({ facts, provider: saved.provider, model: saved.model, today })).digest("hex");
+      const entries = await Promise.all(measured.goals.map(({ goal, facts }) => facts && ask(measured, facts, cached.get(goal.goalId), request.signal,
+        { messages: explanationMessages(facts), schema: explanationSchema }, parseExplanation, (hash, text) => store.cache(userId, goal.goalId, hash, text))
+        .then(text => text === null ? null : [goal.goalId, text] as const)));
+      return { explanations: Object.fromEntries(entries.filter(entry => entry != null)) } satisfies CoachExplanationsDto;
+    })
+    // Ticket 21: one recommendation per Adjust or Off track goal, from its status
+    // facts plus how its tasks were done, scheduled and moved. Cached like the
+    // explanations; a dismissed one stays hidden (and unasked) for the rest of that season week.
+    .get("/coach/recommendations", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const measured = await seasonFacts(userId, request);
+      if (!measured) return { recommendations: [] } satisfies CoachRecommendationsDto;
+      const { season, zone, today, clock, inputs } = measured;
+      const cached = new Map((await store.recommendations(userId)).map(row => [row.goalId, row]));
+      const moves = await store.moves(userId, zonedTaskDate(season.startDate, "00:00", zone)!);
+      const entries = await Promise.all(measured.goals.map(async ({ goal, facts: explanation }) => {
         const hit = cached.get(goal.goalId);
-        if (hit?.inputsHash === hash) return [goal.goalId, hit.text];
-        try {
-          const text = parseExplanation(await model.complete({ messages: explanationMessages(facts), schema: explanationSchema }, request.signal));
-          await store.cache(userId, goal.goalId, hash, text);
-          return [goal.goalId, text];
-        } catch (error) {
-          // One goal's failed explanation hides only that explanation; Test connection shows why.
-          if (error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError")) return null;
-          throw error;
-        }
+        if (dismissedThisWeek(hit?.dismissedAt ?? null, { startDate: season.startDate, today, zone })) return null;
+        const facts = recommendationFacts({ explanation, goalId: goal.goalId, startDate: season.startDate, zone, now: clock, links: inputs.links, tasks: inputs.tasks, moves });
+        if (!facts) return null;
+        const text = await ask(measured, facts, hit, request.signal, { messages: recommendationMessages(facts), schema: recommendationSchema }, parseRecommendation,
+          (hash, value) => store.cacheRecommendation(userId, goal.goalId, hash, value));
+        return text === null ? null : { goalId: goal.goalId, text };
       }));
-      return { explanations: Object.fromEntries(entries.filter(entry => entry !== null)) } satisfies CoachExplanationsDto;
+      return { recommendations: entries.filter(entry => entry !== null) } satisfies CoachRecommendationsDto;
+    })
+    .post("/coach/recommendations/:goalId/dismiss", async ({ request, params, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      if (!await store.dismissRecommendation(userId, params.goalId, now())) return status(404, NO_RECOMMENDATION);
+      return { ok: true };
     });
+
+  /** The current season's goals with their status facts (null while Too early), or null without a provider or season. */
+  async function seasonFacts(userId: string, request: Request) {
+    const saved = await active(userId);
+    if (!saved) return null;
+    const current = await store.season(userId);
+    if (!current) return null;
+    const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
+    const clock = now(), today = todayIn(zone, clock);
+    const { season } = current;
+    const seasonGoals = current.goals.filter(goal => !goal.archivedAt);
+    const inputs = await store.statusInputs(userId, season);
+    const { day, perGoal } = seasonSignals({ ...season, today, now: clock, zone, goalIds: seasonGoals.map(goal => goal.goalId), inputs });
+    const goals = seasonGoals.map(goal => {
+      const weeks = perGoal.get(goal.goalId)!;
+      return { goal, facts: explanationFacts({ goal, weeks, day, length: season.lengthDays, status: goalStatus({ day, length: season.lengthDays, weeks, reviewed: inputs.reviewed }) }) };
+    });
+    return { saved, season, zone, clock, today, inputs, goals };
+  }
+
+  /**
+   * One goal's Coach text: the cached one while its facts, provider, model and
+   * day are unchanged, else one model call. A failure hides only that goal's
+   * text (null); Test connection shows why.
+   */
+  async function ask(measured: { saved: CoachConfig; today: string }, facts: unknown, hit: { inputsHash: string; text: string } | undefined, signal: AbortSignal,
+    request: Parameters<CoachModel["complete"]>[0], parse: (content: string) => string, save: (hash: string, text: string) => Promise<void>): Promise<string | null> {
+    const { saved, today } = measured;
+    const hash = createHash("sha256").update(JSON.stringify({ facts, provider: saved.provider, model: saved.model, today })).digest("hex");
+    if (hit?.inputsHash === hash) return hit.text;
+    try {
+      const text = parse(await store.model(saved).complete(request, signal));
+      await save(hash, text);
+      return text;
+    } catch (error) {
+      if (error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError")) return null;
+      throw error;
+    }
+  }
 }

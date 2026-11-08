@@ -30,7 +30,8 @@ export interface DraftPanelProps {
   deciding: boolean;
   /** Why the last draft attempt produced nothing. */
   message: string | null;
-  onDraft(): void;
+  /** Draft (again); absent for a draft from the Coach chat (ticket 22), which the next message replaces. */
+  onDraft?(): void;
   onDecide(accept: boolean, itemIds?: string[]): void;
 }
 
@@ -70,7 +71,7 @@ export function DraftPanel({ scope, week, draft, drafting, deciding, message, on
       </li>;
     })}</List>
     <div className="flex items-center justify-end gap-1.5 border-t border-border-subtle pt-2">
-      <Button type="button" variant="ghost" size="sm" disabled={deciding || drafting} onClick={onDraft} data-coach-action={copy.action}>{drafting ? <Spinner /> : null}Draft again</Button>
+      {onDraft && <Button type="button" variant="ghost" size="sm" disabled={deciding || drafting} onClick={onDraft} data-coach-action={copy.action}>{drafting ? <Spinner /> : null}Draft again</Button>}
       <Button type="button" variant="outline" size="sm" disabled={deciding} onClick={() => onDecide(false)} data-draft-action="decline-all">Decline all</Button>
       <Button type="button" size="sm" disabled={deciding} onClick={() => onDecide(true)} data-draft-action="accept-all">Accept all</Button>
     </div>

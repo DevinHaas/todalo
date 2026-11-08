@@ -3,6 +3,7 @@ mod auth;
 mod bulk;
 mod calendar;
 mod coach;
+mod coach_chat;
 mod comments;
 mod credentials;
 mod endpoint;
@@ -161,6 +162,12 @@ pub fn run() {
             coach::draft_day,
             coach::draft_week,
             coach::decide_draft,
+            coach::coach_recommendations,
+            coach::dismiss_recommendation,
+            coach::draft_recommendation,
+            coach_chat::coach_chat,
+            coach_chat::send_coach_chat,
+            coach_chat::clear_coach_chat,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

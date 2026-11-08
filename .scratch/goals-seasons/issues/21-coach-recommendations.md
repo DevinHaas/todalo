@@ -4,13 +4,13 @@
 
 **Blocked by:** 19, 16
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Recommendations derived from status and goal-linked tasks (completed, scheduled, moved, time spent)
-- [ ] Update schedule creates a draft
-- [ ] Chat opens the Coach chat with context
-- [ ] Dismiss hides the recommendation
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Recommendations derived from status and goal-linked tasks (completed, scheduled, moved, time spent)
+- [x] Update schedule creates a draft
+- [x] Chat opens the Coach chat with context
+- [x] Dismiss hides the recommendation
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

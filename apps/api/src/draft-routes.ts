@@ -5,6 +5,7 @@ import {
   weekDraftMessages, weekDraftSchema, weekDraftStart, weekPlan,
   type AcceptedWrite, type DayContext, type DraftDayDto, type DraftKind, type DraftRecord, type DraftsDto, type DraftTask, type NewDraft,
 } from "@todalo/server/drafts";
+import { recommendationDraftMessages, recommendationWeek } from "@todalo/server/coach-recommendations";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
 
@@ -22,6 +23,8 @@ export interface DraftStore {
   tasks(userId: string, ids: string[]): Promise<DraftTask[]>;
   /** Applies accepted items and records decisions atomically, then pushes the calendar. */
   resolve(userId: string, draft: DraftRecord, decision: { accepted: AcceptedWrite[]; declined: string[] }): Promise<void>;
+  /** Ticket 21: the goal's Coach recommendation unless dismissed, or null. */
+  recommendation(userId: string, goalId: string): Promise<string | null>;
   now?: () => Date;
 }
 
@@ -30,6 +33,7 @@ const FORBIDDEN = { code: "FORBIDDEN_ORIGIN", message: "This request was not sen
 const INVALID = { code: "INVALID_INPUT", message: "Check your entry and try again." } as const;
 const NO_PROVIDER = { code: "NO_PROVIDER", message: "Connect an AI provider first." } as const;
 const NOT_FOUND = { code: "DRAFT_NOT_FOUND", message: "This draft is no longer open." } as const;
+const NO_RECOMMENDATION = { code: "NOT_FOUND", message: "This recommendation is no longer there." } as const;
 const CHANGED = { code: "TASK_CHANGED", message: "A task in this draft changed since the Coach drafted it. Draft again." } as const;
 
 /**
@@ -71,16 +75,21 @@ export function createDraftRoutes(store: DraftStore) {
 
   // A model failure or an invalid draft is a 200 { draft: null, message } so the
   // reason reaches the native client too (as Test connection does).
-  async function propose(request: Request, status: (code: number, body: unknown) => unknown, kind: DraftKind) {
+  // Ticket 21 (`goalId`): Update schedule on a recommendation, a week draft
+  // (this week, or the next when it is nearly over) carrying it out.
+  async function propose(request: Request, status: (code: number, body: unknown) => unknown, kind: DraftKind, goalId?: string) {
     const userId = await writer(request);
     if (userId === "forbidden") return status(403, FORBIDDEN);
     if (!userId) return status(401, UNAUTHENTICATED);
     const zone = zoneOf(request);
     const at = now();
-    const start = kind === "week" ? weekDraftStart(new URL(request.url).searchParams.get("start"), localParts(at, zone).day) : null;
+    const today = localParts(at, zone).day;
+    const start = kind !== "week" ? null : goalId ? recommendationWeek(today) : weekDraftStart(new URL(request.url).searchParams.get("start"), today);
     if (kind === "week" && !start) return status(400, INVALID);
     const saved = await store.provider(userId);
     if (!saved) return status(404, NO_PROVIDER);
+    const advice = goalId ? await store.recommendation(userId, goalId) : null;
+    if (goalId && !advice) return status(404, NO_RECOMMENDATION);
     if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return { draft: null, message: "Enter your API key again in Settings › Coach." } satisfies DraftDayDto;
     const context = await store.dayContext(userId);
     const ask = (() => {
@@ -89,8 +98,10 @@ export function createDraftRoutes(store: DraftStore) {
         return { period: plan.day, messages: dayDraftMessages(plan), schema: dayDraftSchema, parse: (content: string) => parseDayDraft(content, plan), works: "Your day already works" };
       }
       const plan = weekPlan({ context, zone, now: at, start });
-      return { period: start, messages: weekDraftMessages(plan), schema: weekDraftSchema, parse: (content: string) => parseWeekDraft(content, plan), works: "Your week already works" };
+      const messages = goalId ? recommendationDraftMessages(plan, goalId, advice!) : weekDraftMessages(plan);
+      return messages && { period: start, messages, schema: weekDraftSchema, parse: (content: string) => parseWeekDraft(content, plan), works: "Your week already works" };
     })();
+    if (!ask) return status(404, NO_RECOMMENDATION);
     let drafted: Omit<NewDraft, "kind" | "period">;
     try { drafted = ask.parse(await store.model(saved).complete({ messages: ask.messages, schema: ask.schema }, request.signal)); }
     catch (error) {
@@ -114,6 +125,7 @@ export function createDraftRoutes(store: DraftStore) {
     })
     .post("/coach/drafts/day", ({ request, status }) => propose(request, status, "day"))
     .post("/coach/drafts/week", ({ request, status }) => propose(request, status, "week"))
+    .post("/coach/recommendations/:goalId/draft", ({ request, params, status }) => propose(request, status, "week", params.goalId))
     .post("/coach/drafts/:id/accept", ({ request, params, body, status }) => decide(request, params.id, body, true, status))
     .post("/coach/drafts/:id/decline", ({ request, params, body, status }) => decide(request, params.id, body, false, status));
 }

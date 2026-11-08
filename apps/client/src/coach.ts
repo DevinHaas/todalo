@@ -1,12 +1,16 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import type { CoachRecommendationsDto, RecommendationDto } from "../../../packages/server/src/coach-recommendations";
 import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachExplanationsDto, CoachModelKind, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { coachProviderKinds as serverProviderKinds } from "../../../packages/server/src/coach";
 import { localZone } from "./seasons";
 import type { DraftDayDto, DraftDto, DraftItemDto, DraftsDto } from "../../../packages/server/src/drafts";
+import type { ChatMessageDto, CoachChatDto } from "../../../packages/server/src/coach-chat";
 import { taskKeys } from "./tasks";
 
+export type { ChatMessageDto, CoachChatDto };
+export type { CoachRecommendationsDto, RecommendationDto };
 export type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachModelKind, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
 export { draftCounts } from "../../../packages/server/src/drafts";
 export { coachProviderInfo, coachProviderKinds, nextCoachProvider, ollamaDefaultUrl, ollamaUrl } from "../../../packages/server/src/coach";
@@ -14,6 +18,8 @@ export { coachProviderInfo, coachProviderKinds, nextCoachProvider, ollamaDefault
 export interface CoachProviderInput { provider: CoachProviderKind; model: string; baseUrl?: string; apiKey?: string }
 export interface CoachTestResult { ok: boolean; message?: string }
 const noDraft: DraftDayDto = { draft: null, message: "Connect an AI provider first in Settings › Coach." };
+const noChat: CoachChatDto = { messages: [], draft: null, message: noDraft.message };
+const noRecommendation: DraftDayDto = { draft: null, message: "This recommendation is no longer there." };
 const notConnected: CoachTestResult = { ok: false, message: "Connect an AI provider first in Settings › Coach." };
 
 /** Goals ticket 17: the Coach's AI provider and its goal status explanations. */
@@ -43,8 +49,19 @@ export interface CoachTransport {
   draftDay(timeZone: string): Promise<DraftDayDto>;
   /** Ticket 20: the Coach drafts the week from `start` (its Monday, YYYY-MM-DD); as draftDay. */
   draftWeek(timeZone: string, start: string): Promise<DraftDayDto>;
+  /** Ticket 21: the Coach's recommendation per goal off track (none without a provider). */
+  recommendations(timeZone: string): Promise<CoachRecommendationsDto>;
+  /** Hides it for the rest of the season week. */
+  dismissRecommendation(goalId: string): Promise<void>;
+  /** Update schedule: a week draft carrying out the goal's recommendation; as draftWeek. */
+  draftRecommendation(timeZone: string, goalId: string): Promise<DraftDayDto>;
   /** Accept or decline some items (all when omitted); the draft after, null once decided. TASK_CHANGED when a task changed since. */
   decide(draftId: string, accept: boolean, itemIds?: string[]): Promise<DraftDayDto>;
+  /** Ticket 22: the Coach chat, oldest first. */
+  chat(): Promise<CoachChatDto>;
+  /** The conversation after the reply, with its draft; `message` (nothing stored) when the Coach could not answer. */
+  sendChat(timeZone: string, message: string): Promise<CoachChatDto>;
+  clearChat(): Promise<CoachChatDto>;
 }
 
 const named = (provider?: string) => provider ? `?${new URLSearchParams({ provider })}` : "";
@@ -83,8 +100,14 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     drafts: (timeZone) => request("GET", `/api/v1/coach/drafts?${new URLSearchParams({ timeZone })}`),
     draftDay: (timeZone) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/day?${new URLSearchParams({ timeZone })}`).then(result => result ?? noDraft),
     draftWeek: (timeZone, start) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/week?${new URLSearchParams({ timeZone, start })}`).then(result => result ?? noDraft),
+    recommendations: (timeZone) => request("GET", `/api/v1/coach/recommendations?${new URLSearchParams({ timeZone })}`),
+    dismissRecommendation: async (goalId) => { await request("POST", `/api/v1/coach/recommendations/${encodeURIComponent(goalId)}/dismiss`); },
+    draftRecommendation: (timeZone, goalId) => request<DraftDayDto | null>("POST", `/api/v1/coach/recommendations/${encodeURIComponent(goalId)}/draft?${new URLSearchParams({ timeZone })}`).then(result => result ?? noRecommendation),
     decide: (draftId, accept, itemIds) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/${encodeURIComponent(draftId)}/${accept ? "accept" : "decline"}`, itemIds ? { itemIds } : {})
       .then(result => result ?? { draft: null }),
+    chat: () => request("GET", "/api/v1/coach/chat"),
+    sendChat: (timeZone, message) => request<CoachChatDto | null>("POST", `/api/v1/coach/chat?${new URLSearchParams({ timeZone })}`, { message }).then(result => result ?? noChat),
+    clearChat: () => request("DELETE", "/api/v1/coach/chat"),
   };
 }
 
@@ -111,7 +134,13 @@ export function coachTransport(): CoachTransport {
     drafts: (timeZone) => command("coach_drafts", { timeZone }),
     draftDay: async (timeZone) => (await command<DraftDayDto | null>("draft_day", { timeZone })) ?? noDraft,
     draftWeek: async (timeZone, start) => (await command<DraftDayDto | null>("draft_week", { timeZone, start })) ?? noDraft,
+    recommendations: (timeZone) => command("coach_recommendations", { timeZone }),
+    dismissRecommendation: async (goalId) => { await command("dismiss_recommendation", { goalId }); },
+    draftRecommendation: async (timeZone, goalId) => (await command<DraftDayDto | null>("draft_recommendation", { timeZone, goalId })) ?? noRecommendation,
     decide: async (draftId, accept, itemIds) => (await command<DraftDayDto | null>("decide_draft", { draftId, accept, itemIds: itemIds ?? null })) ?? { draft: null },
+    chat: () => command("coach_chat"),
+    sendChat: async (timeZone, message) => (await command<CoachChatDto | null>("send_coach_chat", { timeZone, message })) ?? noChat,
+    clearChat: async () => (await command<CoachChatDto | null>("clear_coach_chat")) ?? { messages: [] },
   };
 }
 
@@ -132,6 +161,9 @@ export const coachKeys = {
   /** `stamp` changes with the season's statuses, so a changed status asks again (the server still caches per day). */
   explanations: (userId: string, stamp: string) => ["user", userId, "coach", "explanations", stamp] as const,
   drafts: (userId: string) => ["user", userId, "coach", "drafts"] as const,
+  /** Ticket 21: stamped like the explanations. */
+  recommendations: (userId: string, stamp: string) => ["user", userId, "coach", "recommendations", stamp] as const,
+  chat: (userId: string) => ["user", userId, "coach", "chat"] as const,
 };
 
 export function coachQueries(transport: CoachTransport) {
@@ -140,6 +172,8 @@ export function coachQueries(transport: CoachTransport) {
     // A model call per goal at most once a day (the server caches), so a failure is not retried in a loop.
     explanations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.explanations(userId, stamp), queryFn: () => transport.explanations(localZone()), retry: false, staleTime: 5 * 60_000 }),
     drafts: (userId: string) => queryOptions({ queryKey: coachKeys.drafts(userId), queryFn: () => transport.drafts(localZone()) }),
+    recommendations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.recommendations(userId, stamp), queryFn: () => transport.recommendations(localZone()), retry: false, staleTime: 5 * 60_000 }),
+    chat: (userId: string) => queryOptions({ queryKey: coachKeys.chat(userId), queryFn: () => transport.chat() }),
   };
 }
 
@@ -177,6 +211,12 @@ export function draftMutations(transport: CoachTransport, cache: QueryClient, us
     },
     draftWeek: async (start: string) => {
       const result = await transport.draftWeek(localZone(), start);
+      if (result.draft) replace(result.draft);
+      return result;
+    },
+    /** Ticket 21: Update schedule on a recommendation. */
+    draftRecommendation: async (goalId: string) => {
+      const result = await transport.draftRecommendation(localZone(), goalId);
       if (result.draft) replace(result.draft);
       return result;
     },

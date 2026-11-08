@@ -239,6 +239,20 @@
       "when": 1794175821704,
       "tag": "0033_coach_provider_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794177157719,
+      "tag": "0034_coach_recommendations",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794177237031,
+      "tag": "0035_coach_chat",
+      "breakpoints": true
     }
   ]
 }

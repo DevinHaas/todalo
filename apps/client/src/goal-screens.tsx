@@ -2,15 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { coachReads, goalReads, goals, ritualReads, seasonReads, seasons } from "./runtime";
-import { openRitual } from "./ritual-screens";
-import { seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { coach, coachReads, goalReads, goals, ritualReads, seasonReads, seasons } from "./runtime";
+import { openRitual, showWeekPlan } from "./ritual-screens";
+import { seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { draftMutations } from "./coach";
+import { openCoachChat } from "./coach-chat-screens";
 import { PastSeasonView, SeasonsNav, SeasonView } from "./season-views";
 import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { goalOf } from "./schedule";
 import type { TaskDto } from "./tasks";
-import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots } from "./goal-views";
+import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots, type RecommendationSlot } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
 
 function useGoalMutations(userId: string) {
@@ -22,11 +24,48 @@ function useGoalMutations(userId: string) {
  * Ticket 17: the Coach's explanation per season goal. Asks only with a
  * connected provider and a measured status (Too early has nothing to explain).
  */
+const statusStamp = (statuses: Record<string, GoalStatusDto> | undefined) =>
+  statuses ? Object.entries(statuses).map(([id, status]) => `${id}:${status.band}:${status.score}:${status.weeks.join(",")}`).sort().join("|") : "";
+
 function useCoachExplanations(userId: string, statuses: Record<string, GoalStatusDto> | undefined) {
   const provider = useQuery(coachReads.provider(userId));
-  const stamp = statuses ? Object.entries(statuses).map(([id, status]) => `${id}:${status.band}:${status.score}:${status.weeks.join(",")}`).sort().join("|") : "";
+  const stamp = statusStamp(statuses);
   const measured = Object.values(statuses ?? {}).some(status => status.band !== "too_early");
   return useQuery({ ...coachReads.explanations(userId, stamp), enabled: Boolean(provider.data?.provider) && measured }).data?.explanations;
+}
+
+/**
+ * Ticket 21: the Coach's recommendation per goal at Adjust or Off track:
+ * Update schedule drafts the week (shown on Upcoming beside the Plan), Chat
+ * opens the Coach chat with it, dismiss hides it for the season week. Nothing without a provider.
+ */
+function useCoachRecommendations(userId: string, season: { goals: SeasonGoalDto[]; statuses: Record<string, GoalStatusDto> } | null | undefined) {
+  const cache = useQueryClient();
+  const provider = useQuery(coachReads.provider(userId));
+  const options = coachReads.recommendations(userId, statusStamp(season?.statuses));
+  const struggling = Object.values(season?.statuses ?? {}).some(status => status.band === "adjust" || status.band === "off_track");
+  const query = useQuery({ ...options, enabled: Boolean(provider.data?.provider) && struggling });
+  const drafts = useMemo(() => draftMutations(coach, cache, userId), [cache, userId]);
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  const schedule = useMutation({
+    mutationFn: (goalId: string) => drafts.draftRecommendation(goalId),
+    onMutate: (goalId) => setMessages(({ [goalId]: _, ...rest }) => rest),
+    onSuccess: (result, goalId) => result.draft ? showWeekPlan(result.draft.period) : setMessages(current => ({ ...current, [goalId]: result.message ?? "The Coach has nothing to change." })),
+    meta: { action: () => "draft your schedule" },
+  });
+  const dismiss = useMutation({
+    mutationFn: (goalId: string) => coach.dismissRecommendation(goalId),
+    onMutate: (goalId) => cache.setQueryData(options.queryKey, current => current && { recommendations: current.recommendations.filter(item => item.goalId !== goalId) }),
+    onError: () => cache.invalidateQueries({ queryKey: options.queryKey }),
+    meta: { action: () => "dismiss the recommendation" },
+  });
+  const titles = new Map(season?.goals.map(goal => [goal.goalId, goal.title]));
+  return Object.fromEntries((query.data?.recommendations ?? []).map(({ goalId, text }): [string, RecommendationSlot] => [goalId, {
+    text, drafting: schedule.isPending && schedule.variables === goalId, message: messages[goalId] ?? null,
+    onSchedule: () => schedule.mutate(goalId),
+    onChat: () => openCoachChat(`About ${titles.get(goalId) ?? "this goal"}: you recommended "${text}" How should I change my plan?`),
+    onDismiss: () => dismiss.mutate(goalId),
+  }]));
 }
 
 /** Whether the sidebar shows Goals; hidden (or not loaded yet) shows nothing, so tasks never wait on goals. */
@@ -176,6 +215,7 @@ export function SeasonScreen({ account }: { account: Account }) {
   const list = useQuery(goalReads.list(userId));
   const past = useQuery(seasonReads.past(userId));
   const explanations = useCoachExplanations(userId, query.data?.season?.statuses);
+  const recommendations = useCoachRecommendations(userId, query.data?.season);
   const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   const seasonId = query.data?.season?.id ?? "";
   const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays), meta: { action: () => "start the season" } });
@@ -192,7 +232,7 @@ export function SeasonScreen({ account }: { account: Account }) {
   const ritualState = useQuery(ritualReads.state(userId)).data;
   const review = ritualState?.settings.seasonReview.enabled
     ? { due: ritualState.seasonReview.due, done: ritualState.seasonReview.status !== null, onStart: () => openRitual("seasonReview") } : undefined;
-  return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} onRetry={() => void query.refetch()}
+  return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} recommendations={recommendations} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
     onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
