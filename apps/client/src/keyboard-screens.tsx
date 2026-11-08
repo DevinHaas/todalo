@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router";
 import { useOpenSettings } from "./settings-nav";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
-import { coach, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
+import { coach, coachReads, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
+import { coachMutations, coachProviderInfo, nextCoachProvider, usableCoachProviders } from "./coach";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
@@ -99,6 +100,19 @@ function press(scope: ParentNode | null, selector: string) {
   const control = scope?.querySelector<HTMLButtonElement>(selector);
   if (!control || control.disabled) return false;
   control.click();
+}
+/**
+ * Goals ticket 17c: a control inside a Settings › Coach provider card; a
+ * closed card is opened first (its Configure button), then the control is pressed.
+ */
+function coachCard(kind: string, selector: string) {
+  const card = document.querySelector(`[data-coach-settings] [data-coach-card="${kind}"]`);
+  if (!card) return false;
+  if (press(card, selector) !== false) return;
+  const configure = card.querySelector<HTMLButtonElement>('[data-coach-configure][aria-expanded="false"]');
+  if (!configure) return false;
+  configure.click();
+  requestAnimationFrame(() => void press(card, selector));
 }
 /** Opens the composer's Priority or Deadline popover (its button carries the field name). */
 function metadataField(field: "priority" | "deadline") {
@@ -443,12 +457,25 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "coach.chatgpt-sign-in": () => {
         const settings = document.querySelector("[data-coach-settings]");
         if (!settings) return modalOpen() ? false : latest.current.openSettings("coach");
-        return press(settings, '[data-coach-action="chatgpt-sign-in"]');
+        return coachCard("chatgpt", '[data-coach-action="chatgpt-sign-in"]');
       },
       "coach.chatgpt-open": () => press(document.querySelector("[data-coach-chatgpt]"), '[data-coach-action="chatgpt-open"]'),
-      "coach.chatgpt-sign-out": () => press(document.querySelector("[data-coach-chatgpt]"), '[data-coach-action="chatgpt-sign-out"]'),
+      "coach.chatgpt-sign-out": () => coachCard("chatgpt", '[data-coach-action="chatgpt-sign-out"]'),
+      // Goals ticket 17c: the next configured provider becomes the active one (the picker shows it).
+      "coach.next-provider": () => {
+        const { cache } = latest.current;
+        void cache.fetchQuery(coachReads.provider(userId)).then(async state => {
+          const usable = usableCoachProviders(state);
+          const next = nextCoachProvider(usable, state.provider?.provider ?? null);
+          if (usable.length < 2 || !next) return toasts.add({ title: "No other Coach provider", description: "Set up another one in Settings › Coach." });
+          const after = await coachMutations(coach, cache, userId).setActive(next);
+          toasts.add({ title: `Coach uses ${coachProviderInfo[next].label}`, description: after.provider?.model });
+        }).catch(() => toasts.add({ title: "Could not switch the Coach's provider", description: "Try again." }));
+      },
       // Goals ticket 19: the Coach's draft of today in the Plan sidebar.
       "coach.draft-day": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-day"]'),
+      // Ticket 20: the week's draft beside the week calendar.
+      "coach.draft-week": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-week"]'),
       "coach.accept-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="accept-all"]'),
       "coach.decline-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="decline-all"]'),
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),

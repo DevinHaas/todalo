@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CoachModelError, type CoachConfig, type CoachMessage } from "@todalo/server/coach";
+import { CoachModelError, type CoachConfig, type CoachMessage, type CoachModelKind, type ConfiguredProvider } from "@todalo/server/coach";
 import { CoachSecretError } from "@todalo/server/coach-secret";
 import { createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "@todalo/server/coach-chatgpt";
 import { fakeOpenaiAuth } from "../../../packages/server/src/coach-chatgpt.fake";
@@ -7,8 +7,12 @@ import type { StatusInputs } from "@todalo/server/goal-status";
 import type { SeasonGoalRecord } from "@todalo/server/season-dto";
 import { createCoachRoutes, type CoachStore } from "./coach-routes";
 
-type Saved = CoachConfig & { keyLast4: string | null };
+type Saved = CoachConfig & { keyLast4: string | null; configuredAt: Date };
+/** Saved configurations by "user kind" (ticket 17c: one per kind), and each user's pick. */
 let providers: Map<string, Saved>;
+let chosen: Map<string, CoachModelKind>;
+/** Orders saves, so "most recently configured" is deterministic. */
+let tick: number;
 let cache: Map<string, { inputsHash: string; text: string }>;
 let calls: { config: CoachConfig; messages: CoachMessage[]; schema?: string }[];
 /** The fake model's canned reply; a function sees the facts sent. */
@@ -16,7 +20,7 @@ let reply: (facts: { goal?: string }) => string;
 let secretReady: boolean;
 let clock: Date;
 /** Ticket 18: saved ChatGPT sign-ins and registrations, and the fake auth.openai.com the real sign-in code talks to. */
-let chatgptRows: Map<string, { model: string; tokens: ChatgptTokens | null }>;
+let chatgptRows: Map<string, { model: string; tokens: ChatgptTokens | null; at?: Date }>;
 let clients: Map<string, ChatgptClient>;
 let openai: ReturnType<typeof fakeOpenaiAuth>;
 const tokens: ChatgptTokens = { clientId: "oaiapp_1", accessToken: "chatgpt-access-secret", refreshToken: "chatgpt-refresh-secret", email: "alice@example.com", expiresAt: new Date("2026-03-01T00:00:00Z"), earliestRefreshAt: null, scopes: [] };
@@ -33,6 +37,8 @@ let reviewed: boolean;
 
 beforeEach(() => {
   providers = new Map();
+  chosen = new Map();
+  tick = 0;
   cache = new Map();
   calls = [];
   reply = (facts) => JSON.stringify({ explanation: `${facts.goal} explained.` });
@@ -45,17 +51,21 @@ beforeEach(() => {
   store.chatgptAuth = createChatgptAuth(openai.fetch);
 });
 
-const keyed = (userId: string) => providers.get(userId) ?? null;
+const keyed = (userId: string) => [...providers].filter(([key]) => key.startsWith(`${userId} `)).map(([, row]) => row);
+/** The user's most recently saved configuration. */
+const latest = (userId: string) => keyed(userId).sort((a, b) => b.configuredAt.getTime() - a.configuredAt.getTime())[0];
 
 const store: CoachStore = {
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
   allowedOrigins: new Set(["http://localhost:5173", "https://app.todalo.dev"]),
-  // Like the store: ChatGPT while signed in, else the saved key.
-  provider: async (userId) => {
-    const signedIn = chatgptRows.get(userId);
-    return signedIn?.tokens ? { provider: "chatgpt", model: signedIn.model, baseUrl: null, apiKey: signedIn.tokens.accessToken, keyLast4: null } : keyed(userId);
+  // Like the store: every saved configuration plus the ChatGPT sign-in (a row set by a test counts as the newest).
+  state: async (userId) => {
+    const row = chatgptRows.get(userId);
+    const configured: ConfiguredProvider[] = keyed(userId).map(saved => ({ ...saved, usable: !saved.apiKey?.startsWith("undecryptable") }));
+    if (row) configured.push({ provider: "chatgpt", model: row.model, baseUrl: null, apiKey: row.tokens?.accessToken ?? null, keyLast4: null, configuredAt: row.at ?? new Date(1e13), usable: Boolean(row.tokens) });
+    return { configured, chatgpt: await store.chatgpt(userId), chosen: chosen.get(userId) ?? null };
   },
-  keyProvider: async (userId) => keyed(userId),
+  setActive: async (userId, provider) => { chosen.set(userId, provider); },
   // The real sign-in code; only auth.openai.com is fake (replaced per test, below).
   chatgptAuth: createChatgptAuth(),
   chatgptClient: async (userId, key) => clients.get(`${userId} ${key}`) ?? null,
@@ -67,15 +77,18 @@ const store: CoachStore = {
   },
   saveChatgpt: async (userId, saved) => {
     if (!secretReady) throw new CoachSecretError("missing");
-    chatgptRows.set(userId, { model: chatgptRows.get(userId)?.model ?? "gpt-5.5", tokens: saved });
+    chatgptRows.set(userId, { model: chatgptRows.get(userId)?.model ?? "gpt-5.5", tokens: saved, at: new Date(++tick) });
   },
   setChatgptModel: async (userId, model) => { chatgptRows.set(userId, { ...chatgptRows.get(userId)!, model }); },
   removeChatgpt: async (userId) => { chatgptRows.delete(userId); },
   save: async (userId, config) => {
     if (config.apiKey && !secretReady) throw new CoachSecretError("missing");
-    providers.set(userId, { ...config, keyLast4: config.apiKey?.slice(-4) ?? null });
+    providers.set(`${userId} ${config.provider}`, { ...config, keyLast4: config.apiKey?.slice(-4) ?? null, configuredAt: new Date(++tick) });
   },
-  remove: async (userId) => { providers.delete(userId); for (const key of cache.keys()) if (key.startsWith(`${userId}:`)) cache.delete(key); },
+  remove: async (userId, provider) => {
+    for (const key of providers.keys()) if (key.startsWith(`${userId} `) && (!provider || key === `${userId} ${provider}`)) providers.delete(key);
+    for (const key of cache.keys()) if (key.startsWith(`${userId}:`)) cache.delete(key);
+  },
   // In-memory fake provider with canned output; it never reaches a network.
   model: (config) => ({
     complete: async ({ messages, schema }) => {
@@ -106,7 +119,7 @@ const call = (method: string, path: string, init: { user?: string; cookie?: stri
 };
 const connect = (user: string, body: unknown) => call("PUT", "/coach/provider", { user, body });
 /** GET /coach for a user with nothing connected. */
-const off = { provider: null, keyProvider: null, chatgpt: null };
+const off = { provider: null, selected: null, providers: [], chatgpt: null };
 
 describe("coach provider settings", () => {
   it("starts unconnected, saves a key and returns only its last four characters", async () => {
@@ -116,35 +129,35 @@ describe("coach provider settings", () => {
     const text = await saved.text();
     expect(text).not.toContain("sk-secret");
     const openai = { provider: "openai", model: "gpt-5.4-mini", baseUrl: null, keyHint: "9876" };
-    expect(JSON.parse(text)).toEqual({ ...off, provider: openai, keyProvider: openai });
+    expect(JSON.parse(text)).toEqual({ ...off, provider: openai, selected: "openai", providers: [openai] });
     const read = await call("GET", "/coach", { user: "alice" });
     expect(read.headers.get("cache-control")).toBe("no-store");
     expect(await read.text()).not.toContain("sk-secret");
-    expect(providers.get("alice")!.apiKey).toBe("sk-secret-key-9876");
+    expect(latest("alice")!.apiKey).toBe("sk-secret-key-9876");
     expect(await (await call("GET", "/coach", { user: "bob" })).json()).toEqual(off);
   });
 
   it("keeps the saved key when only the model changes, but a new provider needs its own key", async () => {
     await connect("alice", { provider: "openrouter", model: "a", apiKey: "sk-or-key-1111" });
     expect((await connect("alice", { provider: "openrouter", model: "b" })).status).toBe(200);
-    expect(providers.get("alice")).toMatchObject({ model: "b", apiKey: "sk-or-key-1111" });
+    expect(latest("alice")).toMatchObject({ model: "b", apiKey: "sk-or-key-1111" });
     const other = await connect("alice", { provider: "openai", model: "c" });
     expect(other.status).toBe(400);
     expect(await other.json()).toEqual({ code: "INVALID_INPUT", message: "Enter an API key." });
-    expect(providers.get("alice")!.provider).toBe("openrouter");
+    expect(latest("alice")!.provider).toBe("openrouter");
   });
 
   it("connects a loopback Ollama without a key and refuses any other host", async () => {
     const saved = await connect("alice", { provider: "ollama", model: "qwen3.5:4b", baseUrl: "http://localhost:11434/", apiKey: "ignored-key" });
     const ollama = { provider: "ollama", model: "qwen3.5:4b", baseUrl: "http://localhost:11434", keyHint: null };
-    expect(await saved.json()).toEqual({ ...off, provider: ollama, keyProvider: ollama });
-    expect(providers.get("alice")!.apiKey).toBeNull();
+    expect(await saved.json()).toEqual({ ...off, provider: ollama, selected: "ollama", providers: [ollama] });
+    expect(latest("alice")!.apiKey).toBeNull();
     for (const baseUrl of ["http://10.0.0.2:11434", "https://evil.example", "http://169.254.169.254"]) {
       const refused = await connect("bob", { provider: "ollama", model: "m", baseUrl });
       expect(refused.status).toBe(400);
       expect((await refused.json() as { message: string }).message).toContain("localhost");
     }
-    expect(providers.has("bob")).toBe(false);
+    expect(latest("bob")).toBeUndefined();
   });
 
   it("rejects bad bodies and reports a server that cannot encrypt keys", async () => {
@@ -163,7 +176,7 @@ describe("coach provider settings", () => {
     await call("GET", "/coach/explanations", { user: "alice" });
     expect(cache.size).toBeGreaterThan(0);
     expect(await (await call("DELETE", "/coach/provider", { user: "alice" })).json()).toEqual(off);
-    expect(providers.has("alice")).toBe(false);
+    expect(latest("alice")).toBeUndefined();
     expect(cache.size).toBe(0);
   });
 
@@ -192,12 +205,87 @@ describe("coach provider settings", () => {
   });
 });
 
+describe("several providers and the active one (ticket 17c)", () => {
+  type Dto = { provider: { provider: string; model: string } | null; selected: string | null; providers: { provider: string; keyHint: string | null }[] };
+  const read = async (user = "alice") => (await call("GET", "/coach", { user })).json() as Promise<Dto>;
+  const pick = (provider: string, user = "alice") => call("PUT", "/coach/active", { user, body: { provider } });
+  const test = async (query = "") => (await call("POST", `/coach/provider/test${query}`, { user: "alice" })).json();
+
+  beforeEach(async () => {
+    await connect("alice", { provider: "openai", model: "gpt-5.4-mini", apiKey: "sk-openai-1111" });
+    await connect("alice", { provider: "anthropic", model: "claude-sonnet-5-5", apiKey: "sk-ant-2222" });
+  });
+
+  it("keeps one configuration per kind and runs on the most recently configured until the user picks", async () => {
+    const both = await read();
+    expect(both.providers.map(item => [item.provider, item.keyHint])).toEqual([["openai", "1111"], ["anthropic", "2222"]]);
+    expect(both).toMatchObject({ selected: "anthropic", provider: { provider: "anthropic" } });
+    // A model change keeps that kind's own key, not the other's.
+    await connect("alice", { provider: "openai", model: "gpt-5.5" });
+    expect(providers.get("alice openai")).toMatchObject({ model: "gpt-5.5", apiKey: "sk-openai-1111" });
+    expect((await read()).selected).toBe("openai");
+  });
+
+  it("uses the picked provider everywhere, and tests one card by ?provider=", async () => {
+    expect(await (await pick("openai")).json()).toMatchObject({ selected: "openai", provider: { provider: "openai" } });
+    await connect("alice", { provider: "openrouter", model: "x", apiKey: "sk-or-3333" });
+    expect((await read()).selected).toBe("openai");
+    await test();
+    expect(calls.at(-1)!.config).toMatchObject({ provider: "openai", apiKey: "sk-openai-1111" });
+    await call("GET", "/coach/explanations?timeZone=UTC", { user: "alice" });
+    expect(calls.at(-1)!.config.provider).toBe("openai");
+    expect(await test("?provider=anthropic")).toEqual({ ok: true });
+    expect(calls.at(-1)!.config).toMatchObject({ provider: "anthropic", apiKey: "sk-ant-2222" });
+    expect((await call("POST", "/coach/provider/test?provider=ollama", { user: "alice" })).status).toBe(404);
+    expect((await call("POST", "/coach/provider/test?provider=gemini", { user: "alice" })).status).toBe(400);
+  });
+
+  it("only picks a configured provider, and guards the write", async () => {
+    expect((await pick("ollama")).status).toBe(404);
+    expect((await pick("chatgpt")).status).toBe(404);
+    expect((await pick("gemini")).status).toBe(400);
+    expect((await pick("openai", "bob")).status).toBe(404);
+    expect((await call("PUT", "/coach/active", { cookie: "alice", origin: "https://evil.example", body: { provider: "openai" } })).status).toBe(403);
+    expect(chosen.size).toBe(0);
+  });
+
+  it("disconnects one provider by ?provider=; the rest stay and the most recent takes over", async () => {
+    await pick("anthropic");
+    const after = await (await call("DELETE", "/coach/provider?provider=anthropic", { user: "alice" })).json() as Dto;
+    expect(after).toMatchObject({ selected: "openai", provider: { provider: "openai" } });
+    expect(after.providers.map(item => item.provider)).toEqual(["openai"]);
+    expect((await call("DELETE", "/coach/provider?provider=chatgpt", { user: "alice" })).status).toBe(400);
+    // Without ?provider= (ticket 17's single provider) every keyed one goes.
+    expect(await (await call("DELETE", "/coach/provider", { user: "alice" })).json()).toEqual(off);
+  });
+
+  it("falls back when the picked one cannot run, and says what it was", async () => {
+    chatgptRows.set("alice", { model: "gpt-5.5", tokens, at: new Date(0) });
+    await pick("chatgpt");
+    expect(await read()).toMatchObject({ selected: "chatgpt", provider: { provider: "chatgpt" } });
+    // OpenAI refused a refresh: the most recent provider that can run takes over.
+    chatgptRows.set("alice", { model: "gpt-5.5", tokens: null, at: new Date(0) });
+    expect(await read()).toMatchObject({ selected: "chatgpt", provider: { provider: "anthropic" } });
+    await test();
+    expect(calls.at(-1)!.config.provider).toBe("anthropic");
+    expect(await test("?provider=chatgpt")).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again." });
+    // A key that no longer decrypts cannot run either.
+    providers.set("alice anthropic", { ...providers.get("alice anthropic")!, apiKey: "undecryptable" });
+    expect((await read()).provider!.provider).toBe("openai");
+    // Nothing can run: the Coach is off, and Test connection says why.
+    providers.set("alice openai", { ...providers.get("alice openai")!, apiKey: "undecryptable" });
+    expect(await read()).toMatchObject({ selected: "chatgpt", provider: null });
+    expect(await test()).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again." });
+    expect(await (await call("GET", "/coach/explanations?timeZone=UTC", { user: "alice" })).json()).toEqual({ explanations: {} });
+  });
+});
+
 describe("Anthropic by API key (ticket 17b)", () => {
   it("connects like any keyed provider, keeps the key on a model change and runs the Coach through the same seam", async () => {
     const saved = await connect("alice", { provider: "anthropic", model: "claude-sonnet-5-5", apiKey: "sk-ant-secret-4321" });
     expect(await saved.text()).not.toContain("sk-ant-secret");
     expect((await connect("alice", { provider: "anthropic", model: "claude-haiku-5-5" })).status).toBe(200);
-    expect(providers.get("alice")).toMatchObject({ provider: "anthropic", model: "claude-haiku-5-5", apiKey: "sk-ant-secret-4321" });
+    expect(latest("alice")).toMatchObject({ provider: "anthropic", model: "claude-haiku-5-5", apiKey: "sk-ant-secret-4321" });
     expect(await (await call("POST", "/coach/provider/test", { user: "alice" })).json()).toEqual({ ok: true });
     expect(calls.at(-1)!.config).toMatchObject({ provider: "anthropic", apiKey: "sk-ant-secret-4321" });
   });
@@ -223,7 +311,7 @@ describe("ChatGPT sign-in (ticket 18)", () => {
     const body = await (await call("GET", "/coach", { user: "alice" })).text();
     expect(body).not.toContain("access-for-");
     expect(body).not.toContain("refresh-");
-    expect(JSON.parse(body)).toEqual({ ...off, provider: { provider: "chatgpt", model: "gpt-5.5", baseUrl: null, keyHint: null }, chatgpt: { status: "signed_in", email: "alice@example.com", model: "gpt-5.5" } });
+    expect(JSON.parse(body)).toEqual({ ...off, provider: { provider: "chatgpt", model: "gpt-5.5", baseUrl: null, keyHint: null }, selected: "chatgpt", chatgpt: { status: "signed_in", email: "alice@example.com", model: "gpt-5.5" } });
     // The callback works once.
     expect(await complete(back)).toEqual({ status: "failed", message: "This sign-in is no longer active. Start again." });
     // Next time, on another port: the same client, no new registration.
@@ -314,7 +402,7 @@ describe("ChatGPT sign-in (ticket 18)", () => {
     // A model change for ChatGPT leaves the key provider alone.
     const changed = await call("PUT", "/coach/chatgpt", { user: "alice", body: { model: "gpt-6-sol" } });
     expect((await changed.json() as { provider: { model: string } }).provider.model).toBe("gpt-6-sol");
-    expect(providers.get("alice")!.model).toBe("m");
+    expect(latest("alice")!.model).toBe("m");
     // Expired (OpenAI refused a refresh): settings say so, the Coach uses the key.
     chatgptRows.set("alice", { model: "gpt-6-sol", tokens: null });
     const expired = await (await call("GET", "/coach", { user: "alice" })).json() as { provider: { provider: string }; chatgpt: { status: string } };

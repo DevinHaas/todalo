@@ -21,8 +21,22 @@ pub struct CoachProvider {
     api_key: Option<String>,
 }
 
+const KEYED: [&str; 4] = ["openai", "anthropic", "openrouter", "ollama"];
+
+/// Ticket 17c: `?provider=<kind>` for one provider's card; only a known kind
+/// (and "chatgpt" where allowed), so the webview cannot change the path.
+fn named(path: &str, provider: Option<String>, chatgpt: bool) -> Result<String, String> {
+    match provider {
+        None => Ok(path.to_owned()),
+        Some(kind) if KEYED.contains(&kind.as_str()) || (chatgpt && kind == "chatgpt") => {
+            Ok(format!("{path}?provider={kind}"))
+        }
+        Some(_) => Err(INVALID.to_owned()),
+    }
+}
+
 fn provider_body(provider: CoachProvider) -> Result<Value, &'static str> {
-    if !["openai", "anthropic", "openrouter", "ollama"].contains(&provider.provider.as_str())
+    if !KEYED.contains(&provider.provider.as_str())
         || provider.model.trim().is_empty()
         || provider.model.len() > 200
         || provider
@@ -57,19 +71,52 @@ pub async fn save_coach_provider(
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
+/// One provider (ticket 17c), or every keyed one when `provider` is omitted.
 #[tauri::command]
-pub async fn disconnect_coach(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+pub async fn disconnect_coach(
+    state: tauri::State<'_, NativeAuth>,
+    provider: Option<String>,
+) -> Result<Value, String> {
     state
-        .write(Method::DELETE, "/api/v1/coach/provider", None)
+        .write(
+            Method::DELETE,
+            &named("/api/v1/coach/provider", provider, false)?,
+            None,
+        )
         .await?
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
-/// `{ ok, message? }`; null (404) when no provider is connected.
+/// `{ ok, message? }` for the active provider or the named one; null (404) when it is not connected.
 #[tauri::command]
-pub async fn test_coach(state: tauri::State<'_, NativeAuth>) -> Result<Option<Value>, String> {
+pub async fn test_coach(
+    state: tauri::State<'_, NativeAuth>,
+    provider: Option<String>,
+) -> Result<Option<Value>, String> {
     Ok(state
-        .write(Method::POST, "/api/v1/coach/provider/test", None)
+        .write(
+            Method::POST,
+            &named("/api/v1/coach/provider/test", provider, true)?,
+            None,
+        )
+        .await?)
+}
+
+/// Ticket 17c: the provider the Coach uses; null (404) when it is not configured.
+#[tauri::command]
+pub async fn set_coach_active(
+    state: tauri::State<'_, NativeAuth>,
+    provider: String,
+) -> Result<Option<Value>, String> {
+    if !KEYED.contains(&provider.as_str()) && provider != "chatgpt" {
+        return Err(INVALID.to_owned());
+    }
+    Ok(state
+        .write(
+            Method::PUT,
+            "/api/v1/coach/active",
+            Some(serde_json::json!({ "provider": provider })),
+        )
         .await?)
 }
 
@@ -310,6 +357,29 @@ pub async fn draft_day(
         .await?)
 }
 
+/// Goals ticket 20: the Coach drafts the week from `start` (YYYY-MM-DD); as `draft_day`.
+#[tauri::command]
+pub async fn draft_week(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+    start: String,
+) -> Result<Option<Value>, String> {
+    Ok(state
+        .write(Method::POST, &week_path(time_zone, &start)?, None)
+        .await?)
+}
+
+/// The server checks the date itself; this only keeps the path to digits and dashes.
+fn week_path(time_zone: String, start: &str) -> Result<String, String> {
+    if start.len() != 10 || !start.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return Err(INVALID.to_owned());
+    }
+    Ok(format!(
+        "{}&start={start}",
+        zoned("/api/v1/coach/drafts/week", time_zone)?
+    ))
+}
+
 /// Accepts or declines some items of a draft (all without `item_ids`).
 #[tauri::command]
 pub async fn decide_draft(
@@ -367,6 +437,21 @@ mod tests {
     }
 
     #[test]
+    fn provider_queries_name_only_known_kinds() {
+        assert_eq!(named("/p", None, false).unwrap(), "/p");
+        assert_eq!(
+            named("/p", Some("anthropic".into()), false).unwrap(),
+            "/p?provider=anthropic"
+        );
+        assert_eq!(
+            named("/p", Some("chatgpt".into()), true).unwrap(),
+            "/p?provider=chatgpt"
+        );
+        assert!(named("/p", Some("chatgpt".into()), false).is_err());
+        assert!(named("/p", Some("openai&x=1".into()), true).is_err());
+    }
+
+    #[test]
     fn chatgpt_sign_in_opens_and_forwards_only_openai_and_the_callback() {
         assert!(authorize_url(
             "https://auth.openai.com/api/accounts/authorize?client_id=x"
@@ -406,5 +491,15 @@ mod tests {
         assert_eq!(decision_body("../tasks", None), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec![])), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec!["a/b".into()])), Err(INVALID));
+    }
+
+    #[test]
+    fn week_drafts_carry_only_a_plain_date() {
+        assert_eq!(
+            week_path("Europe/Zurich".into(), "2026-02-16").unwrap(),
+            "/api/v1/coach/drafts/week?timeZone=Europe%2FZurich&start=2026-02-16"
+        );
+        assert!(week_path("UTC".into(), "2026-02-16&x=1").is_err());
+        assert!(week_path("UTC".into(), "../../task").is_err());
     }
 }

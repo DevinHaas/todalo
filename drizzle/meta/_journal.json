@@ -232,6 +232,13 @@
       "when": 1794171929603,
       "tag": "0032_coach_chatgpt_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794175821704,
+      "tag": "0033_coach_provider_configs",
+      "breakpoints": true
     }
   ]
 }

@@ -27,7 +27,7 @@ beforeEach(() => {
   drafts = [];
   calls = [];
   pushed = [];
-  task("alice", "run", { dueDate: new Date("2026-02-05T23:00:00Z") }); // overdue
+  task("alice", "run", { dueDate: new Date("2026-02-05T23:00:00Z"), goalIds: ["fit"] } as Partial<DraftTask>); // overdue
   task("alice", "meeting", { dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") }); // 10:00-11:00
   task("alice", "admin", { dueDate: new Date("2026-02-09T14:00:00Z") }); // 15:00-15:30
   task("bob", "bobs");
@@ -58,8 +58,8 @@ const app = createDraftRoutes({
   }),
   dayContext: async (userId) => ({
     tasks: [...tasks.values()].filter(row => row.userId === userId),
-    goals: [{ goalId: "fit", title: "Become fit", tier: "primary" }],
-    links: { projects: [], tasks: [{ goalId: "fit", taskId: "run" }] },
+    goals: [{ goalId: "fit", title: "Become fit", tier: "primary" }, { goalId: "side", title: "Side project", tier: "secondary" }],
+    links: { projects: [], tasks: [...tasks.values()].filter(row => row.userId === userId).flatMap(row => row.goalIds.map(goalId => ({ goalId, taskId: row.id }))) },
     fixedTaskIds: [],
   }),
   drafts: async (userId, draftId) => drafts.filter(draft => draft.userId === userId && draft.status === "open" && (!draftId || draft.id === draftId)).map(draft => structuredClone(draft)),
@@ -167,6 +167,98 @@ describe("drafting today's plan", () => {
     await draftDay();
     clock = new Date("2026-02-10T08:00:00Z");
     expect(await open()).toEqual([]);
+  });
+});
+
+describe("drafting a week (ticket 20)", () => {
+  type WeekFacts = { days: { day: string }[]; goals: { ref: string; tier: string; scheduledMinutes: number }[]; toPlan: { ref: string; title: string }[]; scheduled: { ref: string; title: string; day: string }[] };
+  const draftWeek = async (start: string | null, user = "alice") =>
+    await call("POST", `/coach/drafts/week?timeZone=${zone}${start ? `&start=${start}` : ""}`, { user });
+  const facts = () => JSON.parse(calls.at(-1)!.messages.at(-1)!.content) as WeekFacts;
+  beforeEach(() => {
+    // Next week: primary gym on Tuesday, secondary side work on Wednesday and Thursday evenings.
+    task("alice", "gym", { dueDate: new Date("2026-02-17T06:00:00Z"), dueDateEnd: new Date("2026-02-17T07:00:00Z"), goalIds: ["fit"] } as Partial<DraftTask>);
+    task("alice", "side-a", { dueDate: new Date("2026-02-18T17:00:00Z"), dueDateEnd: new Date("2026-02-18T19:00:00Z"), goalIds: ["side"] } as Partial<DraftTask>);
+    task("alice", "side-b", { dueDate: new Date("2026-02-19T17:00:00Z"), dueDateEnd: new Date("2026-02-19T19:00:00Z"), goalIds: ["side"] } as Partial<DraftTask>);
+    reply = (raw) => {
+      const week = raw as unknown as WeekFacts;
+      return JSON.stringify({
+        summary: "Short week: your side project gives way to training.",
+        items: [
+          item("add", { task: ref(week.toPlan, "run"), day: "2026-02-16", start: "07:00", minutes: 45 }),
+          item("remove", { task: ref(week.scheduled, "side-a"), day: "" }),
+          item("move", { task: ref(week.scheduled, "side-b"), day: "2026-02-21", start: "10:00", minutes: 60 }),
+        ],
+      });
+    };
+  });
+
+  it("stages next week's adds, moves and removes from the week's facts and changes no task", async () => {
+    const before = snapshot();
+    const response = await draftWeek("2026-02-16");
+    const { draft } = await response.json() as DraftDayDto;
+    expect(calls[0]!.schema).toBe("week_draft");
+    const sent = facts();
+    expect(sent.days.map(day => day.day)).toEqual(["2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-21", "2026-02-22"]);
+    expect(sent.goals.map(goal => [goal.tier, goal.scheduledMinutes])).toEqual([["primary", 60], ["secondary", 240]]);
+    expect(sent.scheduled.map(entry => [entry.title, entry.day])).toEqual([["gym", "2026-02-17"], ["side-a", "2026-02-18"], ["side-b", "2026-02-19"]]);
+    expect(draft).toMatchObject({ kind: "week", period: "2026-02-16", summary: "Short week: your side project gives way to training." });
+    expect(draft!.items.map(row => [row.op, row.taskId, row.start, row.end, row.goalId])).toEqual([
+      ["add", "run", "2026-02-16T06:00:00.000Z", "2026-02-16T06:45:00.000Z", "fit"],
+      // Dropped: off the schedule, kept on its own day.
+      ["remove", "side-a", "2026-02-17T23:00:00.000Z", null, "side"],
+      // Postponed to Saturday.
+      ["move", "side-b", "2026-02-21T09:00:00.000Z", "2026-02-21T10:00:00.000Z", "side"],
+    ]);
+    expect(snapshot()).toBe(before);
+    expect(pushed).toEqual([]);
+  });
+
+  it("keeps a day draft and a week draft open side by side; drafting the week again replaces only the week's", async () => {
+    const week = (await (await draftWeek("2026-02-16")).json() as DraftDayDto).draft!;
+    reply = () => JSON.stringify({ summary: "Today.", items: [item("add", { title: "Stretch", start: "18:00", minutes: 15 })] });
+    const day = (await draftDay()).draft!;
+    expect((await open()).map(draft => draft.id)).toEqual([week.id, day.id]);
+    reply = () => JSON.stringify({ summary: "Again.", items: [item("add", { title: "Plan", day: "2026-02-16", start: "09:00", minutes: 30 })] });
+    const again = (await (await draftWeek("2026-02-16")).json() as DraftDayDto).draft!;
+    expect((await open()).map(draft => draft.id)).toEqual([day.id, again.id]);
+  });
+
+  it("protects primary goals: a draft that drops primary-goal work is rejected as a whole", async () => {
+    reply = (raw) => JSON.stringify({ summary: "x", items: [item("remove", { task: ref((raw as unknown as WeekFacts).scheduled, "gym") })] });
+    const result = await (await draftWeek("2026-02-16")).json() as DraftDayDto;
+    expect(result.draft).toBeNull();
+    expect(result.message).toContain("primary-goal work");
+    expect(await open()).toEqual([]);
+  });
+
+  it("accepts and declines a week draft like a day's: per item, then the rest", async () => {
+    const { draft } = await (await draftWeek("2026-02-16")).json() as DraftDayDto;
+    const [, drop, postpone] = draft!.items;
+    const declined = await (await call("POST", `/coach/drafts/${draft!.id}/decline`, { user: "alice", body: { itemIds: [drop!.id] } })).json() as DraftDayDto;
+    expect(declined.draft!.items.map(row => row.state)).toEqual(["pending", "declined", "pending"]);
+    expect(tasks.get("side-a")!.dueDate).toEqual(new Date("2026-02-18T17:00:00Z"));
+    expect(await (await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: {} })).json()).toEqual({ draft: null });
+    expect(tasks.get("side-b")).toMatchObject({ dueDate: new Date("2026-02-21T09:00:00Z"), dueDateEnd: new Date("2026-02-21T10:00:00Z") });
+    expect(tasks.get("run")!.dueDate).toEqual(new Date("2026-02-16T06:00:00Z"));
+    expect(pushed.sort()).toEqual(["run", "side-b"]);
+    expect(postpone!.state).toBe("pending");
+  });
+
+  it("stays open through its week and is left behind after", async () => {
+    await draftWeek("2026-02-16");
+    clock = new Date("2026-02-22T20:00:00Z");
+    expect(await open()).toHaveLength(1);
+    clock = new Date("2026-02-23T08:00:00Z");
+    expect(await open()).toEqual([]);
+  });
+
+  it("needs a week that is not over, and a provider; without one there is no model call", async () => {
+    for (const start of [null, "2026-02-01", "2026-02-30", "next"]) expect((await draftWeek(start)).status).toBe(400);
+    expect((await draftWeek("2026-02-16", "bob")).status).toBe(404);
+    expect((await call("POST", `/coach/drafts/week?timeZone=${zone}&start=2026-02-16`, { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    expect(calls).toEqual([]);
+    expect(drafts).toEqual([]);
   });
 });
 

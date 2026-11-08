@@ -16,8 +16,8 @@ mod organization;
 mod projects;
 mod ramble;
 mod reads;
-mod search;
 mod rituals;
+mod search;
 mod seasons;
 mod settings;
 mod writes;
@@ -150,6 +150,7 @@ pub fn run() {
             coach::save_coach_provider,
             coach::disconnect_coach,
             coach::test_coach,
+            coach::set_coach_active,
             coach::coach_explanations,
             coach::start_chatgpt_sign_in,
             coach::finish_chatgpt_sign_in,
@@ -158,6 +159,7 @@ pub fn run() {
             coach::open_chatgpt_sign_in,
             coach::coach_drafts,
             coach::draft_day,
+            coach::draft_week,
             coach::decide_draft,
             organization::destinations,
             organization::create_section,

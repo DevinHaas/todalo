@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CoachModelError } from "./coach";
-import { dayPlan, dayPlanFacts, draftCounts, parseDayDraft, planAccept, planDecline, type DayContext, type DraftRecord, type DraftTask } from "./drafts";
+import {
+  dayPlan, dayPlanFacts, draftCounts, draftCurrent, parseDayDraft, parseWeekDraft, planAccept, planDecline, weekDraftStart, weekPlan, weekPlanFacts,
+  type DayContext, type DraftRecord, type DraftTask,
+} from "./drafts";
 
 // Zurich, Monday 9 Feb 2026, 09:10 local (08:10 UTC).
 const zone = "Europe/Zurich";
@@ -105,6 +108,100 @@ describe("parseDayDraft", () => {
   });
 
   it("an empty draft is valid (nothing to change)", () => expect(parse([]).items).toEqual([]));
+});
+
+describe("weekPlan (ticket 20)", () => {
+  // This week from Monday 9 Feb; "side" is secondary-goal work (project link), "run" primary.
+  const plan = weekPlan({ now, zone, start: "2026-02-09", context: context([
+    task("inbox"),
+    task("run", { dueDate: at("2026-02-05T23:00:00Z") }), // overdue
+    task("side", { projectId: "p-side", dueDate: at("2026-02-10T17:00:00Z"), dueDateEnd: at("2026-02-10T19:00:00Z") }), // Tue 18:00-20:00
+    task("later", { dueDate: at("2026-02-12T23:00:00Z") }), // due Fri, no time
+    task("next-week", { dueDate: at("2026-02-16T23:00:00Z") }),
+    task("weekly-review", { dueDate: at("2026-02-15T17:00:00Z") }), // Sun 18:00, ritual
+    task("done", { status: "done", dueDate: at("2026-02-11T09:00:00Z") }),
+  ], { fixedTaskIds: ["weekly-review"] }) });
+  const facts = weekPlanFacts(plan);
+
+  it("plans the week's days with its timed tasks and the minutes each goal already has", () => {
+    expect(facts.days.map(day => `${day.day} ${day.weekday}`)).toEqual([
+      "2026-02-09 Monday", "2026-02-10 Tuesday", "2026-02-11 Wednesday", "2026-02-12 Thursday", "2026-02-13 Friday", "2026-02-14 Saturday", "2026-02-15 Sunday",
+    ]);
+    expect(facts.scheduled.map(entry => [entry.title, entry.day, entry.start, entry.minutes, entry.goal, entry.fixed])).toEqual([
+      ["side", "2026-02-10", "18:00", 120, "g2", false], ["weekly-review", "2026-02-15", "18:00", 30, null, true],
+    ]);
+    expect(facts.goals).toEqual([
+      { ref: "g1", title: "Become fit", tier: "primary", scheduledMinutes: 0 }, { ref: "g2", title: "Side project", tier: "secondary", scheduledMinutes: 120 },
+    ]);
+  });
+
+  it("lists overdue, due-this-week and Inbox tasks, goal tasks first; nothing beyond the week", () => {
+    expect(facts.toPlan.map(entry => [entry.title, entry.waiting, entry.due, entry.goal])).toEqual([
+      ["run", "overdue", "2026-02-06", "g1"], ["later", "due", "2026-02-13", null], ["inbox", "inbox", null, null],
+    ]);
+  });
+
+  it.each([
+    ["a week already over", "2026-02-02", []],
+    ["a week under way: from today on", "2026-02-07", ["2026-02-09", "2026-02-10", "2026-02-11", "2026-02-12", "2026-02-13"]],
+  ])("leaves past days out for %s", (_name, start, days) => expect(weekPlan({ now, zone, start, context: context([]) }).days).toEqual(days));
+});
+
+describe("parseWeekDraft", () => {
+  const plan = weekPlan({ now, zone, start: "2026-02-09", context: context([
+    task("run", { dueDate: at("2026-02-05T23:00:00Z") }),
+    task("side", { projectId: "p-side", dueDate: at("2026-02-10T17:00:00Z"), dueDateEnd: at("2026-02-10T19:00:00Z") }),
+    task("gym", { dueDate: at("2026-02-11T06:00:00Z"), dueDateEnd: at("2026-02-11T07:00:00Z") }), // Wed 07:00-08:00
+  ], { links: { projects: [{ goalId: "side", projectId: "p-side" }], tasks: [{ goalId: "fit", taskId: "run" }, { goalId: "fit", taskId: "gym" }] } }) });
+  const ref = (title: string) => [...plan.scheduled.values(), ...plan.toPlan.values()].find(entry => entry.task.title === title)!.ref;
+  const item = (op: string, extra: Record<string, unknown> = {}) => ({ op, task: "", title: "", day: "", start: "", minutes: 0, goal: "", reason: "Because.", ...extra });
+  const parse = (items: unknown[]) => parseWeekDraft(JSON.stringify({ summary: "Primary first.", items }), plan);
+  const real = (items: unknown[]) => JSON.parse(JSON.stringify(items).replaceAll("RUN", ref("run")).replaceAll("SIDE", ref("side")).replaceAll("GYM", ref("gym")));
+
+  it("places items on their own days; dropping secondary work keeps its day; postponing moves it later", () => {
+    const draft = parse(real([
+      item("add", { task: "RUN", day: "2026-02-10", start: "07:00", minutes: 45 }),
+      item("move", { task: "SIDE", day: "2026-02-13", start: "18:00", minutes: 60 }),
+      item("add", { title: "Long run", day: "2026-02-14", start: "09:00", minutes: 90, goal: "g1" }),
+    ]));
+    expect(draft.items.map(row => [row.op, row.taskId, row.startAt.toISOString(), row.endAt?.toISOString(), row.goalId])).toEqual([
+      ["add", "run", "2026-02-10T06:00:00.000Z", "2026-02-10T06:45:00.000Z", "fit"],
+      ["move", "side", "2026-02-13T17:00:00.000Z", "2026-02-13T18:00:00.000Z", "side"],
+      ["add", null, "2026-02-14T08:00:00.000Z", "2026-02-14T09:30:00.000Z", "fit"],
+    ]);
+    expect(parse(real([item("remove", { task: "SIDE" })])).items[0]).toMatchObject({ op: "remove", taskId: "side", startAt: at("2026-02-09T23:00:00Z"), endAt: null });
+  });
+
+  it("lets primary-goal work move to another day at its full length", () =>
+    expect(parse(real([item("move", { task: "GYM", day: "2026-02-12", start: "07:00", minutes: 60 })])).items).toHaveLength(1));
+
+  it.each([
+    ["removing primary-goal work", [item("remove", { task: "GYM" })]],
+    ["shortening primary-goal work", [item("move", { task: "GYM", day: "2026-02-11", start: "07:00", minutes: 30 })]],
+    ["a day outside the week", [item("add", { task: "RUN", day: "2026-02-16", start: "10:00", minutes: 30 })]],
+    ["no day", [item("add", { task: "RUN", start: "10:00", minutes: 30 })]],
+    ["a time today that has passed", [item("add", { task: "RUN", day: "2026-02-09", start: "08:00", minutes: 30 })]],
+    ["past midnight of its day", [item("add", { task: "RUN", day: "2026-02-12", start: "23:30", minutes: 60 })]],
+    ["overlapping a kept task on its day", [item("add", { task: "RUN", day: "2026-02-11", start: "07:30", minutes: 30 })]],
+    ["the same task twice", [item("add", { task: "RUN", day: "2026-02-10", start: "07:00", minutes: 30 }), item("add", { task: "RUN", day: "2026-02-11", start: "12:00", minutes: 30 })]],
+  ])("rejects the whole draft for %s", (_name, items) => expect(() => parse(real(items))).toThrow(/did not fit your week/));
+});
+
+describe("week draft periods", () => {
+  it.each([
+    ["next week", "2026-02-16", "2026-02-16"],
+    ["this week, under way", "2026-02-03", "2026-02-03"],
+    ["a week already over", "2026-02-02", null],
+    ["too far ahead", "2026-03-10", null],
+    ["not a date", "2026-02-30", null],
+    ["malformed", "16/02/2026", null],
+    ["missing", null, null],
+  ])("accepts %s as a week start or not", (_name, start, expected) => expect(weekDraftStart(start, "2026-02-09")).toBe(expected));
+
+  it.each([
+    ["day", "2026-02-09", true], ["day", "2026-02-08", false],
+    ["week", "2026-02-03", true], ["week", "2026-02-02", false],
+  ] as const)("a %s draft of %s is current: %s", (kind, period, expected) => expect(draftCurrent({ kind, period }, "2026-02-09")).toBe(expected));
 });
 
 describe("accepting and declining", () => {

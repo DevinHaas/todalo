@@ -44,6 +44,14 @@
   --color-today: #058527;
   --color-success: #058527;               /* Goal status On track (Adjust is attention, Off track destructive) */
 
+  /* Coach provider marks (Settings › Coach cards and picker, ticket 17c): the square behind each brand icon */
+  --color-provider-chatgpt: #10a37f;
+  --color-provider-openai: #1f1f1f;
+  --color-provider-anthropic: #d97757;
+  --color-provider-openrouter: #6467f2;
+  --color-provider-ollama: #6b6b6b;
+  --color-provider-foreground: #ffffff;
+
   /* Priorities (p1..p4) */
   --color-priority-1: #d1453b;
   --color-priority-2: #eb8909;
@@ -147,6 +155,13 @@
   --color-attention: #ff9a14;
   --color-today: #25b84c;
   --color-success: #25b84c;
+
+  --color-provider-chatgpt: #3d9a7e;
+  --color-provider-openai: #3a3a3a;
+  --color-provider-anthropic: #c96a4c;
+  --color-provider-openrouter: #6f72f0;
+  --color-provider-ollama: #5a5a5a;
+  --color-provider-foreground: #ffffff;
 
   --color-priority-1: #ff7066;
   --color-priority-2: #ff9a14;

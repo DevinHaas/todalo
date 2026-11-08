@@ -63,11 +63,44 @@ export interface CoachProviderDto { provider: CoachModelKind; model: string; bas
 /** Ticket 18: the ChatGPT sign-in. "expired" once OpenAI refused to refresh it: sign in again. */
 export interface ChatgptDto { status: "signed_in" | "expired"; email: string | null; model: string }
 /**
- * `provider` is what the Coach runs on now (ChatGPT while signed in, else the
- * saved key or Ollama), null when it is off. `keyProvider` is the saved
- * key/Ollama provider, the fallback.
+ * Ticket 17c. `providers`: every saved key or Ollama configuration, one per
+ * kind. `selected`: the provider the user picked (or, when none was picked,
+ * the most recently configured). `provider`: what the Coach runs on now; it
+ * differs from `selected` when that one cannot run (an expired ChatGPT sign-in,
+ * a key that no longer decrypts) and another configured provider took over.
  */
-export interface CoachDto { provider: CoachProviderDto | null; keyProvider: CoachProviderDto | null; chatgpt: ChatgptDto | null }
+export interface CoachDto { provider: CoachProviderDto | null; selected: CoachModelKind | null; providers: CoachProviderDto[]; chatgpt: ChatgptDto | null }
+/** PUT /api/v1/coach/active: the provider the Coach should use. */
+export const coachActiveInput = z.strictObject({ provider: z.enum([...coachProviderKinds, "chatgpt"]) });
+/** DELETE /coach/provider and POST /coach/provider/test name one provider with ?provider=. */
+export const coachKindParam = z.enum(coachProviderKinds).optional();
+export const coachModelKindParam = z.enum([...coachProviderKinds, "chatgpt"]).optional();
+
+/** A configured provider the Coach could use; `usable` false when it cannot run now. */
+export interface ConfiguredCoachProvider { provider: CoachModelKind; configuredAt: Date; usable: boolean }
+/** A saved provider with its plaintext key (server-side only). */
+export type StoredCoachProvider = CoachConfig & { keyLast4: string | null };
+export type ConfiguredProvider = StoredCoachProvider & ConfiguredCoachProvider;
+/** Ticket 17c: everything the Coach settings and the provider choice read. */
+export interface CoachState { configured: ConfiguredProvider[]; chatgpt: ChatgptDto | null; chosen: CoachModelKind | null }
+
+/**
+ * Ticket 17c: which provider the Coach uses. The user's pick if it is still
+ * configured, else the most recently configured. When that one cannot run,
+ * the most recently configured provider that can takes over (`fellBack`).
+ */
+export function pickCoachProvider<T extends ConfiguredCoachProvider>(configured: readonly T[], chosen: CoachModelKind | null) {
+  const recent = [...configured].sort((a, b) => b.configuredAt.getTime() - a.configuredAt.getTime());
+  const selected = recent.find(item => item.provider === chosen) ?? recent[0] ?? null;
+  const provider = selected?.usable ? selected : recent.find(item => item.usable) ?? null;
+  return { selected, provider, fellBack: Boolean(selected && provider !== selected) };
+}
+
+/** Ticket 17c: the configured provider after `current` for the switch command, skipping ones that cannot run. */
+export function nextCoachProvider(usable: readonly CoachModelKind[], current: CoachModelKind | null): CoachModelKind | null {
+  // Not in the list (or null): indexOf is -1, so the first.
+  return usable[(usable.indexOf(current!) + 1) % usable.length] ?? null;
+}
 export interface CoachExplanationsDto { explanations: Record<string, string> }
 
 /**

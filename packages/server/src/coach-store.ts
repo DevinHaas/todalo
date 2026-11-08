@@ -1,37 +1,67 @@
-// Ticket 17: the user's Coach provider and cached status explanations. Every
+// Ticket 17: the user's Coach providers and cached status explanations. Every
 // read and write is scoped to the caller's userId. Ticket 18 adds the ChatGPT
-// sign-in beside it: while signed in the Coach runs on ChatGPT, otherwise on
-// the saved key or Ollama provider.
+// sign-in; ticket 17c one configuration per provider kind and the user's pick
+// of the active one (pickCoachProvider in coach.ts).
 import { and, eq } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { coachChatgpt, coachChatgptClients, coachExplanations, coachProviders } from "@todalo/db/schema";
+import { coachChatgpt, coachChatgptClients, coachExplanations, coachProviderConfigs, coachProviders, coachSettings } from "@todalo/db/schema";
 import { openSecret, sealSecret } from "./coach-secret";
 import { ChatgptRefusedError, chatgptSharingScope, createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "./coach-chatgpt";
-import { coachProviderInfo, type ChatgptDto, type CoachConfig, type CoachProviderKind } from "./coach";
+import { coachProviderInfo, pickCoachProvider, type ChatgptDto, type CoachConfig, type CoachModelKind, type CoachProviderKind, type CoachState, type ConfiguredProvider, type StoredCoachProvider } from "./coach";
 
-export type StoredCoachProvider = CoachConfig & { keyLast4: string | null };
+export type { CoachState, ConfiguredProvider, StoredCoachProvider } from "./coach";
 
 /** This server's ChatGPT sign-in (no configuration: OpenAI registers todalo's client on first sign-in). */
 export const chatgptAuth = createChatgptAuth();
 
-/** The saved key or Ollama provider with its key decrypted; a key that no longer decrypts (changed secret) reads as missing. */
-export async function getKeyProvider(userId: string): Promise<StoredCoachProvider | null> {
-  const [row] = await db.select().from(coachProviders).where(eq(coachProviders.userId, userId));
-  if (!row) return null;
+type ConfigRow = Pick<typeof coachProviderConfigs.$inferSelect, "provider" | "model" | "baseUrl" | "encryptedKey" | "keyLast4" | "updatedAt">;
+/** A key that no longer decrypts (changed secret) reads as missing, so that provider cannot run. */
+function opened(row: ConfigRow): ConfiguredProvider {
   let apiKey: string | null = null;
   try { apiKey = row.encryptedKey ? openSecret(row.encryptedKey) : null; } catch { apiKey = null; }
-  return { provider: row.provider as CoachProviderKind, model: row.model, baseUrl: row.baseUrl, apiKey, keyLast4: apiKey ? row.keyLast4 : null };
+  const provider = row.provider as CoachProviderKind;
+  return {
+    provider, model: row.model, baseUrl: row.baseUrl, apiKey, keyLast4: apiKey ? row.keyLast4 : null,
+    configuredAt: row.updatedAt, usable: !coachProviderInfo[provider].needsKey || apiKey !== null,
+  };
 }
 
 /**
- * The provider the Coach runs on now: ChatGPT while signed in (refreshing its
- * token shortly before expiry), else the saved key or Ollama provider. A
- * refused refresh marks the sign-in expired and falls back. Every Coach caller uses this.
+ * Ticket 17c: every configured provider, the ChatGPT sign-in and the user's
+ * pick. The ticket-17 row in coach_providers counts as its kind's
+ * configuration until coach_provider_configs has one for that kind (read, never rewritten).
+ */
+export async function getCoachState(userId: string): Promise<CoachState> {
+  // usableChatgpt first: it may refresh the tokens or mark the sign-in expired.
+  const tokens = await usableChatgpt(userId);
+  const [rows, [legacy], [settings], [signIn]] = await Promise.all([
+    db.select().from(coachProviderConfigs).where(eq(coachProviderConfigs.userId, userId)),
+    db.select().from(coachProviders).where(eq(coachProviders.userId, userId)),
+    db.select().from(coachSettings).where(eq(coachSettings.userId, userId)),
+    db.select().from(coachChatgpt).where(eq(coachChatgpt.userId, userId)),
+  ]);
+  const configured = [...rows, ...legacy && !rows.some(row => row.provider === legacy.provider) ? [legacy] : []].map(opened);
+  const chatgpt = signIn ? chatgptDto(signIn, Boolean(tokens)) : null;
+  if (signIn) configured.push({
+    provider: "chatgpt", model: signIn.model, baseUrl: null, apiKey: tokens?.accessToken ?? null, keyLast4: null,
+    configuredAt: signIn.createdAt, usable: Boolean(tokens),
+  });
+  return { configured, chatgpt, chosen: settings?.activeProvider ?? null };
+}
+
+/**
+ * The provider the Coach runs on now: the user's pick (default: the most
+ * recently configured), or another configured provider when that one cannot
+ * run (an expired ChatGPT sign-in). Every Coach caller uses this.
  */
 export async function getCoachProvider(userId: string): Promise<StoredCoachProvider | null> {
-  const tokens = await usableChatgpt(userId);
-  if (tokens) return { provider: "chatgpt", model: tokens.model, baseUrl: null, apiKey: tokens.accessToken, keyLast4: null };
-  return getKeyProvider(userId);
+  const { configured, chosen } = await getCoachState(userId);
+  return pickCoachProvider(configured, chosen).provider;
+}
+
+export async function setCoachActive(userId: string, provider: CoachModelKind) {
+  await db.insert(coachSettings).values({ userId, activeProvider: provider })
+    .onConflictDoUpdate({ target: coachSettings.userId, set: { activeProvider: provider, updatedAt: new Date() } });
 }
 
 type Sealed = Pick<ChatgptTokens, "clientId" | "accessToken" | "refreshToken"> & { earliestRefreshAt: string | null };
@@ -87,22 +117,24 @@ const storeTokens = (userId: string, tokens: ChatgptTokens) => db.update(coachCh
 /** The sign-in as settings show it (no tokens), or null when never signed in. */
 export async function getChatgpt(userId: string): Promise<ChatgptDto | null> {
   const [row] = await db.select().from(coachChatgpt).where(eq(coachChatgpt.userId, userId));
-  if (!row) return null;
-  return { status: row.encryptedTokens && row.expiresAt ? "signed_in" : "expired", email: row.email, model: row.model };
+  return row ? chatgptDto(row, Boolean(row.encryptedTokens && row.expiresAt)) : null;
 }
+const chatgptDto = (row: typeof coachChatgpt.$inferSelect, signedIn: boolean): ChatgptDto =>
+  ({ status: signedIn ? "signed_in" : "expired", email: row.email, model: row.model });
 
 /** Throws CoachSecretError when COACH_SECRET_KEY is missing. Keeps the chosen model on a new sign-in. */
 export async function saveChatgpt(userId: string, tokens: ChatgptTokens) {
   const values = sealTokens(tokens);
   await db.insert(coachChatgpt).values({ userId, model: coachProviderInfo.chatgpt.model, ...values })
-    .onConflictDoUpdate({ target: coachChatgpt.userId, set: { ...values, updatedAt: new Date() } });
+    // A new sign-in counts as configured now (createdAt orders it among the providers; refreshes do not).
+    .onConflictDoUpdate({ target: coachChatgpt.userId, set: { ...values, createdAt: new Date(), updatedAt: new Date() } });
 }
 
 export async function setChatgptModel(userId: string, model: string) {
   await db.update(coachChatgpt).set({ model }).where(eq(coachChatgpt.userId, userId));
 }
 
-/** Sign out: OpenAI is asked to revoke the refresh token, the tokens go, the key provider (if any) takes over. The registration stays. */
+/** Sign out: OpenAI is asked to revoke the refresh token, the tokens go, another configured provider (if any) takes over. The registration stays. */
 export async function removeChatgpt(userId: string) {
   const saved = await savedChatgpt(userId);
   if (saved) await chatgptAuth.revoke(saved.tokens.clientId, saved.tokens.refreshToken);
@@ -125,18 +157,24 @@ export async function forgetChatgptClient(userId: string, redirectKey: string) {
   await db.delete(coachChatgptClients).where(clientRow(userId, redirectKey));
 }
 
-/** Throws CoachSecretError when a key must be stored but COACH_SECRET_KEY is missing. */
+/** One configuration per kind. Throws CoachSecretError when a key must be stored but COACH_SECRET_KEY is missing. */
 export async function saveCoachProvider(userId: string, config: CoachConfig) {
   const values = {
-    provider: config.provider as CoachProviderKind, model: config.model, baseUrl: config.baseUrl,
+    model: config.model, baseUrl: config.baseUrl,
     encryptedKey: config.apiKey ? sealSecret(config.apiKey) : null, keyLast4: config.apiKey ? config.apiKey.slice(-4) : null,
   };
-  await db.insert(coachProviders).values({ userId, ...values }).onConflictDoUpdate({ target: coachProviders.userId, set: { ...values, updatedAt: new Date() } });
+  await db.insert(coachProviderConfigs).values({ userId, provider: config.provider as CoachProviderKind, ...values })
+    .onConflictDoUpdate({ target: [coachProviderConfigs.userId, coachProviderConfigs.provider], set: { ...values, updatedAt: new Date() } });
 }
 
-/** Disconnect: the key and every cached explanation go. */
-export async function removeCoachProvider(userId: string) {
-  await db.delete(coachProviders).where(eq(coachProviders.userId, userId));
+/**
+ * Disconnect one provider (every keyed one without `provider`): its key and
+ * every cached explanation go. The user's own ticket-17 row of that kind goes
+ * too, or it would stand in again as that kind's configuration.
+ */
+export async function removeCoachProvider(userId: string, provider?: CoachProviderKind) {
+  await db.delete(coachProviderConfigs).where(and(eq(coachProviderConfigs.userId, userId), provider && eq(coachProviderConfigs.provider, provider)));
+  await db.delete(coachProviders).where(and(eq(coachProviders.userId, userId), provider && eq(coachProviders.provider, provider)));
   await db.delete(coachExplanations).where(eq(coachExplanations.userId, userId));
 }
 

@@ -4,12 +4,12 @@
 
 **Blocked by:** 19, 13
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Weekly draft from the Weekly review
-- [ ] Primary goals protected; secondary-goal work proposed for dropping first when capacity is short
-- [ ] Same accept/decline flow as daily drafts
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Weekly draft from the Weekly review
+- [x] Primary goals protected; secondary-goal work proposed for dropping first when capacity is short
+- [x] Same accept/decline flow as daily drafts
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

@@ -75,7 +75,7 @@ export const clientCommandIds = [
   "quick-add.description", "quick-add.actions", "quick-add.deadline",
   "task.date", "task.clear-date", "task.priority-1", "task.priority-2", "task.priority-3", "task.priority-4", "task.priority",
   "task.labels", "task.deadline", "task.clear-deadline", "task.move", "task.nest", "task.unnest", "editor.previous", "editor.next",
-  "navigation.ui", "goal.create", "navigation.season", "season.start", "season.add-goal", "season.move-target", "season.toggle-tier", "season.remove-goal", "season.end", "season.chart", "task.goals", "task.milestone", "schedule.unscheduled", "ritual.check-in", "ritual.weekly-review", "ritual.season-review", "ritual.skip", "ritual.plan-clear", "ritual.plan-help", "ritual.evening-review", "ritual.schedule-candidate", "ritual.leave-candidate", "ritual.search-candidates", "ritual.next", "coach.settings", "coach.test", "coach.chatgpt-sign-in", "coach.chatgpt-open", "coach.chatgpt-sign-out", "coach.draft-day", "coach.accept-draft", "coach.decline-draft", "schedule.filter", "plan.reschedule-overdue", "plan.add-task", "schedule.task", "task.unschedule", "editor.goal-suggestion-accept", "editor.goal-suggestion-dismiss", "project.goals", "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
+  "navigation.ui", "goal.create", "navigation.season", "season.start", "season.add-goal", "season.move-target", "season.toggle-tier", "season.remove-goal", "season.end", "season.chart", "task.goals", "task.milestone", "schedule.unscheduled", "ritual.check-in", "ritual.weekly-review", "ritual.season-review", "ritual.skip", "ritual.plan-clear", "ritual.plan-help", "ritual.evening-review", "ritual.schedule-candidate", "ritual.leave-candidate", "ritual.search-candidates", "ritual.next", "coach.settings", "coach.test", "coach.chatgpt-sign-in", "coach.chatgpt-open", "coach.chatgpt-sign-out", "coach.next-provider", "coach.draft-day", "coach.draft-week", "coach.accept-draft", "coach.decline-draft", "schedule.filter", "plan.reschedule-overdue", "plan.add-task", "schedule.task", "task.unschedule", "editor.goal-suggestion-accept", "editor.goal-suggestion-dismiss", "project.goals", "project.section", "project.menu", "project.sort-date", "project.sort-name", "project.sort-priority", "view.layout",
   "task.menu", "task.copy-url", "task.reveal", "task.toggle-children", "view.toggle-nested",
   "upcoming.today", "upcoming.next-week", "upcoming.previous-week", "calendar.today", "calendar.next-week", "calendar.previous-week",
 ] as const;
@@ -103,8 +103,8 @@ export function adjacentRow<T>(rows: T[], current: T | null, step: number): T | 
  * sub-tasks). They pass an open dialog; their handlers decline behind any other.
  */
 export const SHEET_COMMANDS: readonly ClientCommandId[] = ["task.previous", "task.next", "task.complete", "task.details", "task.edit"];
-/** Settings › Coach keys (tickets 17, 18): Settings is a dialog, so they pass it; their handlers act only on Settings › Coach. */
-export const SETTINGS_COMMANDS: readonly ClientCommandId[] = ["coach.test", "coach.chatgpt-sign-in", "coach.chatgpt-open", "coach.chatgpt-sign-out"];
+/** Settings › Coach keys (tickets 17, 18, 17c): Settings is a dialog, so they pass it; their handlers act only on Settings › Coach (switching works everywhere). */
+export const SETTINGS_COMMANDS: readonly ClientCommandId[] = ["coach.test", "coach.chatgpt-sign-in", "coach.chatgpt-open", "coach.chatgpt-sign-out", "coach.next-provider"];
 
 /** Handlers become dispatcher commands with the account's effective bindings. */
 export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () => void | boolean>>, bindings: (id: string) => string[]): DispatchCommand[] {

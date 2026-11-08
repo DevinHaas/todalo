@@ -1,14 +1,15 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachExplanationsDto, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
+import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachExplanationsDto, CoachModelKind, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
 import { AccountTransportError, nativeAccountError } from "./errors";
+import { coachProviderKinds as serverProviderKinds } from "../../../packages/server/src/coach";
 import { localZone } from "./seasons";
 import type { DraftDayDto, DraftDto, DraftItemDto, DraftsDto } from "../../../packages/server/src/drafts";
 import { taskKeys } from "./tasks";
 
-export type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
+export type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachModelKind, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
 export { draftCounts } from "../../../packages/server/src/drafts";
-export { coachProviderInfo, coachProviderKinds, ollamaDefaultUrl, ollamaUrl } from "../../../packages/server/src/coach";
+export { coachProviderInfo, coachProviderKinds, nextCoachProvider, ollamaDefaultUrl, ollamaUrl } from "../../../packages/server/src/coach";
 /** What Connect sends; an omitted apiKey keeps the saved key for the same provider. */
 export interface CoachProviderInput { provider: CoachProviderKind; model: string; baseUrl?: string; apiKey?: string }
 export interface CoachTestResult { ok: boolean; message?: string }
@@ -19,8 +20,12 @@ const notConnected: CoachTestResult = { ok: false, message: "Connect an AI provi
 export interface CoachTransport {
   get(): Promise<CoachDto>;
   save(input: CoachProviderInput): Promise<CoachDto>;
-  disconnect(): Promise<CoachDto>;
-  test(): Promise<CoachTestResult>;
+  /** Ticket 17c: one provider; every keyed one when omitted. */
+  disconnect(provider?: CoachProviderKind): Promise<CoachDto>;
+  /** The active provider, or the named one (its card). */
+  test(provider?: CoachModelKind): Promise<CoachTestResult>;
+  /** Ticket 17c: the provider the Coach uses (a configured one). */
+  setActive(provider: CoachModelKind): Promise<CoachDto>;
   explanations(timeZone: string): Promise<CoachExplanationsDto>;
   /** Ticket 18: ChatGPT sign-in. Start returns OpenAI's page (the Mac app opens it and listens on 127.0.0.1 for the return). */
   startChatgpt(): Promise<ChatgptStartDto>;
@@ -36,9 +41,13 @@ export interface CoachTransport {
   drafts(timeZone: string): Promise<DraftsDto>;
   /** The Coach drafts today's plan; `draft` null with the reason when it could not. */
   draftDay(timeZone: string): Promise<DraftDayDto>;
+  /** Ticket 20: the Coach drafts the week from `start` (its Monday, YYYY-MM-DD); as draftDay. */
+  draftWeek(timeZone: string, start: string): Promise<DraftDayDto>;
   /** Accept or decline some items (all when omitted); the draft after, null once decided. TASK_CHANGED when a task changed since. */
   decide(draftId: string, accept: boolean, itemIds?: string[]): Promise<DraftDayDto>;
 }
+
+const named = (provider?: string) => provider ? `?${new URLSearchParams({ provider })}` : "";
 
 export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTransport {
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -60,8 +69,9 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
   return {
     get: () => request("GET", "/api/v1/coach"),
     save: (input) => request("PUT", "/api/v1/coach/provider", input),
-    disconnect: () => request("DELETE", "/api/v1/coach/provider"),
-    test: () => request<CoachTestResult | null>("POST", "/api/v1/coach/provider/test").then(result => result ?? notConnected),
+    disconnect: (provider) => request("DELETE", `/api/v1/coach/provider${named(provider)}`),
+    test: (provider) => request<CoachTestResult | null>("POST", `/api/v1/coach/provider/test${named(provider)}`).then(result => result ?? notConnected),
+    setActive: (provider) => request("PUT", "/api/v1/coach/active", { provider }),
     explanations: (timeZone) => request("GET", `/api/v1/coach/explanations?${new URLSearchParams({ timeZone })}`),
     startChatgpt: () => request("POST", "/api/v1/coach/chatgpt/start"),
     // The web never gets the loopback mode.
@@ -72,6 +82,7 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     openChatgpt: (authorizeUrl) => { window.open(authorizeUrl, "_blank", "noopener,noreferrer"); },
     drafts: (timeZone) => request("GET", `/api/v1/coach/drafts?${new URLSearchParams({ timeZone })}`),
     draftDay: (timeZone) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/day?${new URLSearchParams({ timeZone })}`).then(result => result ?? noDraft),
+    draftWeek: (timeZone, start) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/week?${new URLSearchParams({ timeZone, start })}`).then(result => result ?? noDraft),
     decide: (draftId, accept, itemIds) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/${encodeURIComponent(draftId)}/${accept ? "accept" : "decline"}`, itemIds ? { itemIds } : {})
       .then(result => result ?? { draft: null }),
   };
@@ -87,8 +98,9 @@ export function coachTransport(): CoachTransport {
   return {
     get: () => command("coach"),
     save: (provider) => command("save_coach_provider", { provider }),
-    disconnect: () => command("disconnect_coach"),
-    test: async () => (await command<CoachTestResult | null>("test_coach")) ?? notConnected,
+    disconnect: (provider) => command("disconnect_coach", { provider: provider ?? null }),
+    test: async (provider) => (await command<CoachTestResult | null>("test_coach", { provider: provider ?? null })) ?? notConnected,
+    setActive: async (provider) => (await command<CoachDto | null>("set_coach_active", { provider })) ?? command("coach"),
     explanations: (timeZone) => command("coach_explanations", { timeZone }),
     startChatgpt: () => command("start_chatgpt_sign_in"),
     finishChatgpt: () => command("finish_chatgpt_sign_in"),
@@ -98,9 +110,21 @@ export function coachTransport(): CoachTransport {
     openChatgpt: (authorizeUrl) => { void command("open_chatgpt_sign_in", { url: authorizeUrl }).catch(() => undefined); },
     drafts: (timeZone) => command("coach_drafts", { timeZone }),
     draftDay: async (timeZone) => (await command<DraftDayDto | null>("draft_day", { timeZone })) ?? noDraft,
+    draftWeek: async (timeZone, start) => (await command<DraftDayDto | null>("draft_week", { timeZone, start })) ?? noDraft,
     decide: async (draftId, accept, itemIds) => (await command<DraftDayDto | null>("decide_draft", { draftId, accept, itemIds: itemIds ?? null })) ?? { draft: null },
   };
 }
+
+/** Ticket 17c: the cards' and the picker's order. */
+export const coachCardKinds: readonly CoachModelKind[] = ["chatgpt", ...serverProviderKinds];
+const byCard = <T extends { provider: CoachModelKind }>(items: T[]) => items.sort((a, b) => coachCardKinds.indexOf(a.provider) - coachCardKinds.indexOf(b.provider));
+/** Ticket 17c: configured providers that can run now, in card order. */
+export const usableCoachProviders = (state: CoachDto): CoachModelKind[] => [
+  ...state.chatgpt?.status === "signed_in" ? ["chatgpt" as const] : [],
+  ...byCard(state.providers.filter(item => item.provider === "ollama" || item.keyHint !== null)).map(item => item.provider),
+];
+/** Every saved keyed or Ollama provider, in card order. */
+export const sortedCoachProviders = (state: CoachDto) => byCard([...state.providers]);
 
 export const coachKeys = {
   all: (userId: string) => ["user", userId, "coach"] as const,
@@ -124,8 +148,9 @@ export function coachMutations(transport: CoachTransport, cache: QueryClient, us
   const settled = async <T,>(run: () => Promise<T>) => { try { return await run(); } finally { await cache.invalidateQueries({ queryKey: coachKeys.all(userId) }); } };
   return {
     save: (input: CoachProviderInput) => settled(() => transport.save(input)),
-    disconnect: () => settled(() => transport.disconnect()),
-    test: () => transport.test(),
+    disconnect: (provider?: CoachProviderKind) => settled(() => transport.disconnect(provider)),
+    test: (provider?: CoachModelKind) => transport.test(provider),
+    setActive: (provider: CoachModelKind) => settled(() => transport.setActive(provider)),
     saveChatgptModel: (model: string) => settled(() => transport.saveChatgptModel(model)),
     signOutChatgpt: () => settled(() => transport.signOutChatgpt()),
     /** Once signed in, the provider and explanations refetch. */
@@ -140,12 +165,18 @@ export function coachMutations(transport: CoachTransport, cache: QueryClient, us
  */
 export function draftMutations(transport: CoachTransport, cache: QueryClient, userId: string) {
   const replace = (draft: DraftDto | null, id?: string) => cache.setQueryData<DraftsDto>(coachKeys.drafts(userId), current => {
-    const others = (current?.drafts ?? []).filter(item => item.id !== (id ?? draft?.id) && item.period !== draft?.period);
+    // A new draft replaces the open one of its kind and period (as the server does); a day and a week draft stay side by side.
+    const others = (current?.drafts ?? []).filter(item => item.id !== (id ?? draft?.id) && !(item.kind === draft?.kind && item.period === draft.period));
     return { drafts: draft ? [...others, draft] : others };
   });
   return {
     draftDay: async () => {
       const result = await transport.draftDay(localZone());
+      if (result.draft) replace(result.draft);
+      return result;
+    },
+    draftWeek: async (start: string) => {
+      const result = await transport.draftWeek(localZone(), start);
       if (result.draft) replace(result.draft);
       return result;
     },

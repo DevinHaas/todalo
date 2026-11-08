@@ -13,7 +13,7 @@ import { Composer, Failure, listTree, TaskDialogs, TaskRow, type SelectionSlots 
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type DraftBlock, type PlannerSlots, type ScheduleSlots } from "./schedule-views";
 import {
   addDays, datedDetails, dayKey, dropRange, dueDetails, durationOf, goalOf, labels, nextFreeSlot, parseDayKey, planGroupOrder, planGroups, rescheduledDetails,
-  sameDay, scheduledDetails, startOfDay, unscheduledDetails,
+  sameDay, scheduledDetails, startOfDay, startOfWeek, unscheduledDetails,
 } from "./schedule";
 import { PlanSidebar, planRitual, useTaskDrag, type PlanRowData } from "./plan-views";
 import { Button } from "./ui";
@@ -26,7 +26,8 @@ import { BoardScreen } from "./board-screens";
 import { useBulkSelection } from "./bulk-screens";
 
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
-function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection, planner: withPlanner = false }: { projectId?: string | null; selection?: SelectionSlots; planner?: boolean } = {}) {
+function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection, planner: scope }: { projectId?: string | null; selection?: SelectionSlots; planner?: "day" | "week" } = {}) {
+  const withPlanner = scope !== undefined;
   const writes = useTaskWrites(account.user.id);
   const projects = useQuery(projectReads.list(account.user.id));
   const projectNames = Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name]));
@@ -45,7 +46,7 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
     remove: writes.actions.remove,
     slot: (start, end) => setSlot({ start, end }),
   };
-  const planner = usePlanner(account.user.id, tasks, writes, withPlanner, slots.open, projectNames);
+  const planner = usePlanner(account.user.id, tasks, writes, scope, slots.open, projectNames);
   if (withPlanner) slots.planner = planner.slots;
   const overlay = <>
     {slot && <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setSlot(null); }}>
@@ -74,7 +75,8 @@ const Planner = ({ sidebar, children }: { sidebar: ReactNode; children: ReactNod
  * the Plan sidebar beside it; a task dropped on a slot is scheduled for its
  * duration, a scheduled task dropped on the sidebar is unscheduled.
  */
-function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof useTaskWrites>, enabled: boolean, openTask: (task: TaskDto) => void, projectNames: Record<string, string>) {
+function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof useTaskWrites>, scope: "day" | "week" | undefined, openTask: (task: TaskDto) => void, projectNames: Record<string, string>) {
+  const enabled = scope !== undefined;
   const goals = useQuery({ ...goalReads.list(userId), enabled });
   const links = useQuery({ ...goalReads.links(userId), enabled });
   const metadata = useQuery({ ...metadataReads.list(userId), enabled });
@@ -99,7 +101,9 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const drag = useTaskDrag((task, day, y) => { const { start, end } = dropRange(parseDayKey(day), y, durationOf(task)); quietly(write(task, scheduledDetails(task, start, end))); });
   const find = (id: string) => tasks.find(task => task.id === id);
   const withTask = (run: (task: TaskDto) => void) => (id: string) => { const task = find(id); if (task) run(task); };
-  const coachDraft = useCoachDraft(userId, enabled);
+  // Ticket 20: beside the week calendar the Coach drafts the week it shows.
+  const [week, setWeek] = useState(() => dayKey(startOfWeek(new Date(), 1)));
+  const coachDraft = useCoachDraft(userId, enabled, scope === "week" ? { kind: "week", period: week } : { kind: "day", period: dayKey(new Date()) });
   const taskColor = (task: TaskDto) => { const goal = goalOf(task, goalList, goalLinks); return goal ? goalColorValue(goal.color) : null; };
   const slots: PlannerSlots = {
     taskColor,
@@ -111,6 +115,7 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     change: (task, start, end) => write(task, scheduledDetails(task, start, end)),
     unschedule: (task) => quietly(write(task, unscheduledDetails(task))),
     incoming: drag.over,
+    week: (start) => setWeek(dayKey(start)),
     toolbar: <Button type="button" variant={sidebarOpen ? "secondary" : "outline"} size="sm" aria-pressed={sidebarOpen} data-schedule-action="plan" onClick={() => setSidebarOpen(open => !open)}>Plan</Button>,
   };
   /** Overdue › Reschedule: every row to today at once (optimistic), undone from the toast with each task's own dates. */
@@ -168,30 +173,33 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
 
 /**
  * Goals ticket 19: the Coach's open draft of today, for the Plan sidebar and
- * the schedule. Nothing at all without a connected provider.
+ * the schedule. Nothing at all without a connected provider. Ticket 20: or of
+ * the week shown (`period`: its Monday).
  */
-function useCoachDraft(userId: string, enabled: boolean) {
+function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | "week"; period: string }) {
   const cache = useQueryClient();
   const provider = useQuery({ ...coachReads.provider(userId), enabled });
   const connected = Boolean(provider.data?.provider);
   const drafts = useQuery({ ...coachReads.drafts(userId), enabled: enabled && connected });
   const writes = useMemo(() => draftMutations(coach, cache, userId), [cache, userId]);
   const [message, setMessage] = useState<string | null>(null);
-  const draftDay = useMutation({
-    mutationFn: writes.draftDay, onMutate: () => setMessage(null),
+  const propose = useMutation({
+    mutationFn: (target: typeof scope) => target.kind === "week" ? writes.draftWeek(target.period) : writes.draftDay(), onMutate: () => setMessage(null),
     onSuccess: (result) => setMessage(result.draft ? null : result.message ?? null),
-    meta: { action: () => "draft your day" },
+    meta: { action: (target: typeof scope) => `draft your ${target.kind}` },
   });
+  // Another week shown: its own draft, and no message left from the last one.
+  useEffect(() => { setMessage(null); }, [scope.kind, scope.period]);
   const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
-  const today = dayKey(new Date());
-  const draft = drafts.data?.drafts.find(item => item.kind === "day" && item.period === today) ?? null;
+  const draft = drafts.data?.drafts.find(item => item.kind === scope.kind && item.period === scope.period) ?? null;
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
   return {
     blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => pending.map(item => ({
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
     })),
-    panel: connected ? <DraftPanel draft={draft} drafting={draftDay.isPending} deciding={decide.isPending} message={message}
-      onDraft={() => draftDay.mutate()} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })} /> : null,
+    panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}
+      draft={draft} drafting={propose.isPending} deciding={decide.isPending} message={message}
+      onDraft={() => propose.mutate(scope)} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })} /> : null,
   };
 }
 
@@ -204,7 +212,7 @@ export function ProjectCalendar({ account, tasks, projectId }: { account: Accoun
 
 /** Today's Calendar layout: the legacy daily schedule. */
 export function TodayCalendar({ account, tasks }: { account: Account; tasks: TaskDto[] }) {
-  const { slots, overlay, writes, now, sidebar } = useSchedule(account, tasks, { planner: true });
+  const { slots, overlay, writes, now, sidebar } = useSchedule(account, tasks, { planner: "day" });
   const events = useCalendarEvents(account.user.id);
   return <><Planner sidebar={sidebar}><TodaySchedule tasks={tasks} events={events} slots={slots} now={now} /></Planner>{overlay}</>;
 }
@@ -216,7 +224,7 @@ export function UpcomingScreen({ account }: { account: Account }) {
   const tasks = query.data?.tasks ?? [];
   // Ticket 15 selection on the list layout (legacy TaskKeyboardProvider wrapped Upcoming too).
   const selection = useBulkSelection(account.user.id, tasks);
-  const { slots, overlay, writes, now, sidebar } = useSchedule(account, tasks, { selection: layout === "list" ? selection : undefined, planner: layout === "calendar" });
+  const { slots, overlay, writes, now, sidebar } = useSchedule(account, tasks, { selection: layout === "list" ? selection : undefined, planner: layout === "calendar" ? "week" : undefined });
   const composer = (day: Date): ReactNode => <Composer dueDate={() => startOfDay(day).toISOString()} destination={dayDestination(day, now)}
     onCreate={(task) => writes.create.mutateAsync(task)} />;
   let body: ReactNode;

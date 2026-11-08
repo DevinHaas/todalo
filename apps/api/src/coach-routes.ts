@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
 import {
-  CoachModelError, chatgptCompleteInput, chatgptModelInput, chatgptStartInput, coachProviderInfo, coachProviderInput, explanationFacts, explanationMessages, explanationSchema, ollamaUrl, parseExplanation, parsePing, pingRequest,
-  type ChatgptCompleteDto, type ChatgptDto, type ChatgptStartDto, type CoachConfig, type CoachDto, type CoachExplanationsDto, type CoachModel, type CoachProviderDto,
+  CoachModelError, chatgptCompleteInput, chatgptModelInput, chatgptStartInput, coachActiveInput, coachKindParam, coachModelKindParam, coachProviderInput, explanationFacts, explanationMessages, explanationSchema, ollamaUrl, parseExplanation, parsePing, pickCoachProvider, pingRequest,
+  type ChatgptCompleteDto, type ChatgptDto, type ChatgptStartDto, type CoachConfig, type CoachDto, type CoachExplanationsDto, type CoachModel, type CoachModelKind, type CoachProviderDto, type CoachProviderKind, type CoachState, type StoredCoachProvider,
 } from "@todalo/server/coach";
 import {
   agentHostId, chatgptCallbackUrl, chatgptPkce, chatgptSharingScope, ChatgptRefusedError, isLoopback, loopbackRedirect, pastePort, readChatgptCallback, redirectKey,
@@ -18,10 +18,10 @@ import { zoneOrUtc } from "./season-routes";
 export interface CoachStore {
   verify(headers: Headers): Promise<string | null>;
   allowedOrigins: ReadonlySet<string>;
-  /** The provider the Coach runs on now (ChatGPT while signed in, else the saved key), plaintext key server-side only, or null. */
-  provider(userId: string): Promise<(CoachConfig & { keyLast4: string | null }) | null>;
-  /** The saved API key or Ollama provider alone (the fallback), or null. */
-  keyProvider(userId: string): Promise<(CoachConfig & { keyLast4: string | null }) | null>;
+  /** Ticket 17c: every configured provider (plaintext keys server-side only), the ChatGPT sign-in and the user's pick. */
+  state(userId: string): Promise<CoachState>;
+  /** The provider the Coach should use (pickCoachProvider decides whether it can). */
+  setActive(userId: string, provider: CoachModelKind): Promise<void>;
   /** Ticket 18: the calls to auth.openai.com (tests: the real one against a fake auth server). */
   chatgptAuth: ChatgptAuth;
   /** OpenAI's registered client for this user and redirect key, kept across sign-ins. */
@@ -34,10 +34,10 @@ export interface CoachStore {
   setChatgptModel(userId: string, model: string): Promise<void>;
   /** Sign out (revokes the refresh token at OpenAI, best effort). */
   removeChatgpt(userId: string): Promise<void>;
-  /** Encrypts the key; throws CoachSecretError when no COACH_SECRET_KEY is configured. */
+  /** Saves that kind's configuration (one per kind). Encrypts the key; throws CoachSecretError when no COACH_SECRET_KEY is configured. */
   save(userId: string, config: CoachConfig): Promise<void>;
-  /** Removes the provider, its key and the cached explanations. */
-  remove(userId: string): Promise<void>;
+  /** Removes one provider (every keyed one when omitted), its key and the cached explanations. */
+  remove(userId: string, provider?: CoachProviderKind): Promise<void>;
   /** The inference adapter for a config (tests pass a fake). */
   model(config: CoachConfig): CoachModel;
   season(userId: string): Promise<{ season: SeasonRecord; goals: SeasonGoalRecord[] } | null>;
@@ -56,7 +56,7 @@ const LOCAL_ONLY = { code: "INVALID_INPUT", message: "Ollama must run on this co
 const NO_SECRET = { code: "COACH_NOT_CONFIGURED", message: "This server cannot store API keys yet (COACH_SECRET_KEY is missing)." } as const;
 
 /** The client's view: never the key, only its last four characters. */
-const toDto = (config: CoachConfig & { keyLast4: string | null }): CoachProviderDto =>
+const toDto = (config: StoredCoachProvider): CoachProviderDto =>
   ({ provider: config.provider, model: config.model, baseUrl: config.baseUrl, keyHint: config.keyLast4 });
 
 /** How long a started sign-in waits for the browser to come back. */
@@ -79,10 +79,16 @@ const callbackPage = (signedIn: boolean, message: string) => new Response(
 export function createCoachRoutes(store: CoachStore) {
   const now = store.now ?? (() => new Date());
   const writer = (request: Request) => writeUser(store, request);
-  const dto = async (userId: string): Promise<CoachDto> => {
-    const [active, key, chatgpt] = await Promise.all([store.provider(userId), store.keyProvider(userId), store.chatgpt(userId)]);
-    return { provider: active && toDto(active), keyProvider: key && toDto(key), chatgpt };
+  const toCoachDto = ({ configured, chatgpt, chosen }: CoachState): CoachDto => {
+    const { selected, provider } = pickCoachProvider(configured, chosen);
+    return {
+      provider: provider && toDto(provider), selected: selected?.provider ?? null, chatgpt,
+      providers: configured.filter(item => item.provider !== "chatgpt").map(toDto),
+    };
   };
+  const dto = async (userId: string) => toCoachDto(await store.state(userId));
+  /** The provider the Coach runs on now, or null. */
+  const active = async (userId: string) => { const { configured, chosen } = await store.state(userId); return pickCoachProvider(configured, chosen).provider; };
   // Ticket 18: sign-ins in progress by state. The PKCE verifier stays here, never in a client.
   // ponytail: in memory, so a restart or a second API instance drops it (the user starts again).
   const signIns = new Map<string, ChatgptPending & { userId: string; expiresAt: number }>();
@@ -133,9 +139,9 @@ export function createCoachRoutes(store: CoachStore) {
         if (!baseUrl) return status(400, LOCAL_ONLY);
         config = { provider, model, baseUrl, apiKey: null };
       } else {
-        // Changing only the model keeps the saved key; a new provider needs its own.
-        const saved = input.data.apiKey ? null : await store.keyProvider(userId);
-        const apiKey = input.data.apiKey ?? (saved?.provider === provider ? saved.apiKey : null);
+        // Changing only the model keeps that provider's saved key; another provider needs its own.
+        const saved = input.data.apiKey ? null : (await store.state(userId)).configured.find(item => item.provider === provider);
+        const apiKey = input.data.apiKey ?? saved?.apiKey ?? null;
         if (!apiKey) return status(400, NEEDS_KEY);
         config = { provider, model, baseUrl: null, apiKey };
       }
@@ -143,11 +149,25 @@ export function createCoachRoutes(store: CoachStore) {
       catch (error) { if (error instanceof CoachSecretError) return status(503, NO_SECRET); throw error; }
       return dto(userId);
     })
+    // ?provider= disconnects that one; without it every keyed provider (ticket 17's single provider).
     .delete("/coach/provider", async ({ request, status }) => {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      await store.remove(userId);
+      const kind = coachKindParam.safeParse(new URL(request.url).searchParams.get("provider") ?? undefined);
+      if (!kind.success) return status(400, INVALID);
+      await store.remove(userId, kind.data);
+      return dto(userId);
+    })
+    // Ticket 17c: the provider the Coach uses; only a configured one.
+    .put("/coach/active", async ({ request, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = coachActiveInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      if (!(await store.state(userId)).configured.some(item => item.provider === input.data.provider)) return status(404, NO_PROVIDER);
+      await store.setActive(userId, input.data.provider);
       return dto(userId);
     })
     // Ticket 18: ChatGPT sign-in, T3 Code's flow (coach-chatgpt.ts). Start
@@ -222,16 +242,22 @@ export function createCoachRoutes(store: CoachStore) {
       await store.removeChatgpt(userId);
       return dto(userId);
     })
-    // Test connection: one tiny structured request with the saved provider. A
-    // provider failure is a 200 { ok: false, message } so the reason reaches
-    // the native client too (its write mapping replaces error bodies).
+    // Test connection: one tiny structured request with the active provider,
+    // or the one named by ?provider= (its card). A provider failure is a 200
+    // { ok: false, message } so the reason reaches the native client too (its
+    // write mapping replaces error bodies).
     .post("/coach/provider/test", async ({ request, status }) => {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const saved = await store.provider(userId);
+      const kind = coachModelKindParam.safeParse(new URL(request.url).searchParams.get("provider") ?? undefined);
+      if (!kind.success) return status(400, INVALID);
+      const { configured, chosen } = await store.state(userId);
+      const pick = pickCoachProvider(configured, chosen);
+      // Nothing can run: test the pick anyway, so it says why.
+      const saved = kind.data ? configured.find(item => item.provider === kind.data) : pick.provider ?? pick.selected;
       if (!saved) return status(404, NO_PROVIDER);
-      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return { ok: false, message: "Enter your API key again." };
+      if (!saved.usable) return { ok: false, message: saved.provider === "chatgpt" ? "ChatGPT signed you out. Sign in again." : "Enter your API key again." };
       try { parsePing(await store.model(saved).complete(pingRequest, request.signal)); }
       catch (error) { return { ok: false, message: error instanceof CoachModelError ? error.message : "The provider is unavailable. Try again later." }; }
       return { ok: true };
@@ -242,8 +268,8 @@ export function createCoachRoutes(store: CoachStore) {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
       const none = { explanations: {} } satisfies CoachExplanationsDto;
-      const saved = await store.provider(userId);
-      if (!saved || (coachProviderInfo[saved.provider].needsKey && !saved.apiKey)) return none;
+      const saved = await active(userId);
+      if (!saved) return none;
       const current = await store.season(userId);
       if (!current) return none;
       const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));

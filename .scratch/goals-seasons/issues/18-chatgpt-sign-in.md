@@ -41,12 +41,12 @@
 Needs COACH_SECRET_KEY on the API (already set in `.env`). No other setting is needed: `CHATGPT_OAUTH_CLIENT_ID` is gone.
 
 1. Run the API and the Mac app from this worktree as usual, and sign in to todalo.
-2. Open Settings › Coach (Alt+Shift+C), choose Provider "OpenAI", then the "Sign in with ChatGPT" tab, and press **Sign in with ChatGPT** (or Alt+Shift+C again). Your default browser opens OpenAI's page.
+2. Open Settings › Coach (Alt+Shift+C), press **Configure** on the ChatGPT card, then **Sign in with ChatGPT** (or press Alt+Shift+C again: it opens the card and starts the sign-in). Your default browser opens OpenAI's page. (Ticket 17c replaced the provider dropdown with a card per provider.)
 3. Sign in to ChatGPT. On the consent page OpenAI should name **todalo**. Allow sharing of your ChatGPT plan.
 4. The browser shows "ChatGPT is connected", and within a second Settings shows "Signed in with ChatGPT as <your email>". If you closed the tab too early, press "Open OpenAI sign-in again" (Alt+Shift+P). The sign-in waits up to 10 minutes.
 5. Press **Test connection** (Alt+Shift+T). Note the message if it fails: "sharing may not cover it" (403) or "refused the request" (400, for example the model or json_schema). Try the model `gpt-5.4-mini` under Model if `gpt-5.5` is refused.
 6. Open a season page: the goal explanations now come from ChatGPT.
-7. Fallback check: save an API key under "Use an API key", sign out of ChatGPT (Alt+Shift+Q) and Test connection again. It should name the key provider. Sign in again: OpenAI should not register a second client, and your email is filled in.
+7. Fallback check: save an API key on another card (OpenAI, Anthropic or OpenRouter), choose ChatGPT in the "Coach model" picker at the top, then sign out of ChatGPT (Alt+Shift+Q) and press Test connection beside the picker. It should name the key provider. Sign in again: OpenAI should not register a second client, your email is filled in, and the new sign-in becomes the active provider again.
 
 QA screenshots: `docs/qa/coach-chatgpt/` (web at localhost:5189 as test@todalo.dev). In 01–03 the start is real: discovery hit auth.openai.com, which accepted the localhost callback and showed its log-in page. Nobody signed in. 04: a forged state on the callback route is refused. 05 mocks only the start reply to show paste mode; in 06 the real server refuses the pasted address because its state is unknown.
 

@@ -1,54 +1,167 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Asterisk, ChevronDown, Cpu, MessageCircle, Route, Sparkles } from "lucide-react";
 import { coach, coachReads } from "./runtime";
 import {
-  coachKeys, coachMutations, coachProviderInfo, coachProviderKinds, ollamaDefaultUrl, ollamaUrl,
-  type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
+  coachCardKinds, coachKeys, coachMutations, coachProviderInfo, ollamaDefaultUrl, ollamaUrl, sortedCoachProviders,
+  type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
 } from "./coach";
 import { FormError, LoadFailure, Loading } from "./goal-views";
-import { Badge, Button, Field, FieldDescription, FieldLabel, Hint, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, ToggleGroup, ToggleGroupItem } from "./ui";
+import {
+  Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input, cn,
+} from "./ui";
 
 /**
- * Goals tickets 17, 17b and 18: Settings › Coach. Connect an AI provider by API
- * key (OpenAI, Anthropic, OpenRouter) or a local Ollama model, or sign in with
- * ChatGPT; test it, disconnect or sign out.
+ * Goals tickets 17, 17b, 18 and 17c: Settings › Coach. A card per provider
+ * (ChatGPT sign-in, API keys for OpenAI, Anthropic and OpenRouter, a local
+ * Ollama model), several configured at once, and a picker for the one the
+ * Coach uses.
  */
 export function CoachSettingsScreen({ userId }: { userId: string }) {
   const query = useQuery(coachReads.provider(userId));
+  // Outside the keyed settings, so an open card stays open when the data changes.
+  const [open, setOpen] = useState<CoachModelKind | null>(null);
   if (query.status === "pending") return <div className="ui"><Loading>Loading the Coach…</Loading></div>;
   if (!query.data) return <LoadFailure error={query.error} onRetry={() => void query.refetch()} />;
-  return <CoachSettings key={JSON.stringify(query.data)} userId={userId} coach={query.data} />;
+  return <CoachSettings userId={userId} coach={query.data} open={open} setOpen={setOpen} />;
 }
 
-type OpenaiMethod = "chatgpt" | "key";
+/** ChatGPT first: it needs no key. */
+const cardKinds = coachCardKinds;
+const cardLabel: Record<CoachModelKind, string> = { ...Object.fromEntries(cardKinds.map(kind => [kind, coachProviderInfo[kind].label])) as Record<CoachModelKind, string>, ollama: "Ollama" };
+const marks: Record<CoachModelKind, { icon: ReactNode; className: string }> = {
+  chatgpt: { icon: <MessageCircle />, className: "bg-provider-chatgpt" },
+  openai: { icon: <Sparkles />, className: "bg-provider-openai" },
+  anthropic: { icon: <Asterisk />, className: "bg-provider-anthropic" },
+  openrouter: { icon: <Route />, className: "bg-provider-openrouter" },
+  ollama: { icon: <Cpu />, className: "bg-provider-ollama" },
+};
 
-function CoachSettings({ userId, coach: state }: { userId: string; coach: CoachDto }) {
-  const saved = state.keyProvider;
+/** The brand icon on a coloured rounded square (theme.css --color-provider-*). */
+function ProviderMark({ kind, size = "md" }: { kind: CoachModelKind; size?: "sm" | "md" }) {
+  return <span aria-hidden="true" className={cn("flex shrink-0 items-center justify-center text-provider-foreground", marks[kind].className,
+    size === "md" ? "size-8 rounded-lg [&_svg]:size-4.5" : "size-6 rounded-md [&_svg]:size-3.5")}>{marks[kind].icon}</span>;
+}
+
+interface Configured { kind: CoachModelKind; dto: CoachProviderDto | null; usable: boolean }
+
+/** Every configured provider (the ChatGPT sign-in too, even expired), for the cards and the picker. */
+function configured(state: CoachDto): Configured[] {
+  const keyed = sortedCoachProviders(state).map(dto => ({ kind: dto.provider, dto, usable: !coachProviderInfo[dto.provider].needsKey || dto.keyHint !== null }));
+  const chatgpt = state.chatgpt && { kind: "chatgpt" as const, dto: { provider: "chatgpt" as const, model: state.chatgpt.model, baseUrl: null, keyHint: null }, usable: state.chatgpt.status === "signed_in" };
+  return chatgpt ? [chatgpt, ...keyed] : keyed;
+}
+
+function statusLine(kind: CoachModelKind, state: CoachDto): string {
+  if (kind === "chatgpt") {
+    if (!state.chatgpt) return "Sign in to use your ChatGPT plan";
+    if (state.chatgpt.status === "expired") return "Sign-in expired";
+    return [`Signed in${state.chatgpt.email ? ` as ${state.chatgpt.email}` : ""}`, state.chatgpt.model].join(" · ");
+  }
+  const saved = state.providers.find(item => item.provider === kind);
+  if (!saved) return kind === "ollama" ? "Add a local model to set up" : "Add API key to set up";
+  if (kind === "ollama") return ["Connected", saved.model, saved.baseUrl].filter(Boolean).join(" · ");
+  if (!saved.keyHint) return "Enter your API key again";
+  return `Connected · key …${saved.keyHint} · ${saved.model}`;
+}
+
+function CoachSettings({ userId, coach: state, open, setOpen }: { userId: string; coach: CoachDto; open: CoachModelKind | null; setOpen: (kind: CoachModelKind | null) => void }) {
+  const set = configured(state);
+  return <div className="ui flex flex-col gap-4" data-coach-settings="">
+    <Hint>The Coach is optional. With an AI provider it explains each goal's status in plain words; everything else works the same without one.</Hint>
+    {set.length > 0 && <ActivePicker userId={userId} state={state} configured={set} />}
+    <ul className="flex flex-col gap-2" aria-label="AI providers">
+      {cardKinds.map(kind => {
+        const isOpen = open === kind;
+        const set_up = set.some(item => item.kind === kind);
+        return <li key={kind} className="rounded-lg border border-border bg-card text-card-foreground" data-coach-card={kind}>
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <ProviderMark kind={kind} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{cardLabel[kind]}</p>
+              <p className={cn("truncate text-xs-plus", statusLine(kind, state) === "Sign-in expired" ? "text-destructive" : "text-muted-foreground")} data-coach-status={kind}>{statusLine(kind, state)}</p>
+            </div>
+            <Button type="button" variant={set_up ? "outline" : "default"} size="sm" aria-expanded={isOpen} aria-controls={`coach-card-${kind}`}
+              data-coach-configure={kind} onClick={() => setOpen(isOpen ? null : kind)}>{isOpen ? "Close" : set_up ? "Manage" : "Configure"}</Button>
+          </div>
+          {isOpen && <div id={`coach-card-${kind}`} className="border-t border-border-subtle px-3 py-3">
+            {kind === "chatgpt"
+              ? <ChatgptSignIn key={JSON.stringify(state.chatgpt)} userId={userId} chatgpt={state.chatgpt} />
+              : <KeyForm key={JSON.stringify(state.providers.find(item => item.provider === kind) ?? null)} userId={userId} kind={kind} saved={state.providers.find(item => item.provider === kind) ?? null} />}
+          </div>}
+        </li>;
+      })}
+    </ul>
+    <Hint>When connected, your goal titles, season targets and status numbers are sent to the active provider to write the explanations. Nothing is sent without a provider.</Hint>
+  </div>;
+}
+
+/**
+ * Ticket 17c: the pill at the top, like a model picker: the active provider's
+ * mark, "Coach model", "Provider · model". Lists only configured providers;
+ * one that cannot run is shown but disabled. A quiet note when the Coach fell back.
+ */
+function ActivePicker({ userId, state, configured: set }: { userId: string; state: CoachDto; configured: Configured[] }) {
   const cache = useQueryClient();
   const writes = coachMutations(coach, cache, userId);
-  // OpenAI offers both its ChatGPT sign-in and an API key; a sign-in (even expired) opens on its tab.
-  const [method, setMethod] = useState<OpenaiMethod>(state.chatgpt || !saved ? "chatgpt" : "key");
-  const [provider, setProvider] = useState<CoachProviderKind>(state.chatgpt ? "openai" : (saved?.provider as CoachProviderKind | undefined) ?? "openai");
-  const [model, setModel] = useState(saved?.model ?? coachProviderInfo.openai.model);
+  const [tested, setTested] = useState<CoachTestResult | null>(null);
+  const pick = useMutation({ mutationFn: writes.setActive, onMutate: () => setTested(null), meta: { action: () => "switch the Coach's provider" } });
+  const test = useMutation({ mutationFn: () => writes.test(), onSuccess: setTested, meta: { action: () => "test the connection" } });
+  const running = state.provider;
+  const shown = running?.provider ?? state.selected;
+  const fellBack = Boolean(state.selected && running?.provider !== state.selected);
+  return <div className="flex flex-col gap-2" data-coach-active="">
+    <div className="flex flex-wrap items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger disabled={pick.isPending} render={<Button type="button" variant="outline" className="h-auto gap-2.5 rounded-full py-1.5 pr-3 pl-1.5" data-coach-picker="" aria-label="Coach model" />}>
+          {shown && <ProviderMark kind={shown} size="sm" />}
+          <span className="flex flex-col items-start leading-tight">
+            <span className="text-xs font-normal text-muted-foreground">Coach model</span>
+            <span className="text-sm font-semibold" data-coach-running="">{running ? `${cardLabel[running.provider]} · ${running.model}` : "None can run"}</span>
+          </span>
+          <ChevronDown className="ml-1 size-4 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-64">
+          <DropdownMenuRadioGroup value={state.selected ?? ""} onValueChange={(value) => { if (value && value !== state.selected) pick.mutate(value as CoachModelKind); }}>
+            {set.map(item => <DropdownMenuRadioItem key={item.kind} value={item.kind} disabled={!item.usable} data-coach-pick={item.kind}>
+              <ProviderMark kind={item.kind} size="sm" />
+              <span>{cardLabel[item.kind]}{item.dto && <span className="text-muted-foreground"> · {item.usable ? item.dto.model : item.kind === "chatgpt" ? "sign-in expired" : "key unreadable"}</span>}</span>
+            </DropdownMenuRadioItem>)}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {running && <Button type="button" size="sm" variant="ghost" data-coach-action="test" disabled={test.isPending} onClick={() => { setTested(null); test.mutate(); }}>
+        {test.isPending ? "Testing…" : "Test connection"}</Button>}
+    </div>
+    {fellBack && state.selected && <Hint data-coach-fallback="">
+      {state.selected === "chatgpt" ? "Your ChatGPT sign-in expired" : `${cardLabel[state.selected]} cannot run now`}{running ? `, so the Coach uses ${cardLabel[running.provider]} for now.` : ". Set up another provider below."}
+    </Hint>}
+    <div aria-live="polite">
+      {tested && (tested.ok ? <p role="status" className="text-xs-plus text-success" data-coach-test="ok">Connected: the model answered.</p>
+        : <FormError>{tested.message ?? "The connection failed."}</FormError>)}
+      {(test.error ?? pick.error) && <FormError>{(test.error ?? pick.error)!.message}</FormError>}
+    </div>
+  </div>;
+}
+
+const keyPlaceholder: Record<CoachProviderKind, string> = { openai: "sk-…", anthropic: "sk-ant-…", openrouter: "sk-or-…", ollama: "" };
+
+/** One keyed or Ollama provider's configuration: key (kept when left empty), model or address, test, disconnect. */
+function KeyForm({ userId, kind, saved }: { userId: string; kind: CoachProviderKind; saved: CoachProviderDto | null }) {
+  const cache = useQueryClient();
+  const writes = coachMutations(coach, cache, userId);
+  const [model, setModel] = useState(saved?.model ?? coachProviderInfo[kind].model);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(saved?.baseUrl ?? ollamaDefaultUrl);
   const [check, setCheck] = useState<string | null>(null);
   const [tested, setTested] = useState<CoachTestResult | null>(null);
-  const save = useMutation({ mutationFn: writes.save, meta: { action: () => "connect the AI provider" } });
-  const disconnect = useMutation({ mutationFn: writes.disconnect, meta: { action: () => "disconnect the AI provider" } });
-  const test = useMutation({ mutationFn: writes.test, onSuccess: setTested, meta: { action: () => "test the connection" } });
+  const save = useMutation({ mutationFn: writes.save, meta: { action: () => `connect ${cardLabel[kind]}` } });
+  const disconnect = useMutation({ mutationFn: () => writes.disconnect(kind), meta: { action: () => `disconnect ${cardLabel[kind]}` } });
+  const test = useMutation({ mutationFn: () => writes.test(kind), onSuccess: setTested, meta: { action: () => "test the connection" } });
   const pending = save.isPending || disconnect.isPending || test.isPending;
-  const local = provider === "ollama";
-  const signIn = provider === "openai" && method === "chatgpt";
-  // The saved key is kept when only the model changes.
-  const keepsKey = saved?.provider === provider && saved.keyHint !== null;
+  const local = kind === "ollama";
+  const keepsKey = saved?.keyHint != null;
 
-  function choose(next: CoachProviderKind) {
-    setProvider(next);
-    setModel(saved?.provider === next ? saved.model : coachProviderInfo[next].model);
-    setApiKey("");
-    setCheck(null);
-  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     setTested(null);
@@ -56,69 +169,37 @@ function CoachSettings({ userId, coach: state }: { userId: string; coach: CoachD
     if (local && !ollamaUrl(baseUrl)) return setCheck("Ollama must run on this computer: use a localhost address.");
     if (!local && !keepsKey && apiKey.trim().length < 8) return setCheck("Enter an API key.");
     setCheck(null);
-    await save.mutateAsync({ provider, model: model.trim(), ...local ? { baseUrl: baseUrl.trim() } : apiKey.trim() ? { apiKey: apiKey.trim() } : {} }).catch(() => undefined);
+    await save.mutateAsync({ provider: kind, model: model.trim(), ...local ? { baseUrl: baseUrl.trim() } : apiKey.trim() ? { apiKey: apiKey.trim() } : {} }).catch(() => undefined);
   }
 
-  return <div className="ui flex flex-col gap-4" data-coach-settings="">
-    <Hint>The Coach is optional. With an AI provider it explains each goal's status in plain words; everything else works the same without one.</Hint>
-    {state.provider && <div className="flex flex-col gap-2">
-      <p className="flex flex-wrap items-center gap-2 text-sm" data-coach-connected="">
-        <Badge variant="success">Connected</Badge>
-        <span><ProviderLine provider={state.provider} /></span>
-        <Button type="button" size="sm" variant="outline" data-coach-action="test" disabled={pending} onClick={() => { setTested(null); test.mutate(); }}>
-          {test.isPending ? "Testing…" : "Test connection"}</Button>
-      </p>
-      {state.provider.provider === "chatgpt" && saved && <Hint>If ChatGPT signs you out, the Coach uses <ProviderLine provider={saved} /> instead.</Hint>}
-      <div aria-live="polite">
-        {tested && (tested.ok ? <p role="status" className="text-xs-plus text-success" data-coach-test="ok">Connected: the model answered.</p>
-          : <FormError>{tested.message ?? "The connection failed."}</FormError>)}
-        {test.error && <FormError>{test.error.message}</FormError>}
-      </div>
-    </div>}
+  return <form className="flex flex-col gap-3" onSubmit={submit} data-coach-form={kind}>
+    {local ? <Field>
+      <FieldLabel htmlFor={`coach-${kind}-base-url`}>Ollama address</FieldLabel>
+      <Input id={`coach-${kind}-base-url`} className="max-w-sm" value={baseUrl} disabled={pending} onChange={event => setBaseUrl(event.target.value)} required maxLength={500} />
+      <FieldDescription>Ollama runs on this computer, so it works only where the todalo server runs locally.</FieldDescription>
+    </Field> : <Field>
+      <FieldLabel htmlFor={`coach-${kind}-api-key`}>API key</FieldLabel>
+      <Input id={`coach-${kind}-api-key`} type="password" autoComplete="off" className="max-w-sm" value={apiKey} disabled={pending} maxLength={500} autoFocus={!saved}
+        placeholder={keepsKey ? `…${saved!.keyHint} (leave empty to keep)` : keyPlaceholder[kind]} onChange={event => setApiKey(event.target.value)} />
+      <FieldDescription>Stored encrypted on the server and never shown again.</FieldDescription>
+    </Field>}
     <Field>
-      <FieldLabel htmlFor="coach-provider">Provider</FieldLabel>
-      <Select items={coachProviderKinds.map(value => ({ value, label: coachProviderInfo[value].label }))} value={provider} disabled={pending}
-        onValueChange={(value) => { if (value) choose(value as CoachProviderKind); }}>
-        <SelectTrigger id="coach-provider" className="w-56"><SelectValue /></SelectTrigger>
-        <SelectContent>{coachProviderKinds.map(value => <SelectItem key={value} value={value}>{coachProviderInfo[value].label}</SelectItem>)}</SelectContent>
-      </Select>
+      <FieldLabel htmlFor={`coach-${kind}-model`}>Model</FieldLabel>
+      <Input id={`coach-${kind}-model`} className="max-w-sm" value={model} disabled={pending} onChange={event => setModel(event.target.value)} required maxLength={200} />
     </Field>
-    {provider === "openai" && <ToggleGroup aria-label="How to connect OpenAI" variant="outline" size="sm" value={[method]} disabled={pending}
-      onValueChange={(next) => { const value = next[0] as OpenaiMethod | undefined; if (value) setMethod(value); }}>
-      <ToggleGroupItem value="chatgpt" className="px-2.5 text-xs-plus" data-coach-method="chatgpt">Sign in with ChatGPT</ToggleGroupItem>
-      <ToggleGroupItem value="key" className="px-2.5 text-xs-plus" data-coach-method="key">Use an API key</ToggleGroupItem>
-    </ToggleGroup>}
-    {signIn ? <ChatgptSignIn userId={userId} chatgpt={state.chatgpt} /> : <form className="flex flex-col gap-3" onSubmit={submit}>
-      {local ? <Field>
-        <FieldLabel htmlFor="coach-base-url">Ollama address</FieldLabel>
-        <Input id="coach-base-url" className="max-w-sm" value={baseUrl} disabled={pending} onChange={event => setBaseUrl(event.target.value)} required maxLength={500} />
-        <FieldDescription>Ollama runs on this computer, so it works only where the todalo server runs locally.</FieldDescription>
-      </Field> : <Field>
-        <FieldLabel htmlFor="coach-api-key">API key</FieldLabel>
-        <Input id="coach-api-key" type="password" autoComplete="off" className="max-w-sm" value={apiKey} disabled={pending} maxLength={500}
-          placeholder={keepsKey ? `…${saved!.keyHint} (leave empty to keep)` : keyPlaceholder[provider]} onChange={event => setApiKey(event.target.value)} />
-        <FieldDescription>Stored encrypted on the server and never shown again.</FieldDescription>
-      </Field>}
-      <Field>
-        <FieldLabel htmlFor="coach-model">Model</FieldLabel>
-        <Input id="coach-model" className="max-w-sm" value={model} disabled={pending} onChange={event => setModel(event.target.value)} required maxLength={200} />
-      </Field>
-      {(check ?? save.error?.message) && <FormError>{check ?? save.error?.message}</FormError>}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" data-coach-action="connect" disabled={pending || !model.trim()}>{saved ? "Save" : "Connect"}</Button>
-        {saved && <Button type="button" variant="ghost" data-coach-action="disconnect" disabled={pending} onClick={() => { setTested(null); disconnect.mutate(); }}>
-          Disconnect {coachProviderInfo[saved.provider].label}</Button>}
-      </div>
-      {disconnect.error && <FormError>{disconnect.error.message}</FormError>}
-    </form>}
-    <Hint>When connected, your goal titles, season targets and status numbers are sent to this provider to write the explanations. Nothing is sent without a provider.</Hint>
-  </div>;
-}
-
-const keyPlaceholder: Record<CoachProviderKind, string> = { openai: "sk-…", anthropic: "sk-ant-…", openrouter: "sk-or-…", ollama: "" };
-
-function ProviderLine({ provider }: { provider: CoachProviderDto }) {
-  return <>{coachProviderInfo[provider.provider].label} · {provider.model}{provider.keyHint && <span className="text-muted-foreground"> · key …{provider.keyHint}</span>}</>;
+    {(check ?? save.error?.message) && <FormError>{check ?? save.error?.message}</FormError>}
+    <div className="flex flex-wrap gap-2">
+      <Button type="submit" data-coach-action="connect" disabled={pending || !model.trim()}>{saved ? "Save" : "Connect"}</Button>
+      {saved && <Button type="button" variant="outline" data-coach-action="test-provider" disabled={pending} onClick={() => { setTested(null); test.mutate(); }}>
+        {test.isPending ? "Testing…" : "Test connection"}</Button>}
+      {saved && <Button type="button" variant="ghost" data-coach-action="disconnect" disabled={pending} onClick={() => { setTested(null); disconnect.mutate(); }}>Disconnect</Button>}
+    </div>
+    <div aria-live="polite">
+      {tested && (tested.ok ? <p role="status" className="text-xs-plus text-success" data-coach-test="ok">Connected: the model answered.</p>
+        : <FormError>{tested.message ?? "The connection failed."}</FormError>)}
+      {(test.error ?? disconnect.error) && <FormError>{(test.error ?? disconnect.error)!.message}</FormError>}
+    </div>
+  </form>;
 }
 
 type Waiting = Required<Pick<ChatgptStartDto, "mode">> & { authorizeUrl: string };
@@ -151,7 +232,9 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
   const paste = useMutation({ mutationFn: writes.completeChatgpt, onSuccess: done, meta: { action: () => "finish the ChatGPT sign-in" } });
   const saveModel = useMutation({ mutationFn: writes.saveChatgptModel, meta: { action: () => "save the ChatGPT model" } });
   const signOut = useMutation({ mutationFn: writes.signOutChatgpt, meta: { action: () => "sign out of ChatGPT" } });
-  const pending = start.isPending || paste.isPending || saveModel.isPending || signOut.isPending;
+  const [tested, setTested] = useState<CoachTestResult | null>(null);
+  const test = useMutation({ mutationFn: () => writes.test("chatgpt"), onSuccess: setTested, meta: { action: () => "test the connection" } });
+  const pending = start.isPending || paste.isPending || saveModel.isPending || signOut.isPending || test.isPending;
 
   useEffect(() => {
     if (!waiting) return;
@@ -164,10 +247,10 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
     // Restarts only for a new sign-in.
   }, [waiting]);
 
-  const error = message ?? start.error?.message ?? paste.error?.message ?? saveModel.error?.message ?? signOut.error?.message;
+  const error = message ?? start.error?.message ?? paste.error?.message ?? saveModel.error?.message ?? signOut.error?.message ?? test.error?.message;
   return <div className="flex flex-col gap-3" data-coach-chatgpt="">
     {chatgpt?.status === "signed_in" ? <>
-      <p className="text-sm">Signed in with ChatGPT{chatgpt.email && <span className="text-muted-foreground"> as {chatgpt.email}</span>}. The Coach uses your ChatGPT plan.</p>
+      <p className="text-sm">Signed in with ChatGPT{chatgpt.email && <span className="text-muted-foreground"> as {chatgpt.email}</span>}. Usage counts against your ChatGPT plan.</p>
       <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); saveModel.mutate(model.trim()); }}>
         <Field>
           <FieldLabel htmlFor="coach-chatgpt-model">Model</FieldLabel>
@@ -175,9 +258,15 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
         </Field>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={pending || !model.trim() || model.trim() === chatgpt.model}>Save</Button>
+          <Button type="button" variant="outline" data-coach-action="test-provider" disabled={pending} onClick={() => { setTested(null); test.mutate(); }}>
+            {test.isPending ? "Testing…" : "Test connection"}</Button>
           <Button type="button" variant="ghost" data-coach-action="chatgpt-sign-out" disabled={pending} onClick={() => signOut.mutate()}>Sign out of ChatGPT</Button>
         </div>
       </form>
+      <div aria-live="polite">
+        {tested && (tested.ok ? <p role="status" className="text-xs-plus text-success" data-coach-test="ok">Connected: the model answered.</p>
+          : <FormError>{tested.message ?? "The connection failed."}</FormError>)}
+      </div>
     </> : waiting ? <>
       <p className="text-sm" aria-live="polite">{waiting.mode === "paste"
         ? "Sign in on OpenAI's page and allow sharing of your ChatGPT plan with todalo. OpenAI then sends your browser to an address starting with http://127.0.0.1 that cannot load. Copy that whole address and paste it here."
@@ -195,13 +284,13 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
         <Button type="button" variant="ghost" onClick={() => { setWaiting(null); setMessage(null); }}>Cancel</Button>
       </div>
     </> : <>
-      {chatgpt?.status === "expired" && <FormError>ChatGPT signed you out. Sign in again; until then the Coach uses your API key, if any.</FormError>}
+      {chatgpt?.status === "expired" && <FormError>ChatGPT signed you out. Sign in again; until then the Coach uses another configured provider, if any.</FormError>}
       <div className="flex flex-wrap gap-2">
         <Button type="button" data-coach-action="chatgpt-sign-in" disabled={pending} onClick={() => { setMessage(null); start.mutate(); }}>
           {start.isPending ? "Starting…" : "Sign in with ChatGPT"}</Button>
         {chatgpt && <Button type="button" variant="ghost" data-coach-action="chatgpt-sign-out" disabled={pending} onClick={() => signOut.mutate()}>Forget ChatGPT sign-in</Button>}
       </div>
-      <Hint>Runs the Coach on your ChatGPT plan instead of an API key. OpenAI asks you to allow sharing of your plan with todalo; usage counts against your plan. OpenAI has not published this sign-in for other apps, so it may change or stop working; an API key keeps the Coach running.</Hint>
+      <Hint>Runs the Coach on your ChatGPT plan instead of an API key. OpenAI asks you to allow sharing of your plan with todalo; usage counts against your plan. OpenAI has not published this sign-in for other apps, so it may change or stop working; another provider keeps the Coach running.</Hint>
     </>}
     {error && <FormError>{error}</FormError>}
   </div>;

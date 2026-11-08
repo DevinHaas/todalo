@@ -351,6 +351,29 @@ export const coachProviders = pgTable("coach_providers", {
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
+// Goals ticket 17c: one saved configuration per provider kind, so several are
+// set up at once. Same columns and sealing as coach_providers; that older
+// one-per-user row is read (never rewritten) as its kind's configuration until
+// this table has one for the same kind.
+export const coachProviderConfigs = pgTable("coach_provider_configs", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider", { enum: ["openai", "anthropic", "openrouter", "ollama"] }).notNull(),
+  model: text("model").notNull(),
+  baseUrl: text("base_url"),
+  encryptedKey: text("encrypted_key"),
+  keyLast4: text("key_last4"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [primaryKey({ columns: [table.userId, table.provider] })]);
+
+// Goals ticket 17c: the provider the user picked for the Coach (a kind, or
+// "chatgpt"). Null or not configured: the most recently configured one.
+export const coachSettings = pgTable("coach_settings", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  activeProvider: text("active_provider", { enum: ["openai", "anthropic", "openrouter", "ollama", "chatgpt"] }),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
 // Goals ticket 18: the user's ChatGPT sign-in, kept beside coach_providers so
 // the saved key stays as the fallback. encryptedTokens seals the access and
 // refresh tokens and their oaiapp_* client ID (COACH_SECRET_KEY); null once
@@ -398,7 +421,7 @@ export const coachExplanations = pgTable("coach_explanations", {
 export const coachDrafts = pgTable("coach_drafts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["day"] }).notNull(),
+  kind: text("kind", { enum: ["day", "week"] }).notNull(),
   period: date("period", { mode: "string" }).notNull(),
   summary: text("summary").notNull(),
   status: text("status", { enum: ["open", "closed"] }).default("open").notNull(),

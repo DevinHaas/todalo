@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  anthropicRequest, chatgptRequest, chatRequest, CoachModelError, createCoachModel, parseAnthropic, parseChatgptStream, explanationFacts, explanationMessages, explanationSchema, failureMessage, ollamaUrl, parseCompletion, parseExplanation, parsePing,
-  type CoachConfig,
+  anthropicRequest, chatgptRequest, chatRequest, CoachModelError, createCoachModel, parseAnthropic, parseChatgptStream, explanationFacts, explanationMessages, explanationSchema, failureMessage, nextCoachProvider, ollamaUrl, parseCompletion, parseExplanation, parsePing, pickCoachProvider,
+  type CoachConfig, type CoachModelKind,
 } from "./coach";
 import { openSecret, sealSecret, CoachSecretError } from "./coach-secret";
 import type { GoalStatusDto, WeekSignals } from "./goal-status";
@@ -201,5 +201,40 @@ describe("coach secrets", () => {
     expect(() => openSecret(sealed, Buffer.alloc(32, 8).toString("base64"))).toThrow();
     expect(() => sealSecret("x", "")).toThrow(CoachSecretError);
     expect(() => sealSecret("x", "short")).toThrow(CoachSecretError);
+  });
+});
+
+describe("pickCoachProvider (ticket 17c)", () => {
+  // "kind@day" configured that day; a trailing "!" cannot run (expired sign-in, undecryptable key).
+  const list = (...items: string[]) => items.map(item => {
+    const [kind, day] = item.replace("!", "").split("@");
+    return { provider: kind as CoachModelKind, configuredAt: new Date(2026, 0, Number(day)), usable: !item.endsWith("!") };
+  });
+  it.each([
+    { configured: [], chosen: null, selected: null, provider: null, fellBack: false },
+    { configured: ["openai@1"], chosen: null, selected: "openai", provider: "openai", fellBack: false },
+    { configured: ["openai@1", "anthropic@2"], chosen: null, selected: "anthropic", provider: "anthropic", fellBack: false },
+    { configured: ["openai@1", "anthropic@2"], chosen: "openai", selected: "openai", provider: "openai", fellBack: false },
+    // The pick was disconnected: the default (most recent), not a fallback.
+    { configured: ["openai@1", "anthropic@2"], chosen: "ollama", selected: "anthropic", provider: "anthropic", fellBack: false },
+    { configured: ["openai@1", "ollama@2", "chatgpt@3!"], chosen: "chatgpt", selected: "chatgpt", provider: "ollama", fellBack: true },
+    { configured: ["openai@1", "chatgpt@3!"], chosen: null, selected: "chatgpt", provider: "openai", fellBack: true },
+    { configured: ["openai@1!", "chatgpt@3!"], chosen: "openai", selected: "openai", provider: null, fellBack: true },
+  ])("$configured, picked $chosen: $provider", ({ configured, chosen, selected, provider, fellBack }) => {
+    const result = pickCoachProvider(list(...configured), chosen as CoachModelKind | null);
+    expect({ selected: result.selected?.provider ?? null, provider: result.provider?.provider ?? null, fellBack: result.fellBack }).toEqual({ selected, provider, fellBack });
+  });
+});
+
+describe("nextCoachProvider (ticket 17c)", () => {
+  it.each([
+    { usable: [], current: null, next: null },
+    { usable: ["openai"], current: "openai", next: "openai" },
+    { usable: ["chatgpt", "openai", "ollama"], current: "chatgpt", next: "openai" },
+    { usable: ["chatgpt", "openai", "ollama"], current: "ollama", next: "chatgpt" },
+    { usable: ["chatgpt", "openai"], current: "anthropic", next: "chatgpt" },
+    { usable: ["chatgpt", "openai"], current: null, next: "chatgpt" },
+  ])("$current in $usable: $next", ({ usable, current, next }) => {
+    expect(nextCoachProvider(usable as CoachModelKind[], current as CoachModelKind | null)).toBe(next);
   });
 });

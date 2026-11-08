@@ -144,8 +144,8 @@ const app = createApi(dependencies)
 })).use(createCoachRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
-  provider: coach.getCoachProvider,
-  keyProvider: coach.getKeyProvider,
+  state: coach.getCoachState,
+  setActive: coach.setCoachActive,
   chatgptAuth: coach.chatgptAuth,
   chatgptClient: coach.getChatgptClient,
   saveChatgptClient: coach.saveChatgptClient,

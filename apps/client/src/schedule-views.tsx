@@ -111,6 +111,8 @@ export interface PlannerSlots {
   toolbar?: ReactNode;
   /** Ticket 19: a Coach draft's pending items, shown dashed until accepted. */
   draft?: DraftBlock[];
+  /** Ticket 20: the week calendar reports the Monday it shows (the week the Coach drafts). */
+  week?(start: Date): void;
 }
 
 /** One pending draft item on the grid: where it puts the task (add, move) or which block it takes off (remove). */
@@ -397,6 +399,8 @@ export function TodaySchedule({ tasks, events = [], slots, now = new Date() }: {
 function WeekSchedule({ tasks, events, anchor, onNavigate, slots, now }: { tasks: TaskDto[]; events: CalendarEventDto[]; anchor: Date; onNavigate: (action: ViewDateAction) => void; slots: ScheduleSlots; now: Date }) {
   const { showCompleted } = useDisplay();
   const days = weekOf(anchor);
+  const shownWeek = dayKey(days[0]!);
+  useEffect(() => { slots.planner?.week?.(parseDayKey(shownWeek)); }, [shownWeek]); // eslint-disable-line react-hooks/exhaustive-deps
   const byDay = tasksByDay(tasks, showCompleted);
   const eventDays = eventsByDay(events);
   const template = gridTemplate(days);
