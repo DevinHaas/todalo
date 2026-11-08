@@ -162,7 +162,7 @@ export function Shell({ account }: { account: Account }) {
 
   return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
-    <aside className="sidebar" aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
+    <aside className="sidebar" data-tauri-drag-region aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
       <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" onClick={() => { setCollapsed(true); setMobileOpen(false); }}><PanelLeft /></button>
       <AccountMenu account={account} onNavigate={() => setMobileOpen(false)} />
       <div className="add-row">
@@ -182,12 +182,12 @@ export function Shell({ account }: { account: Account }) {
       <button type="button" className="nav-item help" onClick={() => { setMobileOpen(false); window.dispatchEvent(new Event("todalo:help")); }}><HelpCircle /><span>Help & resources</span></button>
     </aside>
     <div className="inset">
-      <div className="toolbar">
-        <div className="toolbar-start">
+      <div className="toolbar" data-tauri-drag-region>
+        <div className="toolbar-start" data-tauri-drag-region>
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
           <LayoutSwitcher />
         </div>
-        <div className="toolbar-start"><SyncStatus userId={account.user.id} /><DisplayMenu /></div>
+        <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><DisplayMenu /></div>
       </div>
       <ConnectionStatus />
       <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>

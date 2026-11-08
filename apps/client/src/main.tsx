@@ -16,6 +16,8 @@ theme.apply();
 trackSoftwareKeyboard();
 // Task deep links Rust accepted (cold or warm launch); before render so none waits.
 if (isTauri()) void followNativeLinks();
+// Mac: the window has an overlay title bar (tauri.conf.json); the sidebar and toolbar make room for the traffic lights.
+if (isTauri() && /Mac/.test(navigator.platform) && navigator.maxTouchPoints === 0) document.documentElement.dataset.titlebar = "overlay";
 const root = createRoot(document.getElementById("root")!);
 root.render(<QueryClientProvider client={queries}><App /><Toaster manager={toasts} /></QueryClientProvider>);
 if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());

@@ -32,6 +32,10 @@ dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border: 0; border-radius: .375rem; background: transparent; color: inherit; padding: 0; cursor: pointer; }
 .icon-button:hover:not([aria-disabled]), .nav-item:hover:not([aria-disabled]), .account-trigger:hover { background: var(--sidebar-accent); }
 .sidebar-toggle { align-self: flex-end; }
+/* Mac overlay title bar: traffic lights sit left of the sidebar toggle; with the sidebar hidden the toolbar makes room. */
+html[data-titlebar="overlay"] .sidebar-toggle { width: 2rem; height: 2rem; }
+html[data-titlebar="overlay"] .app-shell[data-collapsed="true"] .toolbar { padding-left: 5.5rem; }
+
 .account-menu { align-self: flex-start; }
 .account-trigger { display: flex; align-items: center; gap: .5rem; padding: .25rem; border: 0; border-radius: .375rem; background: none; color: inherit; font: inherit; font-size: .875rem; text-decoration: none; font-weight: 500; cursor: pointer; }
 .avatar { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); font-size: .875rem; }
