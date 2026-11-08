@@ -59,7 +59,7 @@ export const keyboardCommands: KeyboardCommand[] = [
   command("navigation.ui", "Component gallery", "Navigation", "global", ["o then c"], 5, { availability: "available", note: "The /ui gallery of src/ui components, light and dark (docs/agents/ui.md)." }),
   command("navigation.season", "Season", "Goals", "global", ["g then s"], 5, { availability: "available", note: "Goals ticket 04; passes on while Goals is hidden in Settings." }),
   command("season.start", "Start season", "Goals", "global", ["Shift+b"], 5, { availability: "available", note: "Goals ticket 04: on the Season page before a season is running." }),
-  command("season.add-goal", "New goal in season", "Goals", "global", ["Shift+n"], 5, { availability: "available", note: "Goals ticket 04: on the Season page; creates a goal and adds it to the season. Existing goals have a switch each." }),
+  command("season.add-goal", "New goal in season", "Goals", "global", ["Shift+n"], 5, { availability: "available", note: "Goals ticket 04: on the Season page; creates a goal and adds it to the season. Choosing existing goals happens when starting or ending a season." }),
   command("season.move-target", "Move goal's target", "Goals", "global", ["Shift+m"], 5, { availability: "available", note: "Goals ticket 04: the focused goal on the Season page." }),
   command("season.toggle-tier", "Make goal primary or secondary", "Goals", "global", ["Shift+p"], 5, { availability: "available", note: "Goals ticket 04: the focused goal on the Season page." }),
   command("season.remove-goal", "Include or exclude goal", "Goals", "global", ["Shift+x"], 5, { availability: "available", note: "Goals ticket 05: the focused goal's switch on the Season page; excluding keeps the goal itself." }),

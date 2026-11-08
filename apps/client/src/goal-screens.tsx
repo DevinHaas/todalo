@@ -166,7 +166,6 @@ export function SeasonScreen({ account }: { account: Account }) {
   const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   const seasonId = query.data?.season?.id ?? "";
   const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays), meta: { action: () => "start the season" } });
-  const add = useMutation({ mutationFn: ({ goalId, tier, target }: { goalId: string; tier: SeasonTier; target: string }) => writes.addGoal(seasonId, goalId, tier, target), meta: { action: () => "add the goal to the season" } });
   const goalWrites = useGoalMutations(userId);
   // A goal made on the season page joins this season at once.
   const create = useMutation({ mutationFn: async ({ goal, tier, target }: { goal: NewGoal; tier: SeasonTier; target: string }) => {
@@ -176,13 +175,12 @@ export function SeasonScreen({ account }: { account: Account }) {
   const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch), meta: { action: ({ patch }: { patch: SeasonGoalPatch }) => patch.tier ? `move the goal to ${patch.tier}` : "save the target" } });
   const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId), meta: { action: () => "remove the goal from the season" } });
   const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next), meta: { action: () => "end the season" } });
-  const writing = [start, add, create, update, remove, end];
+  const writing = [start, create, update, remove, end];
   const ritualState = useQuery(ritualReads.state(userId)).data;
   const review = ritualState?.settings.seasonReview.enabled
     ? { due: ritualState.seasonReview.due, done: ritualState.seasonReview.status !== null, onStart: () => openRitual("seasonReview") } : undefined;
   return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
-    onAdd={(goalId, tier, target) => add.mutateAsync({ goalId, tier, target })}
     onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
     onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)} review={review}

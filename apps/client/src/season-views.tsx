@@ -63,10 +63,9 @@ export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Seaso
   return `Day ${day} of ${length} · ${daysLeft ? `${plural(daysLeft, "day")} left` : "last day"}`;
 }
 
-export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCreate, onUpdate, onRemove, onEnd, review, write }: {
+export function SeasonView({ state, goals, past, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, write }: {
   state: ReadState<CurrentSeasonDto>; goals: GoalDto[]; past: SeasonDto[]; onRetry: () => void;
   onStart: (startDate: string, lengthDays: number) => Promise<unknown>;
-  onAdd: (goalId: string, tier: SeasonTier, target: string) => Promise<unknown>;
   /** Creates a goal and adds it to this season. */
   onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>;
   onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>;
@@ -86,7 +85,6 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
     <StartSeason onStart={onStart} write={write} />
     <PastSeasons seasons={past} />
   </div>;
-  const available = goals.filter(goal => !season.goals.some(item => item.goalId === goal.id));
   const primary = season.goals.filter(goal => goal.tier === "primary");
   const { day, length, phase } = season.progress;
   return <div className="ui max-w-page" data-season-id={season.id}>
@@ -111,11 +109,8 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
     </PageSection>}
     <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
       empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
-    <PageSection title="Not in this season" aria-label="Other goals">
-      {available.length ? <List>{available.map(goal => <OtherGoalRow key={goal.id} goal={goal} onAdd={onAdd} write={write} />)}</List>
-        : <Hint className="py-2">Every active goal is in this season.</Hint>}
-      <NewSeasonGoal count={goals.length} onCreate={onCreate} write={write} />
-    </PageSection>
+    {/* Choosing among existing goals belongs to setting up a season (Start / End season); a running season only adds new ones. */}
+    <NewSeasonGoal count={goals.length} onCreate={onCreate} write={write} />
     <PastSeasons seasons={past} />
     <Dialog open={ending} onOpenChange={setEnding}>
       <DialogContent size="xl">{ending && <EndSeason season={season} onEnd={onEnd} onCancel={() => setEnding(false)} write={write} />}</DialogContent>
@@ -273,30 +268,6 @@ function StartSeason({ onStart, write }: { onStart: (startDate: string, lengthDa
 const escape = (close: () => void) => (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
 
 /** A goal not in the season: switching it on asks for its tier and target, then adds it. */
-function OtherGoalRow({ goal, onAdd, write }: { goal: GoalDto; onAdd: (goalId: string, tier: SeasonTier, target: string) => Promise<unknown>; write: Write }) {
-  const [open, setOpen] = useState(false);
-  const [tier, setTier] = useState<SeasonTier>("primary");
-  const [target, setTarget] = useState("");
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    try { await onAdd(goal.id, tier, target); } catch { /* shown through write.error */ }
-  }
-  return <ListRow data-season-goal={goal.id} className="items-start gap-3">
-    <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked={open} disabled={write.pending} onCheckedChange={setOpen} />
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <GoalTitle goalId={goal.id} color={goal.color} icon={goal.icon} title={goal.title} />
-      {open && <form ref={releaseFocus} className="flex flex-col items-start gap-2" onSubmit={submit} onKeyDown={escape(() => setOpen(false))}>
-        <TierToggle value={tier} onChange={setTier} />
-        <Input aria-label={`Target for ${goal.title} this season`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="Target: what does done look like by the season's end?" />
-        <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={write.pending || !target.trim()}>Add to season</Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-        </div>
-      </form>}
-    </div>
-  </ListRow>;
-}
-
 /** A brand-new goal made here: created with its colour and added to this season in one step. */
 function NewSeasonGoal({ count, onCreate, write }: { count: number; onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>; write: Write }) {
   const [open, setOpen] = useState(false);
