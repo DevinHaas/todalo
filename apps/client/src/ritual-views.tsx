@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarRange, CircleCheck, Moon, Sunrise, X } from "lucide-react";
+import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { CalendarCheck, CalendarDays, CalendarPlus, CalendarRange, CircleCheck, GripVertical, ListTree, MessageSquare, Moon, Sunrise, X } from "lucide-react";
 import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RatingHistoryItem, type RitualKind, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
 import { GoalDot } from "./goal-views";
 import type { CandidateReason } from "./schedule";
 import {
-  Badge, Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
+  Badge, Button, ButtonGroup, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Popover, PopoverContent, PopoverTrigger, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
   SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, Toggle, cn, sidebarItemClassName,
 } from "./ui";
 
@@ -225,6 +225,9 @@ export interface CheckInCandidate {
   id: string; title: string; reason: CandidateReason;
   goal: { id: string; title: string; color: string } | null;
   labels: { id: string; name: string }[];
+  project: string | null;
+  /** Open sub-tasks and comments on the task (shown so nothing hidden gets scheduled blind). */
+  subtasks: number; comments: number;
   /** The suggested time today (HH:MM): the next free slot. */
   slot: string;
 }
@@ -257,9 +260,11 @@ function candidateChips(items: CheckInCandidate[]) {
  * schedule with the unscheduled sidebar beside it (`onPlan` opens it) and Done.
  * Skip records a skip; closing keeps nothing (do it later).
  */
-export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, onPlan, onDone, onSkip, onClose }: {
+export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, onDragStart, onPlan, onDone, onSkip, onClose }: {
   candidates: CheckInCandidate[]; status: RunStatus | null; pending: boolean;
   onSchedule: (id: string, time: string) => void; onDue: (id: string, day: string) => void;
+  /** Starts dragging a suggestion onto today's calendar (shown beside the Check-in). */
+  onDragStart: (id: string, event: ReactPointerEvent) => void;
   onPlan: () => void; onDone: () => void; onSkip: () => void; onClose: () => void;
 }) {
   const [step, setStep] = useState<"candidates" | "schedule">("candidates");
@@ -280,7 +285,7 @@ export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, o
     {status && <Hint>Today's Check-in is already {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</Hint>}
     {step === "candidates" ? <div className="flex flex-col gap-3" data-ritual-step="candidates">
       <h3 className="text-sm font-semibold">What should happen today?</h3>
-      <Hint>Your Inbox, overdue and due-today tasks without a time, goal tasks first. Schedule one at a time today, give it a due date, or leave it.</Hint>
+      <Hint>Your Inbox, overdue and due-today tasks without a time, goal tasks first. Drag one onto the calendar, schedule it at a time today, give it a due date, or leave it.</Hint>
       {searchable && <div className="flex flex-col gap-2" data-check-in-search="">
         <Input type="search" aria-label="Search tasks to plan" placeholder={`Search ${open.length} tasks`} value={text} onChange={event => setText(event.target.value)} />
         <div className="flex flex-wrap gap-1" role="group" aria-label="Filter tasks to plan">{candidateChips(open).map(([chip, name]) =>
@@ -289,16 +294,34 @@ export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, o
       </div>}
       {shown.length ? <ul className="flex flex-col gap-2" aria-label="Tasks to plan">{shown.map(item => {
         const time = times[item.id] ?? item.slot;
-        return <li key={item.id} className="flex flex-col gap-2 rounded-md border border-border-subtle p-3" data-check-in-candidate={item.id}>
-          <div className="flex items-center gap-2 text-sm">
-            {item.goal && <GoalDot color={item.goal.color} />}<span className="min-w-0 flex-1 truncate" title={item.goal ? `${item.title} · ${item.goal.title}` : item.title}>{item.title}</span>
-            <Badge variant="outline">{reasonLabels[item.reason]}</Badge>
+        // Hierarchy: title first; why it's listed and what it holds quiet below; the schedule control grouped on one line.
+        return <li key={item.id} className="group relative flex cursor-grab touch-pan-y select-none flex-col gap-2 rounded-md border border-border-subtle bg-background py-2.5 pr-2 pl-5 hover:border-border"
+          data-check-in-candidate={item.id} onPointerDown={event => { if (!(event.target as HTMLElement).closest("input, button, [role=dialog]")) onDragStart(item.id, event); }}>
+          <GripVertical aria-hidden="true" className="absolute top-3 left-0.5 size-4 text-subtle-foreground opacity-0 group-hover:opacity-100" />
+          <div className="flex min-w-0 flex-col gap-1">
+              <span className="truncate text-sm font-medium" title={item.title}>{item.title}</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span className={cn(item.reason === "overdue" && "font-medium text-destructive")}>{reasonLabels[item.reason]}</span>
+                {item.goal && <span className="flex items-center gap-1"><GoalDot color={item.goal.color} />{item.goal.title}</span>}
+                {item.project && <span className="truncate">{item.project}</span>}
+                {item.labels.map(label => <span key={label.id}>@{label.name}</span>)}
+                {item.subtasks > 0 && <span className="flex items-center gap-0.5" title={`${item.subtasks} open sub-tasks`}><ListTree aria-hidden="true" className="size-3" />{item.subtasks}<span className="sr-only"> sub-tasks</span></span>}
+                {item.comments > 0 && <span className="flex items-center gap-0.5" title={`${item.comments} comments`}><MessageSquare aria-hidden="true" className="size-3" />{item.comments}<span className="sr-only"> comments</span></span>}
+              </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input type="time" aria-label={`Time for ${item.title}`} className="w-28" required value={time} onChange={event => { const value = event.target.value; if (value) setTimes(all => ({ ...all, [item.id]: value })); }} />
-            <Button type="button" size="sm" onClick={() => onSchedule(item.id, time)} data-ritual-action="schedule">Schedule today</Button>
-            <Input type="date" aria-label={`Due date for ${item.title}`} className="w-36" onChange={event => { if (event.target.value) onDue(item.id, event.target.value); }} />
-            <Button type="button" variant="ghost" size="sm" onClick={() => setLeft(all => new Set(all).add(item.id))} data-ritual-action="leave">Leave</Button>
+          <div className="flex items-center gap-0.5">
+            <ButtonGroup>
+              <Input type="time" aria-label={`Time for ${item.title}`} className="h-7 w-[5.75rem] text-xs" required value={time} onChange={event => { const value = event.target.value; if (value) setTimes(all => ({ ...all, [item.id]: value })); }} />
+              <Button type="button" variant="outline" size="sm" onClick={() => onSchedule(item.id, time)} data-ritual-action="schedule"><CalendarPlus />Today</Button>
+            </ButtonGroup>
+            <span className="flex-1" />
+            <Popover>
+              <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Due date for ${item.title}`} title="Give it a due date"><CalendarDays /></Button>} />
+              <PopoverContent className="w-auto p-2">
+                <Input type="date" aria-label={`Due date for ${item.title}`} onChange={event => { if (event.target.value) onDue(item.id, event.target.value); }} />
+              </PopoverContent>
+            </Popover>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Leave ${item.title}`} title="Leave it for now" onClick={() => setLeft(all => new Set(all).add(item.id))} data-ritual-action="leave"><X /></Button>
           </div>
         </li>;
       })}</ul> : <Hint>{open.length ? "No task matches the search or filters." : "Nothing waiting: no Inbox, overdue or due-today tasks without a time."}</Hint>}

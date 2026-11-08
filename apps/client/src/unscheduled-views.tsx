@@ -4,7 +4,7 @@
 // a scheduled task dragged back onto the sidebar is unscheduled. Its Schedule
 // menu does the same from the keyboard. Pure view: the screen passes the
 // tasks, choices and writes.
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { CalendarPlus, Flag, GripVertical, X } from "lucide-react";
 import {
   Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Hint, List, ListRow,
@@ -27,8 +27,14 @@ const columnAt = (x: number, y: number) => document.elementFromPoint(x, y)?.clos
  * there); elsewhere a title chip follows the pointer. Release over a column
  * calls `drop` with the column's day key and the offset in it.
  */
+// Shared by every drag source (the unscheduled sidebar, the Check-in) so the schedule draws the ghost whichever started it.
+let incoming: IncomingTask | null = null;
+const watchers = new Set<() => void>();
+const setOver = (next: IncomingTask | null) => { incoming = next; watchers.forEach(watcher => watcher()); };
+const watch = (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; };
+
 export function useTaskDrag(drop: (task: TaskDto, day: string, y: number) => void) {
-  const [over, setOver] = useState<IncomingTask | null>(null);
+  const over = useSyncExternalStore(watch, () => incoming);
   const [chip, setChip] = useState<{ task: TaskDto; x: number; y: number } | null>(null);
   const start = (task: TaskDto, event: ReactPointerEvent) => {
     if (event.button !== 0 || event.pointerType === "touch") return;
