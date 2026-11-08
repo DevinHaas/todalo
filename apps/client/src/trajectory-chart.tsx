@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { goalColorValue } from "./goals";
 import { bandLabels, statusRules, type GoalStatusDto, type SeasonGoalDto } from "./seasons";
-import { GoalIcon, GoalStatusBadge } from "./goal-views";
+import { GoalIcon } from "./goal-views";
 import { Button, Hint } from "./ui";
 
 // Goals ticket 16: one line per goal across the season's weeks over the three
@@ -71,7 +71,7 @@ export function TrajectoryChart({ goals, statuses, day, length }: { goals: Seaso
     <figcaption className="flex flex-wrap gap-1" aria-label="Goals in the chart">
       {lines.map(({ goal, status }) => <Button key={goal.goalId} variant="ghost" size="sm" className="font-normal" data-season-chart-goal={goal.goalId}
         aria-label={`${goal.title}: ${bandLabels[status.band]}. Open goal`} onClick={() => open(goal.goalId)}>
-        <GoalIcon color={goal.color} icon={goal.icon} /><span className="max-w-40 truncate">{goal.title}</span><GoalStatusBadge status={status} />
+        <GoalIcon color={goal.color} icon={goal.icon} /><span className="max-w-40 truncate">{goal.title}</span>
       </Button>)}
     </figcaption>
   </figure>;
