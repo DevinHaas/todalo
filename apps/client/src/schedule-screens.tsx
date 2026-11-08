@@ -1,14 +1,16 @@
 // Upcoming and Today's calendar layouts (ticket 16). Both read the Today query:
 // it is the full owned-task collection (getTasksForUser), exactly what the legacy
 // Upcoming page loaded, so every task write already refreshes these views.
-import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { goalReads, metadataReads, projectReads, reads } from "./runtime";
+import { coach, coachReads, goalReads, metadataReads, projectReads, reads } from "./runtime";
+import { draftMutations } from "./coach";
+import { DraftPanel } from "./draft-views";
 import { goalColorValue } from "./goals";
 import { useTaskWrites } from "./task-writes";
 import { Composer, Failure, listTree, TaskDialogs, TaskRow, type SelectionSlots } from "./views";
-import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type PlannerSlots, type ScheduleSlots } from "./schedule-views";
+import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type DraftBlock, type PlannerSlots, type ScheduleSlots } from "./schedule-views";
 import {
   addDays, datedDetails, dayKey, dropRange, dueDetails, durationOf, goalOf, labels, nextFreeSlot, parseDayKey, planGroupOrder, planGroups, rescheduledDetails,
   sameDay, scheduledDetails, startOfDay, unscheduledDetails,
@@ -97,8 +99,15 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const drag = useTaskDrag((task, day, y) => { const { start, end } = dropRange(parseDayKey(day), y, durationOf(task)); quietly(write(task, scheduledDetails(task, start, end))); });
   const find = (id: string) => tasks.find(task => task.id === id);
   const withTask = (run: (task: TaskDto) => void) => (id: string) => { const task = find(id); if (task) run(task); };
+  const coachDraft = useCoachDraft(userId, enabled);
+  const taskColor = (task: TaskDto) => { const goal = goalOf(task, goalList, goalLinks); return goal ? goalColorValue(goal.color) : null; };
   const slots: PlannerSlots = {
-    taskColor: (task) => { const goal = goalOf(task, goalList, goalLinks); return goal ? goalColorValue(goal.color) : null; },
+    taskColor,
+    draft: coachDraft.blocks((item) => {
+      const task = item.taskId ? find(item.taskId) : undefined;
+      const goal = item.goalId ? goalList.find(entry => entry.id === item.goalId) : undefined;
+      return task ? taskColor(task) : goal ? goalColorValue(goal.color) : null;
+    }),
     change: (task, start, end) => write(task, scheduledDetails(task, start, end)),
     unschedule: (task) => quietly(write(task, unscheduledDetails(task))),
     incoming: drag.over,
@@ -135,7 +144,7 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     key={ritual ? "check-in" : "plan"}
     groups={Object.fromEntries(planGroupOrder.map(group => [group, groups[group].map(rowOf)])) as Record<keyof typeof groups, PlanRowData[]>}
     projects={(projects.data ?? []).map(project => ({ id: project.id, name: project.name }))}
-    projectId={projectId} onProject={setProjectId} ritual={ritual}
+    projectId={projectId} onProject={setProjectId} ritual={ritual} coach={coachDraft.panel}
     slots={{
       onComplete: withTask(writes.actions.complete), onOpen: withTask(openTask),
       onDragStart: (id, event) => { const task = find(id); if (task) drag.start(task, event); },
@@ -155,6 +164,35 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     </div>
   </div>}</>;
   return { slots, overlay, sidebar: sidebar || null };
+}
+
+/**
+ * Goals ticket 19: the Coach's open draft of today, for the Plan sidebar and
+ * the schedule. Nothing at all without a connected provider.
+ */
+function useCoachDraft(userId: string, enabled: boolean) {
+  const cache = useQueryClient();
+  const provider = useQuery({ ...coachReads.provider(userId), enabled });
+  const connected = Boolean(provider.data?.provider);
+  const drafts = useQuery({ ...coachReads.drafts(userId), enabled: enabled && connected });
+  const writes = useMemo(() => draftMutations(coach, cache, userId), [cache, userId]);
+  const [message, setMessage] = useState<string | null>(null);
+  const draftDay = useMutation({
+    mutationFn: writes.draftDay, onMutate: () => setMessage(null),
+    onSuccess: (result) => setMessage(result.draft ? null : result.message ?? null),
+    meta: { action: () => "draft your day" },
+  });
+  const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
+  const today = dayKey(new Date());
+  const draft = drafts.data?.drafts.find(item => item.kind === "day" && item.period === today) ?? null;
+  const pending = draft?.items.filter(item => item.state === "pending") ?? [];
+  return {
+    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => pending.map(item => ({
+      itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
+    })),
+    panel: connected ? <DraftPanel draft={draft} drafting={draftDay.isPending} deciding={decide.isPending} message={message}
+      onDraft={() => draftDay.mutate()} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })} /> : null,
+  };
 }
 
 /** The week Calendar layout of a project or task collection (legacy ViewSwitcher default CalendarView); a slot adds a task to the project (else the Inbox). */

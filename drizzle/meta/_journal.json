@@ -211,6 +211,20 @@
       "when": 1794149489922,
       "tag": "0029_coach_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794169038848,
+      "tag": "0030_coach_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794170132955,
+      "tag": "0031_coach_chatgpt",
+      "breakpoints": true
     }
   ]
 }

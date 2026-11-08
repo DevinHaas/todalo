@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-chatgpt-sign-in"
+description = "Enables the start_chatgpt_sign_in command without any pre-configured scope."
+commands.allow = ["start_chatgpt_sign_in"]
+
+[[permission]]
+identifier = "deny-start-chatgpt-sign-in"
+description = "Denies the start_chatgpt_sign_in command without any pre-configured scope."
+commands.deny = ["start_chatgpt_sign_in"]

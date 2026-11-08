@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  chatRequest, CoachModelError, createCoachModel, explanationFacts, explanationMessages, explanationSchema, failureMessage, ollamaUrl, parseCompletion, parseExplanation, parsePing,
+  anthropicRequest, chatgptRequest, chatRequest, CoachModelError, createCoachModel, parseAnthropic, parseChatgptStream, explanationFacts, explanationMessages, explanationSchema, failureMessage, ollamaUrl, parseCompletion, parseExplanation, parsePing,
   type CoachConfig,
 } from "./coach";
 import { openSecret, sealSecret, CoachSecretError } from "./coach-secret";
@@ -30,6 +30,90 @@ describe("chatRequest", () => {
 
   it("omits response_format without a schema", () => {
     expect(JSON.parse(chatRequest(config("openai"), { messages: [] }).init.body).response_format).toBeUndefined();
+  });
+});
+
+describe("anthropicRequest (ticket 17b)", () => {
+  const messages = [{ role: "system" as const, content: "Be brief." }, { role: "user" as const, content: "hi" }];
+  it.each([
+    ["with a schema", explanationSchema, { effort: "low", format: { type: "json_schema", schema: explanationSchema.schema } }],
+    ["without a schema", undefined, { effort: "low" }],
+  ])("%s", (_name, schema, outputConfig) => {
+    const request = anthropicRequest(config("anthropic", { model: "claude-sonnet-5-5" }), { messages, schema });
+    expect(request.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(request.init.headers).toEqual({ "content-type": "application/json", "anthropic-version": "2026-10-21", "x-api-key": "sk-test-1234" });
+    const body = JSON.parse(request.init.body);
+    // System text moves to `system`; no sampling parameters (the 2026-10-21 API version rejects them).
+    expect(body).toEqual({ model: "claude-sonnet-5-5", max_tokens: 8_000, system: "Be brief.", messages: [{ role: "user", content: "hi" }], output_config: outputConfig });
+  });
+});
+
+describe("parseAnthropic", () => {
+  const message = (stop: string, content: unknown) => ({ stop_reason: stop, content });
+  it.each([
+    ["text after thinking", message("end_turn", [{ type: "thinking", thinking: "" }, { type: "text", text: '{"ok":true}' }]), '{"ok":true}'],
+    ["two text blocks", message("end_turn", [{ type: "text", text: '{"ok":' }, { type: "text", text: "true}" }]), '{"ok":true}'],
+    ["cut off", message("max_tokens", [{ type: "text", text: '{"ok"' }]), null],
+    ["refused", message("refusal", []), null],
+    ["no text", message("end_turn", [{ type: "thinking", thinking: "" }]), null],
+    ["an error body", { type: "error", error: { type: "overloaded_error" } }, null],
+  ])("%s", (_name, body, expected) => {
+    if (expected === null) expect(() => parseAnthropic(body)).toThrow(CoachModelError);
+    else expect(parseAnthropic(body)).toBe(expected);
+  });
+});
+
+describe("chatgptRequest (ticket 18)", () => {
+  it("calls the Responses API with the account header, todalo's own instructions and a strict schema", () => {
+    const request = chatgptRequest(config("chatgpt", { model: "gpt-5.5", apiKey: "access", accountId: "acct-1" }),
+      { messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "hi" }], schema: explanationSchema });
+    expect(request.url).toBe("https://chatgpt.com/backend-api/codex/responses");
+    expect(request.init.headers).toEqual({ "content-type": "application/json", accept: "text/event-stream", originator: "todalo", authorization: "Bearer access", "chatgpt-account-id": "acct-1" });
+    expect(JSON.parse(request.init.body)).toEqual({
+      model: "gpt-5.5", instructions: "Be brief.", store: false, stream: true, reasoning: { effort: "low" },
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }],
+      text: { format: { type: "json_schema", name: "goal_status_explanation", strict: true, schema: explanationSchema.schema } },
+    });
+  });
+});
+
+describe("parseChatgptStream", () => {
+  const sse = (...events: unknown[]) => events.map(event => `event: x\ndata: ${JSON.stringify(event)}\n\n`).join("");
+  const done = (text: string, status = "completed") => ({ type: "response.completed", response: { status, output: [{ type: "reasoning" }, { type: "message", content: [{ type: "output_text", text }] }] } });
+  it.each([
+    ["the completed response", sse({ type: "response.output_text.delta", delta: "{" }, done('{"ok":true}')), '{"ok":true}'],
+    ["deltas when the completed output is empty", sse({ type: "response.output_text.delta", delta: '{"ok":' }, { type: "response.output_text.delta", delta: "true}" }, { type: "response.completed", response: { status: "completed", output: [] } }), '{"ok":true}'],
+    ["a broken line is skipped", `data: {nope\n${sse(done("x"))}`, "x"],
+    ["failed", sse({ type: "response.failed", response: {} }), null],
+    ["incomplete", sse({ type: "response.incomplete", response: {} }), null],
+    ["never completed", sse({ type: "response.output_text.delta", delta: "x" }), null],
+    ["not a stream", "<html>blocked</html>", null],
+  ])("%s", (_name, stream, expected) => {
+    if (expected === null) expect(() => parseChatgptStream(stream)).toThrow(CoachModelError);
+    else expect(parseChatgptStream(stream)).toBe(expected);
+  });
+});
+
+describe("createCoachModel", () => {
+  const fake = (response: Response) => { const seen: string[] = []; return { seen, fetcher: (async (url: string) => { seen.push(url); return response; }) as unknown as typeof fetch }; };
+  it.each([
+    ["anthropic", config("anthropic"), new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: "a" }] })), "https://api.anthropic.com/v1/messages", "a"],
+    ["chatgpt", config("chatgpt"), new Response(`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "c" }] }] } })}\n`), "https://chatgpt.com/backend-api/codex/responses", "c"],
+    ["openai", config("openai"), new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "o" } }] })), "https://api.openai.com/v1/chat/completions", "o"],
+  ])("routes %s to its adapter", async (_name, cfg, response, url, text) => {
+    const { seen, fetcher } = fake(response);
+    expect(await createCoachModel(cfg, fetcher).complete({ messages: [{ role: "user", content: "hi" }] })).toBe(text);
+    expect(seen).toEqual([url]);
+  });
+  it.each([
+    [config("chatgpt"), 401, "ChatGPT signed you out. Sign in again in Settings › Coach."],
+    [config("chatgpt"), 429, "You reached your ChatGPT plan's usage limit. Try again later."],
+    [config("anthropic"), 401, "The provider rejected the API key."],
+    [config("anthropic"), 402, "The provider is rate limiting this key or it is out of credit."],
+    [config("anthropic"), 529, "The provider is unavailable. Try again later."],
+  ])("maps %o %i", async (cfg, status, message) => {
+    const { fetcher } = fake(new Response("{}", { status }));
+    await expect(createCoachModel(cfg, fetcher).complete({ messages: [] })).rejects.toThrow(message);
   });
 });
 

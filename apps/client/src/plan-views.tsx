@@ -4,7 +4,7 @@
 // onto a slot (with a ghost there), scheduled from its popover, or opened. A
 // scheduled task dragged back onto the sidebar is unscheduled. While the
 // Check-in runs it heads the same sidebar. Pure view: the screen passes rows and writes.
-import { useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CalendarClock, CalendarDays, Check, ChevronDown, Ellipsis, GitBranch, Hash, Inbox, MessageSquare, Plus, X } from "lucide-react";
 import {
   Button, ButtonGroup, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Field, FieldLabel, Hint, Input, List, Popover,
@@ -188,12 +188,14 @@ function PlanRow({ row, slots, checkIn, onLeave }: { row: PlanRowData; slots: Pl
  * The Plan sidebar. `ritual` (the Check-in) adds its header, progress and Done;
  * its "Leave" drops a row from this run only.
  */
-export function PlanSidebar({ groups, projects, projectId, onProject, slots, ritual }: {
+export function PlanSidebar({ groups, projects, projectId, onProject, slots, ritual, coach }: {
   groups: Record<PlanGroup, PlanRowData[]>;
   projects: { id: string; name: string }[];
   /** undefined: all projects; null: the Inbox. */
   projectId: string | null | undefined; onProject(projectId: string | null | undefined): void;
   slots: PlanSlots; ritual?: PlanRitual | null;
+  /** Ticket 19: the Coach's draft of today (only with a provider connected). */
+  coach?: ReactNode;
 }) {
   const [closed, setClosed] = useState<ReadonlySet<PlanGroup>>(new Set());
   const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
@@ -221,6 +223,7 @@ export function PlanSidebar({ groups, projects, projectId, onProject, slots, rit
       <Hint>What should happen today? Drag tasks onto the calendar or schedule them from their row.</Hint>
       {ritual.status && <Hint className="text-xs">Already {ritual.status === "completed" ? "done" : "skipped"} today; Done again replaces it.</Hint>}
     </div>}
+    {coach}
     <Select items={projectItems} value={projectId === undefined ? ALL : projectId === null ? INBOX : projectId}
       onValueChange={(next) => { if (next) onProject(next === ALL ? undefined : next === INBOX ? null : next as string); }}>
       <SelectTrigger size="sm" aria-label="Project" className="w-fit max-w-full shrink-0 gap-1.5" data-plan-filter="first"><Hash className="text-subtle-foreground" /><SelectValue /></SelectTrigger>

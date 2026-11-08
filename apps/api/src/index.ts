@@ -18,6 +18,8 @@ import { createRitualRoutes } from "./ritual-routes";
 import { createCoachRoutes } from "./coach-routes";
 import * as coach from "@todalo/server/coach-store";
 import { createCoachModel } from "@todalo/server/coach";
+import { createDraftRoutes } from "./draft-routes";
+import * as drafts from "@todalo/server/drafts-store";
 import * as rituals from "@todalo/server/rituals";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
@@ -143,6 +145,12 @@ const app = createApi(dependencies)
   verify,
   allowedOrigins: dependencies.allowedOrigins,
   provider: coach.getCoachProvider,
+  keyProvider: coach.getKeyProvider,
+  chatgptAuth: coach.chatgptAuth,
+  chatgpt: coach.getChatgpt,
+  saveChatgpt: coach.saveChatgpt,
+  setChatgptModel: coach.setChatgptModel,
+  removeChatgpt: coach.removeChatgpt,
   save: coach.saveCoachProvider,
   remove: coach.removeCoachProvider,
   model: (config) => createCoachModel(config),
@@ -150,6 +158,16 @@ const app = createApi(dependencies)
   statusInputs: rituals.getStatusInputs,
   cached: coach.getCachedExplanations,
   cache: coach.cacheExplanation,
+})).use(createDraftRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  model: (config) => createCoachModel(config),
+  dayContext: drafts.getDayContext,
+  drafts: drafts.getOpenDrafts,
+  save: drafts.saveDraft,
+  tasks: drafts.getDraftTasks,
+  resolve: drafts.resolveDraft,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

@@ -111,7 +111,7 @@ The build is staged (each stage usable on its own, everything before stage 5 usa
 
 ### Coach and Drafts
 
-69. As a user, I want to connect an AI provider with my ChatGPT sign-in, an API key, or a local Ollama model, so that the Coach runs on what I already have.
+69. As a user, I want to connect an AI provider with my ChatGPT sign-in, an API key, or a local Ollama model, so that the Coach runs on what I already have. (Supported API keys: OpenAI, Anthropic (ticket 17b), OpenRouter. ChatGPT sign-in (ticket 18) is built but stays off until the server sets `CHATGPT_OAUTH_CLIENT_ID`; see ticket 18 for the open decision. Claude.ai subscription sign-in stays out of scope.)
 70. As a user without any AI provider, I want every non-Coach feature to work, so that AI is a bonus, not a requirement.
 71. As a user, I want the Coach to explain each goal's status in plain words, so that I understand the number.
 72. As a user, I want the Coach to give specific recommendations ("Move Ship v2 to your mornings — its Thursday afternoon tasks were moved three times since week 5"), so that I know how to get back on track.

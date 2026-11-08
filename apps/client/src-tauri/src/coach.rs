@@ -22,10 +22,13 @@ pub struct CoachProvider {
 }
 
 fn provider_body(provider: CoachProvider) -> Result<Value, &'static str> {
-    if !["openai", "openrouter", "ollama"].contains(&provider.provider.as_str())
+    if !["openai", "anthropic", "openrouter", "ollama"].contains(&provider.provider.as_str())
         || provider.model.trim().is_empty()
         || provider.model.len() > 200
-        || provider.base_url.as_ref().is_some_and(|url| url.len() > 500)
+        || provider
+            .base_url
+            .as_ref()
+            .is_some_and(|url| url.len() > 500)
         || provider.api_key.as_ref().is_some_and(|key| key.len() > 500)
     {
         return Err(INVALID);
@@ -76,16 +79,134 @@ pub async fn coach_explanations(
     state: tauri::State<'_, NativeAuth>,
     time_zone: String,
 ) -> Result<Value, String> {
-    let query = reqwest::Url::parse_with_params("http://x/", [("timeZone", time_zone)])
-        .map_err(|_| INVALID)?;
-    let path = format!(
-        "/api/v1/coach/explanations?{}",
-        query.query().unwrap_or_default()
-    );
     state
-        .read(&path)
+        .read(&zoned("/api/v1/coach/explanations", time_zone)?)
         .await?
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// Goals ticket 18: starts a ChatGPT sign-in; `{ signIn, message? }` with the code to enter at OpenAI.
+#[tauri::command]
+pub async fn start_chatgpt_sign_in(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .write(Method::POST, "/api/v1/coach/chatgpt/start", None)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// `{ status, message? }`: pending until the user approved at OpenAI.
+#[tauri::command]
+pub async fn poll_chatgpt_sign_in(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .write(Method::POST, "/api/v1/coach/chatgpt/poll", None)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// The model the ChatGPT sign-in runs; null (404) when not signed in.
+#[tauri::command]
+pub async fn save_chatgpt_model(
+    state: tauri::State<'_, NativeAuth>,
+    model: String,
+) -> Result<Option<Value>, String> {
+    let model = model.trim();
+    if model.is_empty() || model.len() > 200 {
+        return Err(INVALID.to_owned());
+    }
+    Ok(state
+        .write(
+            Method::PUT,
+            "/api/v1/coach/chatgpt",
+            Some(serde_json::json!({ "model": model })),
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn sign_out_chatgpt(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .write(Method::DELETE, "/api/v1/coach/chatgpt", None)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// Opens OpenAI's device sign-in page in the system browser. A fixed URL; this
+/// is not a general URL opener.
+#[tauri::command]
+pub fn open_chatgpt_sign_in(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url("https://auth.openai.com/codex/device", None::<&str>)
+        .map_err(|_| "Cannot open the browser. Go to auth.openai.com/codex/device.".to_owned())
+}
+
+/// `/api/v1/coach/...?timeZone=…` for the webview's IANA zone.
+fn zoned(path: &str, time_zone: String) -> Result<String, String> {
+    let query = reqwest::Url::parse_with_params("http://x/", [("timeZone", time_zone)])
+        .map_err(|_| INVALID)?;
+    Ok(format!("{path}?{}", query.query().unwrap_or_default()))
+}
+
+/// Draft and item IDs are server UUIDs: anything else could reach another path.
+fn draft_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 100 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// Goals ticket 19: the open Coach drafts from today on.
+#[tauri::command]
+pub async fn coach_drafts(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+) -> Result<Value, String> {
+    state
+        .read(&zoned("/api/v1/coach/drafts", time_zone)?)
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// `{ draft, message? }`; null (404) when no provider is connected.
+#[tauri::command]
+pub async fn draft_day(
+    state: tauri::State<'_, NativeAuth>,
+    time_zone: String,
+) -> Result<Option<Value>, String> {
+    Ok(state
+        .write(
+            Method::POST,
+            &zoned("/api/v1/coach/drafts/day", time_zone)?,
+            None,
+        )
+        .await?)
+}
+
+/// Accepts or declines some items of a draft (all without `item_ids`).
+#[tauri::command]
+pub async fn decide_draft(
+    state: tauri::State<'_, NativeAuth>,
+    draft_id: String,
+    accept: bool,
+    item_ids: Option<Vec<String>>,
+) -> Result<Option<Value>, String> {
+    let body = decision_body(&draft_id, item_ids)?;
+    let path = format!(
+        "/api/v1/coach/drafts/{draft_id}/{}",
+        if accept { "accept" } else { "decline" }
+    );
+    Ok(state.write(Method::POST, &path, Some(body)).await?)
+}
+
+fn decision_body(id: &str, item_ids: Option<Vec<String>>) -> Result<Value, &'static str> {
+    if !self::draft_id(id)
+        || item_ids.as_ref().is_some_and(|ids| {
+            ids.is_empty() || ids.len() > 20 || !ids.iter().all(|item| self::draft_id(item))
+        })
+    {
+        return Err(INVALID);
+    }
+    Ok(match item_ids {
+        Some(ids) => serde_json::json!({ "itemIds": ids }),
+        None => serde_json::json!({}),
+    })
 }
 
 #[cfg(test)]
@@ -109,8 +230,20 @@ mod tests {
             .is_err()
         );
         let unknown: CoachProvider =
-            serde_json::from_value(serde_json::json!({ "provider": "anthropic", "model": "m" }))
+            serde_json::from_value(serde_json::json!({ "provider": "chatgpt", "model": "m" }))
                 .unwrap();
         assert_eq!(provider_body(unknown), Err(INVALID));
+    }
+
+    #[test]
+    fn draft_decisions_carry_only_plain_ids() {
+        assert_eq!(decision_body("d-1", None).unwrap(), serde_json::json!({}));
+        assert_eq!(
+            decision_body("d-1", Some(vec!["i-1".into()])).unwrap(),
+            serde_json::json!({ "itemIds": ["i-1"] })
+        );
+        assert_eq!(decision_body("../tasks", None), Err(INVALID));
+        assert_eq!(decision_body("d-1", Some(vec![])), Err(INVALID));
+        assert_eq!(decision_body("d-1", Some(vec!["a/b".into()])), Err(INVALID));
     }
 }

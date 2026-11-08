@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-decide-draft"
+description = "Enables the decide_draft command without any pre-configured scope."
+commands.allow = ["decide_draft"]
+
+[[permission]]
+identifier = "deny-decide-draft"
+description = "Denies the decide_draft command without any pre-configured scope."
+commands.deny = ["decide_draft"]

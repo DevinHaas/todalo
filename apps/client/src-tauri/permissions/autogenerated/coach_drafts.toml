@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-coach-drafts"
+description = "Enables the coach_drafts command without any pre-configured scope."
+commands.allow = ["coach_drafts"]
+
+[[permission]]
+identifier = "deny-coach-drafts"
+description = "Denies the coach_drafts command without any pre-configured scope."
+commands.deny = ["coach_drafts"]

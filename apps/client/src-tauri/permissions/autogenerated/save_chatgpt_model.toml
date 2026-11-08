@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-chatgpt-model"
+description = "Enables the save_chatgpt_model command without any pre-configured scope."
+commands.allow = ["save_chatgpt_model"]
+
+[[permission]]
+identifier = "deny-save-chatgpt-model"
+description = "Denies the save_chatgpt_model command without any pre-configured scope."
+commands.deny = ["save_chatgpt_model"]

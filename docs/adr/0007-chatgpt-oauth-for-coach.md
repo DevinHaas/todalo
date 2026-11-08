@@ -18,3 +18,9 @@ changes it.
   fallbacks, so the Coach keeps working if ChatGPT sign-in breaks or is revoked.
 - Re-check OpenAI's terms before any public distribution; if they prohibit this,
   switch to driving the user's own Codex on Mac.
+
+## Note, 8 November 2026 (tickets 17b and 18)
+
+- Anthropic is supported by API key only (Messages API with structured outputs).
+- ChatGPT sign-in is built on OpenAI's device code flow, so web, Mac and iPhone need no redirect back to todalo. The tokens are encrypted on the server with COACH_SECRET_KEY, because the server makes the model calls. The Coach falls back to the saved key when the sign-in is refused or signed out.
+- OpenAI has no OAuth client program for third-party apps. The only client ID that works is the Codex CLI's, so using it presents todalo as Codex. That goes further than this ADR's "not explicitly permitted". The code therefore ships with no client ID and an honest `originator: todalo`. The sign-in is offered only when `CHATGPT_OAUTH_CLIENT_ID` is set. Whether to set it is the user's decision, recorded in ticket 18.

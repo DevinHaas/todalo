@@ -4,14 +4,14 @@
 
 **Blocked by:** 17, 12
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Draft = staged add/move/remove operations with rationale, validated as a whole
-- [ ] Dashed rendering of drafted items on the schedule
-- [ ] Accept or decline all, or per item; applied atomically
-- [ ] Calendar and tasks unchanged until accepted
-- [ ] Coach can only write drafts
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Draft = staged add/move/remove operations with rationale, validated as a whole
+- [x] Dashed rendering of drafted items on the schedule
+- [x] Accept or decline all, or per item; applied atomically
+- [x] Calendar and tasks unchanged until accepted
+- [x] Coach can only write drafts
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

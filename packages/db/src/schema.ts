@@ -339,14 +339,28 @@ export const progressRatings = pgTable("progress_ratings", {
 
 // Goals ticket 17: the user's Coach AI provider (one per user). The API key is
 // AES-256-GCM encrypted with COACH_SECRET_KEY and never sent back; keyLast4 is
-// the "…last4" hint. Ticket 18 adds ChatGPT sign-in as another provider value.
+// the "…last4" hint. Ticket 17b adds Anthropic (a text column: no migration).
 export const coachProviders = pgTable("coach_providers", {
   userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
-  provider: text("provider", { enum: ["openai", "openrouter", "ollama"] }).notNull(),
+  provider: text("provider", { enum: ["openai", "anthropic", "openrouter", "ollama"] }).notNull(),
   model: text("model").notNull(),
   baseUrl: text("base_url"),
   encryptedKey: text("encrypted_key"),
   keyLast4: text("key_last4"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+// Goals ticket 18: the user's ChatGPT sign-in, kept beside coach_providers so
+// the saved key stays as the fallback. encryptedTokens seals the access and
+// refresh tokens (COACH_SECRET_KEY); null once OpenAI refused a refresh (expired).
+export const coachChatgpt = pgTable("coach_chatgpt", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  encryptedTokens: text("encrypted_tokens"),
+  accountId: text("account_id"),
+  email: text("email"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -360,6 +374,40 @@ export const coachExplanations = pgTable("coach_explanations", {
   text: text("text").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [primaryKey({ columns: [table.userId, table.goalId] })]);
+
+// Goals ticket 19: a Coach Draft, staged changes to tasks and their times that
+// touch nothing until the user accepts them (ADR 0005, stage-then-commit).
+// `period` is the planned day (kind "day"; ticket 20 adds "week"). One open
+// draft per kind and period: drafting again closes the previous one.
+export const coachDrafts = pgTable("coach_drafts", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["day"] }).notNull(),
+  period: date("period", { mode: "string" }).notNull(),
+  summary: text("summary").notNull(),
+  status: text("status", { enum: ["open", "closed"] }).default("open").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, table => [index("coach_drafts_user_status_idx").on(table.userId, table.status)]);
+
+// One operation of a draft. startAt/endAt are the task's NEW dueDate/dueDateEnd
+// ("remove" takes it off the schedule: its day at midnight, no end). taskId is
+// null for a new task; seenUpdatedAt is the version drafted from (stale check on accept).
+export const coachDraftItems = pgTable("coach_draft_items", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  draftId: text("draft_id").notNull().references(() => coachDrafts.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  op: text("op", { enum: ["add", "move", "remove"] }).notNull(),
+  taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  startAt: timestamp("start_at").notNull(),
+  endAt: timestamp("end_at"),
+  goalId: text("goal_id").references(() => goals.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),
+  seenUpdatedAt: timestamp("seen_updated_at"),
+  state: text("state", { enum: ["pending", "accepted", "declined"] }).default("pending").notNull(),
+}, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
 
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

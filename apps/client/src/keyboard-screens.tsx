@@ -435,9 +435,22 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // On Settings › Coach the button shows the result inline; elsewhere a toast does.
       "coach.test": () => {
         if (press(document.querySelector("[data-coach-settings]"), '[data-coach-action="test"]') !== false) return;
+        if (modalOpen()) return false;
         const failed = (description?: string) => toasts.add({ title: "Coach connection failed", description: description ?? "Try again, or check Settings › Coach." });
         void coach.test().then(result => result.ok ? toasts.add({ title: "Coach connected", description: "The model answered." }) : failed(result.message), () => failed());
       },
+      // Goals ticket 18: ChatGPT sign-in on Settings › Coach.
+      "coach.chatgpt-sign-in": () => {
+        const settings = document.querySelector("[data-coach-settings]");
+        if (!settings) return modalOpen() ? false : latest.current.openSettings("coach");
+        return press(settings, '[data-coach-action="chatgpt-sign-in"]');
+      },
+      "coach.chatgpt-open": () => press(document.querySelector("[data-coach-chatgpt]"), '[data-coach-action="chatgpt-open"]'),
+      "coach.chatgpt-sign-out": () => press(document.querySelector("[data-coach-chatgpt]"), '[data-coach-action="chatgpt-sign-out"]'),
+      // Goals ticket 19: the Coach's draft of today in the Plan sidebar.
+      "coach.draft-day": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-day"]'),
+      "coach.accept-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="accept-all"]'),
+      "coach.decline-draft": () => press(document.querySelector("[data-coach-draft]"), '[data-draft-action="decline-all"]'),
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 13: the Weekly review's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),
