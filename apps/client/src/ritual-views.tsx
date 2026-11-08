@@ -5,7 +5,7 @@ import { GoalDot } from "./goal-views";
 import type { CandidateReason } from "./schedule";
 import {
   Badge, Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
-  SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, cn, sidebarItemClassName,
+  SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, Toggle, cn, sidebarItemClassName,
 } from "./ui";
 
 // Pure ritual views (goals ticket 11): no runtime imports. Built only from src/ui (docs/agents/ui.md).
@@ -223,11 +223,33 @@ export const seasonReviewCopy = (range: string): RitualCopy => ({
 /** Ticket 14b: one task the Check-in suggests for today. */
 export interface CheckInCandidate {
   id: string; title: string; reason: CandidateReason;
-  goal: { title: string; color: string } | null;
+  goal: { id: string; title: string; color: string } | null;
+  labels: { id: string; name: string }[];
   /** The suggested time today (HH:MM): the next free slot. */
   slot: string;
 }
 const reasonLabels: Record<CandidateReason, string> = { overdue: "Overdue", today: "Due today", inbox: "Inbox" };
+
+/** Above this many suggestions the Check-in shows a search box and filter chips. */
+export const candidateSearchFrom = 11;
+/** Each chip is "reason:x", "goal:id" or "label:id". Text matches the title; chips OR within a kind, AND across kinds. */
+export function filterCandidates(items: CheckInCandidate[], text: string, chips: ReadonlySet<string>) {
+  const needle = text.trim().toLowerCase();
+  const picked = (kind: string) => [...chips].filter(chip => chip.startsWith(`${kind}:`)).map(chip => chip.slice(kind.length + 1));
+  const reasons = picked("reason"), goals = picked("goal"), tags = picked("label");
+  return items.filter(item => (!needle || item.title.toLowerCase().includes(needle))
+    && (!reasons.length || reasons.includes(item.reason))
+    && (!goals.length || (item.goal !== null && goals.includes(item.goal.id)))
+    && (!tags.length || item.labels.some(label => tags.includes(label.id))));
+}
+/** The chips worth offering: only reasons, goals and labels some suggestion has. */
+function candidateChips(items: CheckInCandidate[]) {
+  const chips = new Map<string, string>();
+  for (const item of items) chips.set(`reason:${item.reason}`, reasonLabels[item.reason]);
+  for (const item of items) if (item.goal) chips.set(`goal:${item.goal.id}`, item.goal.title);
+  for (const item of items) for (const label of item.labels) chips.set(`label:${label.id}`, `@${label.name}`);
+  return [...chips];
+}
 
 /**
  * Ticket 14b: the Check-in plans today. First the tasks worth scheduling today
@@ -243,7 +265,12 @@ export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, o
   const [step, setStep] = useState<"candidates" | "schedule">("candidates");
   const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
   const [times, setTimes] = useState<Record<string, string>>({});
-  const shown = candidates.filter(item => !left.has(item.id));
+  const [text, setText] = useState("");
+  const [chips, setChips] = useState<ReadonlySet<string>>(new Set());
+  const open = candidates.filter(item => !left.has(item.id));
+  const searchable = open.length >= candidateSearchFrom;
+  const shown = searchable ? filterCandidates(open, text, chips) : open;
+  const toggle = (chip: string) => setChips(all => { const next = new Set(all); if (!next.delete(chip)) next.add(chip); return next; });
   return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label="Check-in" data-ritual-panel="checkIn"
     title="Check-in" actions={<>
       <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onSkip} data-ritual-action="skip">Skip</Button>
@@ -254,6 +281,12 @@ export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, o
     {step === "candidates" ? <div className="flex flex-col gap-3" data-ritual-step="candidates">
       <h3 className="text-sm font-semibold">What should happen today?</h3>
       <Hint>Your Inbox, overdue and due-today tasks without a time, goal tasks first. Schedule one at a time today, give it a due date, or leave it.</Hint>
+      {searchable && <div className="flex flex-col gap-2" data-check-in-search="">
+        <Input type="search" aria-label="Search tasks to plan" placeholder={`Search ${open.length} tasks`} value={text} onChange={event => setText(event.target.value)} />
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter tasks to plan">{candidateChips(open).map(([chip, name]) =>
+          <Toggle key={chip} variant="outline" size="sm" pressed={chips.has(chip)} onPressedChange={() => toggle(chip)} data-check-in-chip={chip}>{name}</Toggle>)}
+        </div>
+      </div>}
       {shown.length ? <ul className="flex flex-col gap-2" aria-label="Tasks to plan">{shown.map(item => {
         const time = times[item.id] ?? item.slot;
         return <li key={item.id} className="flex flex-col gap-2 rounded-md border border-border-subtle p-3" data-check-in-candidate={item.id}>
@@ -268,7 +301,7 @@ export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, o
             <Button type="button" variant="ghost" size="sm" onClick={() => setLeft(all => new Set(all).add(item.id))} data-ritual-action="leave">Leave</Button>
           </div>
         </li>;
-      })}</ul> : <Hint>Nothing waiting: no Inbox, overdue or due-today tasks without a time.</Hint>}
+      })}</ul> : <Hint>{open.length ? "No task matches the search or filters." : "Nothing waiting: no Inbox, overdue or due-today tasks without a time."}</Hint>}
       <Button type="button" size="sm" className="self-end" onClick={() => { setStep("schedule"); onPlan(); }} data-ritual-action="next">Next</Button>
     </div> : <div className="flex flex-col gap-3" data-ritual-step="schedule">
       <h3 className="text-sm font-semibold">Today's schedule</h3>

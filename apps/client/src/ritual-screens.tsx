@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
-import { goalReads, reads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { goalReads, metadataReads, reads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
 import { seasonMutations, type NextSeason } from "./seasons";
 import { EndSeasonStep, seasonRange } from "./season-views";
 import { addDays, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
@@ -136,6 +136,7 @@ function CheckInRitual({ userId, state, onPlan, onClose }: { userId: string; sta
   const goals = useQuery(goalReads.list(userId)).data;
   const links = useQuery(goalReads.links(userId)).data ?? { projects: [], tasks: [] };
   const writes = useTaskWrites(userId);
+  const labelList = useQuery(metadataReads.list(userId)).data?.labels ?? [];
   const { record } = useRitualWrites(userId);
   const goalList = goals?.hidden ? [] : goals?.goals ?? [];
   const items = new Set([state.checkIn.taskId, state.eveningReview.taskId].filter((id): id is string => id !== null));
@@ -147,7 +148,8 @@ function CheckInRitual({ userId, state, onPlan, onClose }: { userId: string; sta
   const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "checkIn", period, ...run }); onClose(); };
   return <CheckInPanel key={period} status={status} pending={record.isPending}
     candidates={candidates.map(({ task, reason, goal }) => ({
-      id: task.id, title: task.title, reason, goal: goal && { title: goal.title, color: goalColorValue(goal.color) }, slot: labels.time(nextFreeSlot(tasks, durationOf(task)).start),
+      id: task.id, title: task.title, reason, goal: goal && { id: goal.id, title: goal.title, color: goalColorValue(goal.color) },
+      labels: labelList.filter(label => task.labelIds.includes(label.id)), slot: labels.time(nextFreeSlot(tasks, durationOf(task)).start),
     }))}
     onSchedule={(id, time) => {
       const task = find(id);

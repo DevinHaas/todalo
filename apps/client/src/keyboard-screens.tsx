@@ -423,6 +423,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // Goals ticket 14b: the Check-in's suggested task with focus inside it, else the first.
       "ritual.schedule-candidate": () => press(candidate(), '[data-ritual-action="schedule"]'),
       "ritual.leave-candidate": () => press(candidate(), '[data-ritual-action="leave"]'),
+      "ritual.search-candidates": () => { const field = document.querySelector<HTMLInputElement>("[data-ritual-panel] [data-check-in-search] input"); if (!field) return false; field.focus(); },
       "ritual.next": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="next"], [data-ritual-action="done"]'),
       "ritual.weekly-review": () => withRituals(state => state.settings.weeklyReview.enabled ? openRitual("weeklyReview") : ritualOff("Weekly review")),
       "ritual.season-review": () => withRituals(state => !state.settings.seasonReview.enabled ? ritualOff("Season review")
