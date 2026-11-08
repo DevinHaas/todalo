@@ -73,6 +73,7 @@ describe("season statuses", () => {
     ],
     ratings: [{ goalId: "fit", day: "2026-03-03", rating: "solid" }, { goalId: "fit", day: "2026-03-10", rating: "little" }, { goalId: "v2", day: "2026-02-28", rating: "massive" }],
     milestones: [{ goalId: "v2", criteria: [{ text: "Tagged", done: true }], done: true, completedAt: at("2026-03-09T10:00:00Z") }],
+    reviewed: true,
   };
   const statuses = seasonStatuses({ startDate: "2026-03-01", lengthDays: 28, today: "2026-03-12", now: at("2026-03-12T12:00:00Z"), zone, goalIds: ["fit", "v2"], inputs });
 
@@ -86,6 +87,12 @@ describe("season statuses", () => {
   it("counts a reached milestone in the week its task was done; ratings outside the season are ignored", () => {
     // Week 1 empty; week 2: one task and the milestone → (0.3 × 1/3 + 0.2) / 0.5.
     expect(statuses.v2!.weeks).toEqual([0, 0.6]);
+  });
+
+  it("is too early until the season's first Weekly review, whatever the scores", () => {
+    const before = seasonStatuses({ startDate: "2026-03-01", lengthDays: 28, today: "2026-03-12", now: at("2026-03-12T12:00:00Z"), zone, goalIds: ["fit"], inputs: { ...inputs, reviewed: false } }).fit!;
+    expect(before.band).toBe("too_early");
+    expect(before.weeks).toEqual(statuses.fit!.weeks);
   });
 
   it("is too early in the first days and has no weeks before the start", () => {

@@ -16,7 +16,7 @@ const goals = [
 let seasons: Season[] = [];
 let rows: Row[] = [];
 let clock = new Date("2026-02-21T12:00:00Z");
-const noInputs = (): StatusInputs => ({ links: { projects: [], tasks: [] }, tasks: [], ratings: [], milestones: [] });
+const noInputs = (): StatusInputs => ({ links: { projects: [], tasks: [] }, tasks: [], ratings: [], milestones: [], reviewed: false });
 let statusInputs: Record<string, StatusInputs> = {};
 beforeEach(() => {
   statusInputs = {};
@@ -328,6 +328,7 @@ describe("goal status on the current season", () => {
         done("d", "2026-02-09T09:00:00Z"), done("e", "2026-02-10T09:00:00Z"), done("f", "2026-02-11T09:00:00Z")],
       ratings: [{ goalId: "alice-fit", day: "2026-02-02", rating: "massive" }, { goalId: "alice-fit", day: "2026-02-15", rating: "solid" }],
       milestones: [],
+      reviewed: true,
     };
   });
 
@@ -337,6 +338,13 @@ describe("goal status on the current season", () => {
     expect(Object.keys(result).sort()).toEqual(["alice-fit", "alice-v2"]);
     expect(result["alice-fit"]).toMatchObject({ band: "on_track", weeks: [1, 1, 0.43] });
     expect(result["alice-v2"]).toEqual({ band: "off_track", score: 0, weeks: [0, 0, 0], projection: 0 });
+  });
+
+  it("shows Too early before the season's first Weekly review", async () => {
+    statusInputs.alice = { ...statusInputs.alice!, reviewed: false };
+    const result = await statuses();
+    expect(result["alice-fit"]!.band).toBe("too_early");
+    expect(result["alice-fit"]!.weeks).toEqual([1, 1, 0.43]);
   });
 
   it("shows Too early in the first week, and is the same on every read", async () => {
@@ -350,6 +358,6 @@ describe("goal status on the current season", () => {
   it("reads only the signed-in user's inputs", async () => {
     await start("bob", { startDate: "2026-02-01", lengthDays: 84 });
     rows.push({ id: "sg-bob-read", userId: "bob", seasonId: "season-2", goalId: "bob-read", tier: "primary", target: "x", carriedFromId: null });
-    expect(await statuses("bob")).toEqual({ "bob-read": { band: "off_track", score: 0, weeks: [0, 0, 0], projection: 0 } });
+    expect(await statuses("bob")).toEqual({ "bob-read": { band: "too_early", score: 0, weeks: [0, 0, 0], projection: 0 } });
   });
 });

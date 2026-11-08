@@ -104,7 +104,10 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
     </AlertDescription></Alert></div>}
     {write.error && <FormError>{write.error}</FormError>}
     {season.goals.length > 0 && <PageSection title="Trajectory" aria-label="Trajectory">
-      <TrajectoryChart goals={season.goals} statuses={season.statuses} day={phase === "upcoming" ? 0 : day} length={length} />
+      {/* The trajectory waits for measurement: no band (all Too early) means no line or projection worth reading yet. */}
+      {Object.values(season.statuses).some(status => status.band !== "too_early")
+        ? <TrajectoryChart goals={season.goals} statuses={season.statuses} day={phase === "upcoming" ? 0 : day} length={length} />
+        : <Hint className="py-2" data-trajectory-pending="">Your trajectory appears after your first Weekly review, once a week of ratings and tasks has been measured. Until then every goal shows Too early.</Hint>}
     </PageSection>}
     <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
       empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />

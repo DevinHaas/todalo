@@ -147,7 +147,7 @@ export async function getSeasonReviewInputs(userId: string): Promise<SeasonRevie
  */
 export async function getStatusInputs(userId: string, { startDate, lengthDays }: { startDate: string; lengthDays: number }): Promise<StatusInputs> {
   const from = new Date(`${addDays(startDate, -1)}T00:00:00Z`), to = new Date(`${addDays(startDate, lengthDays + 1)}T00:00:00Z`);
-  const [links, seasonTasks, ratings, milestones] = await Promise.all([
+  const [links, seasonTasks, ratings, milestones, reviews] = await Promise.all([
     getGoalLinks(userId),
     db.select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, completedAt: tasks.completedAt }).from(tasks)
       .where(and(eq(tasks.userId, userId), or(and(gte(tasks.dueDate, from), lt(tasks.dueDate, to)), and(gte(tasks.completedAt, from), lt(tasks.completedAt, to))))),
@@ -158,10 +158,14 @@ export async function getStatusInputs(userId: string, { startDate, lengthDays }:
     db.select({ goalId: goalTasks.goalId, criteria: goalTasks.milestoneCriteria, status: tasks.status, completedAt: tasks.completedAt }).from(goalTasks)
       .innerJoin(tasks, eq(tasks.id, goalTasks.taskId))
       .where(and(eq(goalTasks.userId, userId), isNotNull(goalTasks.milestoneCriteria))),
+    db.select({ id: ritualRuns.id }).from(ritualRuns)
+      .where(and(eq(ritualRuns.userId, userId), eq(ritualRuns.kind, kinds.weeklyReview), eq(ritualRuns.status, "completed"),
+        between(ritualRuns.period, addDays(startDate, -6), addDays(startDate, lengthDays - 1)))).limit(1),
   ]);
   return {
     links, tasks: seasonTasks, ratings,
     milestones: milestones.map(row => ({ goalId: row.goalId, criteria: row.criteria ?? [], done: row.status === "done", completedAt: row.completedAt })),
+    reviewed: reviews.length > 0,
   };
 }
 

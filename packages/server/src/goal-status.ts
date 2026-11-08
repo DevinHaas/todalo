@@ -76,7 +76,8 @@ const slopeOf = (scores: number[]) => {
 };
 
 /** One goal's status from its weeks so far (oldest first), on season day `day` of `length`. */
-export function goalStatus({ day, length, weeks }: { day: number; length: number; weeks: WeekSignals[] }): GoalStatusDto {
+/** `reviewed`: the season has a completed Weekly review; before it the measurement is too thin to read a band from. */
+export function goalStatus({ day, length, weeks, reviewed = true }: { day: number; length: number; weeks: WeekSignals[]; reviewed?: boolean }): GoalStatusDto {
   const scores = weeks.map(weekScore);
   // Recent weeks count more; a just-started week counts only its share of days.
   const recent = weeks.map((week, index) => ({ score: scores[index]!, weight: (statusRules.recentWeights[weeks.length - 1 - index] ?? 0) * week.elapsed }));
@@ -85,7 +86,7 @@ export function goalStatus({ day, length, weeks }: { day: number; length: number
   // The trend runs over finished weeks only: a just-started week reads near zero and would drag every projection down.
   const finished = scores.filter((_score, index) => weeks[index]!.elapsed >= 1);
   const projection = round(clamp(score + slopeOf(finished) * statusRules.projectionDamping * Math.max(0, length - day) / 7));
-  return { band: bandOf(score, day, length), score, weeks: scores, projection };
+  return { band: reviewed ? bandOf(score, day, length) : "too_early", score, weeks: scores, projection };
 }
 
 /** The raw inputs for every goal of one season (rituals.ts reads them). */
@@ -94,6 +95,8 @@ export interface StatusInputs {
   ratings: { goalId: string; day: string; rating: ProgressRating }[];
   /** Milestone tasks; a reached one counts in the week its task was completed. */
   milestones: { goalId: string; criteria: CriterionDto[]; done: boolean; completedAt: Date | null }[];
+  /** A Weekly review was completed in this season: until then every goal is Too early and the trajectory stays hidden. */
+  reviewed: boolean;
 }
 
 /**
@@ -123,5 +126,5 @@ export function seasonStatuses({ startDate, lengthDays, today, now, zone, goalId
       });
     }
   }
-  return Object.fromEntries(goalIds.map(id => [id, goalStatus({ day, length: lengthDays, weeks: perGoal.get(id)! })]));
+  return Object.fromEntries(goalIds.map(id => [id, goalStatus({ day, length: lengthDays, weeks: perGoal.get(id)!, reviewed: inputs.reviewed })]));
 }
