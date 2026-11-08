@@ -7,6 +7,8 @@ import { AccountTransportError, nativeAccountError } from "./errors";
 
 export type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier };
 export { primaryGuideline, seasonLengths, tooManyPrimary } from "../../../packages/server/src/season-dto";
+export type { GoalBand, GoalStatusDto } from "../../../packages/server/src/goal-status";
+export { bandLabels, statusRules } from "../../../packages/server/src/goal-status";
 export interface SeasonGoalPatch { tier?: SeasonTier; target?: string }
 /** The season started when the current one ends, with the goals carried into it. */
 export interface NextSeason { startDate: string; lengthDays: number; goals: { goalId: string; tier: SeasonTier; target: string }[] }

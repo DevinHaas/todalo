@@ -370,6 +370,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // The focused goal's switch: included goals leave the season, others open their tier and target.
       "season.remove-goal": () => press(document.activeElement?.closest("[data-season-goal]") ?? null, '[data-season-goal-action="include"]'),
       "season.end": () => press(document.querySelector("main"), '[data-season-action="end"]'),
+      "season.chart": () => { const first = document.querySelector<HTMLElement>("main [data-season-chart-goal]"); if (!first) return false; first.focus(); },
       // d: a focused row's deadline wins; focus the page (Escape) to sort.
       "project.sort-date": () => sort("date", true), "project.sort-name": () => sort("name"), "project.sort-priority": () => sort("priority"),
       // Next layout (the toolbar arrow); focus returns to the list when the focused element left with the old layout.

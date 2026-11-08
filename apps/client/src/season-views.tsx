@@ -2,8 +2,9 @@ import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "re
 import { Link, NavLink } from "react-router";
 import { CalendarRange, History, Pencil, Plus } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
-import { ColorPicker, FormError, GoalIcon, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
-import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
+import { TrajectoryChart } from "./trajectory-chart";
+import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type GoalStatusDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import {
@@ -102,7 +103,10 @@ export function SeasonView({ state, goals, past, onRetry, onStart, onAdd, onCrea
       {primary.length} primary goals. Around {primaryGuideline} keeps your best time protected; consider making some secondary.
     </AlertDescription></Alert></div>}
     {write.error && <FormError>{write.error}</FormError>}
-    <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
+    {season.goals.length > 0 && <PageSection title="Trajectory" aria-label="Trajectory">
+      <TrajectoryChart goals={season.goals} statuses={season.statuses} day={phase === "upcoming" ? 0 : day} length={length} />
+    </PageSection>}
+    <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
       empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
     <PageSection title="Not in this season" aria-label="Other goals">
       {available.length ? <List>{available.map(goal => <OtherGoalRow key={goal.id} goal={goal} onAdd={onAdd} write={write} />)}</List>
@@ -319,8 +323,8 @@ function NewSeasonGoal({ count, onCreate, write }: { count: number; onCreate: (g
 }
 
 /** One goal in the season: switch it off to remove it (the goal stays), change its tier, move its target (the text is replaced). */
-function SeasonGoalRow({ goal, onUpdate, onRemove, write }: {
-  goal: SeasonGoalDto; onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>; onRemove: (goalId: string) => Promise<unknown>; write: Write;
+function SeasonGoalRow({ goal, status, onUpdate, onRemove, write }: {
+  goal: SeasonGoalDto; status?: GoalStatusDto; onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>; onRemove: (goalId: string) => Promise<unknown>; write: Write;
 }) {
   const [editing, setEditing] = useState(false);
   const [target, setTarget] = useState(goal.target);
@@ -333,7 +337,7 @@ function SeasonGoalRow({ goal, onUpdate, onRemove, write }: {
     <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked disabled={write.pending}
       onCheckedChange={() => void onRemove(goal.goalId).catch(() => undefined)} />
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <GoalTitle goalId={goal.goalId} color={goal.color} icon={goal.icon} title={goal.title} archived={goal.archived} />
+      <div className="flex flex-wrap items-center gap-2"><GoalTitle goalId={goal.goalId} color={goal.color} icon={goal.icon} title={goal.title} archived={goal.archived} />{status && <GoalStatusBadge status={status} />}</div>
       {editing ? <form className="flex gap-2" onSubmit={submit} onKeyDown={escape(() => setEditing(false))}>
         <Input aria-label={`Target for ${goal.title}`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} />
         <Button type="submit" disabled={write.pending || !target.trim()}>Save</Button>

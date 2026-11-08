@@ -88,7 +88,8 @@ export const ritualQueries = (transport: RitualTransport) => ({
  */
 export function ritualMutations(transport: RitualTransport, cache: QueryClient, userId: string) {
   const key = ritualKeys.all(userId);
-  const refresh = [{ queryKey: key }, { queryKey: taskKeys.today(userId) }];
+  // Ratings feed Goal status (ticket 15), which rides on the current season.
+  const refresh = [{ queryKey: key }, { queryKey: taskKeys.today(userId) }, { queryKey: ["user", userId, "seasons", "current"] }];
   const done = <T,>(value: T | null) => { if (!value) throw new AccountTransportError("SAVE_FAILED"); return value; };
   return {
     save: (settings: RitualSettingsDto) => optimisticWrite(cache, [change<RitualsDto | undefined>(key, data => data && { ...data, settings })],

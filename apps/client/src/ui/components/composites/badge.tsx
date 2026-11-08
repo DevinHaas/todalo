@@ -13,6 +13,8 @@ const badgeVariants = cva(
           "bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)] [a]:hover:bg-[color:color-mix(in_oklab,var(--color-primary)_80%,transparent)]",
         secondary:
           "border-[color:var(--color-border)] bg-[color:color-mix(in_oklab,var(--color-secondary)_12%,transparent)] text-[color:var(--color-secondary-foreground)] [a]:hover:bg-[color:color-mix(in_oklab,var(--color-secondary)_20%,transparent)]",
+        success:
+          "border-[color:color-mix(in_oklab,var(--color-success)_30%,transparent)] bg-[color:color-mix(in_oklab,var(--color-success)_12%,transparent)] text-[color:var(--color-success)]",
         warning:
           "border-[color:color-mix(in_oklab,var(--color-attention)_30%,transparent)] bg-[color:color-mix(in_oklab,var(--color-attention)_15%,transparent)] text-[color:var(--color-attention)] [a]:hover:border-[color:color-mix(in_oklab,var(--color-attention)_60%,transparent)] [a]:hover:bg-[color:color-mix(in_oklab,var(--color-attention)_25%,transparent)] [a]:hover:text-[color:var(--color-attention)]",
         destructive:

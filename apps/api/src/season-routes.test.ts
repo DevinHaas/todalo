@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SeasonGoalRecord, SeasonRecord, SeasonTier } from "@todalo/server/season-dto";
+import type { StatusInputs } from "@todalo/server/goal-status";
 import { createSeasonRoutes } from "./season-routes";
 
 type Season = SeasonRecord & { userId: string };
@@ -15,7 +16,10 @@ const goals = [
 let seasons: Season[] = [];
 let rows: Row[] = [];
 let clock = new Date("2026-02-21T12:00:00Z");
+const noInputs = (): StatusInputs => ({ links: { projects: [], tasks: [] }, tasks: [], ratings: [], milestones: [] });
+let statusInputs: Record<string, StatusInputs> = {};
 beforeEach(() => {
+  statusInputs = {};
   seasons = [
     // Bob's ended season is history; his current one starts later.
     { id: "bob-old", userId: "bob", startDate: "2025-01-01", lengthDays: 28, endedAt: new Date("2025-01-29T00:00:00Z") },
@@ -34,6 +38,8 @@ const app = createSeasonRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
   allowedOrigins: new Set(["http://localhost:5173"]),
   now: () => clock,
+  // In-memory mirror of rituals.getStatusInputs: each user's links, tasks, ratings and milestones.
+  statusInputs: async (userId) => statusInputs[userId] ?? noInputs(),
   current: async (userId) => {
     const season = current(userId);
     return season && { season, goals: rows.filter(row => row.seasonId === season.id).map(record) };
@@ -301,5 +307,49 @@ describe("season API", () => {
     rows.push({ id: "sg-alice-old", userId: "alice", seasonId: "season-1", goalId: "alice-old", tier: "secondary", target: "Old", carriedFromId: null });
     expect((await end({ next: { startDate: "2026-03-26", lengthDays: 28, goals: [{ goalId: "alice-old", tier: "primary", target: "x" }] } })).status).toBe(404);
     expect((await page()).season?.id).toBe("season-1");
+  });
+});
+
+// Ticket 15: Goal status rides along with the current season (one round trip for the season page, goal page and sidebar).
+describe("goal status on the current season", () => {
+  type Statuses = Record<string, { band: string; score: number; weeks: number[]; projection: number }>;
+  const statuses = async (user = "alice") => ((await page(user)).season as unknown as { statuses: Statuses }).statuses;
+  const done = (id: string, iso: string) => ({ id, projectId: null, status: "done" as const, dueDate: null, dueDateEnd: null, completedAt: new Date(iso) });
+
+  beforeEach(async () => {
+    await start("alice", { startDate: "2026-02-01", lengthDays: 84 });
+    for (const goalId of ["alice-fit", "alice-v2", "alice-old"]) {
+      rows.push({ id: `sg-${goalId}`, userId: "alice", seasonId: "season-1", goalId, tier: "primary", target: "x", carriedFromId: null });
+    }
+    statusInputs.alice = {
+      links: { projects: [], tasks: ["a", "b", "c", "d", "e", "f"].map(taskId => ({ goalId: "alice-fit", taskId })) },
+      // Fit: three tasks done in each of weeks 1 and 2 (from 1 Feb and 8 Feb), and Massive ratings; v2 has nothing.
+      tasks: [done("a", "2026-02-02T09:00:00Z"), done("b", "2026-02-03T09:00:00Z"), done("c", "2026-02-04T09:00:00Z"),
+        done("d", "2026-02-09T09:00:00Z"), done("e", "2026-02-10T09:00:00Z"), done("f", "2026-02-11T09:00:00Z")],
+      ratings: [{ goalId: "alice-fit", day: "2026-02-02", rating: "massive" }, { goalId: "alice-fit", day: "2026-02-15", rating: "solid" }],
+      milestones: [],
+    };
+  });
+
+  it("gives each active season goal a band, weekly scores and a projection; archived goals get none", async () => {
+    // Day 21 (21 Feb): weeks 1-3 have passed.
+    const result = await statuses();
+    expect(Object.keys(result).sort()).toEqual(["alice-fit", "alice-v2"]);
+    expect(result["alice-fit"]).toMatchObject({ band: "on_track", weeks: [1, 1, 0.43] });
+    expect(result["alice-v2"]).toEqual({ band: "off_track", score: 0, weeks: [0, 0, 0], projection: 0 });
+  });
+
+  it("shows Too early in the first week, and is the same on every read", async () => {
+    clock = new Date("2026-02-05T12:00:00Z");
+    const first = await statuses();
+    expect(first["alice-fit"]!.band).toBe("too_early");
+    expect(first["alice-v2"]!.band).toBe("too_early");
+    expect(await statuses()).toEqual(first);
+  });
+
+  it("reads only the signed-in user's inputs", async () => {
+    await start("bob", { startDate: "2026-02-01", lengthDays: 84 });
+    rows.push({ id: "sg-bob-read", userId: "bob", seasonId: "season-2", goalId: "bob-read", tier: "primary", target: "x", carriedFromId: null });
+    expect(await statuses("bob")).toEqual({ "bob-read": { band: "off_track", score: 0, weeks: [0, 0, 0], projection: 0 } });
   });
 });

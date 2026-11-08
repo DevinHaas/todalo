@@ -4,14 +4,14 @@
 
 **Blocked by:** 15
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Weekly score per goal plotted across the season
-- [ ] Background bands for the three statuses
-- [ ] Dashed projection to season end
-- [ ] Selecting a goal opens its page
-- [ ] Readable on iPhone width
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Weekly score per goal plotted across the season
+- [x] Background bands for the three statuses
+- [x] Dashed projection to season end
+- [x] Selecting a goal opens its page
+- [x] Readable on iPhone width
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

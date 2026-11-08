@@ -5,6 +5,7 @@ import {
   type AddSeasonGoalInput, type CurrentSeasonDto, type EndSeasonDto, type EndSeasonInput, type PastSeasonsDto, type SeasonGoalRecord, type SeasonRecord,
   type StartSeasonInput, type UpdateSeasonGoalInput,
 } from "@todalo/server/season-dto";
+import { seasonStatuses, type StatusInputs } from "@todalo/server/goal-status";
 import { writeUser } from "./project-routes";
 
 export interface SeasonStore {
@@ -26,6 +27,8 @@ export interface SeasonStore {
   end(userId: string, seasonId: string, input: EndSeasonInput): Promise<{
     ended: { season: SeasonRecord; goals: SeasonGoalRecord[] }; next: { season: SeasonRecord; goals: SeasonGoalRecord[] } | null;
   } | null>;
+  /** Ticket 15: the Goal status inputs (links, tasks, ratings, milestones) for a season's dates. */
+  statusInputs(userId: string, season: { startDate: string; lengthDays: number }): Promise<StatusInputs>;
   /** The clock for the day count (tests pin it). */
   now?: () => Date;
 }
@@ -56,9 +59,14 @@ export function createSeasonRoutes(store: SeasonStore) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const current = await store.current(userId);
       if (!current) return { season: null } satisfies CurrentSeasonDto;
-      const today = todayIn(zoneOrUtc(new URL(request.url).searchParams.get("timeZone")), now());
+      const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
+      const clock = now(), today = todayIn(zone, clock);
       const { season, goals } = current;
-      return { season: { ...toSeasonDto(season, goals), progress: seasonProgress(season.startDate, season.lengthDays, today) } } satisfies CurrentSeasonDto;
+      // One round trip for the season page, the goal page and the sidebar: every active goal's status comes along.
+      const statuses = seasonStatuses({
+        ...season, today, now: clock, zone, goalIds: goals.filter(goal => !goal.archivedAt).map(goal => goal.goalId), inputs: await store.statusInputs(userId, season),
+      });
+      return { season: { ...toSeasonDto(season, goals), progress: seasonProgress(season.startDate, season.lengthDays, today), statuses } } satisfies CurrentSeasonDto;
     })
     .get("/seasons/past", async ({ request, status }) => {
       const userId = await store.verify(request.headers);

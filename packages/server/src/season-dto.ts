@@ -2,14 +2,18 @@
 // only, no database imports, so the shared client may import these).
 import { z } from "zod";
 import type { SeasonProgress } from "./season-days";
+import type { GoalStatusDto } from "./goal-status";
 import { goalColorKeys, goalIconOf, type GoalColor, type GoalIcon } from "./goal-dto";
 
 export type SeasonTier = "primary" | "secondary";
 /** A goal within one season: its tier and target in words. carriedFromId is the earlier season's row (ticket 05). */
 export interface SeasonGoalDto { id: string; goalId: string; title: string; color: GoalColor; icon: GoalIcon; archived: boolean; tier: SeasonTier; target: string; carriedFromId: string | null }
 export interface SeasonDto { id: string; startDate: string; lengthDays: number; endedAt: string | null; goals: SeasonGoalDto[] }
-/** The season page: the one current season with its day count in the user's zone, or null before the first. */
-export interface CurrentSeasonDto { season: (SeasonDto & { progress: SeasonProgress }) | null }
+/**
+ * The season page: the one current season with its day count in the user's
+ * zone and (ticket 15) each active goal's status by goal ID, or null before the first.
+ */
+export interface CurrentSeasonDto { season: (SeasonDto & { progress: SeasonProgress; statuses: Record<string, GoalStatusDto> }) | null }
 /** Ended seasons, newest first, with their goals, tiers and targets as history (ticket 05). */
 export interface PastSeasonsDto { seasons: SeasonDto[] }
 /** Ending a season: the ended one and the next it started with the carried goals, if any. */

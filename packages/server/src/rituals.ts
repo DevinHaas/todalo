@@ -2,9 +2,10 @@
 // is scoped to the owner. The Check-in item on the schedule is an ordinary
 // daily recurring task (and since ticket 14b the Evening review item too), written through tasks.ts so Google Calendar sync and the
 // live delta treat it like any other scheduled task.
-import { and, asc, between, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { goals, progressRatings, ritualRuns, ritualSettings, tasks } from "@todalo/db/schema";
+import { goals, goalTasks, progressRatings, ritualRuns, ritualSettings, tasks } from "@todalo/db/schema";
+import type { StatusInputs } from "./goal-status";
 import { createTask, deleteTask, updateTask } from "./tasks";
 import { getGoalLinks } from "./goals";
 import { getCurrentSeason } from "./seasons";
@@ -136,6 +137,32 @@ export async function getSeasonReviewInputs(userId: string): Promise<SeasonRevie
   } : null;
   const history = rows.map(row => ({ ...row, kind: row.kind === kinds.checkIn ? "checkIn" as const : row.kind === kinds.eveningReview ? "eveningReview" as const : "weeklyReview" as const }));
   return { season: { id, startDate, lengthDays }, goalIds, history, review };
+}
+
+/**
+ * Ticket 15: Goal status inputs for a season: goal links, the user's tasks
+ * scheduled or completed in its dates (a day's margin each side for zones;
+ * goal-status.ts filters exactly), every completed rating of its days, and the
+ * goals' milestone tasks.
+ */
+export async function getStatusInputs(userId: string, { startDate, lengthDays }: { startDate: string; lengthDays: number }): Promise<StatusInputs> {
+  const from = new Date(`${addDays(startDate, -1)}T00:00:00Z`), to = new Date(`${addDays(startDate, lengthDays + 1)}T00:00:00Z`);
+  const [links, seasonTasks, ratings, milestones] = await Promise.all([
+    getGoalLinks(userId),
+    db.select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, completedAt: tasks.completedAt }).from(tasks)
+      .where(and(eq(tasks.userId, userId), or(and(gte(tasks.dueDate, from), lt(tasks.dueDate, to)), and(gte(tasks.completedAt, from), lt(tasks.completedAt, to))))),
+    db.select({ goalId: progressRatings.goalId, day: ritualRuns.period, rating: progressRatings.rating }).from(progressRatings)
+      .innerJoin(ritualRuns, eq(ritualRuns.id, progressRatings.runId))
+      .where(and(eq(progressRatings.userId, userId), inArray(ritualRuns.kind, [...ratingKinds, kinds.weeklyReview]), eq(ritualRuns.status, "completed"),
+        between(ritualRuns.period, startDate, addDays(startDate, lengthDays - 1)))),
+    db.select({ goalId: goalTasks.goalId, criteria: goalTasks.milestoneCriteria, status: tasks.status, completedAt: tasks.completedAt }).from(goalTasks)
+      .innerJoin(tasks, eq(tasks.id, goalTasks.taskId))
+      .where(and(eq(goalTasks.userId, userId), isNotNull(goalTasks.milestoneCriteria))),
+  ]);
+  return {
+    links, tasks: seasonTasks, ratings,
+    milestones: milestones.map(row => ({ goalId: row.goalId, criteria: row.criteria ?? [], done: row.status === "done", completedAt: row.completedAt })),
+  };
 }
 
 /** A daily ritual item's current start, or null when there is none (never created, or deleted by hand). */

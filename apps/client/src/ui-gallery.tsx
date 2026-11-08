@@ -115,7 +115,7 @@ function Showcase() {
     <Group title="Badges and status">
       <Row>
         <Badge>Default</Badge><Badge variant="secondary">Secondary</Badge><Badge variant="outline">Outline</Badge>
-        <Badge variant="warning">Warning</Badge><Badge variant="destructive">Destructive</Badge>
+        <Badge variant="success">Success</Badge><Badge variant="warning">Warning</Badge><Badge variant="destructive">Destructive</Badge>
         <Badge variant="outline"><span className="size-2 rounded-full" style={{ background: goalColorValue("teal") }} />Finish Todalo</Badge>
       </Row>
       <Row><Spinner /><span className="text-muted-foreground">Loading…</span></Row>

@@ -5,7 +5,7 @@ import {
   Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { criteriaProgress, goalColorKeys, goalColorValue, goalIcons, type GoalColor, type GoalIcon as GoalIconName, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
-import type { SeasonTier } from "./seasons";
+import { bandLabels, type GoalBand, type GoalStatusDto, type SeasonTier } from "./seasons";
 import { taskPath } from "./links";
 import type { ReorderPosition } from "./bulk";
 import { SortableRow, SortableTasks } from "./bulk-views";
@@ -62,6 +62,18 @@ export function ColorPicker({ value, onChange }: { value: GoalColor; onChange(co
   </FieldSet>;
 }
 
+const bandVariants = { on_track: "success", adjust: "warning", off_track: "destructive", too_early: "mutedOutline" } as const;
+const bandDots: Record<GoalBand, string> = { on_track: "bg-success", adjust: "bg-attention", off_track: "bg-destructive", too_early: "bg-border-strong" };
+
+/** Ticket 15: a goal's status (On track, Adjust, Off track, Too early) as a badge. */
+export const GoalStatusBadge = ({ status, className }: { status: GoalStatusDto; className?: string }) =>
+  <Badge variant={bandVariants[status.band]} data-goal-status={status.band} className={className}>{bandLabels[status.band]}</Badge>;
+
+/** The sidebar's compact form: a dot in the band's colour, labelled for screen readers; nothing while Too early. */
+export const GoalStatusDot = ({ status }: { status?: GoalStatusDto }) => !status || status.band === "too_early" ? null
+  : <span data-goal-status={status.band} title={bandLabels[status.band]} className={cn("size-2 shrink-0 rounded-full", bandDots[status.band])}>
+    <span className="sr-only">{bandLabels[status.band]}</span></span>;
+
 /** A form-level error line. */
 export const FormError = ({ children }: { children: ReactNode }) => <p role="alert" className="text-xs-plus text-destructive">{children}</p>;
 /** Loading and load-failure states for a page. */
@@ -73,8 +85,8 @@ export function LoadFailure({ error, onRetry }: { error: Error | null; onRetry: 
 }
 
 /** The sidebar's Goals section, above Projects: drag (or keyboard) to reorder; + adds one. */
-export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }: {
-  goals: GoalDto[]; adding: boolean; onAdding: (adding: boolean) => void;
+export function GoalsNav({ goals, statuses = {}, adding, onAdding, onCreate, onReorder, write }: {
+  goals: GoalDto[]; /** Ticket 15: current-season goals' statuses by goal ID. */ statuses?: Record<string, GoalStatusDto>; adding: boolean; onAdding: (adding: boolean) => void;
   onCreate: (title: string) => Promise<unknown>; onReorder: (id: string, anchorId: string, position: ReorderPosition) => void; write: Write;
 }) {
   const [title, setTitle] = useState("");
@@ -92,7 +104,7 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
     <SortableTasks ids={goals.map(goal => goal.id)} label={(id) => goals.find(goal => goal.id === id)?.title ?? "goal"} onReorder={onReorder}>
       {goals.map(goal => <SortableRow key={goal.id} id={goal.id} title={goal.title} className="group/row -ml-6 flex items-center"
         handleClassName="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-subtle-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5">
-        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className={sidebarItemClassName}><GoalIcon color={goal.color} icon={goal.icon} /><span className="truncate">{goal.title}</span></NavLink>
+        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className={sidebarItemClassName}><GoalIcon color={goal.color} icon={goal.icon} /><span className="flex-1 truncate">{goal.title}</span><GoalStatusDot status={statuses[goal.id]} /></NavLink>
       </SortableRow>)}
     </SortableTasks>
   </section>;
@@ -194,7 +206,7 @@ export function CriteriaConfirm({ onAnswer }: { onAnswer(confirmed: boolean): vo
 }
 
 /** The goal's place in the current season (null when it is not in one). */
-export interface GoalSeason { tier: SeasonTier; target: string }
+export interface GoalSeason { tier: SeasonTier; target: string; /** Ticket 15; absent for an archived goal. */ status?: GoalStatusDto }
 
 /** A season target with its label, so it never reads as the goal's description. */
 export const SeasonTarget = ({ text, className }: { text: string; className?: string }) => <p data-slot="season-target" className={cn("text-sm text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap", className)}>
@@ -251,7 +263,7 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
     {season && <section aria-label="This season" className="mt-5"><Card className="flex-row items-start gap-3 p-4">
       <CalendarRange className="mt-0.5 size-4.5 shrink-0 text-subtle-foreground" aria-hidden="true" />
       <CardContent className="flex min-w-0 flex-1 flex-col gap-1 p-0">
-        <p className="text-sm font-semibold">This season · {season.tier === "primary" ? "Primary" : "Secondary"}</p>
+        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">This season · {season.tier === "primary" ? "Primary" : "Secondary"}{season.status && <GoalStatusBadge status={season.status} />}</p>
         <SeasonTarget text={season.target} />
       </CardContent>
       <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Season</Button>

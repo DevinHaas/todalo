@@ -123,6 +123,7 @@ const app = createApi(dependencies)
   removeGoal: seasons.removeSeasonGoal,
   past: seasons.listPastSeasons,
   end: seasons.endSeason,
+  statusInputs: rituals.getStatusInputs,
 })).use(createRitualRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

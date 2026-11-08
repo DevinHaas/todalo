@@ -30,8 +30,10 @@ export function GoalsSidebar({ userId, adding, onAdding }: { userId: string; add
   const writes = useGoalMutations(userId);
   const create = useMutation({ mutationFn: (title: string) => writes.create({ title }), meta: { action: (title: string) => `add the goal "${title}"` }, onSuccess: (goal) => navigate(`/goals/${encodeURIComponent(goal.id)}`) });
   const reorder = useMutation({ mutationFn: ({ id, anchorId, position }: { id: string; anchorId: string; position: ReorderPosition }) => writes.reorder(id, anchorId, position), meta: { action: () => "move the goal" } });
+  // Ticket 15: the same current-season read the Seasons section makes, so the dots cost no extra request.
+  const current = useQuery({ ...seasonReads.current(userId), enabled: query.data?.hidden === false });
   if (!query.data || query.data.hidden) return null;
-  return <GoalsNav goals={query.data.goals} adding={adding} onAdding={onAdding}
+  return <GoalsNav goals={query.data.goals} statuses={current.data?.season?.statuses} adding={adding} onAdding={onAdding}
     onCreate={(title) => create.mutateAsync(title)}
     onReorder={(id, anchorId, position) => reorder.mutate({ id, anchorId, position })}
     write={{ pending: create.isPending, error: (create.error ?? reorder.error)?.message ?? null }} />;
@@ -74,7 +76,7 @@ export function GoalScreen({ account }: { account: Account }) {
   const writes = useGoalMutations(account.user.id);
   const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch), meta: { action: (patch: GoalPatch) => patch.archived === undefined ? "save the goal" : patch.archived ? "archive the goal" : "restore the goal" } });
   const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false), meta: { action: ({ kind }: { kind: GoalLinkKind }) => `unlink the ${kind === "projects" ? "project" : "task"} from the goal` } });
-  return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target } : null} onRetry={() => void query.refetch()}
+  return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target, status: current.data?.season?.statuses[id] } : null} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
     onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
     write={{ pending: update.isPending || unlink.isPending, error: (update.error ?? unlink.error)?.message ?? null }} />;

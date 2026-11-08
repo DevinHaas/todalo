@@ -20,6 +20,7 @@
     "./rituals": "./src/rituals.ts",
     "./ritual-dto": "./src/ritual-dto.ts",
     "./weekly-review": "./src/weekly-review.ts",
+    "./goal-status": "./src/goal-status.ts",
     "./settings": "./src/settings.ts",
     "./settings-input": "./src/settings-input.ts",
     "./keyboard": "./src/keyboard.ts",

@@ -42,6 +42,7 @@
   --color-selected: #ffefe5;              /* pressed toggles, checked menu items, selected rows */
   --color-attention: #eb8909;
   --color-today: #058527;
+  --color-success: #058527;               /* Goal status On track (Adjust is attention, Off track destructive) */
 
   /* Priorities (p1..p4) */
   --color-priority-1: #d1453b;
@@ -145,6 +146,7 @@
   --color-selected: #3b2724;
   --color-attention: #ff9a14;
   --color-today: #25b84c;
+  --color-success: #25b84c;
 
   --color-priority-1: #ff7066;
   --color-priority-2: #ff9a14;

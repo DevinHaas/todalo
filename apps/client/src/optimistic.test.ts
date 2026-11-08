@@ -132,7 +132,7 @@ describe("task, reorder and season writes", () => {
   it("a season goal's tier toggles at once and back on failure", async () => {
     const cache = new QueryClient();
     const goal = { id: "sg", goalId: "g", title: "Run", color: "blue" as const, icon: "target" as const, archived: false, tier: "primary" as const, target: "", carriedFromId: null };
-    cache.setQueryData<CurrentSeasonDto>(seasonKeys.current("u"), { season: { id: "s", startDate: "2026-11-01", lengthDays: 84, endedAt: null, goals: [goal], progress: {} as never } });
+    cache.setQueryData<CurrentSeasonDto>(seasonKeys.current("u"), { season: { id: "s", startDate: "2026-11-01", lengthDays: 84, endedAt: null, goals: [goal], progress: {} as never, statuses: {} } });
     const save = deferred<null>();
     const writes = seasonMutations({ updateGoal: () => save.promise } as unknown as SeasonTransport, cache, "u");
     const tier = () => cache.getQueryData<CurrentSeasonDto>(seasonKeys.current("u"))!.season!.goals[0]!.tier;
