@@ -2,17 +2,17 @@
 // read and write is scoped to the caller's userId. Ticket 18 adds the ChatGPT
 // sign-in beside it: while signed in the Coach runs on ChatGPT, otherwise on
 // the saved key or Ollama provider.
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@todalo/db";
-import { coachChatgpt, coachExplanations, coachProviders } from "@todalo/db/schema";
+import { coachChatgpt, coachChatgptClients, coachExplanations, coachProviders } from "@todalo/db/schema";
 import { openSecret, sealSecret } from "./coach-secret";
-import { ChatgptRefusedError, createChatgptAuth, type ChatgptAuth, type ChatgptTokens } from "./coach-chatgpt";
+import { ChatgptRefusedError, chatgptSharingScope, createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "./coach-chatgpt";
 import { coachProviderInfo, type ChatgptDto, type CoachConfig, type CoachProviderKind } from "./coach";
 
 export type StoredCoachProvider = CoachConfig & { keyLast4: string | null };
 
-/** This server's ChatGPT sign-in, or null when CHATGPT_OAUTH_CLIENT_ID is not set (no sign-in offered). */
-export const chatgptAuth: ChatgptAuth | null = process.env.CHATGPT_OAUTH_CLIENT_ID ? createChatgptAuth(process.env.CHATGPT_OAUTH_CLIENT_ID) : null;
+/** This server's ChatGPT sign-in (no configuration: OpenAI registers todalo's client on first sign-in). */
+export const chatgptAuth = createChatgptAuth();
 
 /** The saved key or Ollama provider with its key decrypted; a key that no longer decrypts (changed secret) reads as missing. */
 export async function getKeyProvider(userId: string): Promise<StoredCoachProvider | null> {
@@ -30,41 +30,59 @@ export async function getKeyProvider(userId: string): Promise<StoredCoachProvide
  */
 export async function getCoachProvider(userId: string): Promise<StoredCoachProvider | null> {
   const tokens = await usableChatgpt(userId);
-  if (tokens) return { provider: "chatgpt", model: tokens.model, baseUrl: null, apiKey: tokens.accessToken, accountId: tokens.accountId, keyLast4: null };
+  if (tokens) return { provider: "chatgpt", model: tokens.model, baseUrl: null, apiKey: tokens.accessToken, keyLast4: null };
   return getKeyProvider(userId);
 }
 
+type Sealed = Pick<ChatgptTokens, "clientId" | "accessToken" | "refreshToken"> & { earliestRefreshAt: string | null };
 const refreshing = new Map<string, Promise<ChatgptTokens | null>>();
 
-async function usableChatgpt(userId: string, now = new Date()) {
+/** The saved tokens. Device-code sign-ins from before (no clientId) read as signed out. */
+async function savedChatgpt(userId: string) {
   const [row] = await db.select().from(coachChatgpt).where(eq(coachChatgpt.userId, userId));
   if (!row?.encryptedTokens || !row.expiresAt) return null;
-  let tokens: ChatgptTokens;
-  try { tokens = { ...JSON.parse(openSecret(row.encryptedTokens)) as Pick<ChatgptTokens, "accessToken" | "refreshToken">, accountId: row.accountId, email: row.email, expiresAt: row.expiresAt }; }
-  catch { return null; }
-  if (tokens.expiresAt.getTime() - now.getTime() > 5 * 60_000 || !chatgptAuth) return tokens.expiresAt > now ? { ...tokens, model: row.model } : null;
+  try {
+    const sealed = JSON.parse(openSecret(row.encryptedTokens)) as Sealed;
+    if (!sealed.clientId) return null;
+    const tokens: ChatgptTokens = { ...sealed, email: row.email, expiresAt: row.expiresAt, earliestRefreshAt: sealed.earliestRefreshAt ? new Date(sealed.earliestRefreshAt) : null, scopes: [chatgptSharingScope] };
+    return { row, tokens };
+  } catch { return null; }
+}
+
+async function usableChatgpt(userId: string, now = new Date()) {
+  const saved = await savedChatgpt(userId);
+  if (!saved) return null;
+  const { row, tokens } = saved;
+  const left = tokens.expiresAt.getTime() - now.getTime();
+  // Like T3: refresh shortly before expiry, never before OpenAI's earliest_refresh_at.
+  if (left > 5 * 60_000 || (left > 0 && tokens.earliestRefreshAt && tokens.earliestRefreshAt > now)) return { ...tokens, model: row.model };
   // OpenAI rotates refresh tokens, so concurrent requests share one refresh.
   // ponytail: per process; a shared lock (or row version) if the API runs on several instances.
   let pending = refreshing.get(userId);
   if (!pending) {
-    pending = chatgptAuth.refresh(tokens.refreshToken).then(
-      async fresh => { await storeTokens(userId, fresh); return fresh; },
-      async error => {
-        if (error instanceof ChatgptRefusedError) await db.update(coachChatgpt).set({ encryptedTokens: null, expiresAt: null }).where(eq(coachChatgpt.userId, userId));
-        return null;
+    pending = chatgptAuth.refresh(tokens.clientId, tokens.refreshToken).then(
+      async fresh => {
+        if (!fresh.scopes.includes(chatgptSharingScope)) throw new ChatgptRefusedError("Plan sharing is off.");
+        const kept = { ...fresh, email: fresh.email ?? tokens.email };
+        await storeTokens(userId, kept);
+        return kept;
       },
-    ).finally(() => refreshing.delete(userId));
+    ).catch(async error => {
+      if (error instanceof ChatgptRefusedError) await db.update(coachChatgpt).set({ encryptedTokens: null, expiresAt: null }).where(eq(coachChatgpt.userId, userId));
+      return null;
+    }).finally(() => refreshing.delete(userId));
     refreshing.set(userId, pending);
   }
   const fresh = await pending;
   if (fresh) return { ...fresh, model: row.model };
-  return tokens.expiresAt > now ? { ...tokens, model: row.model } : null;
+  return left > 0 ? { ...tokens, model: row.model } : null;
 }
 
-const storeTokens = (userId: string, tokens: ChatgptTokens) => db.update(coachChatgpt).set({
-  encryptedTokens: sealSecret(JSON.stringify({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken })),
-  accountId: tokens.accountId, email: tokens.email, expiresAt: tokens.expiresAt,
-}).where(eq(coachChatgpt.userId, userId));
+const sealTokens = (tokens: ChatgptTokens) => ({
+  encryptedTokens: sealSecret(JSON.stringify({ clientId: tokens.clientId, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, earliestRefreshAt: tokens.earliestRefreshAt?.toISOString() ?? null } satisfies Sealed)),
+  email: tokens.email, expiresAt: tokens.expiresAt,
+});
+const storeTokens = (userId: string, tokens: ChatgptTokens) => db.update(coachChatgpt).set(sealTokens(tokens)).where(eq(coachChatgpt.userId, userId));
 
 /** The sign-in as settings show it (no tokens), or null when never signed in. */
 export async function getChatgpt(userId: string): Promise<ChatgptDto | null> {
@@ -75,8 +93,7 @@ export async function getChatgpt(userId: string): Promise<ChatgptDto | null> {
 
 /** Throws CoachSecretError when COACH_SECRET_KEY is missing. Keeps the chosen model on a new sign-in. */
 export async function saveChatgpt(userId: string, tokens: ChatgptTokens) {
-  const sealed = sealSecret(JSON.stringify({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }));
-  const values = { encryptedTokens: sealed, accountId: tokens.accountId, email: tokens.email, expiresAt: tokens.expiresAt };
+  const values = sealTokens(tokens);
   await db.insert(coachChatgpt).values({ userId, model: coachProviderInfo.chatgpt.model, ...values })
     .onConflictDoUpdate({ target: coachChatgpt.userId, set: { ...values, updatedAt: new Date() } });
 }
@@ -85,9 +102,27 @@ export async function setChatgptModel(userId: string, model: string) {
   await db.update(coachChatgpt).set({ model }).where(eq(coachChatgpt.userId, userId));
 }
 
-/** Sign out: the tokens go; the key provider, if any, takes over. */
+/** Sign out: OpenAI is asked to revoke the refresh token, the tokens go, the key provider (if any) takes over. The registration stays. */
 export async function removeChatgpt(userId: string) {
+  const saved = await savedChatgpt(userId);
+  if (saved) await chatgptAuth.revoke(saved.tokens.clientId, saved.tokens.refreshToken);
   await db.delete(coachChatgpt).where(eq(coachChatgpt.userId, userId));
+}
+
+const clientRow = (userId: string, redirectKey: string) => and(eq(coachChatgptClients.userId, userId), eq(coachChatgptClients.redirectKey, redirectKey));
+
+export async function getChatgptClient(userId: string, redirectKey: string): Promise<ChatgptClient | null> {
+  const [row] = await db.select().from(coachChatgptClients).where(clientRow(userId, redirectKey));
+  return row ? { clientId: row.clientId, email: row.email, sharing: row.sharing } : null;
+}
+
+export async function saveChatgptClient(userId: string, redirectKey: string, client: ChatgptClient) {
+  await db.insert(coachChatgptClients).values({ userId, redirectKey, ...client })
+    .onConflictDoUpdate({ target: [coachChatgptClients.userId, coachChatgptClients.redirectKey], set: { ...client, updatedAt: new Date() } });
+}
+
+export async function forgetChatgptClient(userId: string, redirectKey: string) {
+  await db.delete(coachChatgptClients).where(clientRow(userId, redirectKey));
 }
 
 /** Throws CoachSecretError when a key must be stored but COACH_SECRET_KEY is missing. */

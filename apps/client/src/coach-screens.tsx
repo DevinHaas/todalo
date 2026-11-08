@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { coach, coachReads } from "./runtime";
 import {
-  coachMutations, coachProviderInfo, coachProviderKinds, ollamaDefaultUrl, ollamaUrl,
-  type ChatgptDto, type ChatgptSignInDto, type CoachDto, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
+  coachKeys, coachMutations, coachProviderInfo, coachProviderKinds, ollamaDefaultUrl, ollamaUrl,
+  type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
 } from "./coach";
 import { FormError, LoadFailure, Loading } from "./goal-views";
 import { Badge, Button, Field, FieldDescription, FieldLabel, Hint, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, ToggleGroup, ToggleGroupItem } from "./ui";
@@ -27,7 +27,7 @@ function CoachSettings({ userId, coach: state }: { userId: string; coach: CoachD
   const cache = useQueryClient();
   const writes = coachMutations(coach, cache, userId);
   // OpenAI offers both its ChatGPT sign-in and an API key; a sign-in (even expired) opens on its tab.
-  const [method, setMethod] = useState<OpenaiMethod>(state.chatgpt || (!saved && state.chatgptAvailable) ? "chatgpt" : "key");
+  const [method, setMethod] = useState<OpenaiMethod>(state.chatgpt || !saved ? "chatgpt" : "key");
   const [provider, setProvider] = useState<CoachProviderKind>(state.chatgpt ? "openai" : (saved?.provider as CoachProviderKind | undefined) ?? "openai");
   const [model, setModel] = useState(saved?.model ?? coachProviderInfo.openai.model);
   const [apiKey, setApiKey] = useState("");
@@ -88,7 +88,7 @@ function CoachSettings({ userId, coach: state }: { userId: string; coach: CoachD
       <ToggleGroupItem value="chatgpt" className="px-2.5 text-xs-plus" data-coach-method="chatgpt">Sign in with ChatGPT</ToggleGroupItem>
       <ToggleGroupItem value="key" className="px-2.5 text-xs-plus" data-coach-method="key">Use an API key</ToggleGroupItem>
     </ToggleGroup>}
-    {signIn ? <ChatgptSignIn userId={userId} chatgpt={state.chatgpt} available={state.chatgptAvailable} /> : <form className="flex flex-col gap-3" onSubmit={submit}>
+    {signIn ? <ChatgptSignIn userId={userId} chatgpt={state.chatgpt} /> : <form className="flex flex-col gap-3" onSubmit={submit}>
       {local ? <Field>
         <FieldLabel htmlFor="coach-base-url">Ollama address</FieldLabel>
         <Input id="coach-base-url" className="max-w-sm" value={baseUrl} disabled={pending} onChange={event => setBaseUrl(event.target.value)} required maxLength={500} />
@@ -121,41 +121,50 @@ function ProviderLine({ provider }: { provider: CoachProviderDto }) {
   return <>{coachProviderInfo[provider.provider].label} · {provider.model}{provider.keyHint && <span className="text-muted-foreground"> · key …{provider.keyHint}</span>}</>;
 }
 
+type Waiting = Required<Pick<ChatgptStartDto, "mode">> & { authorizeUrl: string };
+
 /**
- * Ticket 18: ChatGPT sign-in with OpenAI's device code. Start shows a code to
- * enter on OpenAI's page; this polls at OpenAI's interval until the user approved.
+ * Ticket 18: ChatGPT sign-in on OpenAI's page (coach-chatgpt.ts). The Mac app
+ * opens the browser and waits for it on 127.0.0.1; the web opens a tab and
+ * either watches for the API callback (localhost) or takes the pasted address.
  */
-function ChatgptSignIn({ userId, chatgpt, available }: { userId: string; chatgpt: ChatgptDto | null; available: boolean }) {
+function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDto | null }) {
   const cache = useQueryClient();
   const writes = coachMutations(coach, cache, userId);
-  const [code, setCode] = useState<ChatgptSignInDto["signIn"]>(null);
+  const [waiting, setWaiting] = useState<Waiting | null>(null);
+  const [pasted, setPasted] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [model, setModel] = useState(chatgpt?.model ?? coachProviderInfo.chatgpt.model);
+  const done = (result: { status: string; message?: string }) => { setWaiting(null); setMessage(result.status === "signed_in" ? null : result.message ?? "The sign-in failed. Start again."); };
   const start = useMutation({
     mutationFn: () => coach.startChatgpt(),
-    onSuccess: (result) => { setCode(result.signIn); setMessage(result.message ?? null); },
+    onSuccess: (result) => {
+      setMessage(result.message ?? null);
+      if (!result.authorizeUrl || !result.mode) return;
+      setPasted("");
+      setWaiting({ authorizeUrl: result.authorizeUrl, mode: result.mode });
+      // The Mac app already opened the browser.
+      if (result.mode !== "loopback") coach.openChatgpt(result.authorizeUrl);
+    },
     meta: { action: () => "start the ChatGPT sign-in" },
   });
+  const paste = useMutation({ mutationFn: writes.completeChatgpt, onSuccess: done, meta: { action: () => "finish the ChatGPT sign-in" } });
   const saveModel = useMutation({ mutationFn: writes.saveChatgptModel, meta: { action: () => "save the ChatGPT model" } });
   const signOut = useMutation({ mutationFn: writes.signOutChatgpt, meta: { action: () => "sign out of ChatGPT" } });
-  const pending = start.isPending || saveModel.isPending || signOut.isPending;
+  const pending = start.isPending || paste.isPending || saveModel.isPending || signOut.isPending;
 
   useEffect(() => {
-    if (!code) return;
-    let stopped = false, timer: ReturnType<typeof setTimeout>;
-    const next = () => { timer = setTimeout(() => void writes.pollChatgpt().then(result => {
-      if (stopped) return;
-      if (result.status === "pending") { setMessage(result.message ?? null); return next(); }
-      setCode(null);
-      setMessage(result.status === "failed" ? result.message ?? "The sign-in failed. Start again." : null);
-    }, () => { if (!stopped) next(); }), code.intervalSeconds * 1000); };
-    next();
-    return () => { stopped = true; clearTimeout(timer); };
-    // Polling restarts only for a new code.
-  }, [code]);
+    if (!waiting) return;
+    let stopped = false;
+    // Mac: one call that returns when the browser came back (or after 10 minutes).
+    if (waiting.mode === "loopback") void writes.finishChatgpt().then(result => { if (!stopped) done(result); }, () => { if (!stopped) done({ status: "failed" }); });
+    // Web on localhost: the API callback signs in; Settings rereads the Coach until it shows.
+    const timer = waiting.mode === "callback" ? setInterval(() => void cache.invalidateQueries({ queryKey: coachKeys.provider(userId) }), 2_000) : undefined;
+    return () => { stopped = true; clearInterval(timer); };
+    // Restarts only for a new sign-in.
+  }, [waiting]);
 
-  if (!available && !chatgpt) return <Hint>This server does not offer ChatGPT sign-in yet. Use an API key instead.</Hint>;
-  const error = message ?? start.error?.message ?? saveModel.error?.message ?? signOut.error?.message;
+  const error = message ?? start.error?.message ?? paste.error?.message ?? saveModel.error?.message ?? signOut.error?.message;
   return <div className="flex flex-col gap-3" data-coach-chatgpt="">
     {chatgpt?.status === "signed_in" ? <>
       <p className="text-sm">Signed in with ChatGPT{chatgpt.email && <span className="text-muted-foreground"> as {chatgpt.email}</span>}. The Coach uses your ChatGPT plan.</p>
@@ -169,14 +178,22 @@ function ChatgptSignIn({ userId, chatgpt, available }: { userId: string; chatgpt
           <Button type="button" variant="ghost" data-coach-action="chatgpt-sign-out" disabled={pending} onClick={() => signOut.mutate()}>Sign out of ChatGPT</Button>
         </div>
       </form>
-    </> : code ? <>
-      <p className="text-sm">Open OpenAI's sign-in page, sign in to ChatGPT and enter this code:</p>
-      <p className="font-mono text-lg tracking-widest" data-chatgpt-code="" aria-live="polite">{code.userCode}</p>
+    </> : waiting ? <>
+      <p className="text-sm" aria-live="polite">{waiting.mode === "paste"
+        ? "Sign in on OpenAI's page and allow sharing of your ChatGPT plan with todalo. OpenAI then sends your browser to an address starting with http://127.0.0.1 that cannot load. Copy that whole address and paste it here."
+        : "Sign in on OpenAI's page in your browser and allow sharing of your ChatGPT plan with todalo. This page updates when you are done."}</p>
+      {waiting.mode === "paste" && <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); if (pasted.trim()) paste.mutate(pasted.trim()); }}>
+        <Field>
+          <FieldLabel htmlFor="coach-chatgpt-return">Address from the browser</FieldLabel>
+          <Input id="coach-chatgpt-return" className="max-w-sm" value={pasted} disabled={pending} autoComplete="off" placeholder="http://127.0.0.1:…/auth/callback?code=…" maxLength={16_384}
+            onChange={event => setPasted(event.target.value)} />
+        </Field>
+        <div><Button type="submit" data-coach-action="chatgpt-finish" disabled={pending || !pasted.trim()}>{paste.isPending ? "Finishing…" : "Finish sign-in"}</Button></div>
+      </form>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" data-coach-action="chatgpt-open" onClick={() => coach.openChatgpt()}>Open OpenAI sign-in</Button>
-        <Button type="button" variant="ghost" onClick={() => { setCode(null); setMessage(null); }}>Cancel</Button>
+        <Button type="button" variant={waiting.mode === "paste" ? "outline" : "default"} data-coach-action="chatgpt-open" onClick={() => coach.openChatgpt(waiting.authorizeUrl)}>Open OpenAI sign-in again</Button>
+        <Button type="button" variant="ghost" onClick={() => { setWaiting(null); setMessage(null); }}>Cancel</Button>
       </div>
-      <Hint>Waiting for you to approve at {code.verificationUrl.replace("https://", "")}. The code is good for 15 minutes.</Hint>
     </> : <>
       {chatgpt?.status === "expired" && <FormError>ChatGPT signed you out. Sign in again; until then the Coach uses your API key, if any.</FormError>}
       <div className="flex flex-wrap gap-2">
@@ -184,7 +201,7 @@ function ChatgptSignIn({ userId, chatgpt, available }: { userId: string; chatgpt
           {start.isPending ? "Starting…" : "Sign in with ChatGPT"}</Button>
         {chatgpt && <Button type="button" variant="ghost" data-coach-action="chatgpt-sign-out" disabled={pending} onClick={() => signOut.mutate()}>Forget ChatGPT sign-in</Button>}
       </div>
-      <Hint>Runs the Coach on your ChatGPT plan instead of an API key. OpenAI does not officially support this for other apps, so it may stop working; an API key keeps the Coach running.</Hint>
+      <Hint>Runs the Coach on your ChatGPT plan instead of an API key. OpenAI asks you to allow sharing of your plan with todalo; usage counts against your plan. OpenAI has not published this sign-in for other apps, so it may change or stop working; an API key keeps the Coach running.</Hint>
     </>}
     {error && <FormError>{error}</FormError>}
   </div>;

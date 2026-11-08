@@ -65,10 +65,10 @@ describe("parseAnthropic", () => {
 
 describe("chatgptRequest (ticket 18)", () => {
   it("calls the Responses API with the account header, todalo's own instructions and a strict schema", () => {
-    const request = chatgptRequest(config("chatgpt", { model: "gpt-5.5", apiKey: "access", accountId: "acct-1" }),
+    const request = chatgptRequest(config("chatgpt", { model: "gpt-5.5", apiKey: "access" }),
       { messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "hi" }], schema: explanationSchema });
-    expect(request.url).toBe("https://chatgpt.com/backend-api/codex/responses");
-    expect(request.init.headers).toEqual({ "content-type": "application/json", accept: "text/event-stream", originator: "todalo", authorization: "Bearer access", "chatgpt-account-id": "acct-1" });
+    expect(request.url).toBe("https://api.openai.com/v1/responses");
+    expect(request.init.headers).toEqual({ "content-type": "application/json", accept: "text/event-stream", authorization: "Bearer access" });
     expect(JSON.parse(request.init.body)).toEqual({
       model: "gpt-5.5", instructions: "Be brief.", store: false, stream: true, reasoning: { effort: "low" },
       input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }],
@@ -98,7 +98,7 @@ describe("createCoachModel", () => {
   const fake = (response: Response) => { const seen: string[] = []; return { seen, fetcher: (async (url: string) => { seen.push(url); return response; }) as unknown as typeof fetch }; };
   it.each([
     ["anthropic", config("anthropic"), new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: "a" }] })), "https://api.anthropic.com/v1/messages", "a"],
-    ["chatgpt", config("chatgpt"), new Response(`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "c" }] }] } })}\n`), "https://chatgpt.com/backend-api/codex/responses", "c"],
+    ["chatgpt", config("chatgpt"), new Response(`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "c" }] }] } })}\n`), "https://api.openai.com/v1/responses", "c"],
     ["openai", config("openai"), new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "o" } }] })), "https://api.openai.com/v1/chat/completions", "o"],
   ])("routes %s to its adapter", async (_name, cfg, response, url, text) => {
     const { seen, fetcher } = fake(response);

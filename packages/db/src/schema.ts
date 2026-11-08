@@ -353,7 +353,9 @@ export const coachProviders = pgTable("coach_providers", {
 
 // Goals ticket 18: the user's ChatGPT sign-in, kept beside coach_providers so
 // the saved key stays as the fallback. encryptedTokens seals the access and
-// refresh tokens (COACH_SECRET_KEY); null once OpenAI refused a refresh (expired).
+// refresh tokens and their oaiapp_* client ID (COACH_SECRET_KEY); null once
+// OpenAI refused a refresh (expired). account_id is unused since the T3-style
+// sign-in (it was the device-code flow's ChatGPT account header).
 export const coachChatgpt = pgTable("coach_chatgpt", {
   userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
   model: text("model").notNull(),
@@ -364,6 +366,20 @@ export const coachChatgpt = pgTable("coach_chatgpt", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
+
+// Goals ticket 18: OpenAI's registered client (oaiapp_*) for a user's ChatGPT
+// sign-in, per redirect without its port (coach-chatgpt.ts redirectKey). Kept
+// after sign-out so the next sign-in reuses it instead of registering again.
+// sharing: whether the last sign-in allowed sharing the ChatGPT plan.
+export const coachChatgptClients = pgTable("coach_chatgpt_clients", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  redirectKey: text("redirect_key").notNull(),
+  clientId: text("client_id").notNull(),
+  email: text("email"),
+  sharing: boolean("sharing").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [primaryKey({ columns: [table.userId, table.redirectKey] })]);
 
 // Ticket 17: a goal's last Coach status explanation; reused while inputsHash
 // (the facts, provider, model and day) is unchanged.

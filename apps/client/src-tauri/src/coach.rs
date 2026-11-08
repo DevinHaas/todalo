@@ -85,22 +85,154 @@ pub async fn coach_explanations(
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
-/// Goals ticket 18: starts a ChatGPT sign-in; `{ signIn, message? }` with the code to enter at OpenAI.
-#[tauri::command]
-pub async fn start_chatgpt_sign_in(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
-    state
-        .write(Method::POST, "/api/v1/coach/chatgpt/start", None)
-        .await?
-        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+/// Goals ticket 18: ChatGPT sign-in through the system browser, as T3 Code
+/// does it: OpenAI redirects to a one-time listener on 127.0.0.1 (RFC 8252
+/// loopback redirect, random port). The server builds OpenAI's page and keeps
+/// the PKCE verifier; this only opens the page and forwards the redirect.
+#[derive(Default)]
+pub struct ChatgptLoopback {
+    listener: tokio::sync::Mutex<Option<tokio::net::TcpListener>>,
+    /// A newer sign-in ends the wait of an older one.
+    superseded: tokio::sync::Notify,
 }
 
-/// `{ status, message? }`: pending until the user approved at OpenAI.
+/// Only OpenAI's authorize page; the webview cannot make this open anything else.
+fn authorize_url(url: &str) -> bool {
+    url.starts_with("https://auth.openai.com/api/accounts/authorize?") && url.len() <= 16_384
+}
+
+fn open_browser(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "Cannot open the browser. Try again.".to_owned())
+}
+
+/// `{ authorizeUrl, mode: "loopback" }` with the browser opened, or `{ authorizeUrl: null, message }`.
 #[tauri::command]
-pub async fn poll_chatgpt_sign_in(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
-    state
-        .write(Method::POST, "/api/v1/coach/chatgpt/poll", None)
+pub async fn start_chatgpt_sign_in(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, NativeAuth>,
+    loopback: tauri::State<'_, ChatgptLoopback>,
+) -> Result<Value, String> {
+    // iPhone: Safari cannot reach the app's listener while the app is in the background.
+    if cfg!(mobile) {
+        return Ok(serde_json::json!({
+            "authorizeUrl": null,
+            "message": "Sign in with ChatGPT on the Mac or on the web; the Coach then uses it here too."
+        }));
+    }
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .map_err(|_| "Could not start the sign-in. Try again.".to_owned())?;
+    let port = listener.local_addr().map_err(|_| INVALID_RESPONSE)?.port();
+    let reply = state
+        .write(
+            Method::POST,
+            "/api/v1/coach/chatgpt/start",
+            Some(serde_json::json!({ "port": port })),
+        )
         .await?
-        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())?;
+    if let Some(url) = reply.get("authorizeUrl").and_then(Value::as_str) {
+        if !authorize_url(url) {
+            return Err(INVALID_RESPONSE.to_owned());
+        }
+        loopback.superseded.notify_waiters();
+        *loopback.listener.lock().await = Some(listener);
+        open_browser(&app, url)?;
+    }
+    Ok(reply)
+}
+
+/// Waits (up to 10 minutes, the server's limit) for the browser to come back,
+/// then completes the sign-in: `{ status: "signed_in" | "failed", message? }`.
+#[tauri::command]
+pub async fn finish_chatgpt_sign_in(
+    state: tauri::State<'_, NativeAuth>,
+    loopback: tauri::State<'_, ChatgptLoopback>,
+) -> Result<Value, String> {
+    let failed = |message: &str| Ok(serde_json::json!({ "status": "failed", "message": message }));
+    let Some(listener) = loopback.listener.lock().await.take() else {
+        return failed("Start the sign-in again.");
+    };
+    let port = listener.local_addr().map_err(|_| INVALID_RESPONSE)?.port();
+    let (mut stream, target) = tokio::select! {
+        got = tokio::time::timeout(std::time::Duration::from_secs(600), callback(&listener)) => match got {
+            Ok(Ok(got)) => got,
+            _ => return failed("The sign-in timed out. Start again."),
+        },
+        _ = loopback.superseded.notified() => return failed("A newer sign-in replaced this one."),
+    };
+    let result = state
+        .write(
+            Method::POST,
+            "/api/v1/coach/chatgpt/complete",
+            Some(serde_json::json!({ "callbackUrl": format!("http://127.0.0.1:{port}{target}") })),
+        )
+        .await;
+    let signed_in = matches!(&result, Ok(Some(reply)) if reply["status"] == "signed_in");
+    respond(&mut stream, signed_in).await;
+    result?.ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// The first `GET /auth/callback…` request's target; anything else (a favicon) gets a 404.
+async fn callback(
+    listener: &tokio::net::TcpListener,
+) -> std::io::Result<(tokio::net::TcpStream, String)> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    loop {
+        let (mut stream, _) = listener.accept().await?;
+        let mut head = Vec::new();
+        let mut buffer = [0u8; 4096];
+        while !head.windows(4).any(|w| w == b"\r\n\r\n") && head.len() < 16_384 {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut buffer))
+                .await
+            {
+                Ok(Ok(read)) if read > 0 => head.extend_from_slice(&buffer[..read]),
+                _ => break,
+            }
+        }
+        if let Some(target) = callback_target(&head) {
+            return Ok((stream, target));
+        }
+        let _ = stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await;
+    }
+}
+
+fn callback_target(head: &[u8]) -> Option<String> {
+    let line = std::str::from_utf8(head).ok()?.lines().next()?;
+    let mut parts = line.split(' ');
+    let (method, target) = (parts.next()?, parts.next()?);
+    (method == "GET" && (target == "/auth/callback" || target.starts_with("/auth/callback?")))
+        .then(|| target.to_owned())
+}
+
+/// The page the browser shows after coming back.
+async fn respond(stream: &mut tokio::net::TcpStream, signed_in: bool) {
+    use tokio::io::AsyncWriteExt;
+    let (title, text) = if signed_in {
+        (
+            "ChatGPT is connected",
+            "The Coach now runs on your ChatGPT plan. You can close this tab and return to todalo.",
+        )
+    } else {
+        (
+            "ChatGPT sign-in failed",
+            "Return to todalo to see why and try again.",
+        )
+    };
+    let body = format!(
+        "<!doctype html><meta charset=\"utf-8\"><title>todalo</title><body style=\"font:16px system-ui;margin:3rem auto;max-width:32rem;padding:0 1rem\"><h1 style=\"font-size:1.25rem\">{title}</h1><p>{text}</p></body>"
+    );
+    let reply = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _ = stream.write_all(reply.as_bytes()).await;
+    let _ = stream.shutdown().await;
 }
 
 /// The model the ChatGPT sign-in runs; null (404) when not signed in.
@@ -130,14 +262,13 @@ pub async fn sign_out_chatgpt(state: tauri::State<'_, NativeAuth>) -> Result<Val
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
-/// Opens OpenAI's device sign-in page in the system browser. A fixed URL; this
-/// is not a general URL opener.
+/// Opens OpenAI's sign-in page again (the tab was closed). OpenAI's authorize page only.
 #[tauri::command]
-pub fn open_chatgpt_sign_in(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    app.opener()
-        .open_url("https://auth.openai.com/codex/device", None::<&str>)
-        .map_err(|_| "Cannot open the browser. Go to auth.openai.com/codex/device.".to_owned())
+pub fn open_chatgpt_sign_in(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    if !authorize_url(&url) {
+        return Err(INVALID.to_owned());
+    }
+    open_browser(&app, &url)
 }
 
 /// `/api/v1/coach/...?timeZone=…` for the webview's IANA zone.
@@ -233,6 +364,36 @@ mod tests {
             serde_json::from_value(serde_json::json!({ "provider": "chatgpt", "model": "m" }))
                 .unwrap();
         assert_eq!(provider_body(unknown), Err(INVALID));
+    }
+
+    #[test]
+    fn chatgpt_sign_in_opens_and_forwards_only_openai_and_the_callback() {
+        assert!(authorize_url(
+            "https://auth.openai.com/api/accounts/authorize?client_id=x"
+        ));
+        assert!(!authorize_url(
+            "https://auth.openai.com.evil.example/api/accounts/authorize?x"
+        ));
+        assert!(!authorize_url(
+            "https://evil.example/?https://auth.openai.com/api/accounts/authorize?"
+        ));
+        assert!(!authorize_url("file:///etc/passwd"));
+        assert_eq!(
+            callback_target(
+                b"GET /auth/callback?code=c&state=s HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+            ),
+            Some("/auth/callback?code=c&state=s".to_owned())
+        );
+        assert_eq!(callback_target(b"GET /favicon.ico HTTP/1.1\r\n\r\n"), None);
+        assert_eq!(
+            callback_target(b"POST /auth/callback?code=c HTTP/1.1\r\n\r\n"),
+            None
+        );
+        assert_eq!(
+            callback_target(b"GET /auth/callbackX HTTP/1.1\r\n\r\n"),
+            None
+        );
+        assert_eq!(callback_target(b"\xff\xfe"), None);
     }
 
     #[test]

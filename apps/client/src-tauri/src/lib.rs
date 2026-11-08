@@ -73,6 +73,7 @@ pub fn run() {
         .manage(oauth::GoogleFlow::default())
         .manage(links::LinkInbox::default())
         .manage(calendar::LiveStream::default())
+        .manage(coach::ChatgptLoopback::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
             let handle = app.handle().clone();
@@ -151,7 +152,7 @@ pub fn run() {
             coach::test_coach,
             coach::coach_explanations,
             coach::start_chatgpt_sign_in,
-            coach::poll_chatgpt_sign_in,
+            coach::finish_chatgpt_sign_in,
             coach::save_chatgpt_model,
             coach::sign_out_chatgpt,
             coach::open_chatgpt_sign_in,

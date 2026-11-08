@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CoachModelError, type CoachConfig, type CoachMessage } from "@todalo/server/coach";
 import { CoachSecretError } from "@todalo/server/coach-secret";
-import { ChatgptRefusedError, type ChatgptTokens } from "@todalo/server/coach-chatgpt";
+import { createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "@todalo/server/coach-chatgpt";
+import { fakeOpenaiAuth } from "../../../packages/server/src/coach-chatgpt.fake";
 import type { StatusInputs } from "@todalo/server/goal-status";
 import type { SeasonGoalRecord } from "@todalo/server/season-dto";
 import { createCoachRoutes, type CoachStore } from "./coach-routes";
@@ -14,11 +15,11 @@ let calls: { config: CoachConfig; messages: CoachMessage[]; schema?: string }[];
 let reply: (facts: { goal?: string }) => string;
 let secretReady: boolean;
 let clock: Date;
-/** Ticket 18: saved ChatGPT sign-ins, and what the fake OpenAI does on the next poll. */
+/** Ticket 18: saved ChatGPT sign-ins and registrations, and the fake auth.openai.com the real sign-in code talks to. */
 let chatgptRows: Map<string, { model: string; tokens: ChatgptTokens | null }>;
-let openai: "waiting" | "approved" | "refused" | "down";
-let polls: number;
-const tokens: ChatgptTokens = { accessToken: "chatgpt-access-secret", refreshToken: "chatgpt-refresh-secret", accountId: "acct-1", email: "alice@example.com", expiresAt: new Date("2026-03-01T00:00:00Z") };
+let clients: Map<string, ChatgptClient>;
+let openai: ReturnType<typeof fakeOpenaiAuth>;
+const tokens: ChatgptTokens = { clientId: "oaiapp_1", accessToken: "chatgpt-access-secret", refreshToken: "chatgpt-refresh-secret", email: "alice@example.com", expiresAt: new Date("2026-03-01T00:00:00Z"), earliestRefreshAt: null, scopes: [] };
 
 const goal = (goalId: string, title: string, archived = false): SeasonGoalRecord =>
   ({ id: `sg-${goalId}`, goalId, title, color: "blue", archivedAt: archived ? new Date() : null, tier: "primary", target: `${title} target`, carriedFromId: null });
@@ -39,32 +40,27 @@ beforeEach(() => {
   reviewed = true;
   clock = new Date("2026-02-18T12:00:00Z");
   chatgptRows = new Map();
-  openai = "waiting";
-  polls = 0;
+  clients = new Map();
+  openai = fakeOpenaiAuth();
+  store.chatgptAuth = createChatgptAuth(openai.fetch);
 });
 
 const keyed = (userId: string) => providers.get(userId) ?? null;
 
 const store: CoachStore = {
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
-  allowedOrigins: new Set(["http://localhost:5173"]),
+  allowedOrigins: new Set(["http://localhost:5173", "https://app.todalo.dev"]),
   // Like the store: ChatGPT while signed in, else the saved key.
   provider: async (userId) => {
     const signedIn = chatgptRows.get(userId);
-    return signedIn?.tokens ? { provider: "chatgpt", model: signedIn.model, baseUrl: null, apiKey: signedIn.tokens.accessToken, accountId: signedIn.tokens.accountId, keyLast4: null } : keyed(userId);
+    return signedIn?.tokens ? { provider: "chatgpt", model: signedIn.model, baseUrl: null, apiKey: signedIn.tokens.accessToken, keyLast4: null } : keyed(userId);
   },
   keyProvider: async (userId) => keyed(userId),
-  chatgptAuth: {
-    start: async () => ({ deviceAuthId: "device-secret", userCode: "ABCD-1234", intervalSeconds: 5 }),
-    poll: async (code) => {
-      polls++;
-      expect(code.deviceAuthId).toBe("device-secret");
-      if (openai === "down") throw new CoachModelError("Could not reach OpenAI.");
-      if (openai === "refused") throw new ChatgptRefusedError("OpenAI ended the sign-in. Start again.");
-      return openai === "approved" ? tokens : null;
-    },
-    refresh: async () => tokens,
-  },
+  // The real sign-in code; only auth.openai.com is fake (replaced per test, below).
+  chatgptAuth: createChatgptAuth(),
+  chatgptClient: async (userId, key) => clients.get(`${userId} ${key}`) ?? null,
+  saveChatgptClient: async (userId, key, client) => { clients.set(`${userId} ${key}`, client); },
+  forgetChatgptClient: async (userId, key) => { clients.delete(`${userId} ${key}`); },
   chatgpt: async (userId) => {
     const row = chatgptRows.get(userId);
     return row ? { status: row.tokens ? "signed_in" : "expired", email: row.tokens?.email ?? null, model: row.model } : null;
@@ -110,7 +106,7 @@ const call = (method: string, path: string, init: { user?: string; cookie?: stri
 };
 const connect = (user: string, body: unknown) => call("PUT", "/coach/provider", { user, body });
 /** GET /coach for a user with nothing connected. */
-const off = { provider: null, keyProvider: null, chatgpt: null, chatgptAvailable: true };
+const off = { provider: null, keyProvider: null, chatgpt: null };
 
 describe("coach provider settings", () => {
   it("starts unconnected, saves a key and returns only its last four characters", async () => {
@@ -208,38 +204,113 @@ describe("Anthropic by API key (ticket 17b)", () => {
 });
 
 describe("ChatGPT sign-in (ticket 18)", () => {
-  const start = (user = "alice") => call("POST", "/coach/chatgpt/start", { user });
-  const poll = async (user = "alice") => (await call("POST", "/coach/chatgpt/poll", { user })).json();
-  const later = (seconds: number) => { clock = new Date(clock.getTime() + seconds * 1000); };
+  type Started = { authorizeUrl: string | null; mode?: string; message?: string };
+  const start = async (init: Parameters<typeof call>[2] = { user: "alice", body: { port: 51234 } }) => (await call("POST", "/coach/chatgpt/start", init)).json() as Promise<Started>;
+  const complete = async (callbackUrl: string, user = "alice") => (await call("POST", "/coach/chatgpt/complete", { user, body: { callbackUrl } })).json();
+  const later = (minutes: number) => { clock = new Date(clock.getTime() + minutes * 60_000); };
+  const params = (url: string) => new URL(url).searchParams;
 
-  it("shows a code to enter at OpenAI, polls at OpenAI's interval and signs in once approved", async () => {
+  it("Mac: registers todalo on the first sign-in, completes through the loopback redirect and reuses the registration", async () => {
     const started = await start();
-    const text = await started.text();
-    expect(text).not.toContain("device-secret");
-    expect(JSON.parse(text)).toEqual({ signIn: { userCode: "ABCD-1234", verificationUrl: "https://auth.openai.com/codex/device", intervalSeconds: 5 } });
-    expect(await poll()).toEqual({ status: "pending" });
-    expect(polls).toBe(0);
-    later(5);
-    expect(await poll()).toEqual({ status: "pending" });
-    expect(polls).toBe(1);
-    openai = "approved";
-    later(1);
-    expect(await poll()).toEqual({ status: "pending" });
-    later(5);
-    expect(await poll()).toEqual({ status: "signed_in" });
-    const coach = await call("GET", "/coach", { user: "alice" });
-    const body = await coach.text();
-    expect(body).not.toContain("chatgpt-access-secret");
-    expect(body).not.toContain("chatgpt-refresh-secret");
+    expect(started.mode).toBe("loopback");
+    const authorize = params(started.authorizeUrl!);
+    expect(started.authorizeUrl!.startsWith("https://auth.openai.com/api/accounts/authorize?")).toBe(true);
+    expect(Object.fromEntries(authorize)).toMatchObject({ client_id: "dynamic_agent_client", agent_name_hint: "todalo", redirect_uri: "http://127.0.0.1:51234/auth/callback", code_challenge_method: "S256" });
+    expect(JSON.stringify(started)).not.toMatch(/verifier/);
+    const back = openai.approve(started.authorizeUrl!);
+    expect(await complete(back)).toEqual({ status: "signed_in" });
+    expect(clients.get("alice http://127.0.0.1/auth/callback")).toEqual({ clientId: "oaiapp_1", email: "alice@example.com", sharing: true });
+    const body = await (await call("GET", "/coach", { user: "alice" })).text();
+    expect(body).not.toContain("access-for-");
+    expect(body).not.toContain("refresh-");
     expect(JSON.parse(body)).toEqual({ ...off, provider: { provider: "chatgpt", model: "gpt-5.5", baseUrl: null, keyHint: null }, chatgpt: { status: "signed_in", email: "alice@example.com", model: "gpt-5.5" } });
-    expect(await poll()).toEqual({ status: "failed", message: "Start the sign-in again." });
+    // The callback works once.
+    expect(await complete(back)).toEqual({ status: "failed", message: "This sign-in is no longer active. Start again." });
+    // Next time, on another port: the same client, no new registration.
+    const again = params((await start({ user: "alice", body: { port: 60001 } })).authorizeUrl!);
+    expect(Object.fromEntries(again)).toMatchObject({ client_id: "oaiapp_1", login_hint: "alice@example.com", redirect_uri: "http://127.0.0.1:60001/auth/callback" });
+    expect(again.has("agent_name_hint")).toBe(false);
+    expect(openai.clients.size).toBe(1);
+  });
+
+  it("web on localhost: OpenAI sends the browser to the API callback, which checks the state against the signed-in user", async () => {
+    const started = await start({ cookie: "alice", origin: "http://localhost:5173" });
+    expect(started.mode).toBe("callback");
+    const back = new URL(openai.approve(started.authorizeUrl!));
+    expect(back.origin + back.pathname).toBe("http://localhost:5173/api/v1/coach/chatgpt/callback");
+    const visit = (cookie?: string) => app.handle(new Request(`http://localhost/api/v1/coach/chatgpt/callback${back.search}`, { headers: cookie ? { cookie: `session=${cookie}` } : {} }));
+    const anonymous = await visit();
+    expect(anonymous.status).toBe(400);
+    expect(await anonymous.text()).toContain("Sign in to todalo in this browser");
+    expect(await (await visit("bob")).text()).toContain("This sign-in is no longer active");
+    const page = await visit("alice");
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain("ChatGPT is connected");
+    expect(chatgptRows.get("alice")?.tokens?.clientId).toBe("oaiapp_1");
+    expect(chatgptRows.has("bob")).toBe(false);
+  });
+
+  it("web elsewhere: OpenAI takes only loopback redirects, so the user pastes the address it sent the browser to", async () => {
+    const started = await start({ cookie: "alice", origin: "https://app.todalo.dev" });
+    expect(started.mode).toBe("paste");
+    const redirect = new URL(params(started.authorizeUrl!).get("redirect_uri")!);
+    expect(redirect.hostname).toBe("127.0.0.1");
+    expect(Number(redirect.port)).toBeGreaterThanOrEqual(49_152);
+    const back = openai.approve(started.authorizeUrl!);
+    expect(await complete("  " + back.replace("http://", "") + " ")).toEqual({ status: "signed_in" });
+  });
+
+  it.each([
+    ["another user's sign-in", (back: string) => complete(back, "bob"), "This sign-in is no longer active. Start again."],
+    ["a made-up state", (back: string) => complete(back.replace(/state=[^&]+/, "state=forged")), "This sign-in is no longer active. Start again."],
+    ["an address for another port", (back: string) => complete(back.replace(":51234", ":51235")), "That address does not belong to this sign-in. Start again."],
+    ["an address that is not a URL", () => complete("http://"), "Paste the full address from your browser's address bar."],
+    ["an expired sign-in", (back: string) => { later(11); return complete(back); }, "This sign-in is no longer active. Start again."],
+  ])("refuses %s", async (_name, finish, message) => {
+    const back = openai.approve((await start()).authorizeUrl!);
+    expect(await finish(back)).toEqual({ status: "failed", message });
+    expect(chatgptRows.size).toBe(0);
+  });
+
+  it("a started sign-in replaces the last one; another user's attempt does not end it", async () => {
+    const first = openai.approve((await start()).authorizeUrl!);
+    const second = openai.approve((await start()).authorizeUrl!);
+    expect(await complete(first)).toMatchObject({ status: "failed" });
+    expect(await complete(second, "bob")).toMatchObject({ status: "failed" });
+    expect(await complete(second)).toEqual({ status: "signed_in" });
+  });
+
+  it("declined or not shared: no tokens, and the next sign-in asks for consent again", async () => {
+    expect(await complete(openai.approve((await start()).authorizeUrl!, { decline: true }))).toEqual({ status: "failed", message: "You declined the sign-in at OpenAI. Sign in again when you are ready." });
+    expect(await complete(openai.approve((await start()).authorizeUrl!, { share: false })))
+      .toEqual({ status: "failed", message: "OpenAI did not share your ChatGPT plan. Sign in again and allow sharing of your ChatGPT plan." });
+    expect(chatgptRows.size).toBe(0);
+    expect(clients.get("alice http://127.0.0.1/auth/callback")?.sharing).toBe(false);
+    expect(params((await start()).authorizeUrl!).get("prompt")).toBe("consent");
+  });
+
+  it("forgets a registration OpenAI no longer accepts, and needs COACH_SECRET_KEY", async () => {
+    await complete(openai.approve((await start()).authorizeUrl!, { share: false }));
+    const back = openai.approve((await start()).authorizeUrl!);
+    openai.clients.delete("oaiapp_1");
+    expect(await complete(back)).toEqual({ status: "failed", message: "OpenAI no longer accepts todalo's registration. Sign in again." });
+    expect(clients.size).toBe(0);
+    expect(params((await start()).authorizeUrl!).get("client_id")).toBe("dynamic_agent_client");
+    secretReady = false;
+    expect(await complete(openai.approve((await start()).authorizeUrl!))).toEqual({ status: "failed", message: "This server cannot store API keys yet (COACH_SECRET_KEY is missing)." });
+  });
+
+  it("says so when OpenAI cannot be reached", async () => {
+    openai.down = true;
+    expect(await start()).toEqual({ authorizeUrl: null, message: "Could not reach OpenAI. Try again." });
   });
 
   it("runs the Coach on ChatGPT while signed in, then falls back to the saved key after sign-out or expiry", async () => {
     await connect("alice", { provider: "openai", model: "m", apiKey: "sk-12345678" });
     chatgptRows.set("alice", { model: "gpt-5.5", tokens });
     expect(await (await call("POST", "/coach/provider/test", { user: "alice" })).json()).toEqual({ ok: true });
-    expect(calls.at(-1)!.config).toMatchObject({ provider: "chatgpt", apiKey: "chatgpt-access-secret", accountId: "acct-1" });
+    expect(calls.at(-1)!.config).toMatchObject({ provider: "chatgpt", apiKey: "chatgpt-access-secret" });
     // A model change for ChatGPT leaves the key provider alone.
     const changed = await call("PUT", "/coach/chatgpt", { user: "alice", body: { model: "gpt-6-sol" } });
     expect((await changed.json() as { provider: { model: string } }).provider.model).toBe("gpt-6-sol");
@@ -256,33 +327,12 @@ describe("ChatGPT sign-in (ticket 18)", () => {
     expect(calls.at(-1)!.config.provider).toBe("openai");
   });
 
-  it("ends a refused or expired sign-in, keeps waiting through an outage and needs COACH_SECRET_KEY", async () => {
-    await start();
-    later(5);
-    openai = "down";
-    expect(await poll()).toEqual({ status: "pending", message: "Could not reach OpenAI." });
-    later(5);
-    openai = "refused";
-    expect(await poll()).toEqual({ status: "failed", message: "OpenAI ended the sign-in. Start again." });
-    await start();
-    later(16 * 60);
-    expect(await poll()).toEqual({ status: "failed", message: "The code expired. Start the sign-in again." });
-    await start();
-    later(5);
-    openai = "approved";
-    secretReady = false;
-    expect(await poll()).toEqual({ status: "failed", message: "This server cannot store API keys yet (COACH_SECRET_KEY is missing)." });
-    expect(chatgptRows.size).toBe(0);
-  });
-
-  it("is not offered without an OAuth client, and guards its writes", async () => {
-    const plain = createCoachRoutes({ ...store, chatgptAuth: null });
-    const headers = { authorization: "Bearer alice" };
-    expect(await (await plain.handle(new Request("http://localhost/api/v1/coach", { headers }))).json()).toEqual({ ...off, chatgptAvailable: false });
-    expect(await (await plain.handle(new Request("http://localhost/api/v1/coach/chatgpt/start", { method: "POST", headers }))).json())
-      .toEqual({ signIn: null, message: "This server does not offer ChatGPT sign-in yet. Use an API key instead." });
+  it("guards its writes", async () => {
     expect((await call("POST", "/coach/chatgpt/start", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    expect((await call("POST", "/coach/chatgpt/complete", { cookie: "alice", origin: "https://evil.example", body: { callbackUrl: "x" } })).status).toBe(403);
     expect((await call("DELETE", "/coach/chatgpt", { cookie: "alice", origin: "https://evil.example" })).status).toBe(403);
+    expect((await call("POST", "/coach/chatgpt/start", { user: "alice", body: { port: 80 } })).status).toBe(400);
+    expect((await call("POST", "/coach/chatgpt/complete", { user: "alice", body: {} })).status).toBe(400);
     expect((await call("PUT", "/coach/chatgpt", { user: "alice", body: { model: "m" } })).status).toBe(404);
     expect((await call("PUT", "/coach/chatgpt", { user: "alice", body: { model: "" } })).status).toBe(400);
   });

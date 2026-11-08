@@ -98,7 +98,7 @@ fn main() {
             "test_coach",
             "coach_explanations",
             "start_chatgpt_sign_in",
-            "poll_chatgpt_sign_in",
+            "finish_chatgpt_sign_in",
             "save_chatgpt_model",
             "sign_out_chatgpt",
             "open_chatgpt_sign_in",

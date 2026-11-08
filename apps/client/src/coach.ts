@@ -1,15 +1,14 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ChatgptDto, ChatgptPollDto, ChatgptSignInDto, CoachDto, CoachExplanationsDto, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
+import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachExplanationsDto, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { localZone } from "./seasons";
 import type { DraftDayDto, DraftDto, DraftItemDto, DraftsDto } from "../../../packages/server/src/drafts";
 import { taskKeys } from "./tasks";
 
-export type { ChatgptDto, ChatgptPollDto, ChatgptSignInDto, CoachDto, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
+export type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
 export { draftCounts } from "../../../packages/server/src/drafts";
 export { coachProviderInfo, coachProviderKinds, ollamaDefaultUrl, ollamaUrl } from "../../../packages/server/src/coach";
-const chatgptPage = "https://auth.openai.com/codex/device";
 /** What Connect sends; an omitted apiKey keeps the saved key for the same provider. */
 export interface CoachProviderInput { provider: CoachProviderKind; model: string; baseUrl?: string; apiKey?: string }
 export interface CoachTestResult { ok: boolean; message?: string }
@@ -23,13 +22,16 @@ export interface CoachTransport {
   disconnect(): Promise<CoachDto>;
   test(): Promise<CoachTestResult>;
   explanations(timeZone: string): Promise<CoachExplanationsDto>;
-  /** Ticket 18: ChatGPT sign-in. Start returns the code to enter at OpenAI; poll until signed in. */
-  startChatgpt(): Promise<ChatgptSignInDto>;
-  pollChatgpt(): Promise<ChatgptPollDto>;
+  /** Ticket 18: ChatGPT sign-in. Start returns OpenAI's page (the Mac app opens it and listens on 127.0.0.1 for the return). */
+  startChatgpt(): Promise<ChatgptStartDto>;
+  /** Mac: waits for the browser to come back to the loopback listener, then completes the sign-in. */
+  finishChatgpt(): Promise<ChatgptCompleteDto>;
+  /** Web paste mode: the address OpenAI sent the browser to. */
+  completeChatgpt(callbackUrl: string): Promise<ChatgptCompleteDto>;
   saveChatgptModel(model: string): Promise<CoachDto>;
   signOutChatgpt(): Promise<CoachDto>;
-  /** Opens OpenAI's sign-in page; call it straight from the click (pop-up blockers). */
-  openChatgpt(): void;
+  /** Opens OpenAI's sign-in page again. */
+  openChatgpt(authorizeUrl: string): void;
   /** Ticket 19: open drafts from today on. */
   drafts(timeZone: string): Promise<DraftsDto>;
   /** The Coach drafts today's plan; `draft` null with the reason when it could not. */
@@ -62,10 +64,12 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     test: () => request<CoachTestResult | null>("POST", "/api/v1/coach/provider/test").then(result => result ?? notConnected),
     explanations: (timeZone) => request("GET", `/api/v1/coach/explanations?${new URLSearchParams({ timeZone })}`),
     startChatgpt: () => request("POST", "/api/v1/coach/chatgpt/start"),
-    pollChatgpt: () => request("POST", "/api/v1/coach/chatgpt/poll"),
+    // The web never gets the loopback mode.
+    finishChatgpt: async () => ({ status: "failed", message: "Start the sign-in again." }),
+    completeChatgpt: (callbackUrl) => request("POST", "/api/v1/coach/chatgpt/complete", { callbackUrl }),
     saveChatgptModel: (model) => request("PUT", "/api/v1/coach/chatgpt", { model }),
     signOutChatgpt: () => request("DELETE", "/api/v1/coach/chatgpt"),
-    openChatgpt: () => { window.open(chatgptPage, "_blank", "noopener,noreferrer"); },
+    openChatgpt: (authorizeUrl) => { window.open(authorizeUrl, "_blank", "noopener,noreferrer"); },
     drafts: (timeZone) => request("GET", `/api/v1/coach/drafts?${new URLSearchParams({ timeZone })}`),
     draftDay: (timeZone) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/day?${new URLSearchParams({ timeZone })}`).then(result => result ?? noDraft),
     decide: (draftId, accept, itemIds) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/${encodeURIComponent(draftId)}/${accept ? "accept" : "decline"}`, itemIds ? { itemIds } : {})
@@ -87,10 +91,11 @@ export function coachTransport(): CoachTransport {
     test: async () => (await command<CoachTestResult | null>("test_coach")) ?? notConnected,
     explanations: (timeZone) => command("coach_explanations", { timeZone }),
     startChatgpt: () => command("start_chatgpt_sign_in"),
-    pollChatgpt: () => command("poll_chatgpt_sign_in"),
+    finishChatgpt: () => command("finish_chatgpt_sign_in"),
+    completeChatgpt: async () => ({ status: "failed", message: "Start the sign-in again." }),
     saveChatgptModel: async (model) => (await command<CoachDto | null>("save_chatgpt_model", { model })) ?? command("coach"),
     signOutChatgpt: () => command("sign_out_chatgpt"),
-    openChatgpt: () => { void command("open_chatgpt_sign_in").catch(() => undefined); },
+    openChatgpt: (authorizeUrl) => { void command("open_chatgpt_sign_in", { url: authorizeUrl }).catch(() => undefined); },
     drafts: (timeZone) => command("coach_drafts", { timeZone }),
     draftDay: async (timeZone) => (await command<DraftDayDto | null>("draft_day", { timeZone })) ?? noDraft,
     decide: async (draftId, accept, itemIds) => (await command<DraftDayDto | null>("decide_draft", { draftId, accept, itemIds: itemIds ?? null })) ?? { draft: null },
@@ -123,12 +128,9 @@ export function coachMutations(transport: CoachTransport, cache: QueryClient, us
     test: () => transport.test(),
     saveChatgptModel: (model: string) => settled(() => transport.saveChatgptModel(model)),
     signOutChatgpt: () => settled(() => transport.signOutChatgpt()),
-    /** One poll; once signed in, the provider and explanations refetch. */
-    pollChatgpt: async () => {
-      const result = await transport.pollChatgpt();
-      if (result.status === "signed_in") await cache.invalidateQueries({ queryKey: coachKeys.all(userId) });
-      return result;
-    },
+    /** Once signed in, the provider and explanations refetch. */
+    finishChatgpt: () => settled(() => transport.finishChatgpt()),
+    completeChatgpt: (callbackUrl: string) => settled(() => transport.completeChatgpt(callbackUrl)),
   };
 }
 

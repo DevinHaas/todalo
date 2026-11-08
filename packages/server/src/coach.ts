@@ -5,14 +5,18 @@
 // Like Ramble's semantic step (apps/api/src/semantic-llm.ts) it is plain fetch.
 // OpenAI, OpenRouter and Ollama (its /v1 endpoint) speak chat completions with
 // `response_format: json_schema`; ticket 17b adds Anthropic's Messages API
-// (`output_config.format`) and ticket 18 ChatGPT sign-in (the Responses API on
-// the user's subscription, coach-chatgpt.ts). One CoachModel seam covers all.
+// (`output_config.format`) and ticket 18 ChatGPT sign-in (the Responses API
+// with the token of the user's shared ChatGPT plan, coach-chatgpt.ts). One CoachModel seam covers all.
 import { z } from "zod";
 import { bandLabels, statusRules, type GoalStatusDto, type WeekSignals } from "./goal-status";
 import { ratingLabels } from "./ritual-dto";
 
-/** Ticket 18: ChatGPT sign-in calls the Responses API on chatgpt.com with the subscription's token (ADR 0007). */
-export const chatgptBaseUrl = "https://chatgpt.com/backend-api/codex";
+/**
+ * Ticket 18: ChatGPT sign-in calls the public Responses API with the shared-plan
+ * token, as T3 Code's managed Codex does (base_url https://api.openai.com/v1,
+ * wire_api "responses"). Not chatgpt.com/backend-api: the token's resource is api.openai.com/v1.
+ */
+export const chatgptBaseUrl = "https://api.openai.com/v1";
 export const chatgptDefaultModel = "gpt-5.5";
 
 /** Providers connected with an API key or a local endpoint (Settings › Coach's provider choice). */
@@ -42,9 +46,17 @@ export const coachProviderInput = z.strictObject({
 export type CoachProviderInput = z.infer<typeof coachProviderInput>;
 /** What PUT /api/v1/coach/chatgpt accepts: the model the ChatGPT sign-in runs. */
 export const chatgptModelInput = z.strictObject({ model: z.string().trim().min(1).max(200) });
-/** Ticket 18: a started ChatGPT sign-in (the code to enter at verificationUrl), or why it could not start. */
-export interface ChatgptSignInDto { signIn: { userCode: string; verificationUrl: string; intervalSeconds: number } | null; message?: string }
-export interface ChatgptPollDto { status: "pending" | "signed_in" | "failed"; message?: string }
+/** POST /coach/chatgpt/start: the Mac app's loopback port; the web sends nothing. */
+export const chatgptStartInput = z.strictObject({ port: z.number().int().min(1024).max(65_535).optional() });
+/** POST /coach/chatgpt/complete: the address OpenAI sent the browser back to. */
+export const chatgptCompleteInput = z.strictObject({ callbackUrl: z.string().min(1).max(16_384) });
+/**
+ * Ticket 18: a started ChatGPT sign-in: OpenAI's page to open, and how the
+ * browser comes back. loopback: to the Mac app; callback: to this API (local
+ * web only); paste: the user pastes the address OpenAI sent the browser to.
+ */
+export interface ChatgptStartDto { authorizeUrl: string | null; mode?: "loopback" | "callback" | "paste"; message?: string }
+export interface ChatgptCompleteDto { status: "signed_in" | "failed"; message?: string }
 
 /** A connected provider as the client sees it: the key only as its last four characters. */
 export interface CoachProviderDto { provider: CoachModelKind; model: string; baseUrl: string | null; keyHint: string | null }
@@ -53,17 +65,16 @@ export interface ChatgptDto { status: "signed_in" | "expired"; email: string | n
 /**
  * `provider` is what the Coach runs on now (ChatGPT while signed in, else the
  * saved key or Ollama), null when it is off. `keyProvider` is the saved
- * key/Ollama provider, the fallback. `chatgptAvailable` is false when this
- * server has no ChatGPT sign-in client configured.
+ * key/Ollama provider, the fallback.
  */
-export interface CoachDto { provider: CoachProviderDto | null; keyProvider: CoachProviderDto | null; chatgpt: ChatgptDto | null; chatgptAvailable: boolean }
+export interface CoachDto { provider: CoachProviderDto | null; keyProvider: CoachProviderDto | null; chatgpt: ChatgptDto | null }
 export interface CoachExplanationsDto { explanations: Record<string, string> }
 
 /**
  * Everything needed to call a model; apiKey (for ChatGPT the access token) is
- * plaintext and stays server-side. accountId is the ChatGPT account the token belongs to.
+ * plaintext and stays server-side.
  */
-export interface CoachConfig { provider: CoachModelKind; model: string; baseUrl: string | null; apiKey: string | null; accountId?: string | null }
+export interface CoachConfig { provider: CoachModelKind; model: string; baseUrl: string | null; apiKey: string | null }
 export interface CoachMessage { role: "system" | "user" | "assistant"; content: string }
 /** A JSON schema the reply must follow (strict: every property required, no extras). */
 export interface CoachSchema { name: string; schema: Record<string, unknown> }
@@ -136,10 +147,9 @@ export function anthropicRequest(config: CoachConfig, { messages, schema }: Coac
 }
 
 /**
- * Ticket 18: one Responses API call on the user's ChatGPT subscription. The
- * backend only streams (stream: true, store: false), so the reply is read
- * from the finished SSE body. The request names todalo as its originator and
- * sends todalo's own instructions: it does not pose as the Codex CLI.
+ * Ticket 18: one Responses API call on the user's shared ChatGPT plan. Streamed
+ * and unstored like Codex's own requests (stream: true, store: false), so the
+ * reply is read from the finished SSE body. todalo's own instructions.
  */
 export function chatgptRequest(config: CoachConfig, { messages, schema }: CoachRequest) {
   const instructions = messages.filter(message => message.role === "system").map(message => message.content).join("\n\n");
@@ -155,8 +165,8 @@ export function chatgptRequest(config: CoachConfig, { messages, schema }: CoachR
     init: {
       method: "POST",
       headers: {
-        "content-type": "application/json", accept: "text/event-stream", originator: "todalo",
-        ...config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}, ...config.accountId ? { "chatgpt-account-id": config.accountId } : {},
+        "content-type": "application/json", accept: "text/event-stream",
+        ...config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {},
       },
       body: JSON.stringify(body),
     },
@@ -183,7 +193,9 @@ export function parseChatgptStream(stream: string): string {
 
 /** An HTTP failure as a message the user can act on. */
 export function failureMessage(status: number, provider?: CoachModelKind) {
-  if (provider === "chatgpt" && (status === 401 || status === 403)) return "ChatGPT signed you out. Sign in again in Settings › Coach.";
+  if (provider === "chatgpt" && status === 401) return "ChatGPT signed you out. Sign in again in Settings › Coach.";
+  // T3 Code's docs: some requests are not covered by plan sharing.
+  if (provider === "chatgpt" && status === 403) return "ChatGPT refused this request: your plan's sharing may not cover it. Use an API key instead.";
   if (provider === "chatgpt" && status === 429) return "You reached your ChatGPT plan's usage limit. Try again later.";
   if (status === 401 || status === 403) return "The provider rejected the API key.";
   if (status === 404) return "The provider does not offer this model.";
