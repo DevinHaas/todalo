@@ -6,7 +6,8 @@ const at = (pathname: string, state: unknown = null) => ({ pathname, search: "",
 
 describe("settings", () => {
   it("search filters categories by name and by the settings inside", () => {
-    expect(searchSettings("").map((r) => r.section.id)).toEqual(["account", "general", "theme", "keyboard-shortcuts", "rituals", "calendars", "integrations"]);
+    expect(searchSettings("").map((r) => r.section.id)).toEqual(["account", "general", "theme", "keyboard-shortcuts", "rituals", "coach", "calendars", "integrations"]);
+    expect(searchSettings("api key").map((r) => [r.section.id, r.matches])).toEqual([["coach", ["API key"]]]);
     expect(searchSettings("check-in").map((r) => [r.section.id, r.matches])).toEqual([["rituals", ["Check-in"]]]);
     expect(searchSettings("cal").map((r) => [r.section.id, r.matches])).toEqual([["calendars", []]]);
     expect(searchSettings("todoist").map((r) => [r.section.id, r.matches])).toEqual([["integrations", ["Import from Todoist"]]]);

@@ -337,6 +337,30 @@ export const progressRatings = pgTable("progress_ratings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [uniqueIndex("progress_ratings_run_goal_idx").on(table.runId, table.goalId), index("progress_ratings_user_goal_idx").on(table.userId, table.goalId)]);
 
+// Goals ticket 17: the user's Coach AI provider (one per user). The API key is
+// AES-256-GCM encrypted with COACH_SECRET_KEY and never sent back; keyLast4 is
+// the "…last4" hint. Ticket 18 adds ChatGPT sign-in as another provider value.
+export const coachProviders = pgTable("coach_providers", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider", { enum: ["openai", "openrouter", "ollama"] }).notNull(),
+  model: text("model").notNull(),
+  baseUrl: text("base_url"),
+  encryptedKey: text("encrypted_key"),
+  keyLast4: text("key_last4"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+// Ticket 17: a goal's last Coach status explanation; reused while inputsHash
+// (the facts, provider, model and day) is unchanged.
+export const coachExplanations = pgTable("coach_explanations", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
+  inputsHash: text("inputs_hash").notNull(),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.userId, table.goalId] })]);
+
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

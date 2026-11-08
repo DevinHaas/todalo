@@ -104,9 +104,14 @@ export interface StatusInputs {
  * from the start (the last may be shorter), on the user's clock in `zone`;
  * the current week ends at `now`, so a scheduled task still ahead is not yet missed.
  */
-export function seasonStatuses({ startDate, lengthDays, today, now, zone, goalIds, inputs }: {
-  startDate: string; lengthDays: number; today: string; now: Date; zone: string; goalIds: string[]; inputs: StatusInputs;
-}): Record<string, GoalStatusDto> {
+export function seasonStatuses(args: SeasonArgs): Record<string, GoalStatusDto> {
+  const { day, lengthDays, perGoal } = seasonSignals(args);
+  return Object.fromEntries(args.goalIds.map(id => [id, goalStatus({ day, length: lengthDays, weeks: perGoal.get(id)!, reviewed: args.inputs.reviewed })]));
+}
+
+type SeasonArgs = { startDate: string; lengthDays: number; today: string; now: Date; zone: string; goalIds: string[]; inputs: StatusInputs };
+/** The per-week signals behind each goal's status (ticket 17: the Coach explains them). */
+export function seasonSignals({ startDate, lengthDays, today, now, zone, goalIds, inputs }: SeasonArgs) {
   const progress = seasonProgress(startDate, lengthDays, today);
   const day = progress.phase === "upcoming" ? 0 : progress.day;
   const perGoal = new Map<string, WeekSignals[]>(goalIds.map(id => [id, []]));
@@ -126,5 +131,5 @@ export function seasonStatuses({ startDate, lengthDays, today, now, zone, goalId
       });
     }
   }
-  return Object.fromEntries(goalIds.map(id => [id, goalStatus({ day, length: lengthDays, weeks: perGoal.get(id)!, reviewed: inputs.reviewed })]));
+  return { day, lengthDays, perGoal };
 }

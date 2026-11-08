@@ -15,6 +15,9 @@ import { createGoalRoutes } from "./goal-routes";
 import { createSeasonRoutes } from "./season-routes";
 import * as seasons from "@todalo/server/seasons";
 import { createRitualRoutes } from "./ritual-routes";
+import { createCoachRoutes } from "./coach-routes";
+import * as coach from "@todalo/server/coach-store";
+import { createCoachModel } from "@todalo/server/coach";
 import * as rituals from "@todalo/server/rituals";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
@@ -136,6 +139,17 @@ const app = createApi(dependencies)
   weekInputs: rituals.getWeekInputs,
   season: async (userId) => (await seasons.getCurrentSeason(userId))?.season ?? null,
   seasonReviewInputs: rituals.getSeasonReviewInputs,
+})).use(createCoachRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  save: coach.saveCoachProvider,
+  remove: coach.removeCoachProvider,
+  model: (config) => createCoachModel(config),
+  season: seasons.getCurrentSeason,
+  statusInputs: rituals.getStatusInputs,
+  cached: coach.getCachedExplanations,
+  cache: coach.cacheExplanation,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

@@ -2,6 +2,7 @@ mod attachments;
 mod auth;
 mod bulk;
 mod calendar;
+mod coach;
 mod comments;
 mod credentials;
 mod endpoint;
@@ -144,6 +145,11 @@ pub fn run() {
             rituals::record_ritual_run,
             rituals::weekly_review,
             rituals::season_review,
+            coach::coach,
+            coach::save_coach_provider,
+            coach::disconnect_coach,
+            coach::test_coach,
+            coach::coach_explanations,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

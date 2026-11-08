@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useOpenSettings } from "./settings-nav";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
-import { reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
+import { coach, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
@@ -431,6 +431,13 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "ritual.weekly-review": () => withRituals(state => state.settings.weeklyReview.enabled ? openRitual("weeklyReview") : ritualOff("Weekly review")),
       "ritual.season-review": () => withRituals(state => !state.settings.seasonReview.enabled ? ritualOff("Season review")
         : state.seasonReview.period ? openRitual("seasonReview") : toasts.add({ title: "No season is running", description: "Start a season to review it." })),
+      "coach.settings": () => latest.current.openSettings("coach"),
+      // On Settings › Coach the button shows the result inline; elsewhere a toast does.
+      "coach.test": () => {
+        if (press(document.querySelector("[data-coach-settings]"), '[data-coach-action="test"]') !== false) return;
+        const failed = (description?: string) => toasts.add({ title: "Coach connection failed", description: description ?? "Try again, or check Settings › Coach." });
+        void coach.test().then(result => result.ok ? toasts.add({ title: "Coach connected", description: "The model answered." }) : failed(result.message), () => failed());
+      },
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 13: the Weekly review's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),

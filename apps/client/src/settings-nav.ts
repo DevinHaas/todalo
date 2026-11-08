@@ -9,6 +9,7 @@ export const settingsSections = [
   { id: "theme", name: "Theme", terms: ["Dark theme"] },
   { id: "keyboard-shortcuts", name: "Keyboard shortcuts", terms: ["Shortcut help"] },
   { id: "rituals", name: "Rituals", terms: ["Check-in", "Weekly review", "Season review"] },
+  { id: "coach", name: "Coach", terms: ["AI provider", "API key", "OpenAI", "OpenRouter", "Ollama", "Test connection"] },
   { id: "calendars", name: "Calendars", terms: ["Google Calendar", "Show events"] },
   { id: "integrations", name: "Integrations", terms: ["Import from Todoist"] },
 ] as const;

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-coach-provider"
+description = "Enables the save_coach_provider command without any pre-configured scope."
+commands.allow = ["save_coach_provider"]
+
+[[permission]]
+identifier = "deny-save-coach-provider"
+description = "Denies the save_coach_provider command without any pre-configured scope."
+commands.deny = ["save_coach_provider"]

@@ -4,14 +4,14 @@
 
 **Blocked by:** 15
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] AI provider settings: API key for supported providers, Ollama endpoint
-- [ ] Provider-agnostic inference interface reusing Ramble's provider approach
-- [ ] Coach explanation shown on each goal's status
-- [ ] Tests use a fake provider with canned output
-- [ ] No provider: Coach UI hidden or prompts to connect, nothing else breaks
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] AI provider settings: API key for supported providers, Ollama endpoint
+- [x] Provider-agnostic inference interface reusing Ramble's provider approach
+- [x] Coach explanation shown on each goal's status
+- [x] Tests use a fake provider with canned output
+- [x] No provider: Coach UI hidden or prompts to connect, nothing else breaks
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

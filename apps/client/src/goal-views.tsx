@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import {
   Apple, Baby, Bike, BookOpen, Brain, Briefcase, CalendarRange, Camera, Code, Dog, Dumbbell, Flame, Footprints, GraduationCap, Hash, Heart, House, Leaf,
-  Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
+  Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Sparkles, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { criteriaProgress, goalColorKeys, goalColorValue, goalIcons, type GoalColor, type GoalIcon as GoalIconName, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
 import { bandLabels, type GoalBand, type GoalStatusDto, type SeasonTier } from "./seasons";
@@ -206,7 +206,16 @@ export function CriteriaConfirm({ onAnswer }: { onAnswer(confirmed: boolean): vo
 }
 
 /** The goal's place in the current season (null when it is not in one). */
-export interface GoalSeason { tier: SeasonTier; target: string; /** Ticket 15; absent for an archived goal. */ status?: GoalStatusDto }
+export interface GoalSeason {
+  tier: SeasonTier; target: string; /** Ticket 15; absent for an archived goal. */ status?: GoalStatusDto;
+  /** Ticket 17: the Coach's plain-words reading of the status; absent without a provider or while Too early. */ explanation?: string;
+}
+
+/** Ticket 17: the Coach's explanation of a goal's status, under its badge. */
+export const CoachExplanation = ({ text }: { text?: string }) => text
+  ? <p data-coach-explanation="" className="flex items-start gap-1.5 text-xs-plus text-muted-foreground [overflow-wrap:anywhere]">
+    <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden="true" /><span><span className="sr-only">Coach: </span>{text}</span></p>
+  : null;
 
 /** A season target with its label, so it never reads as the goal's description. */
 export const SeasonTarget = ({ text, className }: { text: string; className?: string }) => <p data-slot="season-target" className={cn("text-sm text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap", className)}>
@@ -265,6 +274,7 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
       <CardContent className="flex min-w-0 flex-1 flex-col gap-1 p-0">
         <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">This season · {season.tier === "primary" ? "Primary" : "Secondary"}{season.status && <GoalStatusBadge status={season.status} />}</p>
         <SeasonTarget text={season.target} />
+        <CoachExplanation text={season.explanation} />
       </CardContent>
       <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Season</Button>
     </Card></section>}
