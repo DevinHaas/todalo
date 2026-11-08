@@ -66,6 +66,8 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         // Rust-only too: the webview reaches it through the semantic `feedback` command.
         .plugin(tauri_plugin_haptics::init())
+        // Goals ticket 14b: the webview may only check and ask for permission and show a notification.
+        .plugin(tauri_plugin_notification::init())
         .manage(NativeAuth::new())
         .manage(oauth::GoogleFlow::default())
         .manage(links::LinkInbox::default())

@@ -297,16 +297,22 @@ export const ritualSettings = pgTable("ritual_settings", {
   weeklyReviewDay: integer("weekly_review_day").default(0).notNull(),
   weeklyReviewTime: text("weekly_review_time").default("17:00").notNull(),
   seasonReviewEnabled: boolean("season_review_enabled").default(false).notNull(),
+  // Ticket 14b: the Evening review (rate today's progress) sits on the schedule like the Check-in.
+  eveningReviewEnabled: boolean("evening_review_enabled").default(false).notNull(),
+  eveningReviewTime: text("evening_review_time").default("20:00").notNull(),
+  eveningReviewTaskId: text("evening_review_task_id").references(() => tasks.id, { onDelete: "set null" }),
+  // Ticket 14b: "Notify me when a ritual is ready".
+  notify: boolean("notify").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const ritualKind = pgEnum("ritual_kind", ["check_in", "weekly_review", "season_review"]);
+export const ritualKind = pgEnum("ritual_kind", ["check_in", "weekly_review", "season_review", "evening_review"]);
 export const ritualRunStatus = pgEnum("ritual_run_status", ["completed", "skipped"]);
 export const progressRatingValue = pgEnum("progress_rating", ["massive", "solid", "mixed", "little", "not_relevant"]);
 
 // One finished (or skipped) ritual per kind and period: the day reflected on
-// (Check-in: yesterday), the week's first day, or the season's start date.
+// (Check-in: yesterday; Evening review: today), the week's first day, or the season's start date.
 export const ritualRuns = pgTable("ritual_runs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

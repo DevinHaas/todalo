@@ -11,7 +11,7 @@ export interface WeekTask {
 export interface WeekLinks { projects: { goalId: string; projectId: string }[]; tasks: { goalId: string; taskId: string }[] }
 export interface WeekGoalSummary {
   goalId: string;
-  /** The Check-in ratings given for days of this week, oldest first. */
+  /** The daily ratings (Evening review, and older Check-in) given for days of this week, oldest first. */
   checkIns: { day: string; rating: ProgressRating }[];
   /** Goal-linked tasks completed during the week. */
   completed: number;

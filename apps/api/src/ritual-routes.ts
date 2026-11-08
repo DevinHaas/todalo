@@ -2,10 +2,10 @@ import { Elysia } from "elysia";
 import { seasonProgress, todayIn } from "@todalo/server/season-days";
 import { zonedTaskDate } from "@todalo/server/dates";
 import {
-  addDays, checkInDay, checkInPeriod, ritualRunInput, ritualSettingsInput, weeklyReviewPeriod,
-  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsDto, type RitualSettingsInput, type RitualsDto, type RunStatus, type SeasonReviewDto, type WeeklyReviewDto,
+  addDays, checkInDay, checkInPeriod, eveningReviewPeriod, ritualRunInput, ritualSettingsInput, weeklyReviewPeriod,
+  type RitualKind, type RitualRunDto, type RitualRunInput, type RitualSettingsInput, type RitualsDto, type RunStatus, type SeasonReviewDto, type WeeklyReviewDto,
 } from "@todalo/server/ritual-dto";
-import type { SeasonReviewInputs, WeekInputs } from "@todalo/server/rituals";
+import type { DailyRitual, SeasonReviewInputs, StoredRitualSettings, WeekInputs } from "@todalo/server/rituals";
 import { summariseWeek } from "@todalo/server/weekly-review";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
@@ -13,14 +13,14 @@ import { zoneOrUtc } from "./season-routes";
 export interface RitualStore {
   verify(headers: Headers): Promise<string | null>;
   allowedOrigins: ReadonlySet<string>;
-  settings(userId: string): Promise<{ settings: RitualSettingsDto; checkInTaskId: string | null }>;
+  settings(userId: string): Promise<StoredRitualSettings>;
   save(userId: string, input: RitualSettingsInput): Promise<void>;
   runStatus(userId: string, kind: RitualKind, period: string): Promise<RunStatus | null>;
   /** null when a rated goal is missing, foreign or archived. */
   record(userId: string, input: RitualRunInput): Promise<RitualRunDto | null>;
-  checkInTask(userId: string): Promise<{ id: string; dueDate: Date | null } | null>;
-  /** Moves (or creates) the Check-in task to start at `start`; null deletes it. Returns its ID. */
-  placeCheckIn(userId: string, start: Date | null): Promise<string | null>;
+  ritualTask(userId: string, kind: DailyRitual): Promise<{ id: string; dueDate: Date | null } | null>;
+  /** Moves (or creates) a daily ritual's item (Check-in, Evening review) to start at `start`; null deletes it. Returns its ID. */
+  placeRitualItem(userId: string, kind: DailyRitual, start: Date | null): Promise<string | null>;
   /** Ticket 13: one week's raw inputs (see getWeekInputs). */
   weekInputs(userId: string, week: { from: Date; to: Date; firstDay: string; lastDay: string }): Promise<WeekInputs>;
   /** Ticket 14: the current season's dates (null before the first) and the Season review's raw inputs. */
@@ -46,26 +46,33 @@ export function createRitualRoutes(store: RitualStore) {
   const now = store.now ?? (() => new Date());
   const zoneOf = (request: Request) => zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
 
-  /** Today's state; `force` re-places the item (settings changed, or a run was recorded). */
-  async function state(userId: string, zone: string, force: boolean): Promise<RitualsDto> {
-    const { settings, checkInTaskId } = await store.settings(userId);
-    const today = todayIn(zone, now());
-    const period = checkInPeriod(today);
-    const status = await store.runStatus(userId, "checkIn", period);
-    let taskId = checkInTaskId;
-    if (!settings.checkIn.enabled) {
-      if (force) taskId = await store.placeCheckIn(userId, null);
+  /** One daily ritual's item for today; `force` re-places it (settings changed, or a run was recorded). */
+  async function daily(userId: string, kind: DailyRitual, { settings, taskIds }: StoredRitualSettings, zone: string, today: string, period: string, force: boolean) {
+    const status = await store.runStatus(userId, kind, period);
+    let taskId = taskIds[kind];
+    if (!settings[kind].enabled) {
+      if (force) taskId = await store.placeRitualItem(userId, kind, null);
     } else {
       const day = checkInDay(today, status !== null);
-      const task = await store.checkInTask(userId);
+      const task = await store.ritualTask(userId, kind);
       // A task the user moved later by hand stays where they put it.
-      if (force || !task?.dueDate || todayIn(zone, task.dueDate) < day) taskId = await store.placeCheckIn(userId, zonedTaskDate(day, settings.checkIn.time, zone));
+      if (force || !task?.dueDate || todayIn(zone, task.dueDate) < day) taskId = await store.placeRitualItem(userId, kind, zonedTaskDate(day, settings[kind].time, zone));
       else taskId = task.id;
     }
+    return { period, status, taskId };
+  }
+
+  /** Today's state; `force` re-places the daily items in `force` (settings changed, or a run was recorded). */
+  async function state(userId: string, zone: string, force: readonly DailyRitual[] = []): Promise<RitualsDto> {
+    const stored = await store.settings(userId);
+    const today = todayIn(zone, now());
+    const checkIn = await daily(userId, "checkIn", stored, zone, today, checkInPeriod(today), force.includes("checkIn"));
+    const eveningReview = await daily(userId, "eveningReview", stored, zone, today, eveningReviewPeriod(today), force.includes("eveningReview"));
+    const { settings } = stored;
     const week = weeklyReviewPeriod(today);
     const season = await store.season(userId);
     return {
-      settings, checkIn: { period, status, taskId }, weeklyReview: { period: week, status: await store.runStatus(userId, "weeklyReview", week) },
+      settings, checkIn, eveningReview, weeklyReview: { period: week, status: await store.runStatus(userId, "weeklyReview", week) },
       seasonReview: season
         ? { period: season.startDate, status: await store.runStatus(userId, "seasonReview", season.startDate), due: seasonProgress(season.startDate, season.lengthDays, today).daysLeft === 0 }
         : { period: null, status: null, due: false },
@@ -78,7 +85,7 @@ export function createRitualRoutes(store: RitualStore) {
     .get("/rituals", async ({ request, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      return state(userId, zoneOf(request), false);
+      return state(userId, zoneOf(request));
     })
     // Ticket 13: each current-season goal's week (Monday to Sunday on the user's clock) for the Weekly review.
     .get("/rituals/weekly-review", async ({ request, status }) => {
@@ -112,7 +119,7 @@ export function createRitualRoutes(store: RitualStore) {
       const input = ritualSettingsInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
       await store.save(userId, input.data);
-      return state(userId, zoneOf(request), true);
+      return state(userId, zoneOf(request), ["checkIn", "eveningReview"]);
     })
     // Finishing or skipping a ritual; skipping is always allowed and records nothing else.
     .post("/rituals/runs", async ({ request, body, status }) => {
@@ -125,8 +132,10 @@ export function createRitualRoutes(store: RitualStore) {
       if (!run) return status(404, NOT_FOUND);
       const zone = zoneOf(request);
       const today = todayIn(zone, now());
-      // Today's Check-in done or skipped: its item moves on to tomorrow.
-      const rituals = run.kind === "checkIn" && run.period === checkInPeriod(today) ? await state(userId, zone, true) : await state(userId, zone, false);
+      // Today's Check-in or Evening review done or skipped: its item moves on to tomorrow.
+      const moved = run.kind === "checkIn" && run.period === checkInPeriod(today) ? ["checkIn" as const]
+        : run.kind === "eveningReview" && run.period === eveningReviewPeriod(today) ? ["eveningReview" as const] : [];
+      const rituals = await state(userId, zone, moved);
       return status(201, { run, rituals });
     });
 }

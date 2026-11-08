@@ -218,6 +218,47 @@ export function unscheduledTasks(tasks: TaskDto[], filter: UnscheduledFilter, li
     && (filter.labelId === undefined || task.labelIds.includes(filter.labelId)));
 }
 
+// Goals ticket 14b: the Check-in plans today from these rules (no AI; the Coach ranks later).
+/** Why a task is worth scheduling today. */
+export type CandidateReason = "overdue" | "today" | "inbox";
+const reasonOrder: CandidateReason[] = ["overdue", "today", "inbox"];
+/**
+ * Open tasks without a time worth scheduling today: overdue, due today, or in
+ * the Inbox without a date. Goal-linked first (the first goal in sidebar order),
+ * then by reason, else in collection order. `skip` leaves out ritual items.
+ */
+export function checkInCandidates<G extends { id: string }>(tasks: TaskDto[], goals: G[], links: GoalLinks, skip: ReadonlySet<string> = new Set(), now = new Date()) {
+  const today = dayKey(now);
+  const reasonOf = (task: TaskDto): CandidateReason | null => {
+    if (!task.dueDate) return task.projectId === null ? "inbox" : null;
+    const day = dayKey(new Date(task.dueDate));
+    return day < today ? "overdue" : day === today ? "today" : null;
+  };
+  return tasks.flatMap(task => {
+    const reason = task.status === "done" || isTimed(task) || skip.has(task.id) ? null : reasonOf(task);
+    return reason ? [{ task, reason, goal: goalOf(task, goals, links) ?? null }] : [];
+  }).sort((a, b) => Number(!a.goal) - Number(!b.goal) || reasonOrder.indexOf(a.reason) - reasonOrder.indexOf(b.reason));
+}
+
+/**
+ * The first quarter hour from now today where `minutes` fit without overlapping
+ * today's timed tasks; the plain next slot when the day is full.
+ * ponytail: tasks only; connected-calendar events are not counted as busy.
+ */
+export function nextFreeSlot(tasks: TaskDto[], minutes = DEFAULT_DURATION_MINUTES, now = new Date()) {
+  const fallback = nextSlot(minutes, now);
+  const busy = tasks.filter(task => isTimed(task) && sameDay(new Date(task.dueDate!), now)).map(task => blockFor(task.dueDate!, task.dueDateEnd));
+  const midnight = addDays(startOfDay(now), 1).getTime();
+  let start = fallback.start.getTime();
+  for (;;) {
+    const end = start + minutes * MINUTE;
+    if (end > midnight) return fallback;
+    const clash = busy.find(block => block.start.getTime() < end && block.end.getTime() > start);
+    if (!clash) return { start: new Date(start), end: new Date(end) };
+    start = Math.ceil(clash.end.getTime() / (CLICK_SLOT_MINUTES * MINUTE)) * CLICK_SLOT_MINUTES * MINUTE;
+  }
+}
+
 /** A task's length on the grid: its own range when it has one within a day, else 30 minutes. */
 export function durationOf(task: TaskDto) {
   const minutes = task.dueDate && task.dueDateEnd ? (new Date(task.dueDateEnd).getTime() - new Date(task.dueDate).getTime()) / MINUTE : 0;
@@ -242,6 +283,8 @@ const detailsOf = (task: TaskDto): TaskDetails => ({
 });
 /** The edit that puts a task on the schedule from `start` to `end`. */
 export const scheduledDetails = (task: TaskDto, start: Date, end: Date): TaskDetails => ({ ...detailsOf(task), dueDate: start.toISOString(), dueDateEnd: end.toISOString() });
+/** Ticket 14b: gives a task a due date (all day, local midnight of the YYYY-MM-DD `day`). */
+export const dueDetails = (task: TaskDto, day: string): TaskDetails => ({ ...detailsOf(task), dueDate: parseDayKey(day).toISOString(), dueDateEnd: null });
 /** Unschedule: clears the time and duration; the task keeps its day (all day). */
 export const unscheduledDetails = (task: TaskDto): TaskDetails =>
   ({ ...detailsOf(task), dueDate: task.dueDate && startOfDay(new Date(task.dueDate)).toISOString(), dueDateEnd: null });

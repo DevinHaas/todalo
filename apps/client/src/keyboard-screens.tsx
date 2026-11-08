@@ -263,6 +263,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       if (state) { run(state); return; }
       void latest.current.cache.fetchQuery(ritualReads.state(userId)).then(run).catch(() => {});
     };
+    const candidate = () => document.activeElement?.closest<HTMLElement>("[data-check-in-candidate]") ?? document.querySelector<HTMLElement>("[data-ritual-panel] [data-check-in-candidate]");
     const ritualOff = (name: string) => {
       const id = `ritual-off-${name}`;
       toasts.add({ id, title: `${name} is off`, description: "Turn it on in Settings › Rituals to start it from here.",
@@ -418,11 +419,16 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
       // Goals ticket 11: a ritual that is off says so and offers its settings, instead of doing nothing.
       "ritual.check-in": () => withRituals(state => state.settings.checkIn.enabled ? openRitual("checkIn") : ritualOff("Check-in")),
+      "ritual.evening-review": () => withRituals(state => state.settings.eveningReview.enabled ? openRitual("eveningReview") : ritualOff("Evening review")),
+      // Goals ticket 14b: the Check-in's suggested task with focus inside it, else the first.
+      "ritual.schedule-candidate": () => press(candidate(), '[data-ritual-action="schedule"]'),
+      "ritual.leave-candidate": () => press(candidate(), '[data-ritual-action="leave"]'),
+      "ritual.next": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="next"], [data-ritual-action="done"]'),
       "ritual.weekly-review": () => withRituals(state => state.settings.weeklyReview.enabled ? openRitual("weeklyReview") : ritualOff("Weekly review")),
       "ritual.season-review": () => withRituals(state => !state.settings.seasonReview.enabled ? ritualOff("Season review")
         : state.seasonReview.period ? openRitual("seasonReview") : toasts.add({ title: "No season is running", description: "Start a season to review it." })),
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
-      // Goals ticket 12: the Check-in's planning question; passes on until it is shown.
+      // Goals ticket 13: the Weekly review's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),
       "ritual.plan-help": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-help"]'),
       "calendar.today": () => week(".calendar", "today"), "calendar.next-week": () => week(".calendar", "next-week"), "calendar.previous-week": () => week(".calendar", "previous-week"),

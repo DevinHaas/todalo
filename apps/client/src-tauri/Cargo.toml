@@ -29,3 +29,5 @@ tauri-plugin-haptics = "=2.4.0"
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
+# Goals ticket 14b: ritual-ready notifications, sent from the webview (notification:allow-notify).
+tauri-plugin-notification = "2.8.0"

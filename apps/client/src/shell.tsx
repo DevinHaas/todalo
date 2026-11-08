@@ -25,7 +25,7 @@ import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds } from "./goal-screens";
 import { MilestoneTasks } from "./task-tree";
-import { openRitual, RitualHost, RitualsSidebar, useCheckInTaskId } from "./ritual-screens";
+import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -98,14 +98,15 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
   const milestones = useMilestoneTaskIds(userId);
-  // Opening the Check-in item (list row, schedule block) starts the Check-in instead.
-  const checkInTaskId = useCheckInTaskId(userId);
+  // Opening a ritual's item (Check-in, Evening review; list row, schedule block) starts that ritual instead.
+  const ritualItems = useRitualTaskIds(userId);
   const { pathname } = useLocation();
   useEffect(() => { setId(null); setInserting(null); setEditing(null); }, [pathname]);
   const create = writes.create.mutateAsync;
   const dialog = useMemo<TaskDialog>(() => ({
     open(next) {
-      if (next === checkInTaskId) { openRitual("checkIn"); return; }
+      const ritual = ritualItems.get(next);
+      if (ritual) { openRitual(ritual); return; }
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next); },
     edit(next) { setInserting(null); setEditing(next); },
     editor: (task) => editing === task.id ? <div className="dialog quick-add inline-quick-add row-edit" aria-label={`Edit ${task.title}`}>
@@ -120,7 +121,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       ? <InsertComposer edge={edge} task={inserting.task} onClose={() => { setInserting(null); focusRow(anchor, opener.current); }}
         // The composer follows the task just added, as the next draft does (legacy onCreated).
         onCreate={async (task, direction) => { const created = await create(task); setInserting({ edge: direction, task: created }); }} /> : null,
-  }), [inserting, create, editing, writes.update, organize, checkInTaskId]);
+  }), [inserting, create, editing, writes.update, organize, ritualItems]);
   const close = () => { if (id) focusRow(id, opener.current); setId(null); };
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;

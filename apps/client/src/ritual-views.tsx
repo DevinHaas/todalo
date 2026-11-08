@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarRange, CircleCheck, Sunrise, X } from "lucide-react";
+import { CalendarCheck, CalendarRange, CircleCheck, Moon, Sunrise, X } from "lucide-react";
 import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RatingHistoryItem, type RitualKind, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
 import { GoalDot } from "./goal-views";
+import type { CandidateReason } from "./schedule";
 import {
   Badge, Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
   SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, cn, sidebarItemClassName,
@@ -16,7 +17,7 @@ export const dayLabel = (day: string) => longDay.format(Date.parse(`${day}T00:00
 
 /** Settings › Rituals: each ritual is opt-in, with its time. Every change saves at once. */
 export function RitualSettingsForm({ settings, disabled, onChange }: { settings: RitualSettingsDto; disabled?: boolean; onChange: (settings: RitualSettingsDto) => void }) {
-  const { checkIn, weeklyReview, seasonReview } = settings;
+  const { checkIn, eveningReview, weeklyReview, seasonReview } = settings;
   const time = (label: string, value: string, set: (time: string) => void) =>
     <Input type="time" aria-label={label} className="w-28" required value={value} disabled={disabled} onChange={event => { if (event.target.value) set(event.target.value); }} />;
   const row = (id: string, title: string, hint: string, on: boolean, toggle: (on: boolean) => void, extra?: ReactNode) =>
@@ -26,9 +27,12 @@ export function RitualSettingsForm({ settings, disabled, onChange }: { settings:
         {on && extra && <div className="mt-2 flex flex-wrap items-center gap-2">{extra}</div>}</FieldContent>
     </Field>;
   return <div className="ui flex flex-col" data-ritual-settings="">
-    {row("ritual-check-in", "Check-in", "Daily: rate yesterday's progress on each season goal. Shows on your schedule (and Google Calendar) as a recurring item.", checkIn.enabled,
+    {row("ritual-check-in", "Check-in", "Each morning: plan today. Schedule what matters from your Inbox, overdue and due-today tasks, then adjust today's schedule. Shows on your schedule (and Google Calendar) as a recurring item.", checkIn.enabled,
       enabled => onChange({ ...settings, checkIn: { ...checkIn, enabled } }),
       <>Every day at {time("Check-in time", checkIn.time, value => onChange({ ...settings, checkIn: { ...checkIn, time: value } }))}</>)}
+    {row("ritual-evening-review", "Evening review", "Each evening: rate today's progress on each season goal. Shows on your schedule (and Google Calendar) as a recurring item.", eveningReview.enabled,
+      enabled => onChange({ ...settings, eveningReview: { ...eveningReview, enabled } }),
+      <>Every day at {time("Evening review time", eveningReview.time, value => onChange({ ...settings, eveningReview: { ...eveningReview, time: value } }))}</>)}
     {row("ritual-weekly-review", "Weekly review", "Weekly: check each goal's week and plan the next one.", weeklyReview.enabled,
       enabled => onChange({ ...settings, weeklyReview: { ...weeklyReview, enabled } }),
       <>Every
@@ -40,21 +44,27 @@ export function RitualSettingsForm({ settings, disabled, onChange }: { settings:
         at {time("Weekly review time", weeklyReview.time, value => onChange({ ...settings, weeklyReview: { ...weeklyReview, time: value } }))}</>)}
     {row("ritual-season-review", "Season review", "When a season ends: look back, choose which goals continue and set next season's targets.", seasonReview.enabled,
       enabled => onChange({ ...settings, seasonReview: { enabled } }))}
+    {row("ritual-notify", "Notify me when a ritual is ready", "At a ritual's time, unless it is done or skipped: one notification per ritual and day (or week). Works while todalo is open.", settings.notify,
+      notify => onChange({ ...settings, notify }))}
     <Hint className="pt-3">Rituals are optional: skip or close one any time, and the rest of the app works the same without them.</Hint>
   </div>;
 }
 
 /** The left sidebar's Rituals section: one click starts a ritual. Hidden while every ritual is off (or only the Season review, without a season). */
 export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart: (kind: RitualKind) => void }) {
-  const { settings, checkIn, weeklyReview, seasonReview } = rituals;
+  const { settings, checkIn, eveningReview, weeklyReview, seasonReview } = rituals;
   const season = settings.seasonReview.enabled && seasonReview.period !== null;
-  if (!settings.checkIn.enabled && !settings.weeklyReview.enabled && !season) return null;
+  if (!settings.checkIn.enabled && !settings.eveningReview.enabled && !settings.weeklyReview.enabled && !season) return null;
   const state = (status: RunStatus | null, otherwise: string) => status === "completed" ? "Done" : status === "skipped" ? "Skipped" : otherwise;
   return <section className="ui mb-3 flex flex-col" aria-label="Rituals">
     <SidebarSectionHeader title="Rituals" />
     {settings.checkIn.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("checkIn")} data-ritual-start="checkIn">
       {checkIn.status ? <CircleCheck /> : <Sunrise />}<span className="flex-1 truncate">Check-in</span>
       <span className="text-xs text-subtle-foreground">{state(checkIn.status, settings.checkIn.time)}</span>
+    </button>}
+    {settings.eveningReview.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("eveningReview")} data-ritual-start="eveningReview">
+      {eveningReview.status ? <CircleCheck /> : <Moon />}<span className="flex-1 truncate">Evening review</span>
+      <span className="text-xs text-subtle-foreground">{state(eveningReview.status, settings.eveningReview.time)}</span>
     </button>}
     {settings.weeklyReview.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("weeklyReview")} data-ritual-start="weeklyReview">
       {weeklyReview.status ? <CircleCheck /> : <CalendarRange />}<span className="flex-1 truncate">Weekly review</span>
@@ -95,8 +105,8 @@ export function WeekSummary({ week }: { week: WeekGoalSummary }) {
     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Tasks completed</span><span data-week-stat="completed">{completed}</span></div>
     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Time scheduled</span><span data-week-stat="scheduled">{minutesLabel(scheduledMinutes)}</span></div>
     <div className="flex justify-between gap-2"><span className="text-muted-foreground">Time on completed tasks</span><span data-week-stat="kept">{minutesLabel(keptMinutes)}</span></div>
-    <div className="flex flex-col gap-1"><span className="text-muted-foreground">Check-in ratings</span>
-      {checkIns.length ? <div className="flex flex-wrap gap-1">{checkIns.map(item => <Badge key={item.day} variant="outline">{shortDay.format(Date.parse(`${item.day}T00:00:00Z`))}: {ratingLabels[item.rating]}</Badge>)}</div>
+    <div className="flex flex-col gap-1"><span className="text-muted-foreground">Daily ratings</span>
+      {checkIns.length ? <div className="flex flex-wrap gap-1">{checkIns.map((item, index) => <Badge key={index} variant="outline">{shortDay.format(Date.parse(`${item.day}T00:00:00Z`))}: {ratingLabels[item.rating]}</Badge>)}</div>
         : <Hint>None this week.</Hint>}
     </div>
   </div>;
@@ -117,7 +127,7 @@ export function RatingHistory({ goalId, history }: { goalId: string; history: Ra
       <div className="flex max-h-48 flex-wrap gap-1 overflow-y-auto">{history.map(item => <Badge key={`${item.kind}-${item.period}`} variant="outline" title={item.context ?? undefined}>
         {item.kind === "weeklyReview" ? `Week of ${dayMonth(item.period)}` : shortDate.format(Date.parse(`${item.period}T00:00:00Z`))}: {ratingLabels[item.rating]}
       </Badge>)}</div>
-    </> : <Hint>No Check-in or Weekly review ratings this season.</Hint>}
+    </> : <Hint>No Evening review or Weekly review ratings this season.</Hint>}
   </div>;
 }
 
@@ -195,10 +205,10 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   </RightSidebar>;
 }
 
-/** The rituals' wording. */
-export const checkInCopy = (period: string): RitualCopy => ({
-  kind: "checkIn", title: "Check-in", prompt: `How much did ${dayLabel(period)} move you towards this goal?`, done: "Today's Check-in is already",
-  planQuestion: "Do you need help planning today?", planHint: "Yes opens today's schedule with your unscheduled tasks beside it: drag them onto a time.", planYes: "Yes, help me plan today",
+/** The rituals' wording. Ticket 14b: the Evening review rates today; its last step only finishes. */
+export const eveningReviewCopy = (period: string): RitualCopy => ({
+  kind: "eveningReview", title: "Evening review", prompt: `How much did today, ${dayLabel(period)}, move you towards this goal?`, done: "Today's Evening review is already",
+  planQuestion: "That's every goal", planHint: "Finish to save today's ratings. They show in your Weekly and Season reviews.",
 });
 export const weeklyReviewCopy = (period: string): RitualCopy => ({
   kind: "weeklyReview", title: "Weekly review", prompt: `How much did the week of ${dayLabel(period)} move you towards this goal?`, done: "This week's review is already",
@@ -209,3 +219,64 @@ export const seasonReviewCopy = (range: string): RitualCopy => ({
   kind: "seasonReview", title: "Season review", prompt: `Looking back on ${range}, how much did this season move you towards this goal?`, done: "This season's review is already",
   planQuestion: "Which goals continue?", planHint: "Choose the goals that carry into the next season, with their tier and next target. Finishing ends this season (kept as history) and starts the next.",
 });
+
+/** Ticket 14b: one task the Check-in suggests for today. */
+export interface CheckInCandidate {
+  id: string; title: string; reason: CandidateReason;
+  goal: { title: string; color: string } | null;
+  /** The suggested time today (HH:MM): the next free slot. */
+  slot: string;
+}
+const reasonLabels: Record<CandidateReason, string> = { overdue: "Overdue", today: "Due today", inbox: "Inbox" };
+
+/**
+ * Ticket 14b: the Check-in plans today. First the tasks worth scheduling today
+ * (each: schedule it at a time, give it a due date, or leave it), then today's
+ * schedule with the unscheduled sidebar beside it (`onPlan` opens it) and Done.
+ * Skip records a skip; closing keeps nothing (do it later).
+ */
+export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, onPlan, onDone, onSkip, onClose }: {
+  candidates: CheckInCandidate[]; status: RunStatus | null; pending: boolean;
+  onSchedule: (id: string, time: string) => void; onDue: (id: string, day: string) => void;
+  onPlan: () => void; onDone: () => void; onSkip: () => void; onClose: () => void;
+}) {
+  const [step, setStep] = useState<"candidates" | "schedule">("candidates");
+  const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
+  const [times, setTimes] = useState<Record<string, string>>({});
+  const shown = candidates.filter(item => !left.has(item.id));
+  return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label="Check-in" data-ritual-panel="checkIn"
+    title="Check-in" actions={<>
+      <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onSkip} data-ritual-action="skip">Skip</Button>
+      <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Check-in" onClick={onClose}><X /></Button>
+    </>}>
+    <Progress aria-label={`Step ${step === "candidates" ? 1 : 2} of 2`} value={step === "candidates" ? 50 : 100} />
+    {status && <Hint>Today's Check-in is already {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</Hint>}
+    {step === "candidates" ? <div className="flex flex-col gap-3" data-ritual-step="candidates">
+      <h3 className="text-sm font-semibold">What should happen today?</h3>
+      <Hint>Your Inbox, overdue and due-today tasks without a time, goal tasks first. Schedule one at a time today, give it a due date, or leave it.</Hint>
+      {shown.length ? <ul className="flex flex-col gap-2" aria-label="Tasks to plan">{shown.map(item => {
+        const time = times[item.id] ?? item.slot;
+        return <li key={item.id} className="flex flex-col gap-2 rounded-md border border-border-subtle p-3" data-check-in-candidate={item.id}>
+          <div className="flex items-center gap-2 text-sm">
+            {item.goal && <GoalDot color={item.goal.color} />}<span className="min-w-0 flex-1 truncate" title={item.goal ? `${item.title} · ${item.goal.title}` : item.title}>{item.title}</span>
+            <Badge variant="outline">{reasonLabels[item.reason]}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input type="time" aria-label={`Time for ${item.title}`} className="w-28" required value={time} onChange={event => { const value = event.target.value; if (value) setTimes(all => ({ ...all, [item.id]: value })); }} />
+            <Button type="button" size="sm" onClick={() => onSchedule(item.id, time)} data-ritual-action="schedule">Schedule today</Button>
+            <Input type="date" aria-label={`Due date for ${item.title}`} className="w-36" onChange={event => { if (event.target.value) onDue(item.id, event.target.value); }} />
+            <Button type="button" variant="ghost" size="sm" onClick={() => setLeft(all => new Set(all).add(item.id))} data-ritual-action="leave">Leave</Button>
+          </div>
+        </li>;
+      })}</ul> : <Hint>Nothing waiting: no Inbox, overdue or due-today tasks without a time.</Hint>}
+      <Button type="button" size="sm" className="self-end" onClick={() => { setStep("schedule"); onPlan(); }} data-ritual-action="next">Next</Button>
+    </div> : <div className="flex flex-col gap-3" data-ritual-step="schedule">
+      <h3 className="text-sm font-semibold">Today's schedule</h3>
+      <Hint>Adjust it by hand: drag tasks from the unscheduled sidebar onto a time, move or resize blocks. Done when it looks right.</Hint>
+      <div className="flex items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => setStep("candidates")}>Back</Button>
+        <Button type="button" size="sm" disabled={pending} onClick={onDone} data-ritual-action="done">Done</Button>
+      </div>
+    </div>}
+  </RightSidebar>;
+}

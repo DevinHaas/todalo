@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultRitualSettings, type RitualKind, type RitualRunDto, type RitualSettingsDto, type RitualsDto, type RunStatus, type SeasonReviewDto, type WeeklyReviewDto } from "@todalo/server/ritual-dto";
 import type { WeekTask } from "@todalo/server/weekly-review";
+import type { DailyRitual, StoredRitualSettings } from "@todalo/server/rituals";
 import { createRitualRoutes } from "./ritual-routes";
 
 const goals = [
@@ -9,7 +10,7 @@ const goals = [
   { id: "alice-old", userId: "alice", archived: true },
   { id: "bob-read", userId: "bob", archived: false },
 ];
-let settings: Map<string, { settings: RitualSettingsDto; checkInTaskId: string | null }>;
+let settings: Map<string, StoredRitualSettings>;
 let runs: (RitualRunDto & { userId: string })[];
 let taskStarts: Map<string, Date | null>;
 let clock: Date;
@@ -29,13 +30,13 @@ beforeEach(() => {
 });
 
 // In-memory mirror of packages/server/src/rituals.ts.
-const settingsOf = (userId: string) => settings.get(userId) ?? { settings: defaultRitualSettings, checkInTaskId: null };
+const settingsOf = (userId: string): StoredRitualSettings => settings.get(userId) ?? { settings: defaultRitualSettings, taskIds: { checkIn: null, eveningReview: null } };
 const app = createRitualRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
   allowedOrigins: new Set(["http://localhost:5173"]),
   now: () => clock,
   settings: async (userId) => settingsOf(userId),
-  save: async (userId, input) => { settings.set(userId, { settings: input, checkInTaskId: settingsOf(userId).checkInTaskId }); },
+  save: async (userId, input) => { settings.set(userId, { settings: input, taskIds: settingsOf(userId).taskIds }); },
   runStatus: async (userId, kind: RitualKind, period): Promise<RunStatus | null> => runs.find(run => run.userId === userId && run.kind === kind && run.period === period)?.status ?? null,
   record: async (userId, input) => {
     if (input.ratings.some(rating => !goals.some(goal => goal.id === rating.goalId && goal.userId === userId && !goal.archived))) return null;
@@ -44,16 +45,17 @@ const app = createRitualRoutes({
     runs.push({ ...run, userId });
     return run;
   },
-  checkInTask: async (userId) => {
-    const id = settingsOf(userId).checkInTaskId;
+  ritualTask: async (userId, kind) => {
+    const id = settingsOf(userId).taskIds[kind];
     return id && taskStarts.has(id) ? { id, dueDate: taskStarts.get(id)! } : null;
   },
-  placeCheckIn: async (userId, start) => {
+  placeRitualItem: async (userId, kind: DailyRitual, start) => {
     const current = settingsOf(userId);
-    if (!start) { if (current.checkInTaskId) taskStarts.delete(current.checkInTaskId); settings.set(userId, { ...current, checkInTaskId: null }); return null; }
-    const id = current.checkInTaskId && taskStarts.has(current.checkInTaskId) ? current.checkInTaskId : `task-${userId}-${taskStarts.size + 1}`;
+    const known = current.taskIds[kind];
+    if (!start) { if (known) taskStarts.delete(known); settings.set(userId, { ...current, taskIds: { ...current.taskIds, [kind]: null } }); return null; }
+    const id = known && taskStarts.has(known) ? known : `task-${userId}-${kind}-${taskStarts.size + 1}`;
     taskStarts.set(id, start);
-    settings.set(userId, { ...current, checkInTaskId: id });
+    settings.set(userId, { ...current, taskIds: { ...current.taskIds, [kind]: id } });
     return id;
   },
   weekInputs: async (userId, { from, to, firstDay, lastDay }) => {
@@ -62,7 +64,7 @@ const app = createRitualRoutes({
     return {
       goalIds: seasonGoals[userId] ?? [], links,
       tasks: weekTasks.filter(task => task.userId === userId && (within(task.dueDate) || within(task.completedAt))),
-      checkIns: runs.filter(run => run.userId === userId && run.kind === "checkIn" && run.status === "completed" && run.period >= firstDay && run.period <= lastDay)
+      checkIns: runs.filter(run => run.userId === userId && (run.kind === "checkIn" || run.kind === "eveningReview") && run.status === "completed" && run.period >= firstDay && run.period <= lastDay)
         .flatMap(run => run.ratings.map(({ goalId, rating }) => ({ goalId, day: run.period, rating }))),
       review: review && { id: review.id, kind: review.kind, period: review.period, status: review.status, ratings: review.ratings, planning: review.planning },
     };
@@ -76,7 +78,7 @@ const app = createRitualRoutes({
     return {
       season, goalIds: seasonGoals[userId] ?? [],
       history: runs.filter(run => run.userId === userId && run.kind !== "seasonReview" && run.status === "completed" && run.period >= season.startDate && run.period <= last)
-        .flatMap(run => run.ratings.map(({ goalId, rating, context }) => ({ goalId, kind: run.kind as "checkIn" | "weeklyReview", period: run.period, rating, context }))),
+        .flatMap(run => run.ratings.map(({ goalId, rating, context }) => ({ goalId, kind: run.kind as "checkIn" | "eveningReview" | "weeklyReview", period: run.period, rating, context }))),
       review: review && { id: review.id, kind: review.kind, period: review.period, status: review.status, ratings: review.ratings, planning: review.planning },
     };
   },
@@ -110,17 +112,17 @@ describe("ritual API", () => {
   it("starts with every ritual off and nothing on the schedule", async () => {
     const response = await call("GET", `/rituals${q}`, { user: "alice" });
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ settings: defaultRitualSettings, checkIn: { period: "2026-03-09", status: null, taskId: null }, weeklyReview: { period: "2026-03-02", status: null }, seasonReview: { period: "2026-01-05", status: null, due: false } });
+    expect(await response.json()).toEqual({ settings: defaultRitualSettings, checkIn: { period: "2026-03-09", status: null, taskId: null }, eveningReview: { period: "2026-03-10", status: null, taskId: null }, weeklyReview: { period: "2026-03-02", status: null }, seasonReview: { period: "2026-01-05", status: null, due: false } });
     expect(((await (await call("GET", `/rituals${q}`, { user: "bob" })).json()) as RitualsDto).seasonReview).toEqual({ period: null, status: null, due: false });
     expect(taskStarts.size).toBe(0);
   });
 
   it("saves which rituals run and when, and refuses invalid times and days", async () => {
-    const chosen = { checkIn: { enabled: true, time: "08:30" }, weeklyReview: { enabled: true, day: 0, time: "18:00" }, seasonReview: { enabled: true } };
+    const chosen = { checkIn: { enabled: true, time: "08:30" }, eveningReview: { enabled: true, time: "21:15" }, weeklyReview: { enabled: true, day: 0, time: "18:00" }, seasonReview: { enabled: true }, notify: false };
     expect((await (await call("PUT", `/rituals/settings${q}`, { user: "alice", body: chosen })).json() as any).settings).toEqual(chosen);
     expect((await read()).settings).toEqual(chosen);
     expect((await read("bob")).settings).toEqual(defaultRitualSettings);
-    for (const bad of [{ ...chosen, checkIn: { enabled: true, time: "25:00" } }, { ...chosen, weeklyReview: { enabled: true, day: 7, time: "18:00" } }, { ...chosen, extra: 1 }]) {
+    for (const bad of [{ ...chosen, checkIn: { enabled: true, time: "25:00" } }, { ...chosen, weeklyReview: { enabled: true, day: 7, time: "18:00" } }, { ...chosen, eveningReview: { enabled: true, time: "8pm" } }, { ...chosen, notify: "yes" }, { ...chosen, extra: 1 }]) {
       expect((await call("PUT", `/rituals/settings${q}`, { user: "alice", body: bad })).status).toBe(400);
     }
   });
@@ -314,5 +316,48 @@ describe("ritual API", () => {
     // Once the next season starts (the review ended this one), the review is the next season's and not yet due.
     currentSeasons.alice = { id: "alice-s2", startDate: "2026-03-30", lengthDays: 28 };
     expect((await read()).seasonReview).toEqual({ period: "2026-03-30", status: null, due: false });
+  });
+
+  // Ticket 14b: the Check-in plans today (no ratings); the Evening review rates today.
+  it("puts the Evening review on today's schedule at its own time, and moves it to tomorrow once done", async () => {
+    const enabled = await (await enable({ eveningReview: { enabled: true, time: "20:00" } })).json() as RitualsDto;
+    expect(enabled.eveningReview).toMatchObject({ period: "2026-03-10", status: null });
+    // 20:00 in Zurich is 19:00 UTC; the Check-in keeps its own item.
+    expect(startOf(enabled.eveningReview.taskId)).toBe("2026-03-10T19:00:00.000Z");
+    expect(enabled.eveningReview.taskId).not.toBe(enabled.checkIn.taskId);
+    const response = await record({ kind: "eveningReview", period: "2026-03-10", status: "completed", ratings: [{ goalId: "alice-fit", rating: "solid", context: "Ran 5k" }] });
+    expect(response.status).toBe(201);
+    const { run, rituals } = await response.json() as { run: RitualRunDto; rituals: RitualsDto };
+    expect(run).toMatchObject({ kind: "eveningReview", period: "2026-03-10", ratings: [{ goalId: "alice-fit", rating: "solid", context: "Ran 5k" }] });
+    expect(rituals.eveningReview.status).toBe("completed");
+    expect(startOf(rituals.eveningReview.taskId)).toBe("2026-03-11T19:00:00.000Z");
+    // The Check-in item did not move.
+    expect(startOf(rituals.checkIn.taskId)).toBe("2026-03-10T08:00:00.000Z");
+    // Turning it off removes only its own item.
+    const off = await (await enable({ eveningReview: { enabled: false, time: "20:00" } })).json() as RitualsDto;
+    expect(off.eveningReview.taskId).toBeNull();
+    expect(startOf(off.checkIn.taskId)).toBe("2026-03-10T08:00:00.000Z");
+    expect(taskStarts.size).toBe(1);
+  });
+
+  it("finishes the Check-in as plain planning: completed with no ratings and no planning answer", async () => {
+    await enable();
+    const { run, rituals } = await (await record({ kind: "checkIn", period: "2026-03-09", status: "completed", ratings: [] })).json() as { run: RitualRunDto; rituals: RitualsDto };
+    expect(run).toMatchObject({ kind: "checkIn", ratings: [], planning: null });
+    expect(rituals.checkIn.status).toBe("completed");
+    expect(startOf(rituals.checkIn.taskId)).toBe("2026-03-11T08:00:00.000Z");
+  });
+
+  it("counts Evening review ratings, and old Check-in ratings, in the Weekly review and the Season review", async () => {
+    clock = new Date("2026-03-15T16:00:00Z");
+    await record({ kind: "checkIn", period: "2026-03-10", status: "completed", ratings: [{ goalId: "alice-fit", rating: "massive" }] });
+    await record({ kind: "eveningReview", period: "2026-03-12", status: "completed", ratings: [{ goalId: "alice-fit", rating: "little", context: "Sick" }] });
+    const week = await (await call("GET", `/rituals/weekly-review${q}`, { user: "alice" })).json() as WeeklyReviewDto;
+    expect(week.goals[0]!.checkIns).toEqual([{ day: "2026-03-10", rating: "massive" }, { day: "2026-03-12", rating: "little" }]);
+    const season = await (await call("GET", `/rituals/season-review${q}`, { user: "alice" })).json() as SeasonReviewDto;
+    expect(season.goals[0]!.history).toEqual([
+      { kind: "checkIn", period: "2026-03-10", rating: "massive", context: null },
+      { kind: "eveningReview", period: "2026-03-12", rating: "little", context: "Sick" },
+    ]);
   });
 });

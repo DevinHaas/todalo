@@ -6,12 +6,13 @@ import { taskKeys } from "./tasks";
 import type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, RatingHistoryItem, SeasonReviewDto, WeekGoalSummary, WeeklyReviewDto } from "../../../packages/server/src/ritual-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
+export type { NotifyKind } from "../../../packages/server/src/ritual-dto";
 export type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, RatingHistoryItem, SeasonReviewDto, WeekGoalSummary, WeeklyReviewDto };
-export { addDays, progressRatings, ratingLabels } from "../../../packages/server/src/ritual-dto";
+export { addDays, progressRatings, ratingLabels, readyRituals } from "../../../packages/server/src/ritual-dto";
 export interface RitualRun { kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[]; planning?: PlanningAnswer | null }
 
 export interface RitualTransport {
-  /** The settings and today's Check-in in the given timezone. */
+  /** The settings and today's rituals in the given timezone. */
   get(timeZone: string): Promise<RitualsDto>;
   save(timeZone: string, settings: RitualSettingsDto): Promise<RitualsDto>;
   /** null when a rated goal is refused (missing, foreign or archived). */
@@ -82,8 +83,8 @@ export const ritualQueries = (transport: RitualTransport) => ({
 
 /**
  * Ritual writes (optimistic.ts). Saving settings flips at once; recording a
- * run marks today's Check-in done at once. Both refetch the tasks afterwards:
- * the server moves (or adds, or removes) the Check-in item on the schedule.
+ * run marks that ritual done at once. Both refetch the tasks afterwards: the
+ * server moves (or adds, or removes) the Check-in and Evening review items.
  */
 export function ritualMutations(transport: RitualTransport, cache: QueryClient, userId: string) {
   const key = ritualKeys.all(userId);
@@ -95,6 +96,7 @@ export function ritualMutations(transport: RitualTransport, cache: QueryClient, 
     record: (run: RitualRun) => optimisticWrite(cache,
       [change<RitualsDto | undefined>(key, data => !data ? data
         : run.kind === "checkIn" && run.period === data.checkIn.period ? { ...data, checkIn: { ...data.checkIn, status: run.status } }
+        : run.kind === "eveningReview" && run.period === data.eveningReview.period ? { ...data, eveningReview: { ...data.eveningReview, status: run.status } }
         : run.kind === "weeklyReview" && run.period === data.weeklyReview.period ? { ...data, weeklyReview: { ...data.weeklyReview, status: run.status } }
         : run.kind === "seasonReview" && run.period === data.seasonReview.period ? { ...data, seasonReview: { ...data.seasonReview, status: run.status } } : data),
       change<WeeklyReviewDto | undefined>(ritualKeys.weekly(userId), data => data && run.kind === "weeklyReview" && run.period === data.period

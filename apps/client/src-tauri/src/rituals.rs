@@ -35,8 +35,12 @@ pub struct SeasonReview {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RitualSettings {
     check_in: CheckIn,
+    /// Ticket 14b: same shape as the Check-in (enabled, HH:MM).
+    evening_review: CheckIn,
     weekly_review: WeeklyReview,
     season_review: SeasonReview,
+    /// Ticket 14b: "Notify me when a ritual is ready".
+    notify: bool,
 }
 
 #[derive(Deserialize, Serialize)]

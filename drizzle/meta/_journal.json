@@ -190,6 +190,13 @@
       "when": 1794060170678,
       "tag": "0026_ritual_planning",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794136456078,
+      "tag": "0027_evening_review",
+      "breakpoints": true
     }
   ]
 }

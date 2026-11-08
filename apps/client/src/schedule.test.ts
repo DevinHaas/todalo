@@ -10,7 +10,7 @@ import {
 import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigation";
 import type { TaskDto } from "./tasks";
 import {
-  addDays, addMonths, blockFor, dayKey, dragRange, dropRange, durationOf, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
+  addDays, addMonths, blockFor, checkInCandidates, dayKey, dragRange, dropRange, dueDetails, durationOf, nextFreeSlot, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
   upcomingSections, upcomingWindow, weekOf,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
@@ -335,5 +335,48 @@ describe("overlap layout", () => {
     ["a zero-length item still takes a column", [r(60, 60), r(60, 90)], [[1, 2], [0, 2]]],
   ] as const)("%s", (_name, ranges, expected) => {
     expect(overlapColumns(ranges).map(({ column, columns }) => [column, columns])).toEqual(expected);
+  });
+});
+
+describe("Check-in candidates and the next free slot (goals ticket 14b)", () => {
+  beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
+  // Saturday 21 February 2026, 10:07 in Zurich (UTC+1).
+  const now = new Date("2026-02-21T09:07:00.000Z");
+  const goals = [{ id: "g1" }, { id: "g2" }];
+  const links = { projects: [{ goalId: "g2", projectId: "p-goal" }], tasks: [{ goalId: "g1", taskId: "Linked inbox" }] };
+  const tasks = [
+    task("Inbox", {}),
+    task("Overdue", { projectId: "p1", dueDate: "2026-02-19T23:00:00.000Z" }),
+    task("Due today", { projectId: "p1", dueDate: "2026-02-20T23:00:00.000Z" }),
+    task("Goal today", { projectId: "p-goal", dueDate: "2026-02-20T23:00:00.000Z" }),
+    task("Linked inbox", {}),
+    // Not candidates: a later date, a project without a date, a time already, done, a ritual item.
+    task("Tomorrow", { dueDate: "2026-02-21T23:00:00.000Z" }),
+    task("Someday", { projectId: "p1" }),
+    task("Timed overdue", { dueDate: "2026-02-20T08:00:00.000Z" }),
+    task("Done", { status: "done" }),
+    task("Check-in", { dueDate: "2026-02-20T23:00:00.000Z" }),
+  ];
+  it("lists overdue, due-today and undated Inbox tasks without a time, goal-linked first", () => {
+    expect(checkInCandidates(tasks, goals, links, new Set(["Check-in"]), now).map(item => `${item.task.id}:${item.reason}:${item.goal?.id ?? "-"}`)).toEqual([
+      "Goal today:today:g2", "Linked inbox:inbox:g1", "Overdue:overdue:-", "Due today:today:-", "Inbox:inbox:-",
+    ]);
+  });
+
+  it.each([
+    ["an empty day: the next quarter hour", [], ["10:15", "10:45"]],
+    ["after a block that starts there", [["09:15", "10:00"]], ["11:00", "11:30"]],
+    ["in the first gap long enough", [["09:15", "09:30"], ["10:00", "11:00"]], ["10:30", "11:00"]],
+    ["around back-to-back blocks", [["09:15", "10:00"], ["10:00", "10:20"]], ["11:30", "12:00"]],
+  ] as const)("finds %s", (_name, blocks, expected) => {
+    const busy = blocks.map(([from, to], index) => task(`b${index}`, { dueDate: `2026-02-21T${from}:00.000Z`, dueDateEnd: `2026-02-21T${to}:00.000Z` }));
+    const { start, end } = nextFreeSlot(busy, 30, now);
+    expect([labels.time(start), labels.time(end)]).toEqual(expected);
+  });
+
+  it("falls back to the next quarter hour when the day is full, and sets a due date at local midnight", () => {
+    const full = [task("All", { dueDate: "2026-02-21T09:00:00.000Z", dueDateEnd: "2026-02-21T22:59:00.000Z" })];
+    expect(labels.time(nextFreeSlot(full, 30, now).start)).toBe("10:15");
+    expect(dueDetails(task("Inbox", {}), "2026-02-23")).toMatchObject({ dueDate: "2026-02-22T23:00:00.000Z", dueDateEnd: null });
   });
 });

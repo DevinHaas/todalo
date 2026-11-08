@@ -65,11 +65,19 @@ A task with a start time and a duration, shown as a block on the schedule in its
 _Avoid_: event, slot, appointment, block outcome
 
 **Check-in**:
-The daily ritual: reflect on the previous day with progress ratings, then plan the day. It sits on the schedule as a recurring item.
+The morning ritual: plan the current day. It suggests open Inbox, overdue and due-today tasks without a time (goal-linked first) to schedule today or give a due date, then shows today's schedule with the unscheduled sidebar to adjust by hand. It asks no progress ratings (those moved to the Evening review). It sits on the schedule as a recurring item.
 _Avoid_: daily review, coach sync, standup
 
+**Evening review**:
+The evening ritual: rate today's progress on each current-season goal, with optional context. It sits on the schedule as a recurring item, and its ratings feed the Weekly review and the Season review (older Check-in ratings count the same way).
+_Avoid_: daily review, check-out, journal
+
+**Ritual notification**:
+"Your Evening review is ready": shown once per ritual and period at a Check-in, Evening review or Weekly review's time while it is on and not done or skipped. Clicking it opens that ritual. Per-user toggle, default on.
+_Avoid_: reminder, alert
+
 **Rituals**:
-The check-in, weekly review and season review collectively. Each is opt-in per user: they choose which rituals they do, and the rest of the app (goals, time blocks, the Coach) works without any of them.
+The check-in, evening review, weekly review and season review collectively. Each is opt-in per user: they choose which rituals they do, and the rest of the app (goals, time blocks, the Coach) works without any of them.
 _Avoid_: routines, ceremonies
 
 **Draft**:

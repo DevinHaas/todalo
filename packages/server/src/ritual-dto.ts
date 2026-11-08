@@ -5,7 +5,7 @@ import type { WeekGoalSummary } from "./weekly-review";
 
 export type { WeekGoalSummary };
 
-export type RitualKind = "checkIn" | "weeklyReview" | "seasonReview";
+export type RitualKind = "checkIn" | "eveningReview" | "weeklyReview" | "seasonReview";
 export type RunStatus = "completed" | "skipped";
 /** CONTEXT.md's progress rating scale, best first. */
 export const progressRatings = ["massive", "solid", "mixed", "little", "not_relevant"] as const;
@@ -16,18 +16,25 @@ export const ratingLabels: Record<ProgressRating, string> = {
 
 /** Which rituals the user does and when. Times are HH:MM on the user's own clock. */
 export interface RitualSettingsDto {
+  /** Morning: plan today (ticket 14b). */
   checkIn: { enabled: boolean; time: string };
+  /** Ticket 14b: evening, rate today's progress on each season goal. */
+  eveningReview: { enabled: boolean; time: string };
   /** day: 0 = Sunday … 6 = Saturday. */
   weeklyReview: { enabled: boolean; day: number; time: string };
   seasonReview: { enabled: boolean };
+  /** Ticket 14b: "Notify me when a ritual is ready" (default on). */
+  notify: boolean;
 }
 /**
- * GET /api/v1/rituals: the settings, today's Check-in (it reflects on `period`,
- * yesterday) and the Weekly review due now (it reviews the week starting `period`).
+ * GET /api/v1/rituals: the settings, today's Check-in (it plans today; its run is
+ * recorded under `period`, yesterday, as ticket 11 did), today's Evening review
+ * (`period` is today) and the Weekly review due now (the week starting `period`).
  */
 export interface RitualsDto {
   settings: RitualSettingsDto;
   checkIn: { period: string; status: RunStatus | null; taskId: string | null };
+  eveningReview: { period: string; status: RunStatus | null; taskId: string | null };
   weeklyReview: { period: string; status: RunStatus | null };
   /**
    * Ticket 14: the current season's review (its `period` is the season's start
@@ -55,8 +62,8 @@ export interface WeeklyReviewDto {
   goals: WeekGoalSummary[];
 }
 
-/** One earlier rating of a goal in the season: a Check-in's day or a Weekly review's Monday. */
-export interface RatingHistoryItem { kind: "checkIn" | "weeklyReview"; period: string; rating: ProgressRating; context: string | null }
+/** One earlier rating of a goal in the season: an Evening review's (or an old Check-in's) day or a Weekly review's Monday. */
+export interface RatingHistoryItem { kind: "checkIn" | "eveningReview" | "weeklyReview"; period: string; rating: ProgressRating; context: string | null }
 /**
  * GET /api/v1/rituals/season-review (ticket 14): the current season's review run
  * if any, and per season goal its completed ratings in the season, oldest first.
@@ -68,7 +75,7 @@ export interface SeasonReviewDto {
 }
 
 export const defaultRitualSettings: RitualSettingsDto = {
-  checkIn: { enabled: false, time: "09:00" }, weeklyReview: { enabled: false, day: 0, time: "17:00" }, seasonReview: { enabled: false },
+  checkIn: { enabled: false, time: "09:00" }, eveningReview: { enabled: false, time: "20:00" }, weeklyReview: { enabled: false, day: 0, time: "17:00" }, seasonReview: { enabled: false }, notify: true,
 };
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -79,8 +86,10 @@ const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 
 export const ritualSettingsInput = z.object({
   checkIn: z.object({ enabled: z.boolean(), time }).strict(),
+  eveningReview: z.object({ enabled: z.boolean(), time }).strict(),
   weeklyReview: z.object({ enabled: z.boolean(), day: z.number().int().min(0).max(6), time }).strict(),
   seasonReview: z.object({ enabled: z.boolean() }).strict(),
+  notify: z.boolean(),
 }).strict();
 
 /**
@@ -89,7 +98,7 @@ export const ritualSettingsInput = z.object({
  * included. A skip has neither.
  */
 export const ritualRunInput = z.object({
-  kind: z.enum(["checkIn", "weeklyReview", "seasonReview"]),
+  kind: z.enum(["checkIn", "eveningReview", "weeklyReview", "seasonReview"]),
   period: calendarDate,
   status: z.enum(["completed", "skipped"]),
   ratings: z.array(z.object({
@@ -124,11 +133,35 @@ export function mondayOf(day: string) {
  */
 export const weeklyReviewPeriod = (today: string) => mondayOf(addDays(today, -3));
 
-/** The day a Check-in held on `today` reflects on. */
+/**
+ * The period a Check-in held on `today` is recorded under: yesterday (ticket
+ * 11 rated yesterday; kept so existing runs stay one per day). Since ticket
+ * 14b it plans today and carries no ratings.
+ */
 export const checkInPeriod = (today: string) => addDays(today, -1);
 
+/** Ticket 14b: the Evening review reflects on the day it is held. */
+export const eveningReviewPeriod = (today: string) => today;
+
+/** Ticket 14b: the rituals that notify when ready (the Season review is offered in the app only). */
+export type NotifyKind = "checkIn" | "eveningReview" | "weeklyReview";
 /**
- * The day the Check-in item belongs on: today until today's Check-in is done
+ * Ticket 14b: which rituals are ready at `time` (HH:MM) on `weekday` (0 =
+ * Sunday) on the user's clock: on, their time reached today (the Weekly review
+ * only on its day), and not done or skipped for their period. None while
+ * notifications are off. The caller keeps it to one notification per period.
+ */
+export function readyRituals({ settings, checkIn, eveningReview, weeklyReview }: Pick<RitualsDto, "settings" | "checkIn" | "eveningReview" | "weeklyReview">, time: string, weekday: number) {
+  if (!settings.notify) return [];
+  const ready: { kind: NotifyKind; period: string }[] = [];
+  if (settings.checkIn.enabled && time >= settings.checkIn.time && !checkIn.status) ready.push({ kind: "checkIn", period: checkIn.period });
+  if (settings.eveningReview.enabled && time >= settings.eveningReview.time && !eveningReview.status) ready.push({ kind: "eveningReview", period: eveningReview.period });
+  if (settings.weeklyReview.enabled && weekday === settings.weeklyReview.day && time >= settings.weeklyReview.time && !weeklyReview.status) ready.push({ kind: "weeklyReview", period: weeklyReview.period });
+  return ready;
+}
+
+/**
+ * The day a daily ritual's item (Check-in, Evening review) belongs on: today until today's Check-in is done
  * or skipped, then tomorrow. A missed day is never carried as overdue: the item
  * moves to today (rituals carry no penalty).
  */
