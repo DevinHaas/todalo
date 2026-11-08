@@ -1,5 +1,5 @@
 // The right-click menu on tasks everywhere they are listed (rows, board cards,
-// schedule blocks, the unscheduled sidebar): the task sheet's … actions on the
+// schedule blocks, the Plan sidebar): the task sheet's … actions on the
 // task under the pointer. One menu wraps the page; any element with
 // `data-task-id` opens it, elsewhere the browser's own menu shows. The keyboard
 // keeps its own routes (task.menu, task.copy-url, task.unschedule, 1–4, …).

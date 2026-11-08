@@ -23,8 +23,8 @@ import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
 import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
-import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds } from "./goal-screens";
-import { MilestoneTasks } from "./task-tree";
+import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds, useTaskGoalOf } from "./goal-screens";
+import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
@@ -98,6 +98,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
   const milestones = useMilestoneTaskIds(userId);
+  const goalOfTask = useTaskGoalOf(userId);
   // Opening a ritual's item (Check-in, Evening review; list row, schedule block) starts that ritual instead.
   const ritualItems = useRitualTaskIds(userId);
   const { pathname } = useLocation();
@@ -126,7 +127,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
   const sheet = useTaskSheet(account, task, close);
-  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}>
+  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}><TaskGoals.Provider value={goalOfTask}>
     <TaskContextMenu userId={userId} onOpen={dialog.open}>{children}</TaskContextMenu>
     {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
@@ -134,7 +135,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       onSave={(details) => writes.update.mutateAsync({ id: task.id, details })}
       onOpen={setId}
       onInsert={(edge) => { close(); setInserting({ edge, task }); }} />}
-  </MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
+  </TaskGoals.Provider></MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
 }
 
 /** The page column: lists keep a readable width; board and calendar layouts use the full width. */

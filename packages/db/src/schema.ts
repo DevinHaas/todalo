@@ -129,6 +129,8 @@ export const goals = pgTable("goals", {
   description: text("description"),
   // A goalColors key (goal-dto.ts); existing goals got distinct ones in 0018.
   color: text("color").default("blue").notNull(),
+  // Ticket 14c: a goalIcons name (goal-dto.ts).
+  icon: text("icon").default("target").notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

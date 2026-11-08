@@ -8,7 +8,7 @@ import type { AddSeasonGoalInput, EndSeasonInput, SeasonGoalRecord, SeasonRecord
 
 const seasonColumns = { id: seasons.id, startDate: seasons.startDate, lengthDays: seasons.lengthDays, endedAt: seasons.endedAt };
 const goalColumns = {
-  id: seasonGoals.id, goalId: seasonGoals.goalId, title: goals.title, color: goals.color, archivedAt: goals.archivedAt,
+  id: seasonGoals.id, goalId: seasonGoals.goalId, title: goals.title, color: goals.color, icon: goals.icon, archivedAt: goals.archivedAt,
   tier: seasonGoals.tier, target: seasonGoals.target, carriedFromId: seasonGoals.carriedFromId,
 };
 

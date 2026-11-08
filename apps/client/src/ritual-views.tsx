@@ -1,11 +1,10 @@
-import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { CalendarCheck, CalendarDays, CalendarPlus, CalendarRange, CircleCheck, GripVertical, ListTree, MessageSquare, Moon, Sunrise, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CalendarCheck, CalendarRange, CircleCheck, Moon, Sunrise, X } from "lucide-react";
 import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RatingHistoryItem, type RitualKind, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
-import { GoalDot } from "./goal-views";
-import type { CandidateReason } from "./schedule";
+import { GoalIcon } from "./goal-views";
 import {
-  Badge, Button, ButtonGroup, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Popover, PopoverContent, PopoverTrigger, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
-  SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, Toggle, cn, sidebarItemClassName,
+  Badge, Button, Field, FieldContent, FieldDescription, FieldLabel, Hint, Input, Label, Progress, RadioGroup, RadioGroupItem, RightSidebar, Select,
+  SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, cn, sidebarItemClassName,
 } from "./ui";
 
 // Pure ritual views (goals ticket 11): no runtime imports. Built only from src/ui (docs/agents/ui.md).
@@ -77,7 +76,7 @@ export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart:
   </section>;
 }
 
-export interface CheckInGoal { goalId: string; title: string; color: string }
+export interface CheckInGoal { goalId: string; title: string; color: string; icon?: string }
 
 /** What differs between the Check-in and the Weekly review panels. */
 export interface RitualCopy {
@@ -182,7 +181,7 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
       </div>
       {back}</>}
     </div> : <div className="flex flex-col gap-3" key={goal.goalId}>
-      <h3 className="flex items-center gap-2 text-sm font-semibold"><GoalDot color={goal.color} />{goal.title}</h3>
+      <h3 className="flex items-center gap-2 text-sm font-semibold"><GoalIcon color={goal.color} icon={goal.icon} />{goal.title}</h3>
       {summary?.(goal.goalId)}
       <Hint>{copy.prompt}</Hint>
       <RadioGroup aria-label={`Progress on ${goal.title}`} value={current?.rating ?? ""} onValueChange={(value) => set({ rating: value as ProgressRating })} className="gap-2">
@@ -212,127 +211,10 @@ export const eveningReviewCopy = (period: string): RitualCopy => ({
 });
 export const weeklyReviewCopy = (period: string): RitualCopy => ({
   kind: "weeklyReview", title: "Weekly review", prompt: `How much did the week of ${dayLabel(period)} move you towards this goal?`, done: "This week's review is already",
-  planQuestion: "Do you want to plan next week now?", planHint: "Yes opens next week's schedule with your unscheduled tasks beside it: drag goal tasks onto a time.", planYes: "Yes, plan next week",
+  planQuestion: "Do you want to plan next week now?", planHint: "Yes opens next week's schedule with the Plan sidebar beside it: drag goal tasks onto a time.", planYes: "Yes, plan next week",
 });
 /** Ticket 14: the planning fields are the next season (planQuestion/planHint head that step). */
 export const seasonReviewCopy = (range: string): RitualCopy => ({
   kind: "seasonReview", title: "Season review", prompt: `Looking back on ${range}, how much did this season move you towards this goal?`, done: "This season's review is already",
   planQuestion: "Which goals continue?", planHint: "Choose the goals that carry into the next season, with their tier and next target. Finishing ends this season (kept as history) and starts the next.",
 });
-
-/** Ticket 14b: one task the Check-in suggests for today. */
-export interface CheckInCandidate {
-  id: string; title: string; reason: CandidateReason;
-  goal: { id: string; title: string; color: string } | null;
-  labels: { id: string; name: string }[];
-  project: string | null;
-  /** Open sub-tasks and comments on the task (shown so nothing hidden gets scheduled blind). */
-  subtasks: number; comments: number;
-  /** The suggested time today (HH:MM): the next free slot. */
-  slot: string;
-}
-const reasonLabels: Record<CandidateReason, string> = { overdue: "Overdue", today: "Due today", inbox: "Inbox" };
-
-/** Above this many suggestions the Check-in shows a search box and filter chips. */
-export const candidateSearchFrom = 11;
-/** Each chip is "reason:x", "goal:id" or "label:id". Text matches the title; chips OR within a kind, AND across kinds. */
-export function filterCandidates(items: CheckInCandidate[], text: string, chips: ReadonlySet<string>) {
-  const needle = text.trim().toLowerCase();
-  const picked = (kind: string) => [...chips].filter(chip => chip.startsWith(`${kind}:`)).map(chip => chip.slice(kind.length + 1));
-  const reasons = picked("reason"), goals = picked("goal"), tags = picked("label");
-  return items.filter(item => (!needle || item.title.toLowerCase().includes(needle))
-    && (!reasons.length || reasons.includes(item.reason))
-    && (!goals.length || (item.goal !== null && goals.includes(item.goal.id)))
-    && (!tags.length || item.labels.some(label => tags.includes(label.id))));
-}
-/** The chips worth offering: only reasons, goals and labels some suggestion has. */
-function candidateChips(items: CheckInCandidate[]) {
-  const chips = new Map<string, string>();
-  for (const item of items) chips.set(`reason:${item.reason}`, reasonLabels[item.reason]);
-  for (const item of items) if (item.goal) chips.set(`goal:${item.goal.id}`, item.goal.title);
-  for (const item of items) for (const label of item.labels) chips.set(`label:${label.id}`, `@${label.name}`);
-  return [...chips];
-}
-
-/**
- * Ticket 14b: the Check-in plans today. First the tasks worth scheduling today
- * (each: schedule it at a time, give it a due date, or leave it), then today's
- * schedule with the unscheduled sidebar beside it (`onPlan` opens it) and Done.
- * Skip records a skip; closing keeps nothing (do it later).
- */
-export function CheckInPanel({ candidates, status, pending, onSchedule, onDue, onDragStart, onPlan, onDone, onSkip, onClose }: {
-  candidates: CheckInCandidate[]; status: RunStatus | null; pending: boolean;
-  onSchedule: (id: string, time: string) => void; onDue: (id: string, day: string) => void;
-  /** Starts dragging a suggestion onto today's calendar (shown beside the Check-in). */
-  onDragStart: (id: string, event: ReactPointerEvent) => void;
-  onPlan: () => void; onDone: () => void; onSkip: () => void; onClose: () => void;
-}) {
-  const [step, setStep] = useState<"candidates" | "schedule">("candidates");
-  const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
-  const [times, setTimes] = useState<Record<string, string>>({});
-  const [text, setText] = useState("");
-  const [chips, setChips] = useState<ReadonlySet<string>>(new Set());
-  const open = candidates.filter(item => !left.has(item.id));
-  const searchable = open.length >= candidateSearchFrom;
-  const shown = searchable ? filterCandidates(open, text, chips) : open;
-  const toggle = (chip: string) => setChips(all => { const next = new Set(all); if (!next.delete(chip)) next.add(chip); return next; });
-  return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label="Check-in" data-ritual-panel="checkIn"
-    title="Check-in" actions={<>
-      <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onSkip} data-ritual-action="skip">Skip</Button>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Check-in" onClick={onClose}><X /></Button>
-    </>}>
-    <Progress aria-label={`Step ${step === "candidates" ? 1 : 2} of 2`} value={step === "candidates" ? 50 : 100} />
-    {status && <Hint>Today's Check-in is already {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</Hint>}
-    {step === "candidates" ? <div className="flex flex-col gap-3" data-ritual-step="candidates">
-      <h3 className="text-sm font-semibold">What should happen today?</h3>
-      <Hint>Your Inbox, overdue and due-today tasks without a time, goal tasks first. Drag one onto the calendar, schedule it at a time today, give it a due date, or leave it.</Hint>
-      {searchable && <div className="flex flex-col gap-2" data-check-in-search="">
-        <Input type="search" aria-label="Search tasks to plan" placeholder={`Search ${open.length} tasks`} value={text} onChange={event => setText(event.target.value)} />
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter tasks to plan">{candidateChips(open).map(([chip, name]) =>
-          <Toggle key={chip} variant="outline" size="sm" pressed={chips.has(chip)} onPressedChange={() => toggle(chip)} data-check-in-chip={chip}>{name}</Toggle>)}
-        </div>
-      </div>}
-      {shown.length ? <ul className="flex flex-col gap-2" aria-label="Tasks to plan">{shown.map(item => {
-        const time = times[item.id] ?? item.slot;
-        // Hierarchy: title first; why it's listed and what it holds quiet below; the schedule control grouped on one line.
-        return <li key={item.id} className="group relative flex cursor-grab touch-pan-y select-none flex-col gap-2 rounded-md border border-border-subtle bg-background py-2.5 pr-2 pl-5 hover:border-border"
-          data-check-in-candidate={item.id} onPointerDown={event => { if (!(event.target as HTMLElement).closest("input, button, [role=dialog]")) onDragStart(item.id, event); }}>
-          <GripVertical aria-hidden="true" className="absolute top-3 left-0.5 size-4 text-subtle-foreground opacity-0 group-hover:opacity-100" />
-          <div className="flex min-w-0 flex-col gap-1">
-              <span className="truncate text-sm font-medium" title={item.title}>{item.title}</span>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                <span className={cn(item.reason === "overdue" && "font-medium text-destructive")}>{reasonLabels[item.reason]}</span>
-                {item.goal && <span className="flex items-center gap-1"><GoalDot color={item.goal.color} />{item.goal.title}</span>}
-                {item.project && <span className="truncate">{item.project}</span>}
-                {item.labels.map(label => <span key={label.id}>@{label.name}</span>)}
-                {item.subtasks > 0 && <span className="flex items-center gap-0.5" title={`${item.subtasks} open sub-tasks`}><ListTree aria-hidden="true" className="size-3" />{item.subtasks}<span className="sr-only"> sub-tasks</span></span>}
-                {item.comments > 0 && <span className="flex items-center gap-0.5" title={`${item.comments} comments`}><MessageSquare aria-hidden="true" className="size-3" />{item.comments}<span className="sr-only"> comments</span></span>}
-              </div>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <ButtonGroup>
-              <Input type="time" aria-label={`Time for ${item.title}`} className="h-7 w-[5.75rem] text-xs" required value={time} onChange={event => { const value = event.target.value; if (value) setTimes(all => ({ ...all, [item.id]: value })); }} />
-              <Button type="button" variant="outline" size="sm" onClick={() => onSchedule(item.id, time)} data-ritual-action="schedule"><CalendarPlus />Today</Button>
-            </ButtonGroup>
-            <span className="flex-1" />
-            <Popover>
-              <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Due date for ${item.title}`} title="Give it a due date"><CalendarDays /></Button>} />
-              <PopoverContent className="w-auto p-2">
-                <Input type="date" aria-label={`Due date for ${item.title}`} onChange={event => { if (event.target.value) onDue(item.id, event.target.value); }} />
-              </PopoverContent>
-            </Popover>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Leave ${item.title}`} title="Leave it for now" onClick={() => setLeft(all => new Set(all).add(item.id))} data-ritual-action="leave"><X /></Button>
-          </div>
-        </li>;
-      })}</ul> : <Hint>{open.length ? "No task matches the search or filters." : "Nothing waiting: no Inbox, overdue or due-today tasks without a time."}</Hint>}
-      <Button type="button" size="sm" className="self-end" onClick={() => { setStep("schedule"); onPlan(); }} data-ritual-action="next">Next</Button>
-    </div> : <div className="flex flex-col gap-3" data-ritual-step="schedule">
-      <h3 className="text-sm font-semibold">Today's schedule</h3>
-      <Hint>Adjust it by hand: drag tasks from the unscheduled sidebar onto a time, move or resize blocks. Done when it looks right.</Hint>
-      <div className="flex items-center justify-between gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => setStep("candidates")}>Back</Button>
-        <Button type="button" size="sm" disabled={pending} onClick={onDone} data-ritual-action="done">Done</Button>
-      </div>
-    </div>}
-  </RightSidebar>;
-}

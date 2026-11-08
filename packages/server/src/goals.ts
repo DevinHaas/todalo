@@ -26,7 +26,7 @@ export async function getOwnedGoal(userId: string, id: string) {
 export async function createGoal(userId: string, input: CreateGoalInput) {
   const [{ count } = { count: 0 }] = input.color ? [] : await db.select({ count: sql<number>`count(*)::int` }).from(goals).where(eq(goals.userId, userId));
   const [goal] = await db.insert(goals).values({
-    userId, title: input.title, description: input.description ?? null, color: input.color ?? nextGoalColor(count),
+    userId, title: input.title, description: input.description ?? null, color: input.color ?? nextGoalColor(count), icon: input.icon ?? "target",
     sortOrder: sql`(select coalesce(max(${goals.sortOrder}), -1) + 1 from ${goals} where ${goals.userId} = ${userId})`,
   }).returning();
   return goal!;

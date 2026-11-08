@@ -407,23 +407,25 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         keepFocus(row);
       },
       "upcoming.today": () => week(".upcoming", "today"), "upcoming.next-week": () => week(".upcoming", "next-week"), "upcoming.previous-week": () => week(".upcoming", "previous-week"),
-      // Goals ticket 08: pass on away from the schedule (or with the sidebar closed).
-      "schedule.unscheduled": () => press(document.querySelector("main"), '[data-schedule-action="unscheduled"]'),
-      "schedule.filter": () => { const first = document.querySelector<HTMLElement>('main [data-unscheduled] [data-unscheduled-filter="first"]'); if (!first) return false; first.focus(); },
+      // Goals ticket 14c: the Plan sidebar; pass on away from the schedule (or with the sidebar closed).
+      "schedule.unscheduled": () => press(document.querySelector("main"), '[data-schedule-action="plan"]'),
+      "schedule.filter": () => { const first = document.querySelector<HTMLElement>('main [data-plan] [data-plan-filter="first"]'); if (!first) return false; first.focus(); },
+      "plan.reschedule-overdue": () => press(document.querySelector("main [data-plan]"), '[data-plan-action="reschedule"]'),
+      "plan.add-task": () => press(document.querySelector("main [data-plan]"), '[data-plan-action="add"]'),
       // The focused task (row, card or schedule block) keeps its day and loses its time; passes on without one.
       "task.unschedule": () => {
         const row = activeRow();
         if (!row) return false;
         write(async () => { const { task } = await focusedTask(row); if (task && isTimed(task)) await latest.current.update.mutateAsync({ id: task.id, details: unscheduledDetails(task) }); });
       },
-      "schedule.task": () => press(activeRow()?.closest("[data-unscheduled]") ? activeRow() : null, '[data-unscheduled-action="schedule"]'),
+      "schedule.task": () => press(activeRow()?.closest("[data-plan]") ? activeRow() : null, '[data-plan-action="schedule"]'),
       // Goals ticket 11: a ritual that is off says so and offers its settings, instead of doing nothing.
       "ritual.check-in": () => withRituals(state => state.settings.checkIn.enabled ? openRitual("checkIn") : ritualOff("Check-in")),
       "ritual.evening-review": () => withRituals(state => state.settings.eveningReview.enabled ? openRitual("eveningReview") : ritualOff("Evening review")),
       // Goals ticket 14b: the Check-in's suggested task with focus inside it, else the first.
       "ritual.schedule-candidate": () => press(candidate(), '[data-ritual-action="schedule"]'),
       "ritual.leave-candidate": () => press(candidate(), '[data-ritual-action="leave"]'),
-      "ritual.search-candidates": () => { const field = document.querySelector<HTMLInputElement>("[data-ritual-panel] [data-check-in-search] input"); if (!field) return false; field.focus(); },
+      "ritual.search-candidates": () => { const field = document.querySelector<HTMLInputElement>("main [data-plan] [data-plan-search] input"); if (!field) return false; field.focus(); },
       "ritual.next": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="next"], [data-ritual-action="done"]'),
       "ritual.weekly-review": () => withRituals(state => state.settings.weeklyReview.enabled ? openRitual("weeklyReview") : ritualOff("Weekly review")),
       "ritual.season-review": () => withRituals(state => !state.settings.seasonReview.enabled ? ritualOff("Season review")

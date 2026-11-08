@@ -90,6 +90,7 @@
   --spacing-row: 2.25rem;         /* list rows: 36 */
   --spacing-sidebar-item: 2.125rem; /* sidebar rows: 34 */
   --spacing-sidebar: 17.5rem;     /* sidebar width: 280 */
+  --spacing-plan: 20rem;          /* Plan sidebar beside the schedule: 320 */
   --spacing-page: 50rem;          /* content column: 800 */
 
   /* Radii */

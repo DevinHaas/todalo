@@ -2,20 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
-import { goalReads, metadataReads, projectReads, reads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { ritualReads, rituals, seasonReads, seasons } from "./runtime";
 import { seasonMutations, type NextSeason } from "./seasons";
 import { EndSeasonStep, seasonRange } from "./season-views";
 import { addDays, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
-import { CheckInPanel, eveningReviewCopy, RatingHistory, RitualPanel, RitualSettingsForm, RitualsNav, seasonReviewCopy, WeekSummary, weeklyReviewCopy } from "./ritual-views";
+import { eveningReviewCopy, RatingHistory, RitualPanel, RitualSettingsForm, RitualsNav, seasonReviewCopy, WeekSummary, weeklyReviewCopy } from "./ritual-views";
 import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
 import { showCalendarDay, useDisplay } from "./schedule-views";
-import { checkInCandidates, dropRange, dueDetails, durationOf, labels, nextFreeSlot, parseDayKey, scheduledDetails } from "./schedule";
-import { goalColorValue } from "./goals";
-import { useTaskWrites } from "./task-writes";
+import { parseDayKey } from "./schedule";
 import { askNotificationPermission, firstTimeFor, notifyReady } from "./ritual-notify";
-import { openUnscheduled } from "./schedule-screens";
-import { useTaskDrag } from "./unscheduled-views";
+import { openPlan } from "./schedule-screens";
+import { planRitual } from "./plan-views";
 import { LoadFailure, Loading } from "./goal-views";
 import { Button, Hint } from "./ui";
 
@@ -131,44 +129,21 @@ function useRitualNotifications(userId: string, data: RitualsDto | undefined, re
   }, [userId]);
 }
 
-/** Ticket 14b: the Check-in plans today from the shared task collection (no AI; rules in checkInCandidates). */
-function CheckInRitual({ userId, state, onShowToday, onPlan, onClose }: { userId: string; state: RitualsDto; onShowToday: () => void; onPlan: () => void; onClose: () => void }) {
-  const tasks = useQuery(reads.today(userId)).data?.tasks ?? [];
-  const goals = useQuery(goalReads.list(userId)).data;
-  const links = useQuery(goalReads.links(userId)).data ?? { projects: [], tasks: [] };
-  const writes = useTaskWrites(userId);
-  const labelList = useQuery(metadataReads.list(userId)).data?.labels ?? [];
+/**
+ * Ticket 14c: the Check-in plans today in the Plan sidebar beside Today's
+ * calendar (no separate cards; rules in planGroups). This only opens Today and
+ * hands the sidebar its header, Skip and Done while it runs.
+ */
+function CheckInRitual({ userId, state, onShowToday, onClose }: { userId: string; state: RitualsDto; onShowToday: () => void; onClose: () => void }) {
   const { record } = useRitualWrites(userId);
-  const goalList = goals?.hidden ? [] : goals?.goals ?? [];
-  const items = new Set([state.checkIn.taskId, state.eveningReview.taskId].filter((id): id is string => id !== null));
-  const candidates = checkInCandidates(tasks, goalList, links, items);
-  const projectNames = new Map((useQuery(projectReads.list(userId)).data ?? []).map(project => [project.id, project.name]));
-  const find = (id: string) => tasks.find(task => task.id === id);
-  // A failed write is toasted (toasts.ts) and rolled back.
-  const quietly = (promise: Promise<unknown>) => void promise.catch(() => {});
-  // Dragged onto today's calendar (opened beside the Check-in), a suggestion is scheduled where it lands, as from the unscheduled sidebar.
-  const drag = useTaskDrag((task, day, y) => { const { start, end } = dropRange(parseDayKey(day), y, durationOf(task)); quietly(writes.update.mutateAsync({ id: task.id, details: scheduledDetails(task, start, end) })); });
   const { period, status } = state.checkIn;
   const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "checkIn", period, ...run }); onClose(); };
-  // Today's calendar sits beside the Check-in from the first step, so suggestions can be dragged onto it.
   useEffect(() => { onShowToday(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return <><CheckInPanel key={period} status={status} pending={record.isPending}
-    candidates={candidates.map(({ task, reason, goal }) => ({
-      id: task.id, title: task.title, reason, goal: goal && { id: goal.id, title: goal.title, color: goalColorValue(goal.color) },
-      labels: labelList.filter(label => task.labelIds.includes(label.id)),
-      project: task.projectId ? projectNames.get(task.projectId) ?? null : null,
-      subtasks: tasks.filter(child => child.parentId === task.id && !child.completedAt).length, comments: task.commentCount ?? 0, slot: labels.time(nextFreeSlot(tasks, durationOf(task)).start),
-    }))}
-    onSchedule={(id, time) => {
-      const task = find(id);
-      if (!task) return;
-      const [hours, minutes] = time.split(":").map(Number);
-      const start = new Date(); start.setHours(hours!, minutes!, 0, 0);
-      quietly(writes.update.mutateAsync({ id, details: scheduledDetails(task, start, new Date(start.getTime() + durationOf(task) * 60_000)) }));
-    }}
-    onDragStart={(id, event) => { const task = find(id); if (task) drag.start(task, event); }}
-    onDue={(id, day) => { const task = find(id); if (task) quietly(writes.update.mutateAsync({ id, details: dueDetails(task, day) })); }}
-    onPlan={onPlan} onDone={() => done({ status: "completed", ratings: [] })} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={onClose} />{drag.preview}</>;
+  useEffect(() => {
+    planRitual.set({ status, pending: record.isPending, onDone: () => done({ status: "completed", ratings: [] }), onSkip: () => done({ status: "skipped", ratings: [] }), onClose });
+  });
+  useEffect(() => () => planRitual.set(null), []);
+  return null;
 }
 
 /** The right-sidebar ritual panel, beside every screen; never blocks the rest of the app. */
@@ -188,14 +163,14 @@ export function RitualHost({ userId }: { userId: string }) {
   const { pathname } = useLocation();
   const display = useDisplay();
   // "help" plans by hand: Today (ticket 12) or next week on Upcoming (ticket 13) as a
-  // calendar with the unscheduled sidebar open. ponytail: no AI involved; tickets 19
+  // calendar with the Plan sidebar open. ponytail: no AI involved; tickets 19
   // and 20 add the Coach's drafts on these same schedules.
-  const [plan, setPlan] = useState<{ path: "/today" | "/upcoming"; day?: string; sidebar?: boolean } | null>(null);
+  const [plan, setPlan] = useState<{ path: "/today" | "/upcoming"; day?: string } | null>(null);
   useEffect(() => {
     if (!plan || pathname !== plan.path) return;
     if (display.layout !== "calendar") display.set({ layout: "calendar" });
     if (plan.day) { if (display.calendarRange !== "week") display.set({ calendarRange: "week" }); showCalendarDay(parseDayKey(plan.day)); }
-    if (plan.sidebar !== false) openUnscheduled();
+    openPlan();
     setPlan(null);
   }, [plan, pathname, display]);
   useEffect(() => {
@@ -204,11 +179,11 @@ export function RitualHost({ userId }: { userId: string }) {
     return () => window.removeEventListener(OPEN, start);
   }, []);
   if (!open || !query.data || season.status === "pending") return null;
-  const goals = (shown?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color }) => ({ goalId, title, color }));
+  const goals = (shown?.season?.goals ?? []).filter(goal => !goal.archived).map(({ goalId, title, color, icon }) => ({ goalId, title, color, icon }));
   const voice = (append: (text: string) => void) => <VoiceContext onText={append} />;
   const close = () => setOpen(null);
-  // Ticket 14b: the Check-in's second step is today's schedule with the unscheduled sidebar (ticket 12's planning view).
-  if (open === "checkIn") return <CheckInRitual userId={userId} state={query.data} onShowToday={() => { navigate("/today"); setPlan({ path: "/today", sidebar: false }); }} onPlan={() => { navigate("/today"); setPlan({ path: "/today" }); }} onClose={close} />;
+  // Ticket 14c: the Check-in runs in Today's Plan sidebar, beside the calendar.
+  if (open === "checkIn") return <CheckInRitual userId={userId} state={query.data} onShowToday={() => { navigate("/today"); setPlan({ path: "/today" }); }} onClose={close} />;
   if (open === "eveningReview") {
     const { period, status } = query.data.eveningReview;
     const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "eveningReview", period, ...run }); close(); };

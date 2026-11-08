@@ -2,15 +2,15 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
 import type { CurrentSeasonDto } from "../../../packages/server/src/season-dto";
 import { change, optimisticWrite, type Change } from "./optimistic";
-import type { CriterionDto, GoalColor, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
+import type { CriterionDto, GoalColor, GoalIcon, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
 
-export type { CriterionDto, GoalColor, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
-export { goalColorKeys, goalColorValue, nextGoalColor } from "../../../packages/server/src/goal-dto";
-export interface GoalPatch { title?: string; description?: string; color?: GoalColor; archived?: boolean }
+export type { CriterionDto, GoalColor, GoalIcon, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
+export { goalColorKeys, goalColorValue, goalIcons, nextGoalColor } from "../../../packages/server/src/goal-dto";
+export interface GoalPatch { title?: string; description?: string; color?: GoalColor; icon?: GoalIcon; archived?: boolean }
 /** A new goal; without a colour the server picks the next palette one. */
-export interface NewGoal { title: string; description?: string; color?: GoalColor }
+export interface NewGoal { title: string; description?: string; color?: GoalColor; icon?: GoalIcon }
 
 export interface GoalTransport {
   /** Active goals in the user's order, and whether the sidebar hides them. */
@@ -60,7 +60,7 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
   return {
     goals: async () => required(await request<GoalsDto>("GET", "/api/v1/goals"), "TASKS_UNAVAILABLE"),
     goal: (id) => request<GoalDetailDto>("GET", path(id)),
-    create: async ({ title, description, color }) => required(await request<{ goal: GoalDto }>("POST", "/api/v1/goals", { title, ...(description && { description }), ...(color && { color }) }), "SAVE_FAILED").goal,
+    create: async ({ title, description, color, icon }) => required(await request<{ goal: GoalDto }>("POST", "/api/v1/goals", { title, ...(description && { description }), ...(color && { color }), ...(icon && { icon }) }), "SAVE_FAILED").goal,
     update: async (id, patch) => (await request<{ goal: GoalDto }>("PATCH", path(id), patch))?.goal ?? null,
     reorder: async (id, anchorId, position) => (await request("POST", `${path(id)}/reorder`, { anchorId, position })) !== null,
     setHidden: async (hidden) => required(await request<{ hidden: boolean }>("PUT", "/api/v1/goals-visibility", { hidden }), "SAVE_FAILED").hidden,
@@ -83,7 +83,7 @@ export function goalTransport(): GoalTransport {
   return {
     goals: () => command<GoalsDto>("goals"),
     goal: (id) => command<GoalDetailDto | null>("goal", { id }),
-    create: async ({ title, description, color }) => (await command<{ goal: GoalDto }>("create_goal", { title, description: description || null, color: color ?? null })).goal,
+    create: async ({ title, description, color, icon }) => (await command<{ goal: GoalDto }>("create_goal", { title, description: description || null, color: color ?? null, icon: icon ?? null })).goal,
     update: async (id, patch) => (await command<{ goal: GoalDto } | null>("update_goal", { id, patch }))?.goal ?? null,
     reorder: async (id, anchorId, position) => (await command<{ id: string } | null>("reorder_goal", { id, anchorId, position })) !== null,
     setHidden: async (hidden) => (await command<{ hidden: boolean }>("set_goals_hidden", { hidden })).hidden,
@@ -139,14 +139,14 @@ export function goalMutations(transport: GoalTransport, cache: QueryClient, user
     change<GoalDetailDto | null | undefined>(goalKeys.detail(userId, id), data => data && { ...data, goal: edit(data.goal) }),
     change<CurrentSeasonDto | undefined>(["user", userId, "seasons", "current"], data => data?.season ? { ...data, season: { ...data.season, goals: data.season.goals.map(row => {
       if (row.goalId !== id) return row;
-      const goal = edit({ id, title: row.title, description: null, color: row.color, archived: row.archived });
-      return { ...row, title: goal.title, color: goal.color, archived: goal.archived };
+      const goal = edit({ id, title: row.title, description: null, color: row.color, icon: row.icon, archived: row.archived });
+      return { ...row, title: goal.title, color: goal.color, icon: goal.icon, archived: goal.archived };
     }) } } : data),
   ];
   const ok = (done: boolean, code: "GOAL_NOT_FOUND" | "TASK_NOT_FOUND" = "GOAL_NOT_FOUND") => { if (!done) throw new AccountTransportError(code); return done; };
   return {
     create(goal: NewGoal) {
-      const draft: GoalDto = { id: `draft-goal-${++drafts}`, title: goal.title, description: goal.description ?? null, color: goal.color ?? "blue", archived: false };
+      const draft: GoalDto = { id: `draft-goal-${++drafts}`, title: goal.title, description: goal.description ?? null, color: goal.color ?? "blue", icon: goal.icon ?? "target", archived: false };
       return write([sidebar(goals => [...goals, draft])], () => transport.create(goal), created => [sidebar(goals => goals.map(item => item.id === draft.id ? created : item))]);
     },
     update(id: string, patch: GoalPatch) {

@@ -1,7 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
-import { CalendarRange, Hash, Pencil, Plus, Target, X } from "lucide-react";
-import { criteriaProgress, goalColorKeys, goalColorValue, type GoalColor, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
+import {
+  Apple, Baby, Bike, BookOpen, Brain, Briefcase, CalendarRange, Camera, Code, Dog, Dumbbell, Flame, Footprints, GraduationCap, Hash, Heart, House, Leaf,
+  Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
+} from "lucide-react";
+import { criteriaProgress, goalColorKeys, goalColorValue, goalIcons, type GoalColor, type GoalIcon as GoalIconName, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
 import type { SeasonTier } from "./seasons";
 import { taskPath } from "./links";
 import type { ReorderPosition } from "./bulk";
@@ -12,15 +15,42 @@ import {
   Alert, AlertDescription, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, Badge, Button, Card, CardContent, Checkbox, Field, FieldLabel, FieldLegend, FieldSet, Hint, Input, Label, List,
   ListRow, PageHeader, PageSection, Popover, PopoverContent, PopoverTitle, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger,
-  SelectValue, SidebarSectionHeader, Spinner, SwatchPicker, Switch, Textarea, cn, sidebarItemClassName, type Swatch,
+  SelectValue, SidebarSectionHeader, Spinner, SwatchPicker, Switch, Textarea, ToggleGroup, ToggleGroupItem, cn, sidebarItemClassName, type Swatch,
 } from "./ui";
 
 // Pure goal views (goals ticket 01): no runtime imports. Built only from src/ui (docs/agents/ui.md).
 type Write = { pending: boolean; error: string | null };
 
-/** A goal's colour as its icon: sidebar, goal page, season page, task sheet chips. */
-export const GoalDot = ({ color, className }: { color: string; className?: string }) =>
-  <span data-slot="goal-dot" aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ background: goalColorValue(color) }} />;
+/** Ticket 14c: the curated goal icons (goal-dto `goalIcons`) as lucide components. */
+const iconComponents: Record<GoalIconName, LucideIcon> = {
+  target: Target, rocket: Rocket, dumbbell: Dumbbell, "book-open": BookOpen, heart: Heart, briefcase: Briefcase, "graduation-cap": GraduationCap,
+  "piggy-bank": PiggyBank, music: Music, plane: Plane, leaf: Leaf, code: Code, home: House, brain: Brain, bike: Bike, footprints: Footprints,
+  apple: Apple, moon: Moon, sun: Sun, palette: Palette, camera: Camera, "pen-tool": PenTool, users: Users, baby: Baby, dog: Dog, trophy: Trophy,
+  star: Star, flame: Flame, mountain: Mountain, wallet: Wallet,
+};
+const iconLabel = (icon: string) => icon.split("-").map(word => word[0]!.toUpperCase() + word.slice(1)).join(" ");
+// Important sizes and colour on the glyph: sidebar rows and buttons style every svg inside them.
+const iconSizes = {
+  xs: ["size-3.5 rounded-xs", "size-2.5!"], sm: ["size-4 rounded-sm", "size-3!"], md: ["size-5 rounded-md", "size-3.5!"], lg: ["size-7 rounded-lg", "size-4.5!"],
+} as const;
+
+/** Ticket 14c: a goal's identity everywhere it shows: its icon in white on a rounded square of its colour. */
+export const GoalIcon = ({ color, icon, size = "sm", className }: { color: string; icon?: string; size?: keyof typeof iconSizes; className?: string }) => {
+  const Icon = iconComponents[icon as GoalIconName] ?? Target;
+  return <span data-slot="goal-icon" aria-hidden="true" className={cn("inline-grid shrink-0 place-content-center", iconSizes[size][0], className)}
+    style={{ background: goalColorValue(color) }}><Icon strokeWidth={2.5} className={cn(iconSizes[size][1], "text-primary-foreground! opacity-100!")} /></span>;
+};
+
+/** The curated icons as a toggle grid (arrow keys move, Space picks), shown in the goal's colour. */
+export function IconPicker({ value, color, onChange }: { value: GoalIconName; color: GoalColor; onChange(icon: GoalIconName): void }) {
+  return <FieldSet className="gap-2"><FieldLegend variant="label">Icon</FieldLegend>
+    <ToggleGroup aria-label="Icon" spacing={1} className="flex-wrap" value={[value]} onValueChange={(next) => { const icon = next[0] as GoalIconName | undefined; if (icon) onChange(icon); }}>
+      {goalIcons.map(icon => <ToggleGroupItem key={icon} value={icon} size="sm" aria-label={iconLabel(icon)} title={iconLabel(icon)} className="size-control-sm p-0 data-[pressed]:bg-selected">
+        <GoalIcon color={value === icon ? color : "slate"} icon={icon} size="md" />
+      </ToggleGroupItem>)}
+    </ToggleGroup>
+  </FieldSet>;
+}
 
 const colorNames: Record<GoalColor, string> = { blue: "Blue", green: "Green", orange: "Orange", violet: "Violet", pink: "Pink", teal: "Teal", amber: "Amber", red: "Red", indigo: "Indigo", slate: "Slate" };
 export const goalSwatches: Swatch<GoalColor>[] = goalColorKeys.map(color => ({ value: color, label: colorNames[color], color: goalColorValue(color) }));
@@ -62,7 +92,7 @@ export function GoalsNav({ goals, adding, onAdding, onCreate, onReorder, write }
     <SortableTasks ids={goals.map(goal => goal.id)} label={(id) => goals.find(goal => goal.id === id)?.title ?? "goal"} onReorder={onReorder}>
       {goals.map(goal => <SortableRow key={goal.id} id={goal.id} title={goal.title} className="group/row -ml-6 flex items-center"
         handleClassName="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-subtle-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5">
-        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className={sidebarItemClassName}><span className="grid size-4 place-content-center"><GoalDot color={goal.color} /></span><span className="truncate">{goal.title}</span></NavLink>
+        <NavLink to={`/goals/${encodeURIComponent(goal.id)}`} className={sidebarItemClassName}><GoalIcon color={goal.color} icon={goal.icon} /><span className="truncate">{goal.title}</span></NavLink>
       </SortableRow>)}
     </SortableTasks>
   </section>;
@@ -87,8 +117,8 @@ export function GoalSuggestion({ slots }: { slots: GoalSlots }) {
 }
 
 /** A goal as a chip: its colour dot and title. */
-export const GoalChip = ({ goal }: { goal: Pick<GoalDto, "color" | "title"> }) =>
-  <Badge variant="outline" className="h-6 max-w-full gap-1.5 px-2 text-xs-plus font-normal"><GoalDot color={goal.color} /><span className="truncate">{goal.title}</span></Badge>;
+export const GoalChip = ({ goal }: { goal: Pick<GoalDto, "color" | "icon" | "title"> }) =>
+  <Badge variant="outline" className="h-6 max-w-full gap-1.5 pr-2 pl-1 text-xs-plus font-normal"><GoalIcon color={goal.color} icon={goal.icon} /><span className="truncate">{goal.title}</span></Badge>;
 
 /**
  * Checkboxes over the active goals; each tick links or unlinks at once.
@@ -108,7 +138,7 @@ export function GoalPicker({ slots, variant, data }: { slots: GoalSlots; variant
       <PopoverContent align="start" className="w-64 gap-1 p-2">
         <PopoverTitle className="px-1.5 pb-1 text-xs-plus font-semibold text-muted-foreground">Goals</PopoverTitle>
         {slots.goals.length > 0 ? <div role="group" aria-label="Goals" className="flex flex-col">{slots.goals.map(goal => <Label key={goal.id} className="flex h-control cursor-pointer items-center gap-2 rounded-lg px-1.5 text-sm font-normal hover:bg-accent">
-          <Checkbox checked={slots.linked.includes(goal.id)} onCheckedChange={(checked) => slots.onToggle(goal.id, checked)} /><GoalDot color={goal.color} /><span className="truncate">{goal.title}</span>
+          <Checkbox checked={slots.linked.includes(goal.id)} onCheckedChange={(checked) => slots.onToggle(goal.id, checked)} /><GoalIcon color={goal.color} icon={goal.icon} /><span className="truncate">{goal.title}</span>
         </Label>)}</div>
           : <Hint className="px-1.5">Create a goal with + next to Goals in the sidebar.</Hint>}
       </PopoverContent>
@@ -142,9 +172,9 @@ export function MilestoneToggle({ slots }: { slots: MilestoneSlots }) {
     {milestone && goals.length > 1 && <Select items={goals.map(item => ({ value: item.id, label: item.title }))} value={milestone.goalId}
       onValueChange={(goalId) => { if (goalId) slots.onChange({ ...milestone, goalId: goalId as string }); }}>
       <SelectTrigger size="sm" aria-label="Milestone for" className="max-w-full"><SelectValue /></SelectTrigger>
-      <SelectContent>{goals.map(item => <SelectItem key={item.id} value={item.id}><GoalDot color={item.color} />{item.title}</SelectItem>)}</SelectContent>
+      <SelectContent>{goals.map(item => <SelectItem key={item.id} value={item.id}><GoalIcon color={item.color} icon={item.icon} />{item.title}</SelectItem>)}</SelectContent>
     </Select>}
-    {milestone && goals.length <= 1 && goal && <Hint className="flex items-center gap-1.5"><GoalDot color={goal.color} />for {goal.title}</Hint>}
+    {milestone && goals.length <= 1 && goal && <Hint className="flex items-center gap-1.5"><GoalIcon color={goal.color} icon={goal.icon} size="xs" />for {goal.title}</Hint>}
     {slots.error && <FormError>{slots.error}</FormError>}
   </div>;
 }
@@ -187,21 +217,22 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<GoalColor>("blue");
+  const [icon, setIcon] = useState<GoalIconName>("target");
   if (state.status === "pending") return <div className="ui"><Loading>Loading goal…</Loading></div>;
   if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   if (!state.data) return <div className="ui flex flex-col items-start gap-3"><PageHeader title="Goal not found" />
     <Hint>This goal does not exist or you do not have access to it.</Hint><Button variant="outline" size="sm" nativeButton={false} render={<Link to="/today" />}>Back to Today</Button></div>;
   const { goal, projects, tasks, milestones } = state.data;
   const marked = new Set(milestones.map(item => item.task.id));
-  const edit = () => { setTitle(goal.title); setDescription(goal.description ?? ""); setColor(goal.color); setEditing(true); };
+  const edit = () => { setTitle(goal.title); setDescription(goal.description ?? ""); setColor(goal.color); setIcon(goal.icon); setEditing(true); };
   async function save(event: FormEvent) {
     event.preventDefault();
-    try { await onSave({ title, description, color }); setEditing(false); } catch { /* shown through write.error */ }
+    try { await onSave({ title, description, color, icon }); setEditing(false); } catch { /* shown through write.error */ }
   }
   const unlink = (kind: GoalLinkKind, id: string, name: string) => <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"
     aria-label={`Unlink ${name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink(kind, id)}><X /></Button>;
   return <div className="ui max-w-page" data-goal-id={goal.id}>
-    <PageHeader icon={<GoalDot color={goal.color} className="size-3.5" />} title={goal.title} actions={<>
+    <PageHeader icon={<GoalIcon color={goal.color} icon={goal.icon} size="lg" />} title={goal.title} actions={<>
       {!goal.archived && <Button variant="outline" size="sm" data-goal-action="edit" aria-expanded={editing} onClick={() => editing ? setEditing(false) : edit()}><Pencil />Edit</Button>}
       <Button variant="ghost" size="sm" disabled={write.pending} onClick={() => onArchive(!goal.archived)}>{goal.archived ? "Restore" : "Archive"}</Button>
     </>} />
@@ -209,7 +240,7 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
     {editing ? <form ref={releaseFocus} className="my-4 flex flex-col gap-4 rounded-xl border border-border p-4" onSubmit={save} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }}>
       <Field><FieldLabel htmlFor="goal-title">Title</FieldLabel><Input id="goal-title" value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} /></Field>
       <Field><FieldLabel htmlFor="goal-description">Description</FieldLabel><Textarea id="goal-description" value={description} onChange={event => setDescription(event.target.value)} rows={4} maxLength={10_000} placeholder="Why this goal matters and what reaching it looks like" /></Field>
-      <ColorPicker value={color} onChange={setColor} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-8"><ColorPicker value={color} onChange={setColor} /><IconPicker value={icon} color={color} onChange={setIcon} /></div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
         <Button type="submit" disabled={write.pending || !title.trim()}>Save goal</Button>

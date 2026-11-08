@@ -19,7 +19,17 @@ export const nextGoalColor = (existing: number): GoalColor => goalColorKeys[exis
 /** CSS colour for a stored key; unknown keys (never written, but old clients) fall back to the first. */
 export const goalColorValue = (color: string) => goalColors[color as GoalColor] ?? goalColors.blue;
 
-export interface GoalDto { id: string; title: string; description: string | null; color: GoalColor; archived: boolean }
+/** Ticket 14c: a goal's icon, a lucide name from this curated list (the client maps each to its component). */
+export const goalIcons = [
+  "target", "rocket", "dumbbell", "book-open", "heart", "briefcase", "graduation-cap", "piggy-bank", "music", "plane",
+  "leaf", "code", "home", "brain", "bike", "footprints", "apple", "moon", "sun", "palette",
+  "camera", "pen-tool", "users", "baby", "dog", "trophy", "star", "flame", "mountain", "wallet",
+] as const;
+export type GoalIcon = typeof goalIcons[number];
+/** A stored icon name; unknown ones (never written, but old rows) fall back to the default. */
+export const goalIconOf = (icon: string | null | undefined): GoalIcon => goalIcons.includes(icon as GoalIcon) ? icon as GoalIcon : "target";
+
+export interface GoalDto { id: string; title: string; description: string | null; color: GoalColor; icon: GoalIcon; archived: boolean }
 /** The sidebar read: active goals in the user's order, and whether Goals is hidden. */
 export interface GoalsDto { goals: GoalDto[]; hidden: boolean }
 
@@ -39,20 +49,21 @@ export interface GoalSuggestionsDto { goalIds: string[] }
 export type GoalLinkKind = "projects" | "tasks";
 export const goalLinkKinds: readonly GoalLinkKind[] = ["projects", "tasks"];
 
-export interface GoalRecord { id: string; title: string; description: string | null; color: string; archivedAt: Date | null }
+export interface GoalRecord { id: string; title: string; description: string | null; color: string; icon?: string | null; archivedAt: Date | null }
 
 /** Allow-lists fields: user IDs and ordering internals never leave the server. */
-export const toGoalDto = (goal: GoalRecord): GoalDto => ({ id: goal.id, title: goal.title, description: goal.description, color: goalColorKeys.includes(goal.color as GoalColor) ? goal.color as GoalColor : "blue", archived: goal.archivedAt !== null });
+export const toGoalDto = (goal: GoalRecord): GoalDto => ({ id: goal.id, title: goal.title, description: goal.description, color: goalColorKeys.includes(goal.color as GoalColor) ? goal.color as GoalColor : "blue", icon: goalIconOf(goal.icon), archived: goal.archivedAt !== null });
 
 const title = z.string().trim().min(1).max(200);
 // An empty description clears it.
 const description = z.string().max(10_000).transform(value => value.trim() || null);
 
 const color = z.enum(goalColorKeys as [GoalColor, ...GoalColor[]]);
+const icon = z.enum(goalIcons);
 
-export const createGoalInput = z.object({ title, description: description.optional(), color: color.optional() }).strict();
+export const createGoalInput = z.object({ title, description: description.optional(), color: color.optional(), icon: icon.optional() }).strict();
 /** Only the supplied fields change; `archived: true` archives (soft), false restores. */
-export const updateGoalInput = z.object({ title: title.optional(), description: description.optional(), color: color.optional(), archived: z.boolean().optional() }).strict()
+export const updateGoalInput = z.object({ title: title.optional(), description: description.optional(), color: color.optional(), icon: icon.optional(), archived: z.boolean().optional() }).strict()
   .refine(patch => Object.keys(patch).length > 0, { message: "Nothing to change" });
 export const reorderGoalInput = z.object({ anchorId: z.string().min(1).max(200), position: z.enum(["before", "after"]) }).strict();
 export const goalsVisibilityInput = z.object({ hidden: z.boolean() }).strict();

@@ -10,7 +10,7 @@ import {
 import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigation";
 import type { TaskDto } from "./tasks";
 import {
-  addDays, addMonths, blockFor, checkInCandidates, dayKey, dragRange, dropRange, dueDetails, durationOf, nextFreeSlot, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, unscheduledTasks, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
+  addDays, addMonths, blockFor, datedDetails, dayKey, planGroups, rescheduledDetails, dragRange, dropRange, dueDetails, durationOf, nextFreeSlot, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
   upcomingSections, upcomingWindow, weekOf,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
@@ -266,29 +266,9 @@ describe("time blocks on the schedule (goals ticket 07)", () => {
   });
 });
 
-describe("unscheduled sidebar (goals ticket 08)", () => {
-  const open = [
-    task("Spec", { projectId: "p1", priority: 1, labelIds: ["deep"] }),
-    task("Inbox chore", { priority: 4 }),
-    // Midnight and 09:00 in Zurich.
-    task("Dated", { projectId: "p2", dueDate: "2026-02-20T23:00:00.000Z", labelIds: ["deep"] }),
-    task("Timed", { dueDate: "2026-02-21T08:00:00.000Z" }),
-    task("Done", { status: "done" }),
-  ];
+describe("dragging tasks onto the schedule (goals ticket 08)", () => {
   const links = { projects: [{ goalId: "g1", projectId: "p1" }], tasks: [{ goalId: "g2", taskId: "Inbox chore" }] };
   beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
-  const ids = (filter: Parameters<typeof unscheduledTasks>[1]) => unscheduledTasks(open, filter, links).map(item => item.id);
-
-  it.each([
-    ["no filter: open, without a time (a date alone is unscheduled)", {}, ["Spec", "Inbox chore", "Dated"]],
-    ["a goal through the task's project", { goalId: "g1" }, ["Spec"]],
-    ["a goal linked to the task itself", { goalId: "g2" }, ["Inbox chore"]],
-    ["a project", { projectId: "p2" }, ["Dated"]],
-    ["the Inbox", { projectId: null }, ["Inbox chore"]],
-    ["a priority", { priority: 4 }, ["Inbox chore", "Dated"]],
-    ["a label", { labelId: "deep" }, ["Spec", "Dated"]],
-    ["filters together", { labelId: "deep", projectId: "p1" }, ["Spec"]],
-  ])("lists %s", (_name, filter, expected) => expect(ids(filter)).toEqual(expected));
 
   it("schedules a dropped task for its duration at the snapped slot, ending by midnight", () => {
     process.env.TZ = "Europe/Zurich";
@@ -338,7 +318,7 @@ describe("overlap layout", () => {
   });
 });
 
-describe("Check-in candidates and the next free slot (goals ticket 14b)", () => {
+describe("Plan sidebar groups and the next free slot (goals tickets 14b, 14c)", () => {
   beforeEach(() => { process.env.TZ = "Europe/Zurich"; });
   // Saturday 21 February 2026, 10:07 in Zurich (UTC+1).
   const now = new Date("2026-02-21T09:07:00.000Z");
@@ -347,20 +327,37 @@ describe("Check-in candidates and the next free slot (goals ticket 14b)", () => 
   const tasks = [
     task("Inbox", {}),
     task("Overdue", { projectId: "p1", dueDate: "2026-02-19T23:00:00.000Z" }),
+    task("Timed overdue", { dueDate: "2026-02-20T08:00:00.000Z", dueDateEnd: "2026-02-20T08:45:00.000Z" }),
     task("Due today", { projectId: "p1", dueDate: "2026-02-20T23:00:00.000Z" }),
     task("Goal today", { projectId: "p-goal", dueDate: "2026-02-20T23:00:00.000Z" }),
     task("Linked inbox", {}),
-    // Not candidates: a later date, a project without a date, a time already, done, a ritual item.
-    task("Tomorrow", { dueDate: "2026-02-21T23:00:00.000Z" }),
+    task("In a week", { dueDate: "2026-02-27T23:00:00.000Z" }),
+    task("Tomorrow", { projectId: "p1", dueDate: "2026-02-21T23:00:00.000Z" }),
+    // Not listed: an undated sub-task, 8 days out, a time today, a project without a date, done, a ritual item.
+    task("Inbox step", { parentId: "Inbox" }),
+    task("Later", { dueDate: "2026-02-28T23:00:00.000Z" }),
+    task("Timed today", { dueDate: "2026-02-21T13:00:00.000Z" }),
     task("Someday", { projectId: "p1" }),
-    task("Timed overdue", { dueDate: "2026-02-20T08:00:00.000Z" }),
     task("Done", { status: "done" }),
     task("Check-in", { dueDate: "2026-02-20T23:00:00.000Z" }),
   ];
-  it("lists overdue, due-today and undated Inbox tasks without a time, goal-linked first", () => {
-    expect(checkInCandidates(tasks, goals, links, new Set(["Check-in"]), now).map(item => `${item.task.id}:${item.reason}:${item.goal?.id ?? "-"}`)).toEqual([
-      "Goal today:today:g2", "Linked inbox:inbox:g1", "Overdue:overdue:-", "Due today:today:-", "Inbox:inbox:-",
-    ]);
+  const listed = (filter: Parameters<typeof planGroups>[3]) => {
+    const groups = planGroups(tasks, goals, links, { skip: new Set(["Check-in"]), ...filter }, now);
+    return Object.fromEntries(Object.entries(groups).map(([group, items]) => [group, items.map(item => `${item.task.id}${item.goal ? `:${item.goal.id}` : ""}`)]));
+  };
+  it.each([
+    ["every project: goal tasks first, then by date", {}, {
+      overdue: ["Overdue", "Timed overdue"], today: ["Goal today:g2", "Due today"], week: ["Tomorrow", "In a week"], inbox: ["Linked inbox:g1", "Inbox"],
+    }],
+    ["one project", { projectId: "p1" }, { overdue: ["Overdue"], today: ["Due today"], week: ["Tomorrow"], inbox: [] }],
+    ["the Inbox", { projectId: null }, { overdue: ["Timed overdue"], today: [], week: ["In a week"], inbox: ["Linked inbox:g1", "Inbox"] }],
+  ] as const)("groups %s", (_name, filter, expected) => expect(listed(filter)).toEqual(expected));
+
+  it("reschedules an overdue task to today at its own time and length; undo puts its dates back", () => {
+    const timed = tasks[2]!;
+    expect(rescheduledDetails(timed, now)).toMatchObject({ dueDate: "2026-02-21T08:00:00.000Z", dueDateEnd: "2026-02-21T08:45:00.000Z" });
+    expect(rescheduledDetails(tasks[1]!, now)).toMatchObject({ dueDate: "2026-02-20T23:00:00.000Z", dueDateEnd: null });
+    expect(datedDetails({ ...timed, updatedAt: "v2" }, timed)).toMatchObject({ updatedAt: "v2", dueDate: timed.dueDate, dueDateEnd: timed.dueDateEnd });
   });
 
   it.each([

@@ -8,6 +8,8 @@ import { seasonMutations, type NextSeason, type SeasonGoalPatch, type SeasonTier
 import { PastSeasonView, SeasonsNav, SeasonView } from "./season-views";
 import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
+import { goalOf } from "./schedule";
+import type { TaskDto } from "./tasks";
 import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
 
@@ -49,6 +51,18 @@ export function useMilestoneTaskIds(userId: string) {
   const shown = useGoalsShown(userId);
   const links = useQuery({ ...goalReads.links(userId), enabled: shown });
   return useMemo(() => milestoneTaskIds(shown ? links.data : undefined), [shown, links.data]);
+}
+
+/** Ticket 14c: the first goal (sidebar order) each task serves, for row circles and cards; null while Goals is hidden. */
+export function useTaskGoalOf(userId: string) {
+  const list = useQuery(goalReads.list(userId));
+  const shown = list.data ? !list.data.hidden : false;
+  const links = useQuery({ ...goalReads.links(userId), enabled: shown });
+  return useMemo(() => {
+    const goalList = shown ? list.data?.goals ?? [] : [];
+    const linkData = links.data ?? { projects: [], tasks: [] };
+    return (task: TaskDto) => goalList.length ? goalOf(task, goalList, linkData) ?? null : null;
+  }, [shown, list.data, links.data]);
 }
 
 export function GoalScreen({ account }: { account: Account }) {

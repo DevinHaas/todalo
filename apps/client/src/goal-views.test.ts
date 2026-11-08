@@ -11,7 +11,7 @@ import { TaskEditor } from "./task-sheet";
 import { seasonRange } from "./season-views";
 
 const render = (node: ReactNode) => renderToStaticMarkup(createElement(MemoryRouter, null, node));
-const goal = (extra: Partial<GoalDto> = {}): GoalDto => ({ id: "todalo", title: "Finish Todalo", description: null, color: "teal", archived: false, ...extra });
+const goal = (extra: Partial<GoalDto> = {}): GoalDto => ({ id: "todalo", title: "Finish Todalo", description: null, color: "teal", icon: "target", archived: false, ...extra });
 const task: TaskDto = {
   id: "beta", title: "Ship beta", description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: "2026-11-06T00:00:00.000Z",
@@ -34,12 +34,12 @@ describe("goal page", () => {
     expect(html).toContain("Add a description");
   });
 
-  it("shows the description itself, the colour as its icon, and no season card outside a season", () => {
-    const html = page({ goal: goal({ description: "Why it matters" }) });
+  it("shows the description itself, its icon on its colour, and no season card outside a season", () => {
+    const html = page({ goal: goal({ description: "Why it matters", icon: "book-open" }) });
     expect(html).toMatch(/data-slot="goal-description"[^>]*>Why it matters<\/p>/);
     expect(html).not.toContain("Add a description");
     expect(html).not.toContain("This season");
-    expect(html).toMatch(/data-slot="goal-dot"[^>]*style="background:oklch\(0.65 0.11 190\)"/);
+    expect(html).toMatch(/data-slot="goal-icon"[^>]*style="background:oklch\(0.65 0.11 190\)"><svg[^>]*lucide-book-open/);
   });
 
   it("flags linked tasks that are milestones", () => {

@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { CalendarRange, History, Pencil, Plus } from "lucide-react";
-import { nextGoalColor, type GoalColor, type GoalDto, type NewGoal } from "./goals";
-import { ColorPicker, FormError, GoalDot, LoadFailure, Loading, SeasonTarget } from "./goal-views";
+import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
+import { ColorPicker, FormError, GoalIcon, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
 import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
@@ -135,9 +135,9 @@ function PastSeasons({ seasons }: { seasons: SeasonDto[] }) {
   </PageSection>;
 }
 
-const GoalTitle = ({ goalId, color, title, archived }: { goalId: string; color: string; title: string; archived?: boolean }) =>
+const GoalTitle = ({ goalId, color, icon, title, archived }: { goalId: string; color: string; icon?: string; title: string; archived?: boolean }) =>
   <Link className="inline-flex min-w-0 items-center gap-2 self-start font-medium [overflow-wrap:anywhere] hover:underline hover:underline-offset-4" to={goalPath(goalId)}>
-    <GoalDot color={color} />{title}{archived && <span className="font-normal text-muted-foreground"> (archived)</span>}
+    <GoalIcon color={color} icon={icon} />{title}{archived && <span className="font-normal text-muted-foreground"> (archived)</span>}
   </Link>;
 
 /** A past season, read-only: its goals with the tiers and targets they had. */
@@ -152,7 +152,7 @@ export function PastSeasonView({ state, id, onRetry }: { state: ReadState<Season
     <PageHeader title={`Season ${seasonRange(season)}`} actions={back} />
     <p className="text-muted-foreground">{plural(season.lengthDays, "day")}{season.endedAt && ` · ended ${fullDay.format(new Date(season.endedAt))}`}</p>
     <TierSections goals={season.goals} empty={{ primary: "No primary goals.", secondary: "No secondary goals." }} row={goal => <ListRow key={goal.id} data-season-goal={goal.goalId}>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5"><GoalTitle goalId={goal.goalId} color={goal.color} title={goal.title} /><SeasonTarget text={goal.target} /></div>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5"><GoalTitle goalId={goal.goalId} color={goal.color} icon={goal.icon} title={goal.title} /><SeasonTarget text={goal.target} /></div>
     </ListRow>} />
   </div>;
 }
@@ -205,7 +205,7 @@ function useEndSeason(season: SeasonDto, onEnd: (next: NextSeason | null) => Pro
           const item = carry[goal.goalId]!;
           return <div key={goal.id} className="flex flex-col gap-2 border-t border-border-subtle py-2.5" data-season-carry={goal.goalId}>
             <Label className="flex cursor-pointer items-center gap-2 font-normal"><Checkbox checked={item.on} disabled={goal.archived} onCheckedChange={(on) => set(goal.goalId, { on })} />
-              <GoalDot color={goal.color} />{goal.title}{goal.archived && <span className="text-muted-foreground"> (archived)</span>}</Label>
+              <GoalIcon color={goal.color} icon={goal.icon} />{goal.title}{goal.archived && <span className="text-muted-foreground"> (archived)</span>}</Label>
             {item.on && <div className="flex flex-wrap items-center gap-2 pl-6">
               <Select items={[{ value: "primary", label: "Primary" }, { value: "secondary", label: "Secondary" }]} value={item.tier} onValueChange={(tier) => { if (tier) set(goal.goalId, { tier: tier as SeasonTier }); }}>
                 <SelectTrigger aria-label="Tier" className="w-32"><SelectValue /></SelectTrigger>
@@ -277,7 +277,7 @@ function OtherGoalRow({ goal, onAdd, write }: { goal: GoalDto; onAdd: (goalId: s
   return <ListRow data-season-goal={goal.id} className="items-start gap-3">
     <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked={open} disabled={write.pending} onCheckedChange={setOpen} />
     <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <GoalTitle goalId={goal.id} color={goal.color} title={goal.title} />
+      <GoalTitle goalId={goal.id} color={goal.color} icon={goal.icon} title={goal.title} />
       {open && <form ref={releaseFocus} className="flex flex-col items-start gap-2" onSubmit={submit} onKeyDown={escape(() => setOpen(false))}>
         <TierToggle value={tier} onChange={setTier} />
         <Input aria-label={`Target for ${goal.title} this season`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="Target: what does done look like by the season's end?" />
@@ -296,18 +296,19 @@ function NewSeasonGoal({ count, onCreate, write }: { count: number; onCreate: (g
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<GoalColor>(() => nextGoalColor(count));
+  const [icon, setIcon] = useState<GoalIconName>("target");
   const [tier, setTier] = useState<SeasonTier>("primary");
   const [target, setTarget] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
-    try { await onCreate({ title, description, color }, tier, target); setTitle(""); setDescription(""); setTarget(""); setOpen(false); } catch { /* shown through write.error */ }
+    try { await onCreate({ title, description, color, icon }, tier, target); setTitle(""); setIcon("target"); setDescription(""); setTarget(""); setOpen(false); } catch { /* shown through write.error */ }
   }
   if (!open) return <Button variant="ghost" className="mt-1 -ml-2 font-normal text-muted-foreground hover:text-brand" data-season-action="add-goal" onClick={() => { setColor(nextGoalColor(count)); setOpen(true); }}><Plus className="text-brand" />New goal</Button>;
   return <form ref={releaseFocus} className="mt-3 flex flex-col gap-4 rounded-xl border border-border p-4" aria-label="New goal" onSubmit={submit} onKeyDown={escape(() => setOpen(false))}>
     <Field><FieldLabel htmlFor="season-goal-title">Goal</FieldLabel><Input id="season-goal-title" autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} placeholder="e.g. Ship the beta" /></Field>
     <Field><FieldLabel htmlFor="season-goal-description">Description <span className="font-normal text-muted-foreground">optional, shown on the goal page</span></FieldLabel>
       <Textarea id="season-goal-description" value={description} onChange={event => setDescription(event.target.value)} rows={2} maxLength={10_000} placeholder="Why this goal matters" /></Field>
-    <ColorPicker value={color} onChange={setColor} />
+    <div className="flex flex-col gap-4 sm:flex-row sm:gap-8"><ColorPicker value={color} onChange={setColor} /><IconPicker value={icon} color={color} onChange={setIcon} /></div>
     <FieldSet className="gap-2"><FieldLegend variant="label">Tier</FieldLegend><TierToggle value={tier} onChange={setTier} /></FieldSet>
     <Field><FieldLabel htmlFor="season-goal-target">Target this season</FieldLabel><Input id="season-goal-target" value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} placeholder="What does done look like by the season's end?" /></Field>
     <div className="flex justify-end gap-2">
@@ -332,7 +333,7 @@ function SeasonGoalRow({ goal, onUpdate, onRemove, write }: {
     <Switch className="mt-1" aria-label={`Include ${goal.title} in this season`} data-season-goal-action="include" checked disabled={write.pending}
       onCheckedChange={() => void onRemove(goal.goalId).catch(() => undefined)} />
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <GoalTitle goalId={goal.goalId} color={goal.color} title={goal.title} archived={goal.archived} />
+      <GoalTitle goalId={goal.goalId} color={goal.color} icon={goal.icon} title={goal.title} archived={goal.archived} />
       {editing ? <form className="flex gap-2" onSubmit={submit} onKeyDown={escape(() => setEditing(false))}>
         <Input aria-label={`Target for ${goal.title}`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} />
         <Button type="submit" disabled={write.pending || !target.trim()}>Save</Button>

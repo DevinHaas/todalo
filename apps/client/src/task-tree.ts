@@ -10,6 +10,9 @@ import type { TaskDto } from "./tasks";
 export const TaskTree = createContext<readonly TaskDto[] | null>(null);
 /** Goals ticket 06: task IDs that are milestones (from the goal links; empty while Goals is hidden). Rows show a flag. */
 export const MilestoneTasks = createContext<ReadonlySet<string>>(new Set());
+/** Ticket 14c: the goal a task serves (its colour and icon on rows and cards); always null while Goals is hidden. */
+export interface TaskGoal { id: string; title: string; color: string; icon: string }
+export const TaskGoals = createContext<(task: TaskDto) => TaskGoal | null>(() => null);
 
 /** Direct children (open, done) and their count. */
 export function subtasksOf(id: string, tasks: readonly TaskDto[] | null) {

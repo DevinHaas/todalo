@@ -14,7 +14,8 @@ import {
   createToastManager,
 } from "./ui";
 import { goalColorKeys, goalColorValue } from "./goals";
-import { goalSwatches } from "./goal-views";
+import { GoalIcon, IconPicker, goalSwatches } from "./goal-views";
+import type { GoalColor, GoalIcon as GoalIconName } from "./goals";
 
 /**
  * /ui (o then c): every library component and state, light and dark side by
@@ -47,6 +48,7 @@ const Row = ({ children }: { children: ReactNode }) => <div className="flex flex
 function Showcase() {
   const [tier, setTier] = useState("primary");
   const [color, setColor] = useState<string>(goalColorKeys[0]!);
+  const [icon, setIcon] = useState<GoalIconName>("target");
   const [hex, setHex] = useState("#dc4c3e");
   const [slider, setSlider] = useState(40);
   const [on, setOn] = useState(true);
@@ -102,6 +104,11 @@ function Showcase() {
     <Group title="Colour">
       <SwatchPicker aria-label="Colour" swatches={goalSwatches} value={color} onValueChange={setColor} />
       <div className="max-w-xs"><ColorControl name="Free colour" hex={hex} onValueChange={(value) => setHex(value.hex)} /></div>
+    </Group>
+
+    <Group title="Goal icon">
+      <div className="flex items-center gap-3">{(["xs", "sm", "md", "lg"] as const).map(size => <GoalIcon key={size} color={color} icon={icon} size={size} />)}</div>
+      <div className="max-w-sm"><IconPicker value={icon} color={color as GoalColor} onChange={setIcon} /></div>
     </Group>
 
     <ToastDemo />
@@ -183,7 +190,7 @@ function Showcase() {
         <TableBody><TableRow><TableCell>Finish Todalo</TableCell><TableCell>Primary</TableCell></TableRow><TableRow><TableCell>Run a half</TableCell><TableCell>Secondary</TableCell></TableRow></TableBody>
       </Table>
       <div className="flex h-40 justify-end rounded-lg border border-border">
-        <RightSidebar title="Unscheduled" actions={<Button variant="ghost" size="sm">Close</Button>}><Hint>The right sidebar: unscheduled tasks, rituals, Coach chat.</Hint></RightSidebar>
+        <RightSidebar title="Plan" actions={<Button variant="ghost" size="sm">Close</Button>}><Hint>The right sidebar: the Plan (with the Check-in), rituals, Coach chat.</Hint></RightSidebar>
       </div>
     </Group>
   </>;

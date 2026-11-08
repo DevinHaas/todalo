@@ -110,7 +110,7 @@ export function seasonMutations(transport: SeasonTransport, cache: QueryClient, 
     start: (startDate: string, lengthDays: number) => settled(() => transport.start(startDate, lengthDays)),
     addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) {
       const goal = cache.getQueryData<GoalsDto>(goalKeys.list(userId))?.goals.find(item => item.id === goalId);
-      const draft: SeasonGoalDto = { id: `draft-${goalId}`, goalId, title: goal?.title ?? "", color: goal?.color ?? "blue", archived: false, tier, target, carriedFromId: null };
+      const draft: SeasonGoalDto = { id: `draft-${goalId}`, goalId, title: goal?.title ?? "", color: goal?.color ?? "blue", icon: goal?.icon ?? "target", archived: false, tier, target, carriedFromId: null };
       return optimisticWrite(cache, [rows(seasonId, goals => [...goals.filter(item => item.goalId !== goalId), draft])], async () => done(await transport.addGoal(seasonId, goalId, tier, target)), refresh,
         added => [rows(seasonId, goals => goals.map(item => item.goalId === goalId ? added : item))]);
     },

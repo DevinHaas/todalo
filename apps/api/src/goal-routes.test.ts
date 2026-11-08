@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { planReorder } from "@todalo/server/bulk-input";
 import { createGoalRoutes } from "./goal-routes";
 
-type Row = { id: string; userId: string; title: string; description: string | null; color: string; sortOrder: number; archivedAt: Date | null };
+type Row = { id: string; userId: string; title: string; description: string | null; color: string; icon?: string; sortOrder: number; archivedAt: Date | null };
 let goals: Row[] = [];
 let hidden: Map<string, boolean>;
 // Projects and tasks the links point at; unlinking must never remove these.
@@ -35,7 +35,7 @@ const app = createGoalRoutes({
   list: async (userId) => active(userId),
   get: async (userId, id) => find(userId, id),
   create: async (userId, input) => {
-    const row = { id: `new-${input.title}`, userId, title: input.title, description: input.description ?? null, color: input.color ?? "blue", sortOrder: goals.length, archivedAt: null };
+    const row = { id: `new-${input.title}`, userId, title: input.title, description: input.description ?? null, color: input.color ?? "blue", icon: input.icon ?? "target", sortOrder: goals.length, archivedAt: null };
     goals.push(row);
     return row;
   },
@@ -108,13 +108,13 @@ describe("goal API", () => {
     const response = await call("GET", "/goals?userId=bob", { user: "alice" });
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ hidden: false, goals: [
-      { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", archived: false },
-      { id: "alice-v2", title: "Ship v2", description: null, color: "blue", archived: false },
+      { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", icon: "target", archived: false },
+      { id: "alice-v2", title: "Ship v2", description: null, color: "blue", icon: "target", archived: false },
     ] });
   });
 
   it("opens a goal page (archived ones too); foreign and missing IDs share one 404", async () => {
-    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", archived: false }, projects: [], tasks: [], milestones: [] });
+    expect(await (await call("GET", "/goals/alice-fit", { user: "alice" })).json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", icon: "target", archived: false }, projects: [], tasks: [], milestones: [] });
     expect((await (await call("GET", "/goals/alice-old", { user: "alice" })).json() as { goal: { archived: boolean } }).goal.archived).toBe(true);
     const foreign = await call("GET", "/goals/bob-read", { user: "alice" });
     const missing = await call("GET", "/goals/nope", { user: "alice" });
@@ -125,7 +125,7 @@ describe("goal API", () => {
   it("creates with a trimmed title and optional description, for the session user only", async () => {
     const created = await call("POST", "/goals", { user: "alice", body: { title: "  Build muscle ", description: " Lift 3x a week " } });
     expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ goal: { id: "new-Build muscle", title: "Build muscle", description: "Lift 3x a week", color: "blue", archived: false } });
+    expect(await created.json()).toEqual({ goal: { id: "new-Build muscle", title: "Build muscle", description: "Lift 3x a week", color: "blue", icon: "target", archived: false } });
     expect((await sidebar()).goals.at(-1)?.id).toBe("new-Build muscle");
     for (const body of [{ title: "  " }, { title: "x".repeat(201) }, {}, { title: "A", userId: "bob" }, { title: "A", description: "x".repeat(10_001) }]) {
       const response = await call("POST", "/goals", { user: "alice", body });
@@ -136,9 +136,9 @@ describe("goal API", () => {
 
   it("renames and edits the description; an empty description clears it", async () => {
     const renamed = await call("PATCH", "/goals/alice-fit", { user: "alice", body: { title: "Get fit" } });
-    expect(await renamed.json()).toEqual({ goal: { id: "alice-fit", title: "Get fit", description: "Run a marathon", color: "green", archived: false } });
+    expect(await renamed.json()).toEqual({ goal: { id: "alice-fit", title: "Get fit", description: "Run a marathon", color: "green", icon: "target", archived: false } });
     const described = await call("PATCH", "/goals/alice-fit", { user: "alice", body: { description: "  " } });
-    expect(await described.json()).toEqual({ goal: { id: "alice-fit", title: "Get fit", description: null, color: "green", archived: false } });
+    expect(await described.json()).toEqual({ goal: { id: "alice-fit", title: "Get fit", description: null, color: "green", icon: "target", archived: false } });
     expect((await call("PATCH", "/goals/alice-fit", { user: "alice", body: {} })).status).toBe(400);
   });
 
@@ -152,9 +152,21 @@ describe("goal API", () => {
     expect((await call("PATCH", "/goals/alice-fit", { user: "alice", body: { color: "chartreuse" } })).status).toBe(400);
   });
 
+  it("a goal's icon comes from the curated list: target by default, chosen on create, changed on edit, anything else refused", async () => {
+    const plain = await call("POST", "/goals", { user: "alice", body: { title: "Rest" } });
+    expect((await plain.json() as { goal: { icon: string } }).goal.icon).toBe("target");
+    const created = await call("POST", "/goals", { user: "alice", body: { title: "Read", icon: "book-open" } });
+    expect((await created.json() as { goal: { icon: string } }).goal.icon).toBe("book-open");
+    const changed = await call("PATCH", "/goals/alice-fit", { user: "alice", body: { icon: "dumbbell" } });
+    expect((await changed.json() as { goal: { icon: string } }).goal.icon).toBe("dumbbell");
+    expect((await sidebar()).goals.find(goal => goal.id === "alice-fit")).toMatchObject({ icon: "dumbbell", color: "green" });
+    for (const body of [{ title: "A", icon: "skull" }, { title: "A", icon: "" }, { title: "A", icon: "<svg/>" }]) expect((await call("POST", "/goals", { user: "alice", body })).status).toBe(400);
+    expect((await call("PATCH", "/goals/alice-fit", { user: "alice", body: { icon: "Target" } })).status).toBe(400);
+  });
+
   it("archiving removes a goal from the sidebar but keeps its data", async () => {
     const archived = await call("PATCH", "/goals/alice-fit", { user: "alice", body: { archived: true } });
-    expect(await archived.json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", archived: true } });
+    expect(await archived.json()).toEqual({ goal: { id: "alice-fit", title: "Become fit", description: "Run a marathon", color: "green", icon: "target", archived: true } });
     expect((await sidebar()).goals.map(goal => goal.id)).toEqual(["alice-v2"]);
     expect(goals.find(goal => goal.id === "alice-fit")).toMatchObject({ title: "Become fit", description: "Run a marathon" });
     expect((await call("GET", "/goals/alice-fit", { user: "alice" })).status).toBe(200);

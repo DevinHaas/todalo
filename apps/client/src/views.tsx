@@ -10,10 +10,12 @@ import { releaseFocus } from "./software-keyboard";
 import { eventDayKey, type CalendarEventDto } from "./calendar";
 import { EventRow } from "./calendar-views";
 import { dayKey } from "./schedule";
+import { goalColorValue } from "./goals";
 import { copyText, taskPath } from "./links";
 import { Dropdown, type Option } from "./popover";
 import { ComposerChoices } from "./composer";
-import { MilestoneTasks, TaskTree, subtasksOf } from "./task-tree";
+import { MilestoneTasks, TaskGoals, TaskTree, subtasksOf } from "./task-tree";
+import { GoalIcon } from "./goal-views";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -84,6 +86,9 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
 }) {
   const tree = useContext(TaskTree);
   const milestone = useContext(MilestoneTasks).has(task.id);
+  // Ticket 14c: a goal task's circle is in its goal's colour, with the goal's icon in the meta line.
+  const goal = useContext(TaskGoals)(task);
+  const ring = goal ? { "--ring-color": goalColorValue(goal.color) } as CSSProperties : undefined;
   const closed = useSyncExternalStore(collapsedTasks.subscribe, collapsedTasks.get, collapsedTasks.get);
   const hidden = hiddenBy(task, tree, closed);
   const [expanded, setExpanded] = useState(false);
@@ -105,8 +110,8 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
-      ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} onClick={() => actions.complete(task)} />
-      : <span className="checkbox" data-priority={task.priority} aria-hidden="true" />}
+      ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} style={ring} onClick={() => actions.complete(task)} />
+      : <span className="checkbox" data-priority={task.priority} style={ring} aria-hidden="true" />}
     <div className="row-body">
       <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}{milestone && <MilestoneMark />}</Link>
       {dialog?.edit && <button type="button" hidden data-edit onClick={() => dialog.edit!(task.id)}>Edit {task.title}</button>}
@@ -121,6 +126,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
           onClick={() => nested ? collapsedTasks.toggle(task.id) : setExpanded(value => !value)}>
           <GitBranch />{subtasks.done.length}/{subtasks.total}<ChevronRight className="chevron" />
         </button>}
+        {goal && <span className="pill" title={goal.title}><GoalIcon color={goal.color} icon={goal.icon} size="xs" /><span className="sr-only">Goal {goal.title}</span></span>}
         {(task.commentCount ?? 0) > 0 && <span className="pill comments" aria-label={`${task.commentCount} comment${task.commentCount! > 1 ? "s" : ""}`}><MessageSquare />{task.commentCount}</span>}
         <span className="pill project">{projectName ?? "Inbox"}{projectName ? <Hash /> : <Inbox />}</span>
       </div>

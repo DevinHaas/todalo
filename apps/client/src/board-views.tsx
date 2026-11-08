@@ -9,7 +9,8 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { boardColumns, boardDrop, columnId, type ReorderInput, type TaskStatus } from "./bulk";
 import { SortableRow, dragAnnouncements, useDragSensors } from "./bulk-views";
 import { treeOrder, type TaskDto } from "./tasks";
-import { MilestoneTasks } from "./task-tree";
+import { MilestoneTasks, TaskGoals } from "./task-tree";
+import { GoalIcon } from "./goal-views";
 import { MilestoneMark } from "./views";
 
 // The card under the pointer wins over its column; keyboard drags (no pointer) take the nearest corners.
@@ -29,8 +30,10 @@ function Column({ status, label, target, children }: { status: TaskStatus; label
 
 function Card({ task, onOpen }: { task: TaskDto; onOpen?: (task: TaskDto) => void }) {
   const milestone = useContext(MilestoneTasks).has(task.id);
+  const goal = useContext(TaskGoals)(task);
   return <div className={task.parentId ? "board-card sub-task" : "board-card"} data-task-id={task.id}>
     <button type="button" className="board-card-title" onClick={() => onOpen?.(task)}>{task.title}{milestone && <MilestoneMark />}</button>
+    {goal && <span className="ui mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><GoalIcon color={goal.color} icon={goal.icon} size="xs" />{goal.title}</span>}
   </div>;
 }
 

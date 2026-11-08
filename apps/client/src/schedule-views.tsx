@@ -96,18 +96,18 @@ export interface IncomingTask { task: TaskDto; day: string; y: number }
 
 /**
  * Time blocks (goals ticket 07, reworked): every task with a time is a block.
- * Move or resize it, drag it onto the unscheduled sidebar, or drop a sidebar task on a slot.
+ * Move or resize it, drag it onto the Plan sidebar, or drop a sidebar task on a slot.
  */
 export interface PlannerSlots {
   /** The CSS colour of the task's first goal (sidebar order), if any. */
   taskColor(task: TaskDto): string | null;
   /** A moved or resized task's new range; settles once saved or refused. */
   change(task: TaskDto, start: Date, end: Date): Promise<unknown>;
-  /** Dropped on the unscheduled sidebar: clears its time. */
+  /** Dropped on the Plan sidebar: clears its time. */
   unschedule(task: TaskDto): void;
   /** A sidebar task being dragged over the grid (its ghost shows there). */
   incoming?: IncomingTask | null;
-  /** Controls above the grid (the unscheduled sidebar toggle). */
+  /** Controls above the grid (the Plan sidebar toggle). */
   toolbar?: ReactNode;
 }
 
@@ -279,7 +279,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
     let sidebar: HTMLElement | null = null;
     const mark = (target: HTMLElement | null) => { if (target === sidebar) return; sidebar?.removeAttribute("data-drop-target"); target?.setAttribute("data-drop-target", ""); sidebar = target; };
     track(event, (dy, shift, x, y) => {
-      // Moved onto the unscheduled sidebar: releasing there unschedules the task.
+      // Moved onto the Plan sidebar: releasing there unschedules the task.
       mark(mode === "move" ? sidebarAt(x, y) : null);
       range = sidebar ? null : dragRange(mode, item.start, item.end, dy, mode === "move" ? shift : 0);
       setGhost(range && { ...range, title: item.title, color: item.color, key: item.key });
@@ -336,9 +336,9 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
 }
 
 type Range = { start: Date; end: Date };
-/** The unscheduled sidebar's column under the pointer (anywhere below its top, however short its list). */
+/** The Plan sidebar's column under the pointer (anywhere below its top, however short its list). */
 const sidebarAt = (x: number, y: number) => {
-  const sidebar = document.querySelector<HTMLElement>("main [data-unscheduled]");
+  const sidebar = document.querySelector<HTMLElement>("main [data-plan]");
   const rect = sidebar?.getBoundingClientRect();
   return rect && x >= rect.left && x <= rect.right && y >= rect.top ? sidebar! : null;
 };

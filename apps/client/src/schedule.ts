@@ -200,45 +200,57 @@ export function nextSlot(minutes = DEFAULT_DURATION_MINUTES, now = new Date()) {
   return { start, end: new Date(start.getTime() + minutes * MINUTE) };
 }
 
-// Goals ticket 08: the unscheduled sidebar.
-/** Sidebar filters; an absent field matches everything. `projectId: null` is the Inbox. */
-export interface UnscheduledFilter { goalId?: string; projectId?: string | null; priority?: number; labelId?: string }
 /** Which goals a task serves: linked directly or through its project. */
 export interface GoalLinks { projects: { goalId: string; projectId: string }[]; tasks: { goalId: string; taskId: string }[] }
 export const servesGoal = (task: TaskDto, goalId: string, links: GoalLinks) =>
   links.tasks.some(link => link.goalId === goalId && link.taskId === task.id)
   || (task.projectId !== null && links.projects.some(link => link.goalId === goalId && link.projectId === task.projectId));
 
-/** Open tasks without a time of day, filtered; in collection order. */
-export function unscheduledTasks(tasks: TaskDto[], filter: UnscheduledFilter, links: GoalLinks) {
-  return tasks.filter(task => task.status !== "done" && !isTimed(task)
-    && (filter.goalId === undefined || servesGoal(task, filter.goalId, links))
-    && (filter.projectId === undefined || task.projectId === filter.projectId)
-    && (filter.priority === undefined || task.priority === filter.priority)
-    && (filter.labelId === undefined || task.labelIds.includes(filter.labelId)));
-}
-
-// Goals ticket 14b: the Check-in plans today from these rules (no AI; the Coach ranks later).
-/** Why a task is worth scheduling today. */
-export type CandidateReason = "overdue" | "today" | "inbox";
-const reasonOrder: CandidateReason[] = ["overdue", "today", "inbox"];
+// Goals ticket 14c: the Plan sidebar (planning beside the schedule and the Check-in). No AI; the Coach ranks later.
+export type PlanGroup = "overdue" | "today" | "week" | "inbox";
+export const planGroupOrder: readonly PlanGroup[] = ["overdue", "today", "week", "inbox"];
 /**
- * Open tasks without a time worth scheduling today: overdue, due today, or in
- * the Inbox without a date. Goal-linked first (the first goal in sidebar order),
- * then by reason, else in collection order. `skip` leaves out ritual items.
+ * Where an open task waits to be planned: overdue (any earlier day, with or
+ * without a time), due today or in the next 7 days without a time, or in the
+ * Inbox without a date (sub-tasks go with their parent). Anything else (a time today or later, a later day, a
+ * project task without a date) is not listed.
  */
-export function checkInCandidates<G extends { id: string }>(tasks: TaskDto[], goals: G[], links: GoalLinks, skip: ReadonlySet<string> = new Set(), now = new Date()) {
-  const today = dayKey(now);
-  const reasonOf = (task: TaskDto): CandidateReason | null => {
-    if (!task.dueDate) return task.projectId === null ? "inbox" : null;
-    const day = dayKey(new Date(task.dueDate));
-    return day < today ? "overdue" : day === today ? "today" : null;
-  };
-  return tasks.flatMap(task => {
-    const reason = task.status === "done" || isTimed(task) || skip.has(task.id) ? null : reasonOf(task);
-    return reason ? [{ task, reason, goal: goalOf(task, goals, links) ?? null }] : [];
-  }).sort((a, b) => Number(!a.goal) - Number(!b.goal) || reasonOrder.indexOf(a.reason) - reasonOrder.indexOf(b.reason));
+export function planGroupOf(task: TaskDto, now = new Date()): PlanGroup | null {
+  if (task.status === "done") return null;
+  // An undated sub-task is planned with its parent.
+  if (!task.dueDate) return task.projectId === null && task.parentId === null ? "inbox" : null;
+  const day = dayKey(new Date(task.dueDate)), today = dayKey(now);
+  if (day < today) return "overdue";
+  if (isTimed(task)) return null;
+  if (day === today) return "today";
+  return day <= dayKey(addDays(startOfDay(now), 7)) ? "week" : null;
 }
+/** One Plan row: the task and the first goal (sidebar order) it serves. */
+export interface PlanItem<G> { task: TaskDto; goal: G | null }
+/**
+ * The Plan sidebar's groups, in planGroupOrder. `projectId` filters (null is
+ * the Inbox; undefined every project); `skip` leaves out ritual items. Goal
+ * tasks first in each group, then by date, else in collection order.
+ */
+export function planGroups<G extends { id: string }>(tasks: TaskDto[], goals: G[], links: GoalLinks, { projectId, skip = new Set() }: { projectId?: string | null; skip?: ReadonlySet<string> } = {}, now = new Date()) {
+  const groups: Record<PlanGroup, PlanItem<G>[]> = { overdue: [], today: [], week: [], inbox: [] };
+  for (const task of tasks) {
+    const group = skip.has(task.id) || (projectId !== undefined && task.projectId !== projectId) ? null : planGroupOf(task, now);
+    if (group) groups[group].push({ task, goal: goalOf(task, goals, links) ?? null });
+  }
+  const time = (item: PlanItem<G>) => item.task.dueDate ? Date.parse(item.task.dueDate) : 0;
+  for (const group of planGroupOrder) groups[group].sort((a, b) => Number(!a.goal) - Number(!b.goal) || time(a) - time(b));
+  return groups;
+}
+/** "Reschedule" on Overdue: the same time of day (if any) and length, today. */
+export function rescheduledDetails(task: TaskDto, now = new Date()): TaskDetails {
+  const due = new Date(task.dueDate!), start = startOfDay(now);
+  start.setHours(due.getHours(), due.getMinutes(), 0, 0);
+  const end = task.dueDateEnd ? new Date(start.getTime() + new Date(task.dueDateEnd).getTime() - due.getTime()) : null;
+  return { ...detailsOf(task), dueDate: start.toISOString(), dueDateEnd: end && end > start ? end.toISOString() : null };
+}
+/** Undo: puts the task's own dates back, on its current version. */
+export const datedDetails = (task: TaskDto, dates: Pick<TaskDto, "dueDate" | "dueDateEnd">): TaskDetails => ({ ...detailsOf(task), dueDate: dates.dueDate, dueDateEnd: dates.dueDateEnd });
 
 /**
  * The first quarter hour from now today where `minutes` fit without overlapping
