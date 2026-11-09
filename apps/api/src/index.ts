@@ -212,6 +212,7 @@ const app = createApi(dependencies)
   save: drafts.saveDraft,
   tasks: drafts.getDraftTasks,
   resolve: drafts.resolveDraft,
+  settleOverflow: drafts.settleOverflow,
   recommendation: coach.getRecommendation,
   patterns: coachPatterns.getPatterns,
 })).use(createCoachChatRoutes({
@@ -254,7 +255,7 @@ const app = createApi(dependencies)
   verify,
   allowedOrigins: dependencies.allowedOrigins,
   get: settings.getSettings,
-  setSmartDateRecognition: settings.setSmartDateRecognition,
+  update: settings.updateSettings,
   loadKeyboard: keyboard.loadKeyboardPreferences,
   saveKeyboard: keyboard.saveKeyboardPreferences,
 })).use(createMetadataRoutes({

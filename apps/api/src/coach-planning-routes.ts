@@ -83,7 +83,7 @@ export function createCoachPlanningRoutes(store: CoachPlanningStore) {
           if (next !== "done") return { question: { ...next, step: turns.length + 1, total: PLANNING_QUESTION_LIMIT }, draft: null } satisfies PlanningDto;
         }
         const drafted = parsePlanningDraft(await model.complete({ messages: withPatterns(planningMessages(PLANNING_DRAFT_PROMPT, facts, input.data), patterns), schema: planningDraftSchema }, request.signal), plan, goalId, lastDay);
-        if (!drafted.items.length) return failed(drafted.summary || "The Coach found nothing to add. Say a little more and try again.");
+        if (!drafted.items.length && !drafted.overflow) return failed(drafted.summary || "The Coach found nothing to add. Say a little more and try again.");
         return { question: null, draft: toDraftDto(await store.saveDraft(userId, { kind: "plan", period: today, ...drafted })) } satisfies PlanningDto;
       } catch (error) {
         if (error instanceof CoachModelError) return failed(error.message, coachErrorDto(error, saved.provider));

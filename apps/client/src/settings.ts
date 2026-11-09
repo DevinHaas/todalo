@@ -29,11 +29,12 @@ export function browserSettingsTransport(fetcher: typeof fetch = fetch): Setting
   return { get: () => request("GET"), update: (settings) => request("PATCH", settings) };
 }
 
-// Only the allow-listed field reaches the cache, whatever the server adds.
+// Only the allow-listed fields reach the cache, whatever the server adds.
 function parse(body: unknown): SettingsDto {
-  const value = (body as { settings?: { smartDateRecognition?: unknown } } | null)?.settings?.smartDateRecognition;
-  if (typeof value !== "boolean") throw new AccountTransportError("INVALID_RESPONSE");
-  return { smartDateRecognition: value };
+  const settings = (body as { settings?: { smartDateRecognition?: unknown; shareEventTitles?: unknown } } | null)?.settings;
+  if (typeof settings?.smartDateRecognition !== "boolean") throw new AccountTransportError("INVALID_RESPONSE");
+  // Ticket 28: off unless the server says it is on.
+  return { smartDateRecognition: settings.smartDateRecognition, shareEventTitles: settings.shareEventTitles === true };
 }
 
 export function settingsTransport(): SettingsTransport {

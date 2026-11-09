@@ -274,6 +274,13 @@
       "when": 1794182178360,
       "tag": "0038_coach_planning",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794226220687,
+      "tag": "0039_coach_calendar_events",
+      "breakpoints": true
     }
   ]
 }

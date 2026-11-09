@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
-  dayDraftMessages, dayDraftSchema, dayPlan, draftCurrent, draftDecisionInput, localParts, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto,
+  dayDraftMessages, dayDraftSchema, dayPlan, draftCurrent, draftDecisionInput, localParts, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto,
   weekDraftMessages, weekDraftSchema, weekDraftStart, weekPlan,
   type AcceptedWrite, type DayContext, type DraftDayDto, type DraftKind, type DraftRecord, type DraftsDto, type DraftTask, type NewDraft,
 } from "@todalo/server/drafts";
@@ -24,6 +24,8 @@ export interface DraftStore {
   tasks(userId: string, ids: string[]): Promise<DraftTask[]>;
   /** Applies accepted items and records decisions atomically, then pushes the calendar. */
   resolve(userId: string, draft: DraftRecord, decision: { accepted: AcceptedWrite[]; declined: string[] }): Promise<void>;
+  /** Ticket 28: the overflow answered; closes the draft when nothing else is pending. */
+  settleOverflow(userId: string, draft: DraftRecord): Promise<void>;
   /** Ticket 21: the goal's Coach recommendation unless dismissed, or null. */
   recommendation(userId: string, goalId: string): Promise<string | null>;
   /** Ticket 24: the user's Patterns, sent with every draft. */
@@ -59,6 +61,7 @@ export function createDraftRoutes(store: DraftStore) {
     const [draft] = await store.drafts(userId, id);
     if (!draft) return status(404, NOT_FOUND);
     const { itemIds } = input.data;
+    if (input.data.overflow) return overflow(request, userId, draft, accept, status);
     let decision: { accepted: AcceptedWrite[]; declined: string[] };
     if (accept) {
       const ids = draft.items.flatMap(item => item.taskId && item.state === "pending" ? [item.taskId] : []);
@@ -74,6 +77,23 @@ export function createDraftRoutes(store: DraftStore) {
     await store.resolve(userId, draft, decision);
     const [after] = await store.drafts(userId, id);
     return { draft: after ? toDraftDto(after) : null } satisfies DraftDayDto;
+  }
+
+  /**
+   * Ticket 28: "Schedule them tomorrow?" Yes drafts the overflow onto the next
+   * day with room (a day draft, accepted like any other); No drops it.
+   */
+  async function overflow(request: Request, userId: string, draft: DraftRecord, accept: boolean, status: (code: number, body: unknown) => unknown) {
+    if (!draft.overflow?.length) return status(404, NOT_FOUND);
+    let next: DraftRecord | undefined;
+    if (accept) {
+      const planned = overflowDraft({ draft, context: await store.dayContext(userId), zone: zoneOf(request), now: now() });
+      if (planned === "full") return { draft: toDraftDto(draft), message: "No day in the next two weeks has room for these tasks." } satisfies DraftDayDto;
+      if (planned) next = await store.save(userId, planned);
+    }
+    await store.settleOverflow(userId, draft);
+    const [after] = await store.drafts(userId, draft.id);
+    return { draft: after ? toDraftDto(after) : null, ...(next && { next: toDraftDto(next) }) } satisfies DraftDayDto;
   }
 
   // A model failure or an invalid draft is a 200 { draft: null, message } so the
@@ -113,7 +133,7 @@ export function createDraftRoutes(store: DraftStore) {
       if (error instanceof Error && error.name === "AbortError") return { draft: null, message: "The Coach took too long. Try again." } satisfies DraftDayDto;
       throw error;
     }
-    if (!drafted.items.length) return { draft: null, message: drafted.summary || `${ask.works}: the Coach has nothing to change.` } satisfies DraftDayDto;
+    if (!drafted.items.length && !drafted.overflow) return { draft: null, message: drafted.summary || `${ask.works}: the Coach has nothing to change.` } satisfies DraftDayDto;
     return { draft: toDraftDto(await store.save(userId, { kind, period: ask.period, ...drafted })) } satisfies DraftDayDto;
   }
 

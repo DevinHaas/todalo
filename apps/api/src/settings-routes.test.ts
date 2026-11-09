@@ -3,14 +3,19 @@ import { KeyboardPreferencesError } from "@todalo/ramble/keyboard-account-prefer
 import { createSettingsRoutes } from "./settings-routes";
 
 let rows: Map<string, boolean>;
-beforeEach(() => { rows = new Map([["bob", false]]); });
+let titles: Map<string, boolean>;
+beforeEach(() => { rows = new Map([["bob", false]]); titles = new Map(); });
 
 const app = createSettingsRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
   allowedOrigins: new Set(["http://localhost:5173"]),
-  get: async (userId) => ({ smartDateRecognition: rows.get(userId) ?? true }),
+  get: async (userId) => ({ smartDateRecognition: rows.get(userId) ?? true, shareEventTitles: titles.get(userId) ?? false }),
   // Extra fields from the store never reach the response (allow-listed DTO).
-  setSmartDateRecognition: async (userId, enabled) => { rows.set(userId, enabled); return { smartDateRecognition: enabled, userId } as never; },
+  update: async (userId, input) => {
+    if (input.smartDateRecognition !== undefined) rows.set(userId, input.smartDateRecognition);
+    if (input.shareEventTitles !== undefined) titles.set(userId, input.shareEventTitles);
+    return { smartDateRecognition: rows.get(userId) ?? true, shareEventTitles: titles.get(userId) ?? false, userId } as never;
+  },
   loadKeyboard: async () => { throw new Error("unused"); },
   saveKeyboard: async () => { throw new Error("unused"); },
 });
@@ -27,18 +32,25 @@ describe("settings API", () => {
   it("reads only the session account's settings, defaulting smart dates on", async () => {
     const response = await call("GET", { user: "alice" });
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ settings: { smartDateRecognition: true } });
-    expect(await (await call("GET", { user: "bob" })).json()).toEqual({ settings: { smartDateRecognition: false } });
+    expect(await response.json()).toEqual({ settings: { smartDateRecognition: true, shareEventTitles: false } });
+    expect(await (await call("GET", { user: "bob" })).json()).toEqual({ settings: { smartDateRecognition: false, shareEventTitles: false } });
   });
 
   it("saves the preference for the session user only, so it survives a reload", async () => {
     const response = await call("PATCH", { user: "alice", body: { smartDateRecognition: false } });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ settings: { smartDateRecognition: false } });
-    expect(await (await call("GET", { user: "alice" })).json()).toEqual({ settings: { smartDateRecognition: false } });
+    expect(await response.json()).toEqual({ settings: { smartDateRecognition: false, shareEventTitles: false } });
+    expect(await (await call("GET", { user: "alice" })).json()).toEqual({ settings: { smartDateRecognition: false, shareEventTitles: false } });
     expect(rows.get("bob")).toBe(false);
     await call("PATCH", { user: "bob", body: { smartDateRecognition: true } });
     expect(rows.get("alice")).toBe(false);
+  });
+
+  it("ticket 28: saves Share event titles alone, leaving smart dates as they were", async () => {
+    const response = await call("PATCH", { user: "bob", body: { shareEventTitles: true } });
+    expect(await response.json()).toEqual({ settings: { smartDateRecognition: false, shareEventTitles: true } });
+    expect(titles.get("bob")).toBe(true);
+    expect(titles.has("alice")).toBe(false);
   });
 
   it("rejects bad bodies, including a user ID, without writing", async () => {
@@ -71,8 +83,8 @@ describe("keyboard shortcuts API", () => {
   const shortcuts = createSettingsRoutes({
     verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
     allowedOrigins: new Set(["http://localhost:5173"]),
-    get: async () => ({ smartDateRecognition: true }),
-    setSmartDateRecognition: async () => ({ smartDateRecognition: true }),
+    get: async () => ({ smartDateRecognition: true, shareEventTitles: false }),
+    update: async () => ({ smartDateRecognition: true, shareEventTitles: false }),
     loadKeyboard: async (userId) => ({ preferences: (saved.get(userId) ?? { version: 1, registryVersion: 1, overrides: {}, platforms: {} }) as never }),
     saveKeyboard: async (userId, input) => {
       const preferences = (input as { overrides?: Record<string, string[]> }).overrides?.["general.help"]?.[0] === "Meta+h"

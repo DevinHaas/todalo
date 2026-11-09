@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CoachModelError, type CoachConfig, type CoachMessage } from "@todalo/server/coach";
-import type { DraftDayDto, DraftRecord, DraftsDto, DraftTask } from "@todalo/server/drafts";
+import type { BusyEvent, DraftDayDto, DraftRecord, DraftsDto, DraftTask } from "@todalo/server/drafts";
 import { createDraftRoutes } from "./draft-routes";
 
 // Zurich, Monday 9 Feb 2026, 09:10 local.
@@ -16,6 +16,9 @@ let reply: (facts: { toPlan: { ref: string; title: string }[]; scheduled: { ref:
 let pushed: string[];
 /** Ticket 21: each user's current (not dismissed) recommendation by goal. */
 let advice: Map<string, string>;
+/** Ticket 28: each user's visible calendar events, and who shares event titles. */
+let events: Map<string, BusyEvent[]>;
+let sharing: Set<string>;
 
 const task = (userId: string, id: string, extra: Partial<DraftTask> = {}) =>
   tasks.set(id, { userId, id, title: id, status: "todo", projectId: null, parentId: null, dueDate: null, dueDateEnd: null, updatedAt: v1, goalIds: [], ...extra });
@@ -30,6 +33,8 @@ beforeEach(() => {
   calls = [];
   pushed = [];
   advice = new Map([["alice:fit", "Run in the mornings — your evening runs were moved twice."]]);
+  events = new Map();
+  sharing = new Set();
   task("alice", "run", { dueDate: new Date("2026-02-05T23:00:00Z"), goalIds: ["fit"] } as Partial<DraftTask>); // overdue
   task("alice", "meeting", { dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") }); // 10:00-11:00
   task("alice", "admin", { dueDate: new Date("2026-02-09T14:00:00Z") }); // 15:00-15:30
@@ -64,6 +69,8 @@ const app = createDraftRoutes({
     goals: [{ goalId: "fit", title: "Become fit", tier: "primary" }, { goalId: "side", title: "Side project", tier: "secondary" }],
     links: { projects: [], tasks: [...tasks.values()].filter(row => row.userId === userId).flatMap(row => row.goalIds.map(goalId => ({ goalId, taskId: row.id }))) },
     fixedTaskIds: [],
+    events: events.get(userId) ?? [],
+    shareEventTitles: sharing.has(userId),
   }),
   drafts: async (userId, draftId) => drafts.filter(draft => draft.userId === userId && draft.status === "open" && (!draftId || draft.id === draftId)).map(draft => structuredClone(draft)),
   save: async (userId, draft) => {
@@ -87,6 +94,11 @@ const app = createDraftRoutes({
       if (accepted.some(write => write.itemId === row.id)) row.state = "accepted";
       if (declined.includes(row.id)) row.state = "declined";
     }
+    if (!stored.overflow?.length && stored.items.every(row => row.state !== "pending")) stored.status = "closed";
+  },
+  settleOverflow: async (userId, draft) => {
+    const stored = drafts.find(row => row.id === draft.id && row.userId === userId)!;
+    stored.overflow = null;
     if (stored.items.every(row => row.state !== "pending")) stored.status = "closed";
   },
   recommendation: async (userId, goalId) => advice.get(`${userId}:${goalId}`) ?? null,
@@ -325,6 +337,99 @@ describe("accepting and declining", () => {
     for (const body of [{ itemIds: [] }, { itemIds: "x" }, { all: true }]) expect((await call("POST", path, { user: "alice", body })).status).toBe(400);
     expect((await call("POST", path, { cookie: "alice", origin: "http://localhost:5173", body: { itemIds: [draft!.items[0]!.id] } })).status).toBe(200);
     expect(await open("bob")).toEqual([]);
+  });
+});
+
+describe("calendar events and overflow (ticket 28)", () => {
+  const event = (title: string, start: string, end: string, allDay = false): BusyEvent => ({ title, start: new Date(start), end: new Date(end), allDay });
+  const facts = () => JSON.parse(calls.at(-1)!.messages.at(-1)!.content) as { events: Record<string, unknown>[]; allDayEvents: Record<string, unknown>[] };
+  beforeEach(() => {
+    events.set("alice", [
+      event("Dentist", "2026-02-09T12:00:00Z", "2026-02-09T13:00:00Z"), // 13:00-14:00
+      event("Holiday", "2026-02-09T00:00:00Z", "2026-02-10T00:00:00Z", true),
+      event("Next week", "2026-02-16T12:00:00Z", "2026-02-16T13:00:00Z"),
+    ]);
+    events.set("bob", [event("Bob's secret", "2026-02-09T12:00:00Z", "2026-02-09T13:00:00Z")]);
+  });
+  const overflowReply = (raw: { toPlan: { ref: string; title: string }[] }) => JSON.stringify({
+    summary: "Your afternoon is taken.",
+    items: [item("add", { title: "Stretch", start: "18:00", minutes: 15 })],
+    overflow: [{ task: ref(raw.toPlan, "run"), title: "", minutes: 45, goal: "", reason: "The dentist and the meeting fill the day." }],
+  });
+
+  it("sends the day's timed events as busy times only, all-day ones as context, never another user's", async () => {
+    await draftDay();
+    expect(facts().events).toEqual([{ start: "13:00", minutes: 60 }]);
+    expect(facts().allDayEvents).toEqual([{}]);
+    expect(calls[0]!.messages.at(-1)!.content).not.toMatch(/Dentist|Holiday|secret/);
+    sharing.add("alice");
+    await draftDay();
+    expect(facts().events).toEqual([{ title: "Dentist", start: "13:00", minutes: 60 }]);
+    expect(facts().allDayEvents).toEqual([{ title: "Holiday" }]);
+  });
+
+  it("rejects a draft that overlaps a calendar event, as it does overlapping tasks; all-day events block nothing", async () => {
+    reply = () => JSON.stringify({ summary: "x", items: [item("add", { title: "Clash", start: "13:30", minutes: 30 })] });
+    const result = await draftDay();
+    expect(result.draft).toBeNull();
+    expect(result.message).toContain("calendar event");
+    expect(await open()).toEqual([]);
+    reply = () => JSON.stringify({ summary: "x", items: [item("add", { title: "Fits", start: "14:00", minutes: 30 })] });
+    expect((await draftDay()).draft).not.toBeNull();
+  });
+
+  it("returns what does not fit as overflow, not placed; No drops it and closes the decided draft", async () => {
+    reply = overflowReply;
+    const { draft } = await draftDay();
+    expect(draft!.items.map(row => row.title)).toEqual(["Stretch"]);
+    expect(draft!.overflow).toEqual([{ title: "run", minutes: 45, reason: "The dentist and the meeting fill the day." }]);
+    await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: {} });
+    // Its items decided, the draft stays open for the overflow question.
+    expect((await open())[0]!.overflow).toHaveLength(1);
+    const before = snapshot();
+    const dropped = await (await call("POST", `/coach/drafts/${draft!.id}/decline?timeZone=${zone}`, { user: "alice", body: { overflow: true } })).json() as DraftDayDto;
+    expect(dropped).toEqual({ draft: null });
+    expect(snapshot()).toBe(before);
+    expect(await open()).toEqual([]);
+  });
+
+  it("Yes drafts the overflow onto the next day with room, around events, and checks it is fresh on accept", async () => {
+    reply = overflowReply;
+    // Tomorrow is taken from 08:00 to 22:00, so Wednesday gets it, after its own 08:00-09:00 event.
+    events.get("alice")!.push(event("Offsite", "2026-02-10T07:00:00Z", "2026-02-10T21:00:00Z"), event("Standup", "2026-02-11T07:00:00Z", "2026-02-11T08:00:00Z"));
+    const { draft } = await draftDay();
+    const before = snapshot();
+    const result = await (await call("POST", `/coach/drafts/${draft!.id}/accept?timeZone=${zone}`, { user: "alice", body: { overflow: true } })).json() as DraftDayDto;
+    expect(calls).toHaveLength(1);
+    expect(snapshot()).toBe(before);
+    expect(result.draft!.overflow).toBeUndefined();
+    expect(result.draft!.items).toHaveLength(1);
+    expect(result.next).toMatchObject({ kind: "day", period: "2026-02-11" });
+    expect(result.next!.items.map(row => [row.op, row.taskId, row.start, row.end])).toEqual([["add", "run", "2026-02-11T08:00:00.000Z", "2026-02-11T08:45:00.000Z"]]);
+    expect((await open()).map(row => row.period)).toEqual(["2026-02-09", "2026-02-11"]);
+    // Asked twice: the overflow is gone.
+    expect((await call("POST", `/coach/drafts/${draft!.id}/accept?timeZone=${zone}`, { user: "alice", body: { overflow: true } })).status).toBe(404);
+    Object.assign(tasks.get("run")!, { updatedAt: new Date("2026-02-09T08:30:00Z") });
+    expect((await call("POST", `/coach/drafts/${result.next!.id}/accept`, { user: "alice", body: {} })).status).toBe(412);
+  });
+
+  it("keeps the overflow when no day in the next two weeks has room", async () => {
+    reply = overflowReply;
+    events.get("alice")!.push(event("Sabbatical", "2026-02-10T00:00:00Z", "2026-03-01T00:00:00Z"));
+    const { draft } = await draftDay();
+    const result = await (await call("POST", `/coach/drafts/${draft!.id}/accept?timeZone=${zone}`, { user: "alice", body: { overflow: true } })).json() as DraftDayDto;
+    expect(result.message).toBe("No day in the next two weeks has room for these tasks.");
+    expect(result.draft!.overflow).toHaveLength(1);
+    expect(result.next).toBeUndefined();
+  });
+
+  it("rejects overflow answers mixed with items, on a draft without overflow, or another user's", async () => {
+    reply = () => JSON.stringify({ summary: "x", items: [item("add", { title: "Fits", start: "14:00", minutes: 30 })] });
+    const { draft } = await draftDay();
+    const path = `/coach/drafts/${draft!.id}/accept?timeZone=${zone}`;
+    expect((await call("POST", path, { user: "alice", body: { overflow: true, itemIds: [draft!.items[0]!.id] } })).status).toBe(400);
+    expect((await call("POST", path, { user: "alice", body: { overflow: true } })).status).toBe(404);
+    expect((await call("POST", path, { user: "bob", body: { overflow: true } })).status).toBe(404);
   });
 });
 

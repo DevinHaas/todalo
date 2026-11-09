@@ -412,19 +412,41 @@ fn week_path(time_zone: String, start: &str) -> Result<String, String> {
 }
 
 /// Accepts or declines some items of a draft (all without `item_ids`).
+/// Goals ticket 28: with `overflow`, answers "Schedule them tomorrow?" instead
+/// (accept: drafts them onto the next day with room in the webview's timezone).
 #[tauri::command]
 pub async fn decide_draft(
     state: tauri::State<'_, NativeAuth>,
     draft_id: String,
     accept: bool,
     item_ids: Option<Vec<String>>,
+    overflow: Option<bool>,
+    time_zone: Option<String>,
 ) -> Result<Option<Value>, String> {
-    let body = decision_body(&draft_id, item_ids)?;
+    let (body, path) = decision(&draft_id, accept, item_ids, overflow, time_zone)?;
+    Ok(state.write(Method::POST, &path, Some(body)).await?)
+}
+
+fn decision(
+    id: &str,
+    accept: bool,
+    item_ids: Option<Vec<String>>,
+    overflow: Option<bool>,
+    time_zone: Option<String>,
+) -> Result<(Value, String), String> {
+    let body = decision_body(id, item_ids)?;
     let path = format!(
-        "/api/v1/coach/drafts/{draft_id}/{}",
+        "/api/v1/coach/drafts/{id}/{}",
         if accept { "accept" } else { "decline" }
     );
-    Ok(state.write(Method::POST, &path, Some(body)).await?)
+    if overflow != Some(true) {
+        return Ok((body, path));
+    }
+    if body != serde_json::json!({}) {
+        return Err(INVALID.to_owned());
+    }
+    let zone = time_zone.ok_or_else(|| INVALID.to_owned())?;
+    Ok((serde_json::json!({ "overflow": true }), zoned(&path, zone)?))
 }
 
 fn decision_body(id: &str, item_ids: Option<Vec<String>>) -> Result<Value, &'static str> {
@@ -566,6 +588,20 @@ mod tests {
         assert_eq!(decision_body("../tasks", None), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec![])), Err(INVALID));
         assert_eq!(decision_body("d-1", Some(vec!["a/b".into()])), Err(INVALID));
+        // Goals ticket 28: the overflow answer, never mixed with items.
+        assert_eq!(
+            decision("d-1", true, None, Some(true), Some("Europe/Zurich".into())).unwrap(),
+            (
+                serde_json::json!({ "overflow": true }),
+                "/api/v1/coach/drafts/d-1/accept?timeZone=Europe%2FZurich".to_owned()
+            )
+        );
+        assert!(decision("d-1", true, Some(vec!["i-1".into()]), Some(true), Some("UTC".into())).is_err());
+        assert!(decision("d-1", false, None, Some(true), None).is_err());
+        assert_eq!(
+            decision("d-1", false, None, None, None).unwrap().1,
+            "/api/v1/coach/drafts/d-1/decline"
+        );
     }
 
     #[test]

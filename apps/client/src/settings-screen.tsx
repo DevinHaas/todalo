@@ -27,5 +27,5 @@ export function SmartDatesSettingScreen({ userId }: { userId: string }) {
   // A failed save rolls the switch back; flipping it again retries.
   return <SmartDatesSetting state={query} onRetry={() => void query.refetch()} pending={update.isPending}
     error={update.error && inlineError(update.error) ? `${update.error.message} The setting was not changed.` : null}
-    onChange={(smartDateRecognition) => update.mutate({ smartDateRecognition })} />;
+    onChange={(smartDateRecognition) => update.mutate({ ...query.data!, smartDateRecognition })} />;
 }

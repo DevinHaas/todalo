@@ -78,6 +78,8 @@ function CoachChat({ userId, prompt, focus }: { userId: string; prompt: string |
     meta: { action: () => "clear the Coach chat" },
   });
   const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
+  // Ticket 28: Yes or No to the overflow; Yes's day draft shows on Today (or the week it lands in).
+  const overflow = useMutation({ mutationFn: writes.overflow, onSuccess: (result) => setMessage(result.message ?? result.next?.summary ?? null), meta: { action: ({ schedule }: { schedule: boolean }) => schedule ? "schedule the tasks that didn't fit" : "drop the tasks that didn't fit" } });
   const messages: ChatMessageDto[] = chat.data?.messages ?? [];
   const pendingText = send.isPending ? send.variables : null;
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages.length, pendingText]);
@@ -95,11 +97,11 @@ function CoachChat({ userId, prompt, focus }: { userId: string; prompt: string |
       {!messages.length && !pendingText && <li><Hint className="py-2">Ask the Coach about your goals or your plan, e.g. “What should I change this week?”. It never changes anything itself: proposals arrive as a draft you accept or decline.</Hint></li>}
       {messages.map(item => {
         const draft = item.draftId ? open.get(item.draftId) : undefined;
-        const pending = draft?.items.some(row => row.state === "pending");
+        const pending = draft?.items.some(row => row.state === "pending") || draft?.overflow;
         return <li key={item.id} className="flex flex-col gap-2" data-chat-message={item.role}>
           <Bubble role={item.role} content={item.content} />
-          {draft && pending ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending} message={null}
-            onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })} />
+          {draft && pending ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null}
+            onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
             : item.draftId && <Hint className="text-xs">This draft was decided or replaced.</Hint>}
         </li>;
       })}

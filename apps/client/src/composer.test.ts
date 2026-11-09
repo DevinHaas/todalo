@@ -102,14 +102,14 @@ describe("account settings", () => {
 
   it("reads and saves only the allow-listed preference with the shared error codes", async () => {
     const read = respond(200, { settings: { smartDateRecognition: false, userId: "bob" } });
-    expect(await read.transport.get()).toEqual({ smartDateRecognition: false });
+    expect(await read.transport.get()).toEqual({ smartDateRecognition: false, shareEventTitles: false });
     expect(read.calls[0]).toMatchObject({ method: "GET", credentials: "same-origin", cache: "no-store" });
-    const save = respond(200, { settings: { smartDateRecognition: true } });
-    await save.transport.update({ smartDateRecognition: true });
-    expect(save.calls[0]).toMatchObject({ method: "PATCH", body: '{"smartDateRecognition":true}' });
+    const save = respond(200, { settings: { smartDateRecognition: true, shareEventTitles: false } });
+    await save.transport.update({ smartDateRecognition: true, shareEventTitles: true });
+    expect(save.calls[0]).toMatchObject({ method: "PATCH", body: '{"smartDateRecognition":true,"shareEventTitles":true}' });
     await expect(respond(401).transport.get()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     await expect(respond(500).transport.get()).rejects.toMatchObject({ code: "SETTINGS_UNAVAILABLE" });
-    await expect(respond(500).transport.update({ smartDateRecognition: true })).rejects.toMatchObject({ code: "SAVE_FAILED" });
+    await expect(respond(500).transport.update({ smartDateRecognition: true, shareEventTitles: false })).rejects.toMatchObject({ code: "SAVE_FAILED" });
     await expect(respond(200, { settings: {} }).transport.get()).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 
@@ -117,25 +117,25 @@ describe("account settings", () => {
     const cache = new QueryClient();
     const key = settingsKeys.settings("alice");
     expect(key).toEqual(["user", "alice", "settings"]);
-    cache.setQueryData(key, { smartDateRecognition: true });
-    const failing: SettingsTransport = { get: async () => ({ smartDateRecognition: true }), update: async () => { throw new AccountTransportError("SAVE_FAILED"); } };
+    cache.setQueryData(key, { smartDateRecognition: true, shareEventTitles: false });
+    const failing: SettingsTransport = { get: async () => ({ smartDateRecognition: true, shareEventTitles: false }), update: async () => { throw new AccountTransportError("SAVE_FAILED"); } };
     const { update } = settingsMutations(failing, cache, "alice");
-    const snapshot = await update.onMutate({ smartDateRecognition: false });
-    expect(cache.getQueryData(key)).toEqual({ smartDateRecognition: false });
-    update.onError(new AccountTransportError("SAVE_FAILED"), { smartDateRecognition: false }, snapshot);
-    expect(cache.getQueryData(key)).toEqual({ smartDateRecognition: true });
+    const snapshot = await update.onMutate({ smartDateRecognition: false, shareEventTitles: false });
+    expect(cache.getQueryData(key)).toEqual({ smartDateRecognition: false, shareEventTitles: false });
+    update.onError(new AccountTransportError("SAVE_FAILED"), { smartDateRecognition: false, shareEventTitles: false }, snapshot);
+    expect(cache.getQueryData(key)).toEqual({ smartDateRecognition: true, shareEventTitles: false });
     expect(update.retry(0, new AccountTransportError("SAVE_FAILED"))).toBe(true);
     expect(update.retry(0, new AccountTransportError("INVALID_INPUT"))).toBe(false);
   });
 
   it("shows the setting, a loading state and a retryable load failure", () => {
     const props = { onRetry: noop, onChange: noop, pending: false, error: null };
-    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: true }, error: null } }))).toMatch(/role="switch"[^>]*checked=""/);
-    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: false }, error: null } }))).not.toContain("checked");
+    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: true, shareEventTitles: false }, error: null } }))).toMatch(/role="switch"[^>]*checked=""/);
+    expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "success", data: { smartDateRecognition: false, shareEventTitles: false }, error: null } }))).not.toContain("checked");
     expect(render(createElement(SmartDatesSetting, { ...props, state: { status: "pending", error: null } }))).toContain("Loading preferences");
     const failed = render(createElement(SmartDatesSetting, { ...props, state: { status: "error", error: new Error("x") } }));
     expect(failed).toContain("Your preferences could not be loaded.");
     expect(failed).toContain("Try again");
-    expect(render(createElement(SmartDatesSetting, { ...props, error: "Your changes could not be saved. Try again. The setting was not changed.", state: { status: "success", data: { smartDateRecognition: true }, error: null } }))).toContain('role="alert"');
+    expect(render(createElement(SmartDatesSetting, { ...props, error: "Your changes could not be saved. Try again. The setting was not changed.", state: { status: "success", data: { smartDateRecognition: true, shareEventTitles: false }, error: null } }))).toContain('role="alert"');
   });
 });

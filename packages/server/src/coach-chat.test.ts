@@ -27,6 +27,11 @@ describe("parseChatReply", () => {
     expect(result.draft?.items.length ?? null).toBe(count || null);
   });
 
+  it("ticket 28: overflow alone is a draft (nothing placed)", () => {
+    const content = JSON.stringify({ reply: "Your week is full.", summary: "s", items: [], overflow: [{ task: "t2", title: "", minutes: 30, goal: "", reason: "No room." }] });
+    expect(parseChatReply(content, plan).draft).toMatchObject({ items: [], overflow: [{ taskId: "run", minutes: 30 }] });
+  });
+
   it.each([["not JSON", "nope"], ["an empty reply", reply([], "  ")], ["a wrong shape", JSON.stringify({ text: "hi" })]])("rejects %s", (_, content) => {
     expect(() => parseChatReply(content, plan)).toThrow(CoachModelError);
   });

@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Asterisk, ChevronDown, Cpu, MessageCircle, Route, Sparkles } from "lucide-react";
-import { coach, coachReads } from "./runtime";
+import { coach, coachReads, settings, settingsReads } from "./runtime";
+import { settingsMutations } from "./settings";
+import { SettingSwitch } from "./settings-views";
 import {
   coachCardKinds, coachKeys, coachMutations, coachProviderInfo, ollamaDefaultUrl, ollamaUrl, sortedCoachProviders,
   type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachModelOption, type CoachModelsDraft, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
@@ -96,8 +98,20 @@ function CoachSettings({ userId, coach: state, open, setOpen }: { userId: string
       })}
     </ul>
     <CoachPatterns userId={userId} connected={state.provider !== null} />
+    <EventTitlesSetting userId={userId} />
     <Hint>When connected, your goal titles, season targets and status numbers (and your patterns) are sent to the active provider to write the explanations. Nothing is sent without a provider.</Hint>
   </div>;
+}
+
+/** Ticket 28: calendar events are busy time for the Coach's drafts; their titles go to the provider only when this is on. */
+function EventTitlesSetting({ userId }: { userId: string }) {
+  const cache = useQueryClient();
+  const query = useQuery(settingsReads.settings(userId));
+  const update = useMutation(useMemo(() => settingsMutations(settings, cache, userId).update, [cache, userId]));
+  if (!query.data) return null;
+  return <SettingSwitch title="Share event titles with the AI" checked={query.data.shareEventTitles} disabled={update.isPending}
+    hint="Off: the Coach only sees when your calendar events make you busy. On: their titles are sent to the active provider too."
+    onChange={(shareEventTitles) => update.mutate({ ...query.data, shareEventTitles })} />;
 }
 
 /**

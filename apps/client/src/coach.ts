@@ -68,6 +68,8 @@ export interface CoachTransport {
   draftRecommendation(timeZone: string, goalId: string): Promise<DraftDayDto>;
   /** Accept or decline some items (all when omitted); the draft after, null once decided. TASK_CHANGED when a task changed since. */
   decide(draftId: string, accept: boolean, itemIds?: string[]): Promise<DraftDayDto>;
+  /** Ticket 28: "Schedule them tomorrow?" Yes (a day draft of the overflow comes back as `next`) or No (dropped). */
+  overflow(timeZone: string, draftId: string, schedule: boolean): Promise<DraftDayDto>;
   /** Ticket 22: the Coach chat, oldest first. */
   chat(): Promise<CoachChatDto>;
   /** The conversation after the reply, with its draft; `message` (nothing stored) when the Coach could not answer. */
@@ -119,6 +121,8 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     draftRecommendation: (timeZone, goalId) => request<DraftDayDto | null>("POST", `/api/v1/coach/recommendations/${encodeURIComponent(goalId)}/draft?${new URLSearchParams({ timeZone })}`).then(result => result ?? noRecommendation),
     decide: (draftId, accept, itemIds) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/${encodeURIComponent(draftId)}/${accept ? "accept" : "decline"}`, itemIds ? { itemIds } : {})
       .then(result => result ?? { draft: null }),
+    overflow: (timeZone, draftId, schedule) => request<DraftDayDto | null>("POST", `/api/v1/coach/drafts/${encodeURIComponent(draftId)}/${schedule ? "accept" : "decline"}?${new URLSearchParams({ timeZone })}`, { overflow: true })
+      .then(result => result ?? { draft: null }),
     chat: () => request("GET", "/api/v1/coach/chat"),
     sendChat: (timeZone, message) => request<CoachChatDto | null>("POST", `/api/v1/coach/chat?${new URLSearchParams({ timeZone })}`, { message }).then(result => result ?? noChat),
     clearChat: () => request("DELETE", "/api/v1/coach/chat"),
@@ -154,6 +158,7 @@ export function coachTransport(): CoachTransport {
     dismissRecommendation: async (goalId) => { await command("dismiss_recommendation", { goalId }); },
     draftRecommendation: async (timeZone, goalId) => (await command<DraftDayDto | null>("draft_recommendation", { timeZone, goalId })) ?? noRecommendation,
     decide: async (draftId, accept, itemIds) => (await command<DraftDayDto | null>("decide_draft", { draftId, accept, itemIds: itemIds ?? null })) ?? { draft: null },
+    overflow: async (timeZone, draftId, schedule) => (await command<DraftDayDto | null>("decide_draft", { draftId, accept: schedule, itemIds: null, overflow: true, timeZone })) ?? { draft: null },
     chat: () => command("coach_chat"),
     sendChat: async (timeZone, message) => (await command<CoachChatDto | null>("send_coach_chat", { timeZone, message })) ?? noChat,
     clearChat: async () => (await command<CoachChatDto | null>("clear_coach_chat")) ?? { messages: [] },
@@ -247,6 +252,17 @@ export function draftMutations(transport: CoachTransport, cache: QueryClient, us
         return result;
       } finally {
         await Promise.all([cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) }), accept && cache.invalidateQueries({ queryKey: taskKeys.today(userId) })]);
+      }
+    },
+    /** Ticket 28: the overflow answered; Yes adds its day draft. Tasks change only when that draft is accepted. */
+    overflow: async ({ draftId, schedule }: { draftId: string; schedule: boolean }) => {
+      try {
+        const result = await transport.overflow(localZone(), draftId, schedule);
+        replace(result.draft, draftId);
+        if (result.next) replace(result.next);
+        return result;
+      } finally {
+        await cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) });
       }
     },
   };

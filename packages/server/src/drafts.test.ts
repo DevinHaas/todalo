@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CoachModelError } from "./coach";
 import {
-  dayPlan, dayPlanFacts, draftCounts, draftCurrent, parseDayDraft, parseWeekDraft, planAccept, planDecline, weekDraftStart, weekPlan, weekPlanFacts,
+  dayPlan, dayPlanFacts, draftCounts, draftCurrent, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto, weekDraftStart, weekPlan, weekPlanFacts,
   type DayContext, type DraftRecord, type DraftTask,
 } from "./drafts";
 
@@ -108,6 +108,75 @@ describe("parseDayDraft", () => {
   });
 
   it("an empty draft is valid (nothing to change)", () => expect(parse([]).items).toEqual([]));
+});
+
+describe("calendar events and overflow (ticket 28)", () => {
+  const events = [
+    { title: "Dentist", start: at("2026-02-09T12:00:00Z"), end: at("2026-02-09T13:00:00Z"), allDay: false }, // 13:00-14:00
+    { title: "Late call", start: at("2026-02-09T22:30:00Z"), end: at("2026-02-10T00:00:00Z"), allDay: false }, // 23:30, into tomorrow
+    { title: "Holiday", start: at("2026-02-09T00:00:00Z"), end: at("2026-02-11T00:00:00Z"), allDay: true },
+    { title: "Tomorrow", start: at("2026-02-10T09:00:00Z"), end: at("2026-02-10T10:00:00Z"), allDay: false },
+  ];
+  const plan = dayPlan({ now, zone, context: context([task("run", { dueDate: at("2026-02-05T23:00:00Z") })], { events }) });
+  const item = (extra: Record<string, unknown>) => ({ op: "add", task: "", title: "", start: "", minutes: 0, goal: "", reason: "Because.", ...extra });
+  const parse = (items: unknown[], overflow?: unknown[]) => parseDayDraft(JSON.stringify({ summary: "x", items, ...(overflow && { overflow }) }), plan);
+
+  it("keeps the day's timed events (clipped to it) as busy times, titles only when shared", () => {
+    expect(dayPlanFacts(plan)).toMatchObject({ events: [{ start: "13:00", minutes: 60 }, { start: "23:30", minutes: 30 }], allDayEvents: [{}] });
+    const shared = dayPlan({ now, zone, context: context([], { events, shareEventTitles: true }) });
+    expect(dayPlanFacts(shared)).toMatchObject({ events: [{ title: "Dentist" }, { title: "Late call" }], allDayEvents: [{ title: "Holiday" }] });
+    expect(weekPlanFacts(weekPlan({ now, zone, start: "2026-02-09", context: context([], { events }) }))).toMatchObject({
+      events: [{ day: "2026-02-09", start: "13:00" }, { day: "2026-02-09", start: "23:30", minutes: 90 }, { day: "2026-02-10", start: "10:00" }],
+      allDayEvents: [{ day: "2026-02-09" }, { day: "2026-02-10" }],
+    });
+  });
+
+  it("rejects an item over a timed event; all-day events block nothing", () => {
+    expect(() => parse([item({ title: "Clash", start: "13:45", minutes: 30 })])).toThrow("calendar event");
+    expect(parse([item({ title: "Fits", start: "14:00", minutes: 30 })]).items).toHaveLength(1);
+  });
+
+  it("returns overflow (a task to plan or a new one) unplaced, and none when everything fits", () => {
+    const run = [...plan.toPlan.values()][0]!.ref;
+    const draft = parse([], [{ task: run, title: "", minutes: 45, goal: "", reason: "No room." }, { task: "", title: "Stretch", minutes: 5, goal: "g1", reason: "No room." }]);
+    expect(draft.items).toEqual([]);
+    expect(draft.overflow).toEqual([
+      { taskId: "run", title: "run", minutes: 45, goalId: "fit", reason: "No room.", seenUpdatedAt: v1.toISOString() },
+      { taskId: null, title: "Stretch", minutes: 15, goalId: "fit", reason: "No room.", seenUpdatedAt: null },
+    ]);
+    expect(parse([]).overflow).toBeUndefined();
+    expect(() => parse([item({ task: run, start: "14:00", minutes: 30 })], [{ task: run, title: "", minutes: 30, goal: "", reason: "" }])).toThrow(CoachModelError);
+    expect(() => parse([], [{ task: "t99", title: "", minutes: 30, goal: "", reason: "" }])).toThrow(CoachModelError);
+    expect(() => parse([], [{ task: "", title: " ", minutes: 30, goal: "", reason: "" }])).toThrow(CoachModelError);
+  });
+
+  it("schedules the overflow on the first later day with room, around tasks and events, a break after each", () => {
+    const busy = [{ title: "Offsite", start: at("2026-02-10T07:00:00Z"), end: at("2026-02-10T21:00:00Z"), allDay: false }, { title: "Standup", start: at("2026-02-11T07:00:00Z"), end: at("2026-02-11T07:20:00Z"), allDay: false }];
+    const overflow = [
+      { taskId: "run", title: "run", minutes: 45, goalId: "fit", reason: "No room.", seenUpdatedAt: v1.toISOString() },
+      { taskId: null, title: "Stretch", minutes: 15, goalId: null, reason: "No room.", seenUpdatedAt: null },
+    ];
+    const tasks = [task("run"), task("block", { dueDate: at("2026-02-11T08:00:00Z"), dueDateEnd: at("2026-02-11T09:00:00Z") })];
+    const next = overflowDraft({ draft: { kind: "day", period: "2026-02-09", overflow }, context: context(tasks, { events: busy }), zone, now });
+    expect(next).toMatchObject({ kind: "day", period: "2026-02-11" });
+    // Standup ends 08:20: 08:30 until the 09:00 block is too short for the run (10:00 then) but fits Stretch.
+    expect(next !== "full" && next!.items.map(row => [row.taskId, row.startAt.toISOString(), row.endAt!.toISOString(), row.seenUpdatedAt])).toEqual([
+      ["run", "2026-02-11T09:00:00.000Z", "2026-02-11T09:45:00.000Z", v1],
+      [null, "2026-02-11T07:30:00.000Z", "2026-02-11T07:45:00.000Z", null],
+    ]);
+    // A task done since is left out; nothing left is null; no room at all is "full".
+    expect(overflowDraft({ draft: { kind: "day", period: "2026-02-09", overflow: overflow.slice(0, 1) }, context: context([task("run", { status: "done" })]), zone, now })).toBeNull();
+    const away = [{ title: "Away", start: at("2026-02-09T00:00:00Z"), end: at("2026-03-01T00:00:00Z"), allDay: false }];
+    expect(overflowDraft({ draft: { kind: "day", period: "2026-02-09", overflow }, context: context(tasks, { events: away }), zone, now })).toBe("full");
+    // A week's overflow goes after its last day.
+    expect(overflowDraft({ draft: { kind: "week", period: "2026-02-09", overflow }, context: context(tasks), zone, now })).toMatchObject({ period: "2026-02-16" });
+  });
+
+  it("shows overflow on the draft only while there is some", () => {
+    const record = { id: "d", kind: "day" as const, period: "2026-02-09", summary: "", createdAt: now, items: [] };
+    expect(toDraftDto({ ...record, overflow: [{ taskId: "run", title: "run", minutes: 45, goalId: null, reason: "No room.", seenUpdatedAt: null }] }).overflow).toEqual([{ title: "run", minutes: 45, reason: "No room." }]);
+    expect(toDraftDto({ ...record, overflow: null })).not.toHaveProperty("overflow");
+  });
 });
 
 describe("weekPlan (ticket 20)", () => {

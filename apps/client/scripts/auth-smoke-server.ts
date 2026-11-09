@@ -98,11 +98,11 @@ const shortcutStore = { read: async (userId: string) => shortcuts.get(userId), w
 const app = createAuthRoutes(auth).use(qaCalendarRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), userId: user.id, otherId: other.id, day })).use(createSettingsRoutes({
   verify: verifySession,
   allowedOrigins: new Set([clientOrigin]),
-  get: async (userId) => ({ smartDateRecognition: settings.get(userId) ?? true }),
-  setSmartDateRecognition: async (userId, enabled) => {
+  get: async (userId) => ({ smartDateRecognition: settings.get(userId) ?? true, shareEventTitles: false }),
+  update: async (userId, { smartDateRecognition }) => {
     if (process.env.QA_SETTINGS_SAVE_FAILS) throw new Error("QA: settings save failed");
-    settings.set(userId, enabled);
-    return { smartDateRecognition: enabled };
+    if (smartDateRecognition !== undefined) settings.set(userId, smartDateRecognition);
+    return { smartDateRecognition: settings.get(userId) ?? true, shareEventTitles: false };
   },
   // Ticket 19: the shared validator over per-user memory rows.
   loadKeyboard: (userId) => keyboardAccountPreferences(async () => userId, shortcutStore).load(),

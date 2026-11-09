@@ -14,6 +14,9 @@ const READ_FAILED: &str = "Your tasks could not be loaded. Try again.";
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     smart_date_recognition: bool,
+    // Goals ticket 28: Settings › Coach "Share event titles with the AI".
+    #[serde(default)]
+    share_event_titles: bool,
 }
 
 #[tauri::command]

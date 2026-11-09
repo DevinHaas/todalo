@@ -7,16 +7,23 @@ import type { SettingsDto } from "./settings-input";
 
 export async function getSettings(userId: string): Promise<SettingsDto> {
   const [row] = await db
-    .select({ smartDateRecognition: userSettings.smartDateRecognitionEnabled })
+    .select({ smartDateRecognition: userSettings.smartDateRecognitionEnabled, shareEventTitles: userSettings.coachShareEventTitles })
     .from(userSettings)
     .where(eq(userSettings.userId, userId));
-  return { smartDateRecognition: row?.smartDateRecognition ?? true };
+  return { smartDateRecognition: row?.smartDateRecognition ?? true, shareEventTitles: row?.shareEventTitles ?? false };
 }
 
-export async function setSmartDateRecognition(userId: string, enabled: boolean): Promise<SettingsDto> {
+/** Writes only the preferences given; the rest keep their value (or default). */
+export async function updateSettings(userId: string, input: Partial<SettingsDto>): Promise<SettingsDto> {
+  const set = {
+    ...(input.smartDateRecognition !== undefined && { smartDateRecognitionEnabled: input.smartDateRecognition }),
+    ...(input.shareEventTitles !== undefined && { coachShareEventTitles: input.shareEventTitles }),
+  };
   await db
     .insert(userSettings)
-    .values({ userId, smartDateRecognitionEnabled: enabled })
-    .onConflictDoUpdate({ target: userSettings.userId, set: { smartDateRecognitionEnabled: enabled, updatedAt: new Date() } });
-  return { smartDateRecognition: enabled };
+    .values({ userId, ...set })
+    .onConflictDoUpdate({ target: userSettings.userId, set: { ...set, updatedAt: new Date() } });
+  return getSettings(userId);
 }
+
+export const setSmartDateRecognition = (userId: string, enabled: boolean) => updateSettings(userId, { smartDateRecognition: enabled });

@@ -67,6 +67,23 @@ describe("parsePlanningDraft", () => {
   });
 });
 
+describe("calendar events in a planning session (ticket 28)", () => {
+  const busy = weekPlan({ zone, now, start: "2026-02-09", context: { ...context, events: [{ title: "Dentist", start: new Date("2026-02-10T06:00:00Z"), end: new Date("2026-02-10T07:00:00Z"), allDay: false }] } });
+  const facts = (target = busy) => planningFacts(target, { goalId: "fit", title: "Become fit", description: null, season: null, openTasks: [], milestones: [] }, "goal", lastDay);
+
+  it("sends events as busy times (no titles unless shared) and rejects a task over one", () => {
+    expect(facts().events).toEqual([{ day: "2026-02-10", start: "07:00", minutes: 60 }]);
+    expect(JSON.stringify(facts())).not.toContain("Dentist");
+    expect(() => parsePlanningDraft(draft({ tasks: [task()] }), busy, "fit", lastDay)).toThrow("calendar event");
+  });
+
+  it("returns tasks that do not fit as overflow for the goal", () => {
+    const result = parsePlanningDraft(draft({ overflow: [{ title: "Long run", minutes: 90, reason: "The week is full." }] }), busy, "fit", lastDay);
+    expect(result.items).toEqual([]);
+    expect(result.overflow).toEqual([{ taskId: null, title: "Long run", minutes: 90, goalId: "fit", reason: "The week is full.", seenUpdatedAt: null }]);
+  });
+});
+
 describe("milestoneLastDay", () => {
   it.each([
     ["the season's last day", { startDate: "2026-02-02", lengthDays: 84 }, "2026-04-26"],

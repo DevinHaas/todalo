@@ -5,7 +5,7 @@ import { useContext, useEffect, useMemo, useState, useSyncExternalStore, type Re
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { coach, coachReads, goalReads, metadataReads, projectReads, reads } from "./runtime";
-import { draftMutations } from "./coach";
+import { draftMutations, type DraftDto } from "./coach";
 import { DraftPanel } from "./draft-views";
 import { goalColorValue } from "./goals";
 import { useTaskWrites } from "./task-writes";
@@ -192,7 +192,12 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   // Another week shown: its own draft, and no message left from the last one.
   useEffect(() => { setMessage(null); }, [scope.kind, scope.period]);
   const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
-  const draft = drafts.data?.drafts.find(item => item.kind === scope.kind && item.period === scope.period) ?? null;
+  // Ticket 28: Yes or No to the overflow; Yes's day draft shows on Today (or the week it lands in).
+  const overflow = useMutation({ mutationFn: writes.overflow, onSuccess: (result) => setMessage(result.message ?? result.next?.summary ?? null), meta: { action: ({ schedule }: { schedule: boolean }) => schedule ? "schedule the tasks that didn't fit" : "drop the tasks that didn't fit" } });
+  // Ticket 28: the overflow's day draft sits on a later day: Today shows it when today has none, a week when it falls in it.
+  const today = dayKey(new Date());
+  const later = (item: DraftDto) => item.kind === "day" && item.period > today && (scope.kind === "day" || (item.period >= scope.period && item.period <= dayKey(addDays(parseDayKey(scope.period), 6))));
+  const draft = drafts.data?.drafts.find(item => item.kind === scope.kind && item.period === scope.period) ?? drafts.data?.drafts.find(later) ?? null;
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
   // Ticket 22: a draft from the Coach chat shows dashed too (it is decided in the chat).
   // Ticket 23: and a planning session's timed tasks (its milestones have no time).
@@ -202,8 +207,9 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
     })),
     panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}
-      draft={draft} drafting={propose.isPending} deciding={decide.isPending} message={message}
-      onDraft={() => propose.mutate(scope)} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })} /> : null,
+      draft={draft} drafting={propose.isPending} deciding={decide.isPending || overflow.isPending} message={message}
+      onDraft={() => propose.mutate(scope)} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })}
+      onOverflow={(schedule) => overflow.mutate({ draftId: draft!.id, schedule })} /> : null,
   };
 }
 

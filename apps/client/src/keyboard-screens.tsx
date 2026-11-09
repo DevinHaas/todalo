@@ -509,6 +509,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "coach.draft-week": () => press(document.querySelector("[data-plan]"), '[data-coach-action="draft-week"]'),
       "coach.accept-draft": () => press(document, '[data-coach-draft] [data-draft-action="accept-all"]'),
       "coach.decline-draft": () => press(document, '[data-coach-draft] [data-draft-action="decline-all"]'),
+      "coach.overflow-schedule": () => press(document, '[data-coach-draft] [data-draft-action="overflow-schedule"]'),
+      "coach.overflow-drop": () => press(document, '[data-coach-draft] [data-draft-action="overflow-drop"]'),
       // Ticket 22: the toolbar's Coach button exists only with a provider connected.
       "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; openCoachChat(); },
       "coach.chat-clear": () => press(document.querySelector("[data-coach-chat]"), '[data-coach-chat-action="clear"]'),

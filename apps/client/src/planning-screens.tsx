@@ -89,6 +89,8 @@ function PlanningSession({ userId, initialGoal, source }: { userId: string; init
     meta: { action: () => "plan with the Coach" },
   });
   const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the plan" : "decline the plan" } });
+  // Ticket 28: Yes or No to the overflow; Yes's day draft shows on Today (or the week it lands in).
+  const overflow = useMutation({ mutationFn: writes.overflow, onSuccess: (result) => setMessage(result.message ?? result.next?.summary ?? null), meta: { action: ({ schedule }: { schedule: boolean }) => schedule ? "schedule the tasks that didn't fit" : "drop the tasks that didn't fit" } });
   const send = (finish = false) => {
     if (!chosen || !ramble.trim() || turn.isPending) return;
     const answer = choice === OTHER ? other.trim() : choice;
@@ -109,9 +111,11 @@ function PlanningSession({ userId, initialGoal, source }: { userId: string; init
   // Wait for the drafts: a plan still to decide opens first.
   if (drafts.isPending) return <>{header}<DialogBody><span role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground"><Spinner />Loading…</span></DialogBody></>;
   if (draftId) return <>{header}<DialogBody className="flex flex-col gap-3" data-planning-step="draft">
-    {draft && draft.items.some(item => item.state === "pending")
-      ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending} message={null} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })} />
+    {draft && (draft.items.some(item => item.state === "pending") || draft.overflow)
+      ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })}
+        onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
       : <Hint role="status">Plan decided. Accepted tasks are on your schedule and milestones on the goal.</Hint>}
+    {message && <Hint role="status">{message}</Hint>}
   </DialogBody><DialogFooter>
     <Button type="button" variant="outline" onClick={restart} data-planning-action="restart">Plan again</Button>
     <Button type="button" onClick={closePlanning}>Close</Button>

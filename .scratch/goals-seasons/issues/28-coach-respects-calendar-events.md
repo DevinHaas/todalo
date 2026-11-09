@@ -6,14 +6,16 @@
 
 **Blocked by:** 19, 20
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Visible, non-all-day calendar events in the drafted range join the busy list in every draft kind
-- [ ] The draft parser rejects any item that overlaps a calendar event, the same way it rejects overlapping tasks
-- [ ] Items that don't fit come back as "overflow" with a reason and are not placed in the draft
-- [ ] The draft card shows the overflow: "3 tasks don't fit today. Schedule them tomorrow?" with Yes and No
-- [ ] Yes drafts the overflow onto the next day with room (the same draft rules, stale check on accept); No drops them
-- [ ] Setting in Settings › Coach, "Share event titles with the AI": off (default) sends only busy times, on sends titles too (user decision 2026-11-09)
-- [ ] Tests at the draft parser and API seam, with fakes for events
+- [x] Visible, non-all-day calendar events in the drafted range join the busy list in every draft kind
+- [x] The draft parser rejects any item that overlaps a calendar event, the same way it rejects overlapping tasks
+- [x] Items that don't fit come back as "overflow" with a reason and are not placed in the draft
+- [x] The draft card shows the overflow: "3 tasks don't fit today. Schedule them tomorrow?" with Yes and No
+- [x] Yes drafts the overflow onto the next day with room (the same draft rules, stale check on accept); No drops them
+- [x] Setting in Settings › Coach, "Share event titles with the AI": off (default) sends only busy times, on sends titles too (user decision 2026-11-09)
+- [x] Tests at the draft parser and API seam, with fakes for events
+
+Notes (2026-11-09): events come from the Today/Upcoming read (getCalendarEventsForUser). The setting is `user_settings.coach_share_event_titles` via PATCH /settings; overflow is `coach_drafts.overflow` (migration 0039, additive). Yes places the overflow without a model call (quarter hours 08:00-22:00, around tasks and events, 15-minute breaks) as a day draft on the first day after the draft's days with room for all of it, within 14 days; it is answered through the accept/decline endpoints with `{ overflow: true }` (Mac: decide_draft's new optional args, no new command). Keys: o then y (Yes), o then d (No).
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

@@ -425,6 +425,8 @@ export const coachDrafts = pgTable("coach_drafts", {
   period: date("period", { mode: "string" }).notNull(),
   summary: text("summary").notNull(),
   status: text("status", { enum: ["open", "closed"] }).default("open").notNull(),
+  // Goals ticket 28: tasks that did not fit the open time, not placed; null once the user scheduled or dropped them.
+  overflow: jsonb("overflow").$type<{ taskId: string | null; title: string; minutes: number; goalId: string | null; reason: string; seenUpdatedAt: string | null }[]>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, table => [index("coach_drafts_user_status_idx").on(table.userId, table.status)]);
@@ -629,6 +631,8 @@ export const userSettings = pgTable("user_settings", {
   importPromptSeenAt: timestamp("import_prompt_seen_at"),
   // Goals ticket 01: hides the sidebar's Goals section; goals keep their data.
   goalsHidden: boolean("goals_hidden").default(false).notNull(),
+  // Goals ticket 28: Settings › Coach "Share event titles with the AI"; off sends only busy times.
+  coachShareEventTitles: boolean("coach_share_event_titles").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

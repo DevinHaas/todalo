@@ -10,7 +10,8 @@ export interface SettingsStore {
   /** Browser origins allowed to write with an ambient cookie session (CSRF). */
   allowedOrigins: ReadonlySet<string>;
   get(userId: string): Promise<SettingsDto>;
-  setSmartDateRecognition(userId: string, enabled: boolean): Promise<SettingsDto>;
+  /** Writes only the preferences given (ticket 28 adds shareEventTitles). */
+  update(userId: string, input: Partial<SettingsDto>): Promise<SettingsDto>;
   /** Ticket 19: account keyboard shortcuts (unreadable rows load as defaults plus an error). */
   loadKeyboard(userId: string): Promise<{ preferences: KeyboardPreferences; error?: string }>;
   /** Validates (shape, conflicts, reserved keys) before writing; throws KeyboardPreferencesError. */
@@ -37,8 +38,8 @@ export function createSettingsRoutes(store: SettingsStore) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const input = settingsInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
-      const settings = await store.setSmartDateRecognition(userId, input.data.smartDateRecognition);
-      return { settings: { smartDateRecognition: settings.smartDateRecognition } satisfies SettingsDto };
+      const settings = await store.update(userId, input.data);
+      return { settings: { smartDateRecognition: settings.smartDateRecognition, shareEventTitles: settings.shareEventTitles } satisfies SettingsDto };
     })
     .get("/settings/keyboard", async ({ request, status }) => {
       const userId = await store.verify(request.headers);
