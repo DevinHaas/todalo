@@ -15,8 +15,9 @@ const READ_FAILED: &str = "Your tasks could not be loaded. Try again.";
 pub struct Settings {
     smart_date_recognition: bool,
     // Goals ticket 28: Settings › Coach "Share event titles with the AI".
-    #[serde(default)]
-    share_event_titles: bool,
+    // Forwarded only when sent, so a save that leaves it out never resets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    share_event_titles: Option<bool>,
 }
 
 #[tauri::command]
@@ -82,6 +83,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&parsed).unwrap(),
             json!({ "smartDateRecognition": false })
+        );
+        let both: Settings = serde_json::from_value(
+            json!({ "smartDateRecognition": true, "shareEventTitles": true }),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&both).unwrap(),
+            json!({ "smartDateRecognition": true, "shareEventTitles": true })
         );
         assert!(
             serde_json::from_value::<Settings>(json!({ "smartDateRecognition": "no" })).is_err()
