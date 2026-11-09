@@ -291,7 +291,7 @@ export function retryAfter(headers: Headers, now = Date.now()): number | undefin
  * retries again. Up to `attempts` calls with exponential backoff and jitter (or
  * the provider's Retry-After); no retry starts when its wait would pass
  * `budgetMs` since the first call, so a failing provider answers within ~20 s
- * (plus the one attempt in flight, whose own timeout is 30 s, 90 s for Ollama).
+ * (plus the one attempt in flight, whose own timeout is 75 s, as reasoning models can think that long; 90 s for Ollama).
  */
 export const coachRetry = { attempts: 5, baseMs: 500, maxDelayMs: 4_000, budgetMs: 20_000 };
 /** The wait before retry `attempt` (1-based): full backoff halved plus random jitter of up to the other half. */
@@ -343,8 +343,11 @@ export function createCoachModel(config: CoachConfig, fetcher: typeof fetch = fe
     const { url, init } = adapter.request(config, request);
     let response: Response;
     try {
-      response = await fetcher(url, { ...init, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(local(config) ? 90_000 : 30_000)]) });
-    } catch { throw new CoachModelError(local(config) ? "Could not reach Ollama. Is it running?" : "Could not reach the provider.", "network", config.provider); }
+      response = await fetcher(url, { ...init, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(local(config) ? 90_000 : 75_000)]) });
+    } catch (error) {
+      console.warn(`Coach ${config.provider} ${config.model}: ${(error as Error)?.name === "TimeoutError" ? "timed out" : "unreachable"}`);
+      throw new CoachModelError(local(config) ? "Could not reach Ollama. Is it running?" : "Could not reach the provider.", "network", config.provider);
+    }
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       // The provider's own reason (never the request, so no prompt or key leaks into the log).

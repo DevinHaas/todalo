@@ -263,6 +263,13 @@ impl NativeAuth {
             .client
             .request(method, self.url(path)?)
             .bearer_auth(&*token);
+        // Coach calls wait on an AI model (one attempt up to 75 s plus the
+        // server's retries), far past the 20 s default.
+        let request = if path.starts_with("/api/v1/coach") {
+            request.timeout(Duration::from_secs(150))
+        } else {
+            request
+        };
         let response = build(request)
             .send()
             .await
