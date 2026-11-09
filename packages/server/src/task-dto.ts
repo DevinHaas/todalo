@@ -27,6 +27,8 @@ export interface TaskDto {
   horizon?: Horizon | null;
   /** Ticket 31: the Plan's "oldest first". */
   createdAt?: string | null;
+  /** Goals ticket 32: the last Keep in a Coach tidy-up (see staleTasks). */
+  reviewedAt?: string | null;
 }
 
 /** Goals ticket 31: where a task without a time waits (CONTEXT.md: horizon). */
@@ -37,6 +39,32 @@ export type Horizon = typeof horizons[number];
  * without a horizon counts as Next. null: unsorted (an Inbox task without one).
  */
 export const effectiveHorizon = (task: { horizon?: Horizon | null; projectId: string | null }): Horizon | null => task.horizon ?? (task.projectId ? "next" : null);
+
+/** Goals ticket 32: what the Coach bar's "Tidy up" chip and the Weekly review send (coach-chat.ts tidyIntent). */
+export const TIDY_PROMPT = "Tidy up my backlog";
+/** Goals ticket 32: untouched this many days, an open task is stale (CONTEXT.md: stale). */
+export const STALE_DAYS = 30;
+type When = Date | string | null | undefined;
+const at = (value: When) => value == null ? 0 : new Date(value).getTime();
+export interface StaleCandidate { id: string; status: string; parentId: string | null; projectId: string | null; dueDate: When; horizon?: Horizon | null; updatedAt: When; reviewedAt?: When }
+/**
+ * Ticket 32: the stale tasks, oldest first, with their age in whole days: open,
+ * top-level, without a date, not Later, and last touched (an edit, a Keep, or
+ * an edit of one of its sub-tasks, which are judged with it) STALE_DAYS or more ago.
+ */
+export function staleTasks<T extends StaleCandidate>(tasks: readonly T[], now: Date): { task: T; days: number }[] {
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const touched = new Map<string, number>();
+  for (const task of tasks) {
+    let root = task;
+    for (let depth = 0; root.parentId && byId.has(root.parentId) && depth < 10; depth++) root = byId.get(root.parentId)!;
+    touched.set(root.id, Math.max(touched.get(root.id) ?? 0, at(task.updatedAt), at(task.reviewedAt)));
+  }
+  const day = 24 * 60 * 60_000;
+  return tasks.filter(task => task.status !== "done" && task.parentId === null && !task.dueDate && effectiveHorizon(task) !== "later" && now.getTime() - touched.get(task.id)! >= STALE_DAYS * day)
+    .map(task => ({ task, days: Math.floor((now.getTime() - touched.get(task.id)!) / day) }))
+    .sort((a, b) => touched.get(a.task.id)! - touched.get(b.task.id)!);
+}
 
 export interface RecurrenceDto { n: number; unit: "day" | "week" | "month" | "year"; basedOn: "scheduled" | "completed"; until: string | null }
 
@@ -54,6 +82,7 @@ export interface TaskRecord {
   commentCount?: number;
   horizon?: Horizon | null;
   createdAt?: DateLike;
+  reviewedAt?: DateLike;
 }
 
 /** Allow-lists fields: user IDs, calendar event IDs and sort internals never leave the server. */
@@ -64,6 +93,6 @@ export function toTaskDto(task: TaskRecord): TaskDto {
     deadline: iso(task.deadline), completedAt: iso(task.completedAt), labelIds: [...task.labelIds],
     recurrence: task.recurrence ? { n: task.recurrence.n, unit: task.recurrence.unit, basedOn: task.recurrence.basedOn, until: iso(task.recurrence.until) } : null,
     updatedAt: iso(task.updatedAt), commentCount: task.commentCount ?? 0,
-    horizon: task.horizon ?? null, createdAt: iso(task.createdAt),
+    horizon: task.horizon ?? null, createdAt: iso(task.createdAt), reviewedAt: iso(task.reviewedAt),
   };
 }

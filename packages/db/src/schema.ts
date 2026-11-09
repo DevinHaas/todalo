@@ -166,6 +166,8 @@ export const tasks = pgTable(
     // Goals ticket 31: Now, Next or Later for a task without a time; null is unsorted
     // (an Inbox task without one; a project task without one counts as Next).
     horizon: text("horizon", { enum: ["now", "next", "later"] }),
+    // Goals ticket 32: when the user last kept the task in a Coach tidy-up (not an edit: updatedAt stays).
+    reviewedAt: timestamp("reviewed_at"),
     deadline: timestamp("deadline"),
     status: taskStatus("status").default("todo").notNull(),
     dueDate: timestamp("due_date"),
@@ -442,8 +444,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   draftId: text("draft_id").notNull().references(() => coachDrafts.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  // Goals ticket 30: "complete" and "delete" (chat drafts, when the user asks); ticket 31: "horizon".
-  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon"] }).notNull(),
+  // Goals ticket 30: "complete" and "delete" (chat drafts, when the user asks); ticket 31: "horizon"; ticket 32: "keep".
+  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon", "keep"] }).notNull(),
   taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   startAt: timestamp("start_at").notNull(),

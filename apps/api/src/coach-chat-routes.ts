@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { bandLabels, seasonStatuses, type StatusInputs } from "@todalo/server/goal-status";
 import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
-  CHAT_CONTEXT_TURNS, CHAT_HISTORY_LIMIT, chatExtras, chatFacts, chatInput, chatMessages, chatSchema, parseChatReply, toChatMessageDto,
+  CHAT_CONTEXT_TURNS, CHAT_HISTORY_LIMIT, chatExtras, tidyIntent, chatFacts, chatInput, chatMessages, chatSchema, parseChatReply, toChatMessageDto,
   type ChatGoalNote, type ChatMessageRecord, type CoachChatDto, type DraftRevision, type NewChatMessage,
 } from "@todalo/server/coach-chat";
 import {
@@ -144,7 +144,8 @@ export function createCoachChatRoutes(store: CoachChatStore) {
       // Ticket 29: images go only to models that read them; the rest get the extracted text.
       const images = acceptsImages(saved);
       const current = open.filter(row => draftCurrent(row, today));
-      const extras = chatExtras(plan, context, files, current);
+      // Ticket 32: "tidy up" lists the stale tasks and limits the draft to them.
+      const extras = chatExtras(plan, context, files, current, tidyIntent(input.data.message));
       const attached = images ? files.filter(file => kindOf(file) === "image").map(file => ({ mediaType: file.mediaType, data: file.content })) : [];
       let answer: ReturnType<typeof parseChatReply>;
       try {
@@ -156,6 +157,8 @@ export function createCoachChatRoutes(store: CoachChatStore) {
         if (error instanceof Error && error.name === "AbortError") return failed("The Coach took too long. Try again.");
         throw error;
       }
+      // Ticket 32: what waits for the next tidy-up.
+      if (extras.tidy && extras.tidy.total > extras.tidy.tasks.size) answer.reply += `\n\n${extras.tidy.tasks.size} of ${extras.tidy.total} stale tasks shown; the rest wait for the next tidy-up.`;
       // A revision applies to its pending draft at once (still a proposal, accepted as usual).
       for (const target of current) {
         const revisions = answer.revisions.filter(revision => revision.draftId === target.id);

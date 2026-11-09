@@ -9,13 +9,16 @@
 // right sidebar (coach-chat-screens.tsx) is the read-only record.
 // Ticket 30: accepting a change that deletes tasks asks once more ("Delete 3
 // tasks? This can't be undone."); a change whose task changed since is left out.
+// Ticket 32: a "Tidy up" chip (shown while stale tasks wait) sends TIDY_PROMPT;
+// the Weekly review sends the same through askCoach.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, Image, Paperclip, Sparkles, X } from "lucide-react";
-import { coach, coachReads, goalReads } from "./runtime";
+import { coach, coachReads, goalReads, reads } from "./runtime";
 import { coachKeys, draftCounts, draftMutations, type CoachChatDto, type CoachDocumentDto, type DraftDto } from "./coach";
 import { draftOps, type DraftOp } from "../../../packages/server/src/drafts";
 import { documentProblem } from "../../../packages/server/src/coach-documents";
+import { TIDY_PROMPT, staleTasks } from "../../../packages/server/src/task-dto";
 import { draftTime, opIcons, opLabels, overflowQuestion, useParentTitle } from "./draft-views";
 import { dayKey } from "./schedule";
 import { goalColorValue } from "./goals";
@@ -30,11 +33,13 @@ import {
 /** Accepted in the picker (the server checks again, by kind). */
 const ACCEPT = ".pdf,.docx,.txt,.md,.markdown,.csv,.png,.jpg,.jpeg,.gif,.webp,application/pdf,text/*,image/png,image/jpeg,image/gif,image/webp";
 
-let state = { focus: 0, prompt: null as string | null };
+let state = { focus: 0, prompt: null as string | null, send: false };
 const watchers = new Set<() => void>();
 const barState = { get: () => state, subscribe: (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; } };
 /** Focuses the bar's field; `prompt` pre-fills it (a recommendation's "Chat with coach") for the user to edit and send. */
-export const focusCoachBar = (prompt?: string) => { state = { focus: state.focus + 1, prompt: prompt ?? null }; watchers.forEach(watcher => watcher()); };
+export const focusCoachBar = (prompt?: string) => { state = { focus: state.focus + 1, prompt: prompt ?? null, send: false }; watchers.forEach(watcher => watcher()); };
+/** Ticket 32: sends `prompt` from the bar as if typed (the Weekly review's "Tidy up"). */
+export const askCoach = (prompt: string) => { state = { focus: state.focus + 1, prompt, send: true }; watchers.forEach(watcher => watcher()); };
 
 /** Only with a Coach provider connected: without one there is no bar. */
 export function CoachBar({ userId }: { userId: string }) {
@@ -44,7 +49,7 @@ export function CoachBar({ userId }: { userId: string }) {
 
 function Bar({ userId }: { userId: string }) {
   const cache = useQueryClient();
-  const { focus, prompt } = useSyncExternalStore(barState.subscribe, barState.get);
+  const { focus, prompt, send: sending } = useSyncExternalStore(barState.subscribe, barState.get);
   const chat = useQuery(coachReads.chat(userId));
   const drafts = useQuery(coachReads.drafts(userId));
   const goals = useQuery(goalReads.list(userId));
@@ -81,6 +86,14 @@ function Bar({ userId }: { userId: string }) {
     onError: () => setReplyOpen(false),
     meta: { action: () => "send your message to the Coach" },
   });
+  // Ticket 32: askCoach sends at once; the field shows the request until the reply.
+  useEffect(() => {
+    if (focus && sending && prompt && !send.isPending) send.mutate(prompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new askCoach sends
+  }, [focus, sending, prompt]);
+  // Ticket 32: the open tasks nobody touched for 30+ days, for the "Tidy up" chip.
+  const tasks = useQuery(reads.today(userId)).data?.tasks;
+  const stale = useMemo(() => tasks ? staleTasks(tasks, new Date()).length : 0, [tasks]);
   const upload = useMutation({
     mutationFn: (files: File[]) => coach.uploadDocuments(files),
     onSuccess: (result) => setChat({ documents: result.documents }),
@@ -174,6 +187,10 @@ function Bar({ userId }: { userId: string }) {
           {upload.isPending && <li className="flex items-center gap-1 text-xs text-muted-foreground" role="status"><Spinner />Reading…</li>}
         </ul>}
         {message && <Hint className="px-1 text-xs text-destructive" role="alert">{message}</Hint>}
+        {stale > 0 && !text && !draft && !send.isPending && <div className="flex px-1 pt-0.5">
+          <Button type="button" variant="outline" size="xs" className="rounded-full" onClick={() => send.mutate(TIDY_PROMPT)} data-coach-bar-action="tidy"
+            title={`${stale} open task${stale === 1 ? "" : "s"} untouched for 30+ days`}><Sparkles className="text-brand" />Tidy up</Button>
+        </div>}
         <div className="flex items-end gap-1">
           <Button type="button" variant="ghost" size="icon" className="size-control!" aria-label="Attach a document" title="Attach a document (PDF, Word, text, image)"
             disabled={upload.isPending} onClick={() => picker.current?.click()} data-coach-bar-action="attach"><Paperclip /></Button>
@@ -209,7 +226,7 @@ function Bar({ userId }: { userId: string }) {
 }
 
 /** One group per kind of change, in the draft's order ("Added 4", "Moved 1"…). */
-const groupLabels: Record<DraftOp, string> = { add: "Added", move: "Moved", remove: "Removed", subtask: "Sub-tasks", attach: "Attached", complete: "Completed", delete: "Deleted", horizon: "Re-sorted" };
+const groupLabels: Record<DraftOp, string> = { add: "Added", move: "Moved", remove: "Removed", subtask: "Sub-tasks", attach: "Attached", complete: "Completed", delete: "Deleted", horizon: "Re-sorted", keep: "Kept" };
 
 /**
  * The review under the pill: the pending changes grouped by kind. A group opens to its changes;

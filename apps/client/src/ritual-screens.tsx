@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
-import { coachReads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { coachReads, reads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { askCoach } from "./coach-bar";
+import { STALE_DAYS, TIDY_PROMPT, staleTasks } from "../../../packages/server/src/task-dto";
 import { seasonMutations, type NextSeason } from "./seasons";
 import { EndSeasonStep, seasonRange } from "./season-views";
 import { addDays, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
@@ -159,6 +161,8 @@ export function RitualHost({ userId }: { userId: string }) {
   const season = useQuery({ ...seasonReads.current(userId), enabled: open !== null });
   const weekly = useQuery({ ...ritualReads.weekly(userId), enabled: open === "weeklyReview" });
   const looking = useQuery({ ...ritualReads.seasonReview(userId), enabled: open === "seasonReview" });
+  // Goals ticket 32: the Weekly review's nudge counts the stale tasks.
+  const tasks = useQuery({ ...reads.today(userId), enabled: open === "weeklyReview" });
   const { record, review } = useRitualWrites(userId);
   const connected = Boolean(useQuery(coachReads.provider(userId)).data?.provider);
   const cache = useQueryClient();
@@ -227,7 +231,13 @@ export function RitualHost({ userId }: { userId: string }) {
     // Goals ticket 24: a finished Weekly review is when the Coach learns patterns (one model call; Settings › Coach shows them).
     if (connected && run.status === "completed") void recorded.then(() => patternMutations(cache, userId).learn()).then(result => { reportCoachError(result.error, { background: true }); }).catch(() => undefined);
   };
-  return <RitualPanel key={period} copy={weeklyReviewCopy(period)} goals={goals} status={status} pending={record.isPending} initial={weekly.data?.ratings} voice={voice}
+  // Ticket 32: "12 tasks untouched for 30+ days. Tidy up with the Coach?" (with a provider, and only when there are some).
+  const stale = connected && tasks.data ? staleTasks(tasks.data.tasks, new Date()).length : 0;
+  const notice = stale > 0 && <div className="flex items-center gap-2 rounded-md border border-border p-2 text-sm" data-weekly-tidy="">
+    <span className="flex-1">{stale === 1 ? "1 task" : `${stale} tasks`} untouched for {STALE_DAYS}+ days. Tidy up with the Coach?</span>
+    <Button type="button" variant="outline" size="sm" onClick={() => askCoach(TIDY_PROMPT)} data-ritual-action="tidy-up">Tidy up</Button>
+  </div>;
+  return <RitualPanel key={period} copy={weeklyReviewCopy(period)} goals={goals} status={status} pending={record.isPending} initial={weekly.data?.ratings} voice={voice} notice={notice}
     summary={goalId => {
       if (!weekly.data) return <LoadFailure error={weekly.error} onRetry={() => void weekly.refetch()} />;
       const week = weekly.data.goals.find(item => item.goalId === goalId);

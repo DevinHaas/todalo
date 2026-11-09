@@ -211,8 +211,8 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   // Every other open draft's timed changes show too (a day draft's item the Coach moved to Wednesday shows on Wednesday).
   const chatPending = drafts.data?.drafts.filter(item => item.id !== draft?.id).flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
   return {
-    // Ticket 30: a move that only changes the project or section leaves the schedule as it is; ticket 31: so does a new horizon.
-    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" || item.op === "horizon" || item.place?.keepsDate ? [] : [{
+    // Ticket 30: a move that only changes the project or section leaves the schedule as it is; ticket 31: so does a new horizon (ticket 32: and a Keep).
+    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" || item.op === "horizon" || item.op === "keep" || item.place?.keepsDate ? [] : [{
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
     }]),
     panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}

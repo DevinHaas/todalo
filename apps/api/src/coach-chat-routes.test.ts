@@ -264,6 +264,36 @@ describe("documents in the chat (ticket 29)", () => {
   });
 });
 
+describe("tidying up stale tasks (ticket 32)", () => {
+  type Stale = { stale?: { shown: number; total: number; tasks: { ref: string; title: string; days: number }[] } };
+  const old = new Date("2025-12-01T00:00:00Z");
+
+  it("lists up to 40 stale tasks, oldest first, says how many wait, and drafts only changes to them", async () => {
+    for (let n = 0; n < 45; n++) task("alice", `old-${n}`, { title: `Old ${n}`, updatedAt: new Date(old.getTime() - n * 60_000) });
+    let seen: Stale["stale"];
+    reply = (facts) => {
+      seen = (facts as unknown as Stale).stale;
+      return answer("Here is a tidy-up.", [item("horizon", { task: seen!.tasks[0]!.ref, horizon: "later" }), item("keep", { task: seen!.tasks[1]!.ref })]);
+    };
+    const result = await send("Tidy up my backlog");
+    expect(seen).toMatchObject({ shown: 40, total: 45 });
+    expect(seen!.tasks.slice(0, 2).map(row => row.title)).toEqual(["Old 44", "Old 43"]);
+    expect(result.messages.at(-1)!.content).toBe("Here is a tidy-up.\n\nProposed: 1 re-sorted, 1 kept. Accept with ✓.\n\n40 of 45 stale tasks shown; the rest wait for the next tidy-up.");
+    expect(drafts[0]!.items.map(row => [row.op, row.taskId])).toEqual([["horizon", "old-44"], ["keep", "old-43"]]);
+  });
+
+  it("sends no stale tasks for other messages, and refuses changes to fresh tasks in a tidy-up", async () => {
+    task("alice", "old", { title: "Old", updatedAt: old });
+    let facts: Stale = {};
+    reply = (sent) => { facts = sent as unknown as Stale; return answer("Done.", [item("complete", { task: ref((sent as unknown as { toPlan: { ref: string; title: string }[] }).toPlan, "Run") })]); };
+    expect(await send("What next?")).toMatchObject({ draft: { items: [{ op: "complete" }] } });
+    expect(facts.stale).toBeUndefined();
+    const result = await send("tidy up please");
+    expect(result.draft).toBeNull();
+    expect(result.messages.at(-1)!.content).toMatch(/only the stale tasks/);
+  });
+});
+
 describe("chat access", () => {
   it("needs a provider, a session, a todalo origin and a message", async () => {
     expect((await call("POST", "/coach/chat", { user: "bob", body: { message: "Hi" } })).status).toBe(404);

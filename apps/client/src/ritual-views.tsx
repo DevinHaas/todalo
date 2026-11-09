@@ -137,8 +137,10 @@ export function RatingHistory({ goalId, history }: { goalId: string; history: Ra
  * question (tickets 12 and 13). Either answer finishes the ritual; "help" also
  * opens the schedule to plan. Skip records a skip; closing keeps nothing (do it later).
  */
-export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, final, onFinish, onCoachPlan, onSkip, onClose }: {
+export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, final, notice, onFinish, onCoachPlan, onSkip, onClose }: {
   copy: RitualCopy; goals: CheckInGoal[]; status: RunStatus | null; pending: boolean;
+  /** Goals ticket 32: shown on every step under the progress (the Weekly review's "Tidy up" nudge). */
+  notice?: ReactNode;
   /** A redo starts from the ratings given before. */
   initial?: RatingDto[];
   /** Shown above a goal's rating (the Weekly review's week). */
@@ -173,6 +175,7 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
     </>}>
     <Progress aria-label={`Step ${step + 1} of ${steps}`} value={Math.round((step + 1) / steps * 100)} />
     {status && <Hint>{copy.done} {status === "completed" ? "done" : "skipped"}; finishing again replaces it.</Hint>}
+    {notice}
     {!goal ? <div className="flex flex-col gap-3" data-ritual-step="planning">
       {!goals.length && <Hint>No goals in the current season to rate. Add goals on the Season page.</Hint>}
       <h3 className="text-sm font-semibold">{copy.planQuestion}</h3>

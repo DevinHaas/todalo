@@ -15,6 +15,7 @@
 // Ticket 31: toPlan also holds the Now and Next tasks of every project (the
 // Inbox's unsorted ones after them, Later never), ranked goal tier, priority,
 // then how they wait; chat drafts set a task's horizon ("horizon").
+// Ticket 32: a tidy-up keeps a stale task as it is ("keep": only its reviewedAt is stamped).
 import { z } from "zod";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
@@ -22,8 +23,8 @@ import { effectiveHorizon, type Horizon } from "./task-dto";
 
 /** What a day or week draft (and the model's schedule items) can do. */
 export const scheduleOps = ["add", "move", "remove"] as const;
-/** Ticket 29: plus a new sub-task and an attached document (chat drafts); ticket 30: completing and deleting a task; ticket 31: setting its horizon. */
-export const draftOps = [...scheduleOps, "subtask", "attach", "complete", "delete", "horizon"] as const;
+/** Ticket 29: plus a new sub-task and an attached document (chat drafts); ticket 30: completing and deleting a task; ticket 31: setting its horizon; ticket 32: keeping it (tidy-up). */
+export const draftOps = [...scheduleOps, "subtask", "attach", "complete", "delete", "horizon", "keep"] as const;
 export type DraftOp = typeof draftOps[number];
 export type DraftItemState = "pending" | "accepted" | "declined";
 /**
@@ -98,7 +99,7 @@ export const toDraftDto = (draft: DraftRecord): DraftDto => ({
 
 const opWords: Record<DraftOp, (count: number) => string> = {
   add: () => "added", move: () => "moved", remove: () => "removed", subtask: count => count === 1 ? "sub-task" : "sub-tasks", attach: () => "attached",
-  complete: () => "completed", delete: () => "deleted", horizon: () => "re-sorted",
+  complete: () => "completed", delete: () => "deleted", horizon: () => "re-sorted", keep: () => "kept",
 };
 /** "4 added, 1 moved, 1 removed" (ticket 29: ", 2 sub-tasks, 1 attached"; ticket 30: ", 2 completed, 1 deleted"; ticket 31: ", 3 re-sorted") over the items still to decide. */
 export function draftCounts(items: readonly Pick<DraftItemDto, "op" | "state">[]) {
@@ -114,6 +115,8 @@ export function draftCounts(items: readonly Pick<DraftItemDto, "op" | "state">[]
 export interface DraftTask {
   id: string; title: string; status: "todo" | "in_progress" | "done"; projectId: string | null; parentId: string | null; dueDate: Date | null; dueDateEnd: Date | null; updatedAt: Date;
   horizon?: Horizon | null; priority?: number; createdAt?: Date;
+  /** Ticket 32: the last Keep of a tidy-up (staleTasks). */
+  reviewedAt?: Date | null;
 }
 export interface DayContext {
   tasks: DraftTask[];
@@ -216,7 +219,7 @@ export function dayPlan({ context, zone, now }: { context: DayContext; zone: str
 }
 
 /** The season's goals, primary first, as "g1"…; a task's goal is its first linked one (task link or project link). */
-function planGoals(context: DayContext) {
+export function planGoals(context: Pick<DayContext, "goals" | "links">) {
   const tier = { primary: 0, secondary: 1 } as const;
   const goals = context.goals.filter(goal => !goal.archivedAt).sort((a, b) => tier[a.tier] - tier[b.tier]).map((goal, index) => ({ ...goal, ref: `g${index + 1}` }));
   const goalOf = (task: DraftTask) => goals.find(goal => context.links.tasks.some(link => link.goalId === goal.goalId && link.taskId === task.id)

@@ -10,6 +10,9 @@
 // task (to a day with or without a time, and/or another project or section).
 // Ticket 31: and sets a task's horizon (Now, Next, Later): "horizon", labelled
 // "Re-sorted" in the bar. Later tasks are never proposed unless named.
+// Ticket 32: "tidy up" lists the stale tasks (staleTasks, up to STALE_LIMIT,
+// oldest first) and the draft holds one change per stale task: park (Later),
+// delete (never primary-goal work), complete, move, or keep ("keep").
 // Revising pending drafts (2026-11-09): the Coach sees the pending changes of
 // the user's open drafts ("c1"…) and revises one in place when asked (a new
 // time, a new name, or dropped), instead of proposing it a second time; a new
@@ -21,9 +24,10 @@ import { MAX_SUBTASK_DEPTH } from "@todalo/db/task-parent-validation";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { documentFacts, type CoachDocumentDto, type CoachDocumentRecord } from "./coach-documents";
 import { zonedTaskDate } from "./dates";
-import { effectiveHorizon, horizons } from "./task-dto";
+import { effectiveHorizon, horizons, staleTasks } from "./task-dto";
+export { TIDY_PROMPT } from "./task-dto";
 import {
-  CHAT_DRAFT_ITEM_LIMIT, DRAFT_ITEM_LIMIT, EVENTS_RULE, OVERFLOW_RULE, TO_PLAN_RULE, draftCounts, draftOps, localParts, overflowSchema, parseWeekDraft, plusDays, weekDraftSchema, weekPlanFacts,
+  CHAT_DRAFT_ITEM_LIMIT, DRAFT_ITEM_LIMIT, EVENTS_RULE, OVERFLOW_RULE, TO_PLAN_RULE, draftCounts, draftOps, localParts, overflowSchema, parseWeekDraft, planGoals, plusDays, weekDraftSchema, weekPlanFacts,
   type DayContext, type DraftDto, type DraftItemRecord, type DraftPlace, type DraftRecord, type DraftTask, type NewDraft, type NewDraftItem, type WeekPlan,
 } from "./drafts";
 
@@ -53,6 +57,12 @@ export const DUE_AHEAD_DAYS = 366;
 
 /** At most this many pending changes of open drafts go to the model. */
 export const PENDING_LIMIT = 40;
+/** Ticket 32: at most this many stale tasks per tidy-up ("40 of 63 shown"); the rest wait for the next. */
+export const STALE_LIMIT = 40;
+/** Ticket 32: the message asks for a tidy-up ("tidy up my backlog"). */
+export const tidyIntent = (message: string) => /\btid(y|ied|ying)\b/i.test(message);
+/** Ticket 32: a stale task in a tidy-up: days since its last touch, its project's name, its goal's ref and whether that goal is primary. */
+export interface TidyEntry { task: DraftTask; days: number; project: string | null; goal: string | null; primary: boolean }
 
 /** A pending item of an open draft, by its ref ("c1"…). */
 export interface PendingRef { draftId: string; item: DraftItemRecord }
@@ -69,11 +79,18 @@ export interface ChatGoalNote { target: string; status: string }
 /**
  * Ticket 29: what the chat offers beyond the week plan: more tasks ("t41"…), the documents ("d1"…) and each task's depth.
  * Ticket 30: the places a task may move to ("p1" a project, "s1" a section, "inbox") and the ritual tasks, which it never touches.
+ * Ticket 32: in a tidy-up, the stale tasks shown by ref, and how many are stale in all.
  */
-export interface ChatExtras { others: Map<string, DraftTask>; documents: Map<string, CoachDocumentRecord>; depth: ReadonlyMap<string, number>; places?: Map<string, DraftPlace>; fixed?: ReadonlySet<string>; pending?: Map<string, PendingRef> }
+export interface ChatExtras {
+  others: Map<string, DraftTask>; documents: Map<string, CoachDocumentRecord>; depth: ReadonlyMap<string, number>; places?: Map<string, DraftPlace>; fixed?: ReadonlySet<string>; pending?: Map<string, PendingRef>;
+  tidy?: { total: number; tasks: Map<string, TidyEntry> };
+}
 
-/** The open tasks the plan does not list (most recently changed first), numbered after its refs; the documents in upload order; the projects and their sections. */
-export function chatExtras(plan: WeekPlan, context: Pick<DayContext, "tasks" | "destinations"> & Partial<Pick<DayContext, "fixedTaskIds">>, documents: readonly CoachDocumentRecord[], drafts: readonly DraftRecord[] = []): ChatExtras {
+/**
+ * The open tasks the plan does not list (most recently changed first), numbered after its refs; the documents in upload order; the projects and their sections.
+ * Ticket 32: `tidy` (the message asks for a tidy-up): the stale tasks too, the ones the plan does not list first among the other tasks.
+ */
+export function chatExtras(plan: WeekPlan, context: Pick<DayContext, "tasks" | "destinations"> & Partial<Pick<DayContext, "fixedTaskIds" | "goals" | "links">>, documents: readonly CoachDocumentRecord[], drafts: readonly DraftRecord[] = [], tidy = false): ChatExtras {
   const listed = new Set([...plan.scheduled.values(), ...plan.toPlan.values()].map(entry => entry.task.id));
   const byId = new Map(context.tasks.map(task => [task.id, task]));
   const depth = new Map(context.tasks.map(task => {
@@ -82,10 +99,17 @@ export function chatExtras(plan: WeekPlan, context: Pick<DayContext, "tasks" | "
     return [task.id, count];
   }));
   const offset = plan.scheduled.size + plan.toPlan.size;
-  const others = context.tasks.filter(task => task.status !== "done" && !listed.has(task.id))
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, OTHER_TASK_LIMIT);
+  const stale = tidy ? staleTasks(context.tasks, plan.now) : [];
+  const shown = stale.slice(0, STALE_LIMIT);
+  const first = new Set(shown.map(entry => entry.task.id));
+  const others = new Map([
+    ...shown.map(entry => entry.task).filter(task => !listed.has(task.id)),
+    ...context.tasks.filter(task => task.status !== "done" && !listed.has(task.id) && !first.has(task.id)).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+  ].slice(0, OTHER_TASK_LIMIT).map((task, index) => [`t${offset + index + 1}`, task]));
+  const refOf = new Map([...[...plan.toPlan].map(([ref, entry]) => [entry.task.id, ref] as const), ...[...others].map(([ref, task]) => [task.id, ref] as const)]);
+  const { goalOf } = planGoals({ goals: context.goals ?? [], links: context.links ?? { projects: [], tasks: [] } });
   return {
-    others: new Map(others.map((task, index) => [`t${offset + index + 1}`, task])),
+    others,
     documents: new Map(documents.map((document, index) => [`d${index + 1}`, document])),
     depth,
     places: chatPlaces(context.destinations),
@@ -93,6 +117,10 @@ export function chatExtras(plan: WeekPlan, context: Pick<DayContext, "tasks" | "
     // The open drafts' pending changes (attachments aside: nothing to revise there).
     pending: new Map(drafts.flatMap(draft => draft.items.filter(item => item.state === "pending" && item.op !== "attach").map(item => ({ draftId: draft.id, item })))
       .slice(0, PENDING_LIMIT).map((entry, index) => [`c${index + 1}`, entry])),
+    ...(tidy && { tidy: { total: stale.length, tasks: new Map(shown.map(({ task, days }) => {
+      const goal = goalOf(task);
+      return [refOf.get(task.id)!, { task, days, project: context.destinations?.projects.find(row => row.id === task.projectId)?.name ?? null, goal, primary: plan.goals.get(goal ?? "")?.tier === "primary" }] as const;
+    })) } }),
   };
 }
 
@@ -123,6 +151,10 @@ export function chatFacts(plan: WeekPlan, notes: ReadonlyMap<string, ChatGoalNot
     projects: [...extras?.places ?? []].filter(([ref]) => ref.startsWith("p")).map(([ref, place]) => ({
       ref, name: place.label, sections: [...extras!.places!].filter(([key, section]) => key.startsWith("s") && section.projectId === place.projectId).map(([key, section]) => ({ ref: key, name: section.label.slice(place.label.length + 3) })),
     })),
+    // Ticket 32: a tidy-up's stale tasks, oldest first.
+    ...(extras?.tidy && { stale: { shown: extras.tidy.tasks.size, total: extras.tidy.total, tasks: [...extras.tidy.tasks].map(([ref, entry]) => ({
+      ref, title: entry.task.title.slice(0, 200), days: entry.days, project: entry.project?.slice(0, 200) ?? null, goal: entry.goal, priority: entry.task.priority ?? 4,
+    })) } }),
     // The open drafts' pending changes, as proposals the Coach may revise.
     pending: [...extras?.pending ?? []].map(([ref, { item }]) => {
       const local = localParts(item.startAt, plan.zone);
@@ -144,6 +176,7 @@ A new task due on a day without a time (e.g. each assignment of a syllabus): "ad
 "subtask" adds a new sub-task (short title) under parent; "attach" attaches a document (document = its ref, title "") to parent. parent is a task ref (scheduled, toPlan or tasks) or "#N" for the N-th item of this list when that is a new task you add above it. For both use day "", start "" and minutes 0. Turn a document into tasks or sub-tasks only when the user asks; attach a document to the task it belongs to when that helps.
 Only when the user asks for it, never on your own: "complete" marks an open task done (a repeating one moves on to its next date); "delete" deletes a task with its sub-tasks; for both task is its ref (scheduled, toPlan or tasks), day "", start "" and minutes 0. "move" also puts a task on a day without a time (start "" and minutes 0) and/or in another project or section: project = a projects ref or "inbox", section = a section ref of that project ("" for none); with day "" and start "" it keeps its date. Never complete, delete or move fixed tasks.
 "horizon" sorts an open task (task = its ref; day "", start "" and minutes 0) into horizon "now" (the next things to plan), "next" or "later" (parked, out of the way): only when the user asks to sort, re-sort, park or prioritise tasks. Tasks with later: true are parked: never plan or propose them unless the user names them.
+stale is there only when the user asks to tidy up: open tasks nobody touched for 30 days or more (days since the last touch), oldest first (shown of total). Then draft exactly one item per stale task, nothing else, each with a one-line reason: park it ("horizon" with horizon "later"), "delete" it (a duplicate, or no longer relevant; never a task of a primary goal), "complete" it (it looks done already), "move" it to a fitting project or section (day "" and start ""), or "keep" it (it still matters: nothing changes, and it is not proposed again for 30 days; task = its ref, day "", start "" and minutes 0). "keep" is only for stale tasks. Prefer keep or park when unsure; delete only what is clearly a duplicate or obsolete.
 title is "" unless the task or sub-task is new; goal is a goal ref only for a new task, else ""; parent, document, project, section and horizon are "" unless the op needs them. At most ${CHAT_DRAFT_ITEM_LIMIT} items in all. reason: one short sentence per item. summary: one or two sentences on the draft ("" without items).
 ${EVENTS_RULE}
 ${TO_PLAN_RULE}
@@ -237,6 +270,8 @@ function outcome(draft: Omit<NewDraft, "kind" | "period"> | null, revisions: rea
  * task once; a timed move of a task not on the schedule is placed by the week
  * rules as an "add" would be, then stays a move (with its place, if any).
  * Ticket 31: "horizon" names any open, non-fixed task once, with "now", "next" or "later".
+ * Ticket 32: in a tidy-up every item names a stale task (park, delete, complete,
+ * move to a place, keep); never a delete of primary-goal work. "keep" only then.
  * Pending changes: a "move" or "remove" of a pending ref ("c1") revises that
  * item instead (by the same rules; the pending times count as busy), and a new
  * task titled as a pending new task (case and spaces aside) is a move of it.
@@ -268,6 +303,15 @@ function parseChatDraft(summary: string, raw: unknown[], overflow: unknown[], pl
   const changed = items.filter(item => item.task && item.op !== "subtask" && item.op !== "attach").map(item => item.task);
   const twice = changed.find((ref, index) => changed.indexOf(ref) !== index);
   if (twice) fail(`${twice} appears twice`);
+  const tidy = extras.tidy;
+  for (const item of items) {
+    if (item.op === "keep" && !tidy?.tasks.has(item.task)) fail(`keeping ${item.task || "a new task"}`);
+    if (!tidy) continue;
+    const entry = tidy.tasks.get(item.task);
+    if (!entry || !["horizon", "delete", "complete", "move", "keep"].includes(item.op)) fail(`only the stale tasks change in a tidy-up, not ${item.op} ${item.task || "a new task"}`);
+    if (item.op === "delete" && entry?.primary) fail(`deleting primary-goal work (${item.task})`);
+    if (item.op === "move" && (item.day || item.start)) fail(`a tidy-up moves ${item.task} to a project, not a day`);
+  }
   const taskOf = (ref: string) => {
     const entry = plan.scheduled.get(ref);
     const task = entry?.task ?? plan.toPlan.get(ref)?.task ?? extras.others.get(ref);
@@ -303,7 +347,7 @@ function parseChatDraft(summary: string, raw: unknown[], overflow: unknown[], pl
       results[index] = { ...base, op: "add", title, goalId: goalOf(item.goal), startAt: dueDay(item.day, "due day") };
       return;
     }
-    if (item.op === "complete" || item.op === "delete") {
+    if (item.op === "complete" || item.op === "delete" || item.op === "keep") {
       const { task, goalId } = taskOf(item.task);
       results[index] = { ...base, op: item.op, taskId: task.id, title: task.title, goalId, seenUpdatedAt: task.updatedAt };
       return;

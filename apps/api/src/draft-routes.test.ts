@@ -97,6 +97,8 @@ const app = createDraftRoutes({
       if (write.op === "delete") { tasks.delete(write.taskId!); continue; }
       // Ticket 31: only the horizon changes.
       if (write.op === "horizon") { Object.assign(tasks.get(write.taskId!)!, { horizon: write.horizon, updatedAt: clock }); continue; }
+      // Ticket 32: a Keep stamps reviewedAt; updatedAt stays.
+      if (write.op === "keep") { tasks.get(write.taskId!)!.reviewedAt = clock; continue; }
       if (write.place) tasks.get(write.taskId!)!.projectId = write.place.projectId;
       if (write.place?.keepsDate) continue;
       const id = write.taskId ?? `new-${write.itemId}`;
@@ -508,6 +510,20 @@ describe("horizons (ticket 31)", () => {
     expect(result.message).toBe("1 change was left out: its task changed since the Coach drafted.");
     expect(tasks.get("run")!.horizon).toBeUndefined();
     expect(tasks.get("admin")!.horizon).toBe("now");
+  });
+});
+
+describe("keeping stale tasks (ticket 32)", () => {
+  it("lists a Keep, and accepting stamps only reviewedAt: nothing else changes", async () => {
+    drafts.push({ id: "c4", userId: "alice", status: "open", kind: "chat", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { id: "c4-keep", op: "keep", taskId: "run", title: "run", goalId: null, reason: "Still matters.", startAt: clock, endAt: null, seenUpdatedAt: v1, state: "pending" },
+    ] });
+    const listed = await (await call("GET", `/coach/drafts?timeZone=${zone}`, { user: "alice" })).json() as DraftsDto;
+    expect(listed.drafts.find(row => row.id === "c4")!.items[0]).toMatchObject({ op: "keep", taskId: "run" });
+    const before = { ...tasks.get("run")! };
+    expect(await (await call("POST", "/coach/drafts/c4/accept", { user: "alice", body: {} })).json()).toEqual({ draft: null });
+    expect(tasks.get("run")).toEqual({ ...before, reviewedAt: clock });
+    expect(pushed).toEqual([]);
   });
 });
 

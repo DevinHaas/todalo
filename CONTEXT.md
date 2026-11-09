@@ -107,3 +107,11 @@ _Avoid_: bucket, status, someday
 **Unsorted**:
 An Inbox task without a horizon. Sorting a task means giving it a horizon, a project, or both; a project task without a horizon counts as Next.
 _Avoid_: untriaged, new
+
+**Stale**:
+An open, top-level task without a date and not Later that nobody touched (edited it or one of its sub-tasks, or kept it in a tidy-up) for 30 days or more.
+_Avoid_: old, abandoned, rotten
+
+**Tidy-up**:
+A Coach chat request ("Tidy up my backlog", the bar's chip or the Weekly review's nudge) that drafts one change per stale task, each with a reason: park (Later), delete, complete, move, or keep. A Keep changes nothing but makes the task fresh for another 30 days.
+_Avoid_: cleanup, triage, purge

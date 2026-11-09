@@ -1,7 +1,7 @@
 // Goals ticket 19: Coach Drafts in the database. The Coach only ever reaches
 // saveDraft; tasks change only through resolveDraft, when the user accepts.
 // Every read and write is scoped to the caller's userId.
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@todalo/db";
 import { coachDocuments, coachDraftItems, coachDrafts, goalTasks, taskAttachments, tasks, userSettings } from "@todalo/db/schema";
@@ -19,6 +19,8 @@ import type { DraftRevision } from "./coach-chat";
 const taskColumns = {
   id: tasks.id, title: tasks.title, status: tasks.status, projectId: tasks.projectId, parentId: tasks.parentId, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, updatedAt: tasks.updatedAt,
   horizon: tasks.horizon, priority: tasks.priority, createdAt: tasks.createdAt,
+  // Ticket 32: what makes a task stale.
+  reviewedAt: tasks.reviewedAt,
 };
 
 export async function getDayContext(userId: string): Promise<DayContext> {
@@ -102,6 +104,8 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
     const times = { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd };
     if (write.op === "complete" || write.op === "delete") (write.op === "complete" ? completed : deleted).push(write.taskId!);
     // Ticket 31: a new horizon only (its times stay).
+    // Ticket 32: a Keep is not an edit: only the stamp that makes the task fresh again (updatedAt stays, open editors stay valid).
+    else if (write.op === "keep") writes.push(db.update(tasks).set({ reviewedAt: new Date(), updatedAt: sql`${tasks.updatedAt}` }).where(and(eq(tasks.id, write.taskId!), eq(tasks.userId, userId))));
     else if (write.op === "horizon") writes.push(db.update(tasks).set({ horizon: write.horizon ?? null, updatedAt: new Date() }).where(and(eq(tasks.id, write.taskId!), eq(tasks.userId, userId))));
     else if (write.place?.keepsDate) continue;
     else if (write.op === "subtask") {

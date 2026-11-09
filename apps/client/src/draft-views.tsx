@@ -5,26 +5,27 @@
 // Ticket 28: tasks that did not fit (overflow) ask "Schedule them tomorrow?".
 // Ticket 29: the Coach bar shows it for chat drafts, with sub-tasks and attachments.
 // Ticket 30: and completions, deletions (red, struck through) and moves to another place.
-// Ticket 31: and new horizons ("To Later").
+// Ticket 31: and new horizons ("To Later"); ticket 32: a tidy-up's Keep ("Stays as it is").
 import { useContext } from "react";
-import { ArrowRight, ArrowUpDown, Check, CircleCheck, CornerDownRight, Minus, Paperclip, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowRight, ArrowUpDown, Check, CircleCheck, CornerDownRight, Minus, Paperclip, Pin, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button, Hint, List, Spinner } from "./ui";
 import { draftCounts, type DraftDto, type DraftItemDto } from "./coach";
 import { dayKey, labels } from "./schedule";
 import { horizonNames } from "./tasks";
 import { TaskTree } from "./task-tree";
 
-export const opIcons = { add: Plus, move: ArrowRight, remove: Minus, subtask: CornerDownRight, attach: Paperclip, complete: CircleCheck, delete: Trash2, horizon: ArrowUpDown } as const;
-export const opLabels = { add: "Add", move: "Move", remove: "Remove", subtask: "Add sub-task", attach: "Attach", complete: "Complete", delete: "Delete", horizon: "Re-sort" } as const;
+export const opIcons = { add: Plus, move: ArrowRight, remove: Minus, subtask: CornerDownRight, attach: Paperclip, complete: CircleCheck, delete: Trash2, horizon: ArrowUpDown, keep: Pin } as const;
+export const opLabels = { add: "Add", move: "Move", remove: "Remove", subtask: "Add sub-task", attach: "Attach", complete: "Complete", delete: "Delete", horizon: "Re-sort", keep: "Keep" } as const;
 
 /**
  * "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule"; ticket 23's milestone: "Milestone, due Mar 1".
  * Ticket 29: a new task without a time: "Due Mar 3"; a sub-task: "Under Essay"; an attachment: "On Essay" (`parent`: that task's title).
  * Ticket 30: "Will complete", "Will delete"; a move to another place adds it ("Due Mar 3, Health › Gym"), or is just "To Health" when its date stays.
- * Ticket 31: a new horizon: "To Later".
+ * Ticket 31: a new horizon: "To Later". Ticket 32: a Keep: "Stays as it is".
  */
 export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria" | "place" | "horizon">, week = false, parent = "a new task") =>
   item.op === "horizon" ? `To ${horizonNames[item.horizon ?? "next"]}`
+  : item.op === "keep" ? "Stays as it is"
   : item.op === "complete" ? "Will complete"
   : item.op === "delete" ? "Will delete"
   : item.place ? (item.place.keepsDate ? `To ${item.place.label}` : `${when(item, week, parent)}, ${item.place.label}`)

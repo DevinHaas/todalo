@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CoachModelError } from "./coach";
-import { chatExtras, chatFacts, chatMessages, chatSchema, parseChatReply } from "./coach-chat";
+import { chatExtras, chatFacts, chatMessages, chatSchema, parseChatReply, tidyIntent } from "./coach-chat";
 import { weekPlan, type DraftTask } from "./drafts";
+import { staleTasks } from "./task-dto";
 
 // Zurich, Monday 9 Feb 2026, 09:10 local.
 const zone = "Europe/Zurich";
@@ -50,7 +51,7 @@ describe("due-day tasks, sub-tasks and attachments (ticket 29)", () => {
     expect(facts.tasks.every(row => Number(row.ref.slice(1)) > plan.scheduled.size + plan.toPlan.size)).toBe(true);
     expect(facts.documents).toEqual([{ ref: "d1", name: "syllabus.pdf", kind: "pdf", text: "Week 1: essay" }]);
     const ops = (chatSchema.schema as { properties: { items: { items: { properties: { op: { enum: string[] } }; required: string[] } } } }).properties.items.items;
-    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon"]);
+    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon", "keep"]);
     expect(ops.required).toEqual(expect.arrayContaining(["parent", "document", "day"]));
   });
 
@@ -162,6 +163,74 @@ describe("horizons (ticket 31)", () => {
     const result = parse(items);
     expect(result.draft).toBeNull();
     expect(result.reply).toMatch(why);
+  });
+});
+
+describe("stale tasks (ticket 32)", () => {
+  const days = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60_000);
+  const old = { updatedAt: days(45) };
+
+  it("are open, top-level, undated, not Later and untouched for 30+ days (a Keep or a sub-task's edit touches), oldest first", () => {
+    const tasks = [
+      task("fresh", { updatedAt: days(29) }),
+      task("month", { updatedAt: days(30) }),
+      task("oldest", { updatedAt: days(90) }),
+      task("done", { ...old, status: "done" }),
+      task("dated", { ...old, dueDate: now }),
+      task("parked", { ...old, horizon: "later" }),
+      task("kept", { ...old, reviewedAt: days(3) }),
+      task("parent", old), task("step", { parentId: "parent", updatedAt: days(2) }),
+      task("quiet parent", old), task("quiet step", { parentId: "quiet parent", updatedAt: days(60) }),
+    ];
+    expect(staleTasks(tasks, now).map(({ task, days }) => [task.id, days])).toEqual([["oldest", 90], ["quiet parent", 45], ["month", 30]]);
+  });
+
+  const context = {
+    tasks: [task("run"), task("dup", { ...old, title: "Buy milk" }), task("fitness", { ...old, title: "Stretch", projectId: "health" }), task("recent", { title: "Recent" })],
+    goals: [{ goalId: "fit", title: "Fit", tier: "primary" as const }],
+    links: { projects: [{ goalId: "fit", projectId: "health" }], tasks: [] },
+    destinations: { projects: [{ id: "health", name: "Health" }, { id: "home", name: "Home" }], sections: [] },
+  };
+  const tidyPlan = weekPlan({ zone, now, start: "2026-02-09", context: { ...context, fixedTaskIds: [] } });
+  const extras = chatExtras(tidyPlan, context, [], [], true);
+  const refOf = (title: string) => [...extras.tidy!.tasks].find(([, entry]) => entry.task.title === title)![0];
+  const parse = (items: unknown[]) => parseChatReply(reply(items), tidyPlan, extras);
+
+  it("recognises the request and lists the stale tasks with age, project, goal and priority", () => {
+    expect(["Tidy up my backlog", "could you tidy my tasks?"].map(tidyIntent)).toEqual([true, true]);
+    expect(tidyIntent("Plan my week")).toBe(false);
+    expect(chatFacts(tidyPlan, new Map(), extras, false).stale).toEqual({ shown: 2, total: 2, tasks: [
+      { ref: refOf("Buy milk"), title: "Buy milk", days: 45, project: null, goal: null, priority: 4 },
+      { ref: refOf("Stretch"), title: "Stretch", days: 45, project: "Health", goal: "g1", priority: 4 },
+    ] });
+    expect(chatFacts(tidyPlan, new Map(), chatExtras(tidyPlan, context, []), false)).not.toHaveProperty("stale");
+  });
+
+  it("drafts one change per stale task: park, delete, complete, move, keep", () => {
+    const draft = parse([
+      item("delete", { task: refOf("Buy milk") }),
+      item("horizon", { task: refOf("Stretch"), horizon: "later" }),
+    ]).draft!;
+    expect(draft.items.map(row => [row.op, row.taskId])).toEqual([["delete", "dup"], ["horizon", "fitness"]]);
+    expect(parse([item("keep", { task: refOf("Stretch") }), item("move", { task: refOf("Buy milk"), project: "p2" })]).draft!.items.map(row => [row.op, row.taskId, row.place?.label ?? null]))
+      .toEqual([["keep", "fitness", null], ["move", "dup", "Home"]]);
+  });
+
+  it.each([
+    ["a task that is not stale", [item("complete", { task: "RUN" })], /only the stale tasks/],
+    ["a new task", [item("add", { title: "New", day: "2026-02-10" })], /only the stale tasks/],
+    ["deleting primary-goal work", [item("delete", { task: "STRETCH" })], /deleting primary-goal work/],
+    ["a move to a day", [item("move", { task: "MILK", day: "2026-02-10" })], /to a project, not a day/],
+  ])("drops the draft for %s", (_, items, why) => {
+    const run = [...tidyPlan.toPlan].find(([, entry]) => entry.task.id === "run")![0];
+    const named = (items as { task: string }[]).map(row => ({ ...row, task: { STRETCH: refOf("Stretch"), MILK: refOf("Buy milk"), RUN: run }[row.task] ?? row.task }));
+    const result = parse(named);
+    expect(result.draft).toBeNull();
+    expect(result.reply).toMatch(why);
+  });
+
+  it("keeps only in a tidy-up", () => {
+    expect(parseChatReply(reply([item("keep", { task: "t1" })]), plan).reply).toMatch(/keeping t1/);
   });
 });
 
