@@ -13,12 +13,13 @@ import { FormError, LoadFailure, Loading } from "./goal-views";
 import { CoachPatterns } from "./pattern-screens";
 import {
   Button, Combobox, ComboboxCollection, ComboboxContent, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxLabel, ComboboxList, ComboboxTrigger,
-  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input, cn,
+  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input,
+  ToggleGroup, ToggleGroupItem, cn,
 } from "./ui";
 
 /**
  * Goals tickets 17, 17b, 18 and 17c: Settings › Coach. A card per provider
- * (ChatGPT sign-in, API keys for OpenAI, Anthropic and OpenRouter, a local
+ * (OpenAI by ChatGPT sign-in or API key, Anthropic and OpenRouter keys, a local
  * Ollama model), several configured at once, and a picker for the one the
  * Coach uses.
  */
@@ -31,9 +32,19 @@ export function CoachSettingsScreen({ userId }: { userId: string }) {
   return <CoachSettings userId={userId} coach={query.data} open={open} setOpen={setOpen} />;
 }
 
-/** ChatGPT first: it needs no key. */
-const cardKinds = coachCardKinds;
-const cardLabel: Record<CoachModelKind, string> = { ...Object.fromEntries(cardKinds.map(kind => [kind, coachProviderInfo[kind].label])) as Record<CoachModelKind, string>, ollama: "Ollama" };
+/**
+ * ChatGPT and OpenAI are one card ("OpenAI"): the server keeps them as two
+ * providers (a sign-in and a key), the card picks between them.
+ */
+const cardKinds = coachCardKinds.filter(kind => kind !== "chatgpt");
+const cardLabel: Record<CoachModelKind, string> = {
+  ...Object.fromEntries(coachCardKinds.map(kind => [kind, coachProviderInfo[kind].label])) as Record<CoachModelKind, string>,
+  chatgpt: "OpenAI · ChatGPT plan", openai: "OpenAI · API key", ollama: "Ollama",
+};
+const cardTitle = (kind: CoachModelKind) => kind === "openai" ? "OpenAI" : cardLabel[kind];
+/** The card a provider lives on. */
+const cardOf = (kind: CoachModelKind): CoachModelKind => kind === "chatgpt" ? "openai" : kind;
+const openaiModes = [{ kind: "chatgpt", label: "Sign in with ChatGPT" }, { kind: "openai", label: "API key" }] as const;
 const marks: Record<CoachModelKind, { icon: ReactNode; className: string }> = {
   chatgpt: { icon: <MessageCircle />, className: "bg-provider-chatgpt" },
   openai: { icon: <Sparkles />, className: "bg-provider-openai" },
@@ -58,11 +69,20 @@ function configured(state: CoachDto): Configured[] {
 }
 
 function statusLine(kind: CoachModelKind, state: CoachDto): string {
+  if (kind === "openai") {
+    // The OpenAI card: whichever of the sign-in and the key are set up.
+    const parts = [state.chatgpt && `ChatGPT: ${statusLine("chatgpt", state)}`, state.providers.some(item => item.provider === "openai") && `API key: ${keyStatus("openai", state)}`].filter(Boolean);
+    return parts.length ? parts.join("; ") : "Sign in with ChatGPT or add an API key to set up";
+  }
   if (kind === "chatgpt") {
     if (!state.chatgpt) return "Sign in to use your ChatGPT plan";
     if (state.chatgpt.status === "expired") return "Sign-in expired";
     return [`Signed in${state.chatgpt.email ? ` as ${state.chatgpt.email}` : ""}`, state.chatgpt.model].join(" · ");
   }
+  return keyStatus(kind, state);
+}
+
+function keyStatus(kind: CoachModelKind, state: CoachDto): string {
   const saved = state.providers.find(item => item.provider === kind);
   if (!saved) return kind === "ollama" ? "Add a local model to set up" : "Add API key to set up";
   if (kind === "ollama") return ["Connected", saved.model, saved.baseUrl].filter(Boolean).join(" · ");
@@ -77,22 +97,31 @@ function CoachSettings({ userId, coach: state, open, setOpen }: { userId: string
     {set.length > 0 && <ActivePicker userId={userId} state={state} configured={set} />}
     <ul className="flex flex-col gap-2" aria-label="AI providers">
       {cardKinds.map(kind => {
-        const isOpen = open === kind;
-        const set_up = set.some(item => item.kind === kind);
+        // On the OpenAI card, `open` also says which way it connects: "chatgpt" (sign-in) or "openai" (key).
+        const isOpen = open !== null && cardOf(open) === kind;
+        const set_up = set.some(item => cardOf(item.kind) === kind);
+        const status = statusLine(kind, state);
+        // An unopened OpenAI card opens on the sign-in, unless only a key is set up.
+        const first = kind === "openai" && (state.chatgpt || !state.providers.some(item => item.provider === "openai")) ? "chatgpt" : kind;
+        const form = isOpen && open === "chatgpt"
+          ? <ChatgptSignIn key={JSON.stringify(state.chatgpt)} userId={userId} chatgpt={state.chatgpt} />
+          : <KeyForm key={JSON.stringify(state.providers.find(item => item.provider === kind) ?? null)} userId={userId} kind={kind as CoachProviderKind} saved={state.providers.find(item => item.provider === kind) ?? null} />;
         return <li key={kind} className="rounded-lg border border-border bg-card text-card-foreground" data-coach-card={kind}>
           <div className="flex items-center gap-3 px-3 py-2.5">
             <ProviderMark kind={kind} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{cardLabel[kind]}</p>
-              <p className={cn("truncate text-xs-plus", statusLine(kind, state) === "Sign-in expired" ? "text-destructive" : "text-muted-foreground")} data-coach-status={kind}>{statusLine(kind, state)}</p>
+              <p className="text-sm font-semibold">{cardTitle(kind)}</p>
+              <p className={cn("truncate text-xs-plus", status.includes("Sign-in expired") ? "text-destructive" : "text-muted-foreground")} data-coach-status={kind}>{status}</p>
             </div>
             <Button type="button" variant={set_up ? "outline" : "default"} size="sm" aria-expanded={isOpen} aria-controls={`coach-card-${kind}`}
-              data-coach-configure={kind} onClick={() => setOpen(isOpen ? null : kind)}>{isOpen ? "Close" : set_up ? "Manage" : "Configure"}</Button>
+              data-coach-configure={kind} onClick={() => setOpen(isOpen ? null : first)}>{isOpen ? "Close" : set_up ? "Manage" : "Configure"}</Button>
           </div>
-          {isOpen && <div id={`coach-card-${kind}`} className="border-t border-border-subtle px-3 py-3">
-            {kind === "chatgpt"
-              ? <ChatgptSignIn key={JSON.stringify(state.chatgpt)} userId={userId} chatgpt={state.chatgpt} />
-              : <KeyForm key={JSON.stringify(state.providers.find(item => item.provider === kind) ?? null)} userId={userId} kind={kind} saved={state.providers.find(item => item.provider === kind) ?? null} />}
+          {isOpen && <div id={`coach-card-${kind}`} className="flex flex-col gap-3 border-t border-border-subtle px-3 py-3">
+            {kind === "openai" && <ToggleGroup aria-label="Connect OpenAI with" variant="outline" className="w-full max-w-sm" value={[open ?? ""]}
+              onValueChange={([mode]) => { if (mode) setOpen(mode as CoachModelKind); }}>
+              {openaiModes.map(mode => <ToggleGroupItem key={mode.kind} value={mode.kind} className="min-w-0 flex-1" data-coach-mode={mode.kind}>{mode.label}</ToggleGroupItem>)}
+            </ToggleGroup>}
+            {form}
           </div>}
         </li>;
       })}

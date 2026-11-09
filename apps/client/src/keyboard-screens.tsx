@@ -117,15 +117,18 @@ function press(scope: ParentNode | null, selector: string) {
 /**
  * Goals ticket 17c: a control inside a Settings › Coach provider card; a
  * closed card is opened first (its Configure button), then the control is pressed.
+ * ChatGPT lives on the OpenAI card: its "Sign in with ChatGPT" / "API key" switch is picked too.
  */
-function coachCard(kind: string, selector: string) {
-  const card = document.querySelector(`[data-coach-settings] [data-coach-card="${kind}"]`);
+const coachCardOf = (kind: string) => document.querySelector(`[data-coach-settings] [data-coach-card="${kind === "chatgpt" ? "openai" : kind}"]`);
+function coachCard(kind: string, selector: string, steps = 2): false | void {
+  const card = coachCardOf(kind);
   if (!card) return false;
   if (press(card, selector) !== false) return;
-  const configure = card.querySelector<HTMLButtonElement>('[data-coach-configure][aria-expanded="false"]');
-  if (!configure) return false;
-  configure.click();
-  requestAnimationFrame(() => void press(card, selector));
+  const step = card.querySelector<HTMLButtonElement>('[data-coach-configure][aria-expanded="false"]')
+    ?? card.querySelector<HTMLButtonElement>(`[data-coach-mode="${kind}"][aria-pressed="false"]`);
+  if (!step || !steps) return false;
+  step.click();
+  requestAnimationFrame(() => void coachCard(kind, selector, steps - 1));
 }
 /** Opens the composer's Priority or Deadline popover (its button carries the field name). */
 function metadataField(field: "priority" | "deadline") {
@@ -270,7 +273,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // The dialog renders after navigation: wait for the card (up to 3 s), then open it and press the control.
       let tries = 0;
       const find = () => {
-        if (document.querySelector(`[data-coach-settings] [data-coach-card="${kind}"]`)) return void coachCard(kind, action ? `[data-coach-action="${action}"]` : "[data-coach-none]");
+        if (coachCardOf(kind)) return void coachCard(kind, action ? `[data-coach-action="${action}"]` : "[data-coach-none]");
         if (++tries < 30) setTimeout(find, 100);
       };
       find();
