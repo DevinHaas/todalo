@@ -8,6 +8,16 @@
 // liquid along that direction, swinging back and forth until it settles. Closing,
 // the bar gathers into one drop that flows back in, with the same slosh. The slosh
 // is its own motion, apart from the idle surface wobble.
+//
+// The liquid is thick (honey, not water), and the motion follows how such
+// liquids behave:
+// - Above an Ohnesorge number of about 0.77, a drop's shape no longer oscillates;
+//   it creeps back to round (aperiodic). So every spring here is overdamped
+//   (viscosity is the damping ratio, default above 1): nothing bounces or overshoots.
+// - Viscous friction eats the surface energy, so shapes relax slowly, on the
+//   visco-capillary time (viscosity × radius / surface tension), and drops merge slowly.
+// - A viscous neck thins linearly in time into a long thread, with no satellite drops.
+// - A broken viscous thread retracts by speeding up gradually, then slowing; no rebound.
 
 export type LiquidParams = {
   /** The button's radius, px. */
@@ -49,9 +59,9 @@ export type LiquidParams = {
 };
 
 export const liquidDefaults: LiquidParams = {
-  size: 24, duration: 0.45, tension: 1, viscosity: 0.6, lag: 0.7, spreadAt: 0.35, flow: 1,
-  wobbleSpeed: 1, wobbleAmp: 2.2, barWobble: 0.15, stretch: 1,
-  goo: 20, neck: 110, pinch: 3.5, satellites: 0, recoil: 1, settle: 1.4,
+  size: 24, duration: 0.45, tension: 1, viscosity: 1.4, lag: 0.8, spreadAt: 0.35, flow: 1,
+  wobbleSpeed: 0.45, wobbleAmp: 1.8, barWobble: 0.15, stretch: 1,
+  goo: 20, neck: 140, pinch: 1.2, satellites: 0, recoil: 1, settle: 1.2,
   gloss: 0.55, shadow: 1,
   blobColor: "#dc4c3e",
 };
@@ -74,8 +84,8 @@ type Body = Box & {
   /** Merges into this body and disappears once inside. */
   into?: Body;
 };
-/** `life`: seconds for the neck to drain to a third. */
-type Bridge = { a: Body; b: Body; age: number; base: number; life: number };
+/** `life`: seconds for the neck to thin away. `tail`: a broken thread still on `a`, of this fixed radius. */
+type Bridge = { a: Body; b: Body; age: number; base: number; life: number; tail?: number };
 /** One drawable: a rounded box (stretched along dir) or, with `segment`, a capsule a→b. */
 export type Shape = { x: number; y: number; w: number; h: number; r: number; wobble: number; mix: number; stretch: number; dx: number; dy: number; seed: number; segment: boolean };
 export type Phase = "closed" | "opening" | "open" | "closing";
@@ -155,7 +165,7 @@ export class LiquidSim {
   private shake(dx: number, dy: number, amount: number) {
     const length = Math.hypot(dx, dy);
     if (!length) return;
-    const speed = this.params.recoil * amount * this.params.size * 4;
+    const speed = this.params.recoil * amount * this.params.size * 2.2;
     this.home.svx += dx / length * speed;
     this.home.svy += dy / length * speed;
   }
@@ -187,7 +197,7 @@ export class LiquidSim {
     for (const satellite of this.satellites) {
       const into = satellite.into ?? home;
       satellite.target = round(into.x, into.y, into === home ? radius(satellite) : 0);
-      satellite.posOmega = omega * 1.1; satellite.sizeOmega = omega * 0.5;
+      satellite.posOmega = omega * 0.8; satellite.sizeOmega = omega * 0.4;
       satellite.targetMix = into.targetMix;
     }
 
@@ -198,7 +208,7 @@ export class LiquidSim {
     for (const bridge of this.bridges) bridge.age += dt;
     // A neck thins as it lengthens and as it drains; below the threshold it pinches off.
     for (const bridge of [...this.bridges]) {
-      if (this.neck(bridge).r >= p.pinch) continue;
+      if (bridge.tail || this.neck(bridge).r >= p.pinch) continue;
       this.bridges.splice(this.bridges.indexOf(bridge), 1);
       this.pinches++;
       const { ax, ay, bx, by } = this.neck(bridge);
@@ -214,17 +224,19 @@ export class LiquidSim {
       // The snap: the drop recoils, and the neck's stub runs back into the button with the energy.
       bridge.b.vj += 0.9 / Math.max(p.tension, 0.2);
       if (bridge.a === home) {
-        // The stub starts where the thread broke, a third of the way out, and runs home.
+        // A viscous thread breaks near the drop; the length left on the button retracts into it
+        // as a thread with a swollen tip, speeding up and then slowing (no rebound).
         const dx = bx - home.x, dy = by - home.y, length = Math.hypot(dx, dy) || 1;
-        const out = radius(home) + Math.max(0, length - radius(home) - radius(bridge.b)) / 3;
-        const stub = makeBody(round(home.x + dx / length * out, home.y + dy / length * out, Math.max(this.neck(bridge).r, p.pinch) * 1.8), home.mix, this.seed++);
-        stub.vx = -dx / length * p.size * 8; stub.vy = -dy / length * p.size * 8;
-        stub.into = home;
-        this.satellites.push(stub);
+        const out = radius(home) + Math.max(0, length - radius(home) - radius(bridge.b)) * 0.7;
+        const thread = Math.max(p.pinch, 1);
+        const tip = makeBody(round(home.x + dx / length * out, home.y + dy / length * out, thread * 2.2), home.mix, this.seed++);
+        tip.into = home;
+        this.satellites.push(tip);
+        this.bridges.push({ a: home, b: tip, age: 0, base: thread, life: 1, tail: thread });
       }
     }
     // Back home: the closing drop merges into the button, which takes the bump.
-    if (body && !opening && this.gathered && Math.hypot(body.x - home.x, body.y - home.y) < radius(home) * 0.6) {
+    if (body && !opening && this.gathered && Math.hypot(body.x - home.x, body.y - home.y) < radius(home) * 0.25) {
       this.body = null;
       this.shake(body.vx || home.x - body.x, body.vy || home.y - body.y, 1);
       this.bridges = this.bridges.filter(bridge => bridge.a !== body && bridge.b !== body);
@@ -238,6 +250,8 @@ export class LiquidSim {
       if (merged && into === home) this.shake(satellite.vx || home.x - satellite.x, satellite.vy || home.y - satellite.y, 1);
       return !merged && radius(satellite) >= 0.4;
     });
+    // A thread goes with its tip.
+    this.bridges = this.bridges.filter(bridge => !bridge.tail || this.satellites.includes(bridge.b));
     if (this.phase === "opening" && this.body && near(this.body, this.bar, Math.max(12, this.bar.w * 0.04))) this.phase = "open";
   }
 
@@ -245,11 +259,12 @@ export class LiquidSim {
   neck(bridge: Bridge) {
     const [ax, ay] = core(bridge.a, bridge.b.x, bridge.b.y);
     const [bx, by] = core(bridge.b, ax, ay);
+    if (bridge.tail) return { ax, ay, bx, by, r: bridge.tail };
     const ra = Math.min(bridge.a.r, radius(bridge.a));
     const rb = Math.min(bridge.b.r, radius(bridge.b));
     const gap = Math.max(0, Math.hypot(bx - ax, by - ay) - ra - rb);
     const p = this.params;
-    const r = Math.min(bridge.base, ra, rb) * p.neck / (p.neck + gap) * Math.exp(-bridge.age / Math.max(bridge.life, 0.05));
+    const r = Math.min(bridge.base, ra, rb) * p.neck / (p.neck + gap) * Math.max(0, 1 - bridge.age / Math.max(bridge.life, 0.05));
     return { ax, ay, bx, by, r };
   }
 
@@ -269,14 +284,14 @@ export class LiquidSim {
       [item.mix, item.vmix] = spring(item.mix, item.vmix, item.targetMix, item.sizeOmega * 2.5, 1, dt);
       // Braking along x squashes it wide, braking along y tall: the arrival wobble.
       const ax = (item.vx - vx0) / dt, ay = (item.vy - vy0) / dt;
-      if (item !== this.home) item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00002 * p.stretch * dt * 60;
-      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, zeta * 0.6, dt);
+      if (item !== this.home) item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00001 * p.stretch * dt * 60;
+      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, zeta, dt);
       item.j = Math.max(-0.35, Math.min(0.35, item.j));
       item.w = Math.max(0, item.w); item.h = Math.max(0, item.h); item.r = Math.max(0, item.r);
     }
-    // The slosh rings down over `settle` seconds (envelope e^-ζωt).
-    const home = this.home, sloshOmega = jiggleOmega * 0.8;
-    const sloshZeta = Math.min(0.9, 1 / (sloshOmega * Math.max(p.settle, 0.05)));
+    // The slosh creeps back without swinging (overdamped), its slow mode decaying over `settle` seconds.
+    const home = this.home, sloshZeta = Math.max(zeta, 1);
+    const sloshOmega = 1 / (Math.max(p.settle, 0.05) * (sloshZeta - Math.sqrt(sloshZeta * sloshZeta - 1)));
     [home.sx, home.svx] = spring(home.sx, home.svx, 0, sloshOmega, sloshZeta, dt);
     [home.sy, home.svy] = spring(home.sy, home.svy, 0, sloshOmega, sloshZeta, dt);
   }
