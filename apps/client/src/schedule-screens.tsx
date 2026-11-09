@@ -156,7 +156,7 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     key={ritual ? "check-in" : "plan"}
     groups={Object.fromEntries(planGroupOrder.map(group => [group, groups[group].map(rowOf)])) as Record<keyof typeof groups, PlanRowData[]>}
     projects={(projects.data ?? []).map(project => ({ id: project.id, name: project.name }))}
-    projectId={projectId} onProject={setProjectId} ritual={ritual} coach={coachDraft.panel} remember={`todalo:plan-closed:${userId}`} nowLoad={nowLoad}
+    projectId={projectId} onProject={setProjectId} ritual={ritual} coach={coachDraft.panel} remember={`todalo:plan-closed-v2:${userId}`} nowLoad={nowLoad}
     slots={{
       onComplete: withTask(writes.actions.complete), onOpen: withTask(openTask),
       onDragStart: (id, event) => { const task = find(id); if (task) drag.start(task, event); },

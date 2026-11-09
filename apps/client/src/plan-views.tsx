@@ -5,7 +5,7 @@
 // scheduled task dragged back onto the sidebar is unscheduled. While the
 // Check-in runs it heads the same sidebar. Pure view: the screen passes rows and writes.
 // Ticket 31: tasks without a date in Now, Next, Inbox (unsorted) and Later
-// sections; Inbox and Later start collapsed, and each user's choice is kept
+// sections; Next, Inbox and Later start collapsed, and each user's choice is kept
 // (localStorage). Now warns when it needs more time than the week has free.
 import { useEffect, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CalendarClock, CalendarDays, Check, ChevronDown, Ellipsis, GitBranch, Hash, Inbox, MessageSquare, Plus, X } from "lucide-react";
@@ -81,7 +81,7 @@ export interface PlanRowData {
   slot: string;
 }
 const groupTitles: Record<PlanGroup, string> = { overdue: "Overdue", today: "Today", week: "Next 7 days", now: "Now", next: "Next", inbox: "Inbox", later: "Later" };
-/** Ticket 31: the sections the user collapsed, under `key` (default: Inbox and Later). */
+/** Ticket 31: the sections the user collapsed, under `key` (default: Next, Inbox and Later). */
 function storedClosed(key: string | undefined): ReadonlySet<PlanGroup> {
   try {
     const saved: unknown = key ? JSON.parse(localStorage.getItem(key) ?? "null") : null;

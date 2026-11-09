@@ -38,10 +38,10 @@ describe("Now, Next, Inbox and Later (ticket 31)", () => {
     projects: [], projectId: undefined, onProject: () => {}, slots, nowLoad,
   }));
 
-  it("opens Now and Next, collapses the Inbox and Later, each with its count", () => {
+  it("opens Now, collapses Next, the Inbox and Later, each with its count", () => {
     const html = render({ minutes: 30, free: 600 });
     expect(html).toContain("Ship it");
-    expect(html).toContain("Tidy desk");
+    expect(html).not.toContain("Tidy desk");
     expect(html).not.toContain("Call mum");
     expect(html).not.toContain("Learn Rust");
     expect(html.indexOf('data-plan-group="now"')).toBeLessThan(html.indexOf('data-plan-group="next"'));

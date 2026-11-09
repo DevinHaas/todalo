@@ -213,7 +213,7 @@ export const servesGoal = (task: TaskDto, goalId: string, links: GoalLinks) =>
 export type PlanGroup = "overdue" | "today" | "week" | "now" | "next" | "inbox" | "later";
 export const planGroupOrder: readonly PlanGroup[] = ["overdue", "today", "week", "now", "next", "inbox", "later"];
 /** Ticket 31: the sections that start collapsed until the user opens them. */
-export const planGroupsClosed: readonly PlanGroup[] = ["inbox", "later"];
+export const planGroupsClosed: readonly PlanGroup[] = ["next", "inbox", "later"];
 /**
  * Where an open task waits to be planned: overdue (any earlier day, with or
  * without a time), due today or in the next 7 days without a time, or, without
