@@ -12,7 +12,8 @@ import { getOrganizationDestinations, moveTasks } from "./organization";
 import { getRitualSettings } from "./rituals";
 import { getCurrentSeason } from "./seasons";
 import { syncToCalendar } from "./tasks";
-import type { AcceptedWrite, DayContext, DraftRecord, DraftTask, NewDraft } from "./drafts";
+import { planDecline, type AcceptedWrite, type DayContext, type DraftRecord, type DraftTask, type NewDraft } from "./drafts";
+import type { DraftRevision } from "./coach-chat";
 
 const taskColumns = { id: tasks.id, title: tasks.title, status: tasks.status, projectId: tasks.projectId, parentId: tasks.parentId, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, updatedAt: tasks.updatedAt };
 
@@ -145,4 +146,20 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
 export async function settleOverflow(userId: string, draft: DraftRecord) {
   const done = draft.items.every(item => item.state !== "pending");
   await db.update(coachDrafts).set({ overflow: null, ...(done && { status: "closed" as const }) }).where(and(eq(coachDrafts.id, draft.id), eq(coachDrafts.userId, userId)));
+}
+
+/**
+ * The Coach revised pending items of an open draft from the chat: new times
+ * and names in one batch; dropped ones (with what goes under them) declined as
+ * the Decline button does, closing the draft when nothing is left.
+ * ponytail: two statements when both kinds come at once (no interactive transactions).
+ */
+export async function reviseDraft(userId: string, draft: DraftRecord, revisions: readonly DraftRevision[]) {
+  const writes: BatchItem<"pg">[] = revisions.filter(revision => !revision.drop && (revision.startAt || revision.rename)).map(revision => db.update(coachDraftItems)
+    .set({ ...(revision.startAt && { startAt: revision.startAt, endAt: revision.endAt ?? null }), ...(revision.rename && { title: revision.rename }) })
+    .where(and(eq(coachDraftItems.id, revision.itemId), eq(coachDraftItems.userId, userId), eq(coachDraftItems.draftId, draft.id), eq(coachDraftItems.state, "pending"))));
+  if (writes.length) await atomically(writes);
+  const dropped = revisions.filter(revision => revision.drop).map(revision => revision.itemId);
+  const declined = dropped.length ? planDecline(draft, dropped) : [];
+  if (declined !== "missing" && declined.length) await resolveDraft(userId, draft, { accepted: [], declined });
 }

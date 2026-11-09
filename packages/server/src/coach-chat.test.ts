@@ -18,7 +18,7 @@ const reply = (items: unknown[], text = "Sure.") => JSON.stringify({ reply: text
 describe("parseChatReply", () => {
   it.each([
     ["no items: just the reply", reply([]), "Sure.", 0],
-    ["a valid add: a draft", reply([item("add", { task: "t2", day: "2026-02-10", start: "08:00", minutes: 30 })]), "Sure.", 1],
+    ["a valid add: a draft", reply([item("add", { task: "t2", day: "2026-02-10", start: "08:00", minutes: 30 })]), "Sure.\n\nProposed: 1 added. Accept with ✓.", 1],
     ["an unknown ref: reply with a note", reply([item("add", { task: "t9", day: "2026-02-10", start: "08:00", minutes: 30 })]), /^Sure\.\n\n\(.*cannot add t9.*Ask again/, null],
     ["removing primary-goal work: reply with a note", reply([item("remove", { task: "t1" })]), /primary-goal work/, null],
   ])("%s", (_, content, text, count) => {

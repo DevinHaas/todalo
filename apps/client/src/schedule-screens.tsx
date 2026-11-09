@@ -202,7 +202,8 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   // Ticket 22: a draft from the Coach chat shows dashed too (it is decided in the chat).
   // Ticket 23: and a planning session's timed tasks (its milestones have no time).
   // Ticket 29: only schedule changes are blocks (sub-tasks and attachments show in lists and the task sheet).
-  const chatPending = drafts.data?.drafts.filter(item => item.kind === "chat" || item.kind === "plan").flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
+  // Every other open draft's timed changes show too (a day draft's item the Coach moved to Wednesday shows on Wednesday).
+  const chatPending = drafts.data?.drafts.filter(item => item.id !== draft?.id).flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
   return {
     // Ticket 30: a move that only changes the project or section leaves the schedule as it is.
     blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" || item.place?.keepsDate ? [] : [{

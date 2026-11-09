@@ -3,7 +3,7 @@ import { bandLabels, seasonStatuses, type StatusInputs } from "@todalo/server/go
 import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
   CHAT_CONTEXT_TURNS, CHAT_HISTORY_LIMIT, chatExtras, chatFacts, chatInput, chatMessages, chatSchema, parseChatReply, toChatMessageDto,
-  type ChatGoalNote, type ChatMessageRecord, type CoachChatDto, type NewChatMessage,
+  type ChatGoalNote, type ChatMessageRecord, type CoachChatDto, type DraftRevision, type NewChatMessage,
 } from "@todalo/server/coach-chat";
 import {
   acceptsImages, documentKind, documentProblem, kindOf, toCoachDocumentDto,
@@ -11,7 +11,7 @@ import {
 } from "@todalo/server/coach-documents";
 import { extractText } from "@todalo/server/coach-documents-text";
 import { AttachmentError, readUploadForm, uploadedFiles } from "@todalo/server/attachment-http";
-import { localParts, toDraftDto, weekPlan, type DayContext, type DraftRecord, type NewDraft } from "@todalo/server/drafts";
+import { draftCurrent, localParts, toDraftDto, weekPlan, type DayContext, type DraftRecord, type NewDraft } from "@todalo/server/drafts";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
 import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { writeUser } from "./project-routes";
@@ -32,6 +32,10 @@ export interface CoachChatStore {
   clear(userId: string): Promise<void>;
   /** The drafts' only write (closes the open chat draft of the same day). */
   saveDraft(userId: string, draft: NewDraft): Promise<DraftRecord>;
+  /** The open drafts with every item, whose pending changes the Coach may revise. */
+  drafts(userId: string): Promise<DraftRecord[]>;
+  /** Applies the Coach's revisions to one open draft's pending items (new times or names; dropped ones declined). */
+  revise(userId: string, draft: DraftRecord, revisions: DraftRevision[]): Promise<void>;
   /** Ticket 24: the user's Patterns, sent with every message. */
   patterns?(userId: string): Promise<PatternRecord[]>;
   /** Ticket 29: the session's documents, oldest first; clear() removes them too. */
@@ -132,12 +136,15 @@ export function createCoachChatRoutes(store: CoachChatStore) {
       const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
       const at = now();
       const today = localParts(at, zone).day;
-      const [context, notes, earlier, patterns, files] = await Promise.all([store.dayContext(userId), goalNotes(userId, zone, at), store.messages(userId, CHAT_CONTEXT_TURNS), store.patterns?.(userId) ?? [], store.documents(userId)]);
+      const [context, notes, earlier, patterns, files, open] = await Promise.all([
+        store.dayContext(userId), goalNotes(userId, zone, at), store.messages(userId, CHAT_CONTEXT_TURNS), store.patterns?.(userId) ?? [], store.documents(userId), store.drafts(userId),
+      ]);
       // The seven days from today: what the Coach can see and draft.
       const plan = weekPlan({ context, zone, now: at, start: today });
       // Ticket 29: images go only to models that read them; the rest get the extracted text.
       const images = acceptsImages(saved);
-      const extras = chatExtras(plan, context, files);
+      const current = open.filter(row => draftCurrent(row, today));
+      const extras = chatExtras(plan, context, files, current);
       const attached = images ? files.filter(file => kindOf(file) === "image").map(file => ({ mediaType: file.mediaType, data: file.content })) : [];
       let answer: ReturnType<typeof parseChatReply>;
       try {
@@ -148,6 +155,11 @@ export function createCoachChatRoutes(store: CoachChatStore) {
         if (error instanceof CoachModelError) return failed(error.message, coachErrorDto(error, saved.provider));
         if (error instanceof Error && error.name === "AbortError") return failed("The Coach took too long. Try again.");
         throw error;
+      }
+      // A revision applies to its pending draft at once (still a proposal, accepted as usual).
+      for (const target of current) {
+        const revisions = answer.revisions.filter(revision => revision.draftId === target.id);
+        if (revisions.length) await store.revise(userId, target, revisions);
       }
       const draft = answer.draft && await store.saveDraft(userId, { kind: "chat", period: today, ...answer.draft });
       // The reply a millisecond after the question, so the order survives equal clocks.

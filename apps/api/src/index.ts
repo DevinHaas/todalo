@@ -227,6 +227,8 @@ const app = createApi(dependencies)
   append: coachChat.appendChatMessages,
   clear: coachChat.clearChat,
   saveDraft: drafts.saveDraft,
+  drafts: drafts.getOpenDrafts,
+  revise: drafts.reviseDraft,
   patterns: coachPatterns.getPatterns,
   documents: coachChat.getChatDocuments,
   addDocuments: coachChat.addChatDocuments,

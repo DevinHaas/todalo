@@ -248,8 +248,10 @@ export function coachMutations(transport: CoachTransport, cache: QueryClient, us
 }
 
 /**
- * Ticket 19: drafting and deciding. A decision refetches the tasks (accepted
- * items changed them) and the drafts, also after a refusal (TASK_CHANGED).
+ * Ticket 19: drafting and deciding. A decision refetches the drafts, also after
+ * a refusal (TASK_CHANGED); an accept also everything the accepted items may
+ * change (tasks on Today and the calendar, projects, a task's page, goals and
+ * seasons, the rituals), but not the Coach's other reads, which may call the model.
  */
 export function draftMutations(transport: CoachTransport, cache: QueryClient, userId: string) {
   const replace = (draft: DraftDto | null, id?: string) => cache.setQueryData<DraftsDto>(coachKeys.drafts(userId), current => {
@@ -280,7 +282,10 @@ export function draftMutations(transport: CoachTransport, cache: QueryClient, us
         replace(result.draft, draftId);
         return result;
       } finally {
-        await Promise.all([cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) }), accept && cache.invalidateQueries({ queryKey: taskKeys.today(userId) })]);
+        await Promise.all([
+          cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) }),
+          accept && cache.invalidateQueries({ queryKey: taskKeys.user(userId), predicate: query => query.queryKey[2] !== "coach" }),
+        ]);
       }
     },
     /** Ticket 28: the overflow answered; Yes adds its day draft. Tasks change only when that draft is accepted. */

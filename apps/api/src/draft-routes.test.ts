@@ -513,6 +513,20 @@ describe("complete, delete and move (ticket 30)", () => {
     expect(tasks.get("run")!.status).toBe("done");
     expect(tasks.get("report")!.projectId).toBeNull();
   });
+
+  it("accepting declines the other open drafts' pending changes to the same tasks, so none shows outdated", async () => {
+    drafts.push({ id: "day1", userId: "alice", status: "open", kind: "day", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { ...base, id: "day1-meeting", op: "move", taskId: "meeting", title: "meeting", startAt: new Date("2026-02-09T15:00:00Z"), endAt: new Date("2026-02-09T16:00:00Z") },
+      { ...base, id: "day1-new", op: "add", taskId: null, title: "Stretch", seenUpdatedAt: null, startAt: new Date("2026-02-09T17:00:00Z"), endAt: new Date("2026-02-09T17:15:00Z") },
+    ] });
+    await accept(["c2-day"]);
+    const day = drafts.find(row => row.id === "day1")!;
+    expect(day.items.map(row => [row.id, row.state])).toEqual([["day1-meeting", "declined"], ["day1-new", "pending"]]);
+    expect(day.status).toBe("open");
+    // Declining touches no other draft.
+    await call("POST", "/coach/drafts/c2/decline", { user: "alice", body: { itemIds: ["c2-done"] } });
+    expect(day.items[1]!.state).toBe("pending");
+  });
 });
 
 describe("Update schedule on a recommendation (ticket 21)", () => {

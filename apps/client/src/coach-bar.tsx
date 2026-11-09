@@ -69,7 +69,9 @@ function Bar({ userId }: { userId: string }) {
       if (reportCoachError(result.error, { retry: () => send.mutate(body) })) { setReplyOpen(false); return; }
       if (result.message) { setMessage(result.message); setReplyOpen(false); return; }
       setChat({ messages: result.messages, ...(result.documents && { documents: result.documents }) });
-      if (result.draft) { void cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) }); setReviewing(false); }
+      // A reply may also have revised another draft's pending changes: the views show them at once.
+      void cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) });
+      if (result.draft) setReviewing(false);
       setText(current => current === body ? "" : current);
     },
     onError: () => setReplyOpen(false),

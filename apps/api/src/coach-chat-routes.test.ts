@@ -15,7 +15,9 @@ let stored: (ChatMessageRecord & { userId: string })[];
 let drafts: (NewDraft & { id: string; userId: string })[];
 let calls: { messages: CoachMessage[]; schema?: string }[];
 let documents: (CoachDocumentRecord & { userId: string })[];
-type Facts = { goals: { ref: string; title: string; target: string; status: string }[]; scheduled: { ref: string; title: string }[]; toPlan: { ref: string; title: string }[]; days: { day: string }[]; tasks: { ref: string; title: string }[]; documents: { ref: string; name: string; text?: string; note?: string }[] };
+/** Open drafts the chat may revise (the real store's getOpenDrafts). */
+let opened: (DraftRecord & { userId: string })[];
+type Facts = { pending: { ref: string; op: string; title: string; day?: string; start?: string; minutes?: number }[]; goals: { ref: string; title: string; target: string; status: string }[]; scheduled: { ref: string; title: string }[]; toPlan: { ref: string; title: string }[]; days: { day: string }[]; tasks: { ref: string; title: string }[]; documents: { ref: string; name: string; text?: string; note?: string }[] };
 /** The fake model's reply; it sees the facts it was sent. */
 let reply: (facts: Facts, messages: CoachMessage[]) => string;
 
@@ -33,6 +35,7 @@ beforeEach(() => {
   drafts = [];
   calls = [];
   documents = [];
+  opened = [];
   task("alice", "run-id", { title: "Run" });
   task("alice", "meeting-id", { title: "Meeting", dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") });
   task("bob", "bobs-id", { title: "Bob's task" });
@@ -70,6 +73,17 @@ const app = createCoachChatRoutes({
   documents: async (userId) => documents.filter(row => row.userId === userId),
   addDocuments: async (userId, rows) => { rows.forEach(row => documents.push({ ...row, userId, id: `doc${documents.length + 1}`, createdAt: clock })); },
   deleteDocument: async (userId, id) => { documents = documents.filter(row => !(row.userId === userId && row.id === id)); },
+  drafts: async (userId) => opened.filter(row => row.userId === userId),
+  // The production batch's effect: new times and names, dropped items declined.
+  revise: async (userId, draft, revisions) => {
+    const items = opened.find(row => row.id === draft.id && row.userId === userId)!.items;
+    for (const revision of revisions) {
+      const row = items.find(entry => entry.id === revision.itemId)!;
+      if (revision.drop) row.state = "declined";
+      if (revision.startAt) Object.assign(row, { startAt: revision.startAt, endAt: revision.endAt });
+      if (revision.rename) row.title = revision.rename;
+    }
+  },
   saveDraft: async (userId, draft) => {
     const id = `d${drafts.length + 1}`;
     drafts.push({ ...draft, id, userId });
@@ -260,5 +274,50 @@ describe("chat access", () => {
     expect((await call("POST", "/coach/chat", { user: "alice", body: { message: "Hi", userId: "bob" } })).status).toBe(400);
     expect((await call("POST", "/coach/chat", { cookie: "alice", origin: "http://localhost:5173", body: { message: "Hi" } })).status).toBe(200);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("revising pending changes from the chat", () => {
+  // The user's open day draft proposes a new task today 14:30-15:30.
+  const title = "Work on QR Bill for Dimetra";
+  beforeEach(() => {
+    opened.push({ id: "day1", userId: "alice", kind: "day", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { id: "day1-qr", op: "add", taskId: null, title, startAt: new Date("2026-02-09T13:30:00Z"), endAt: new Date("2026-02-09T14:30:00Z"), goalId: null, reason: "", seenUpdatedAt: null, state: "pending" },
+    ] });
+  });
+  const qr = () => opened[0]!.items[0]!;
+
+  it("moves the pending item itself (no second draft), so it shows at its new time, and says so", async () => {
+    reply = (facts) => answer("Sure, Wednesday afternoon.", [item("move", { task: facts.pending.find(row => row.title === title)!.ref, day: "2026-02-11", start: "14:00", minutes: 60 })]);
+    const result = await send("move it to Wednesday");
+    const facts = JSON.parse(calls[0]!.messages[1]!.content.replace(/^Facts: /, "")) as Facts;
+    expect(facts.pending).toEqual([{ ref: "c1", op: "add", title, day: "2026-02-09", start: "14:30", minutes: 60 }]);
+    expect(result.draft).toBeNull();
+    expect(drafts).toEqual([]);
+    expect(qr()).toMatchObject({ startAt: new Date("2026-02-11T13:00:00Z"), endAt: new Date("2026-02-11T14:00:00Z"), state: "pending" });
+    expect(result.messages.at(-1)!.content).toBe(`Sure, Wednesday afternoon.\n\nUpdated the plan: "${title}" moved to Wed 14:00.`);
+  });
+
+  it("treats a new task titled as a pending one as that task again, and marks what is only proposed", async () => {
+    reply = () => answer("Here you go.", [
+      item("add", { title: "  work on QR bill   for dimetra ", day: "2026-02-11", start: "12:00", minutes: 120 }),
+      item("add", { title: "Call the bank", day: "2026-02-10", start: "09:00", minutes: 30 }),
+    ], "Bank call.");
+    const result = await send("Put two hours on the QR bill Wednesday at noon and call the bank tomorrow");
+    expect(qr()).toMatchObject({ title, startAt: new Date("2026-02-11T11:00:00Z"), endAt: new Date("2026-02-11T13:00:00Z"), state: "pending" });
+    expect(result.draft!.items.map(row => [row.op, row.title])).toEqual([["add", "Call the bank"]]);
+    expect(result.messages.at(-1)!.content).toBe(`Here you go.\n\nUpdated the plan: "${title}" moved to Wed 12:00.\nProposed: 1 added. Accept with ✓.`);
+  });
+
+  it("checks a revision by the draft rules, and drops one when asked", async () => {
+    reply = () => answer("Moved.", [item("move", { task: "c1", day: "2026-02-09", start: "10:15", minutes: 30 })]); // over the 10:00 meeting
+    expect((await send("Move it to 10:15")).messages.at(-1)!.content).toMatch(/overlap/);
+    reply = () => answer("Done.", [item("add", { title: "Clash", day: "2026-02-09", start: "14:45", minutes: 30 })]); // over the pending block
+    expect((await send("Add a clash")).draft).toBeNull();
+    expect(qr()).toMatchObject({ startAt: new Date("2026-02-09T13:30:00Z"), state: "pending" });
+    reply = () => answer("Dropped it.", [item("remove", { task: "c1" })]);
+    const result = await send("Drop it");
+    expect(qr().state).toBe("declined");
+    expect(result.messages.at(-1)!.content).toBe(`Dropped it.\n\nUpdated the plan: "${title}" dropped.`);
   });
 });

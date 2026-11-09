@@ -86,8 +86,24 @@ export function createDraftRoutes(store: DraftStore) {
       decision = { accepted: [], declined };
     }
     await store.resolve(userId, draft, decision);
+    if (accept) await declineStale(userId, draft.id, decision.accepted);
     const [after] = await store.drafts(userId, id);
     return { draft: after ? toDraftDto(after) : null, ...(message && { message }) } satisfies DraftDayDto;
+  }
+
+  /**
+   * An accepted change to an existing task makes the other open drafts' pending
+   * changes to that task outdated: they are declined, so no view keeps showing them.
+   */
+  async function declineStale(userId: string, draftId: string, accepted: readonly AcceptedWrite[]) {
+    const changed = new Set(accepted.flatMap(write => write.taskId && write.op !== "subtask" && write.op !== "attach" ? [write.taskId] : []));
+    if (!changed.size) return;
+    for (const other of await store.drafts(userId)) {
+      if (other.id === draftId) continue;
+      const stale = other.items.filter(item => item.state === "pending" && item.taskId && item.op !== "subtask" && item.op !== "attach" && changed.has(item.taskId)).map(item => item.id);
+      const declined = stale.length ? planDecline(other, stale) : [];
+      if (declined !== "missing" && declined.length) await store.resolve(userId, other, { accepted: [], declined });
+    }
   }
 
   /**
