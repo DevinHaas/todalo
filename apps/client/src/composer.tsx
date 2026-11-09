@@ -184,16 +184,19 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     };
     const key = JSON.stringify(task);
     if (operation.current?.key !== key) operation.current = { key, id: operationId() };
-    setPending(true); setError(null);
-    try {
-      const created = operation.current.id;
-      await onCreate?.({ id: created, ...task }, direction);
-      if (task.placement) setPosition({ edge: direction, anchorId: created });
-      reset();
-      input.current?.focus();
-    } catch (reason) {
+    // Optimistic: the row shows at once (tasks.ts draftTask) and the write retries on its own,
+    // so the composer resets without waiting for the server. A create that still fails is
+    // toasted with Retry; its title comes back here if the field is still empty.
+    setError(null);
+    const created = operation.current.id;
+    const typed = title;
+    Promise.resolve(onCreate?.({ id: created, ...task }, direction)).catch((reason: unknown) => {
+      setTitle(current => current || typed);
       setError(inlineError(reason));
-    } finally { setPending(false); }
+    });
+    if (task.placement) setPosition({ edge: direction, anchorId: created });
+    reset();
+    input.current?.focus();
   }
 
   const today = schedule.date?.toDateString() === new Date().toDateString();

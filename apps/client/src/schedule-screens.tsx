@@ -54,7 +54,7 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
       <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog mt-[60vh] -translate-y-1/2">
         <Composer startOpen projectId={projectId} dueDate={() => slot.start.toISOString()} dueDateEnd={() => slot.end.toISOString()}
           destination={dayDestination(slot.start, now)}
-          onCancel={() => setSlot(null)} onCreate={async (created) => { await writes.create.mutateAsync(created); setSlot(null); }} />
+          onCancel={() => setSlot(null)} onCreate={(created) => { setSlot(null); return writes.create.mutateAsync(created); }} />
       </div>
     </div>}
     {planner.overlay}
