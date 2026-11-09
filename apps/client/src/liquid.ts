@@ -66,7 +66,7 @@ export type LiquidParams = {
 };
 
 export const liquidDefaults: LiquidParams = {
-  speed: 1.6, size: 24, duration: 0.45, tension: 1, viscosity: 1.4, lag: 0.8, spreadAt: 0.35, flow: 1,
+  speed: 2.6, size: 24, duration: 0.45, tension: 1, viscosity: 1.4, lag: 0.8, spreadAt: 0.35, flow: 1,
   wobbleSpeed: 0.45, wobbleAmp: 1.8, barWobble: 0.15, stretch: 1,
   goo: 20, neck: 7, pinch: 1.2, satellites: 0, recoil: 1.5, settle: 1.2,
   gloss: 0.55, shadow: 0.45, shine: 0.7, shineLap: 6,

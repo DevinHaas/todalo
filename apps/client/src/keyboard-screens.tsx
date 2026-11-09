@@ -537,7 +537,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // Ticket 22: the toolbar's Coach button exists only with a provider connected.
       "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; toggleCoachSidebar(); },
       "coach.bar": () => { if (!document.querySelector("[data-coach-bar]")) return false; focusCoachBar(); },
-      "coach.attach": () => press(document.querySelector("[data-coach-bar]"), '[data-coach-bar-action="attach"]'),
+      // The bar may be resting as the liquid button: open it, then pick the files.
+      "coach.attach": () => { if (!document.querySelector("[data-coach-bar]")) return false; focusCoachBar(); return press(document.querySelector("[data-coach-bar]"), '[data-coach-bar-action="attach"]'); },
       "coach.chat-clear": () => press(document.querySelector("[data-coach-chat]"), '[data-coach-chat-action="clear"]'),
       // Ticket 23: the goal page shown, else the season's first primary goal.
       "coach.planning": () => {

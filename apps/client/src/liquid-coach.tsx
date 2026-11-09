@@ -126,16 +126,17 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
   }, [open]);
 
   const size = params.size * 2;
-  // The bar stays centred and clear of the button on both sides.
-  // Farther from the button than the goo reaches (plus the slosh), or the two would melt together.
-  const room = (size + 16 + params.goo + 16) * 2;
+  // The bar keeps clear of the button (farther than the goo reaches, or the two would melt
+  // together): centred while the column has room on both sides, else just left of the button.
+  const room = size + 16 + params.goo + 16;
+  const width = `min(var(--spacing-page), 100% - ${room}px)`;
   return <LiquidActive.Provider value={active}>
-    <div ref={host} data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
-      className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    <div ref={host} data-coach-bar="" data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
+      className="ui pointer-events-none sticky bottom-0 z-[25] flex pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       onKeyDown={(event) => { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); onOpenChange(false); } }}>
       {/* Behind the content, above the page: the liquid. */}
       {active && <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 size-full" />}
-      <div ref={bar} inert={!open} data-liquid-bar="" style={{ width: `min(var(--spacing-page), calc(100% - ${room}px))` }}
+      <div ref={bar} inert={!open} data-liquid-bar="" style={{ width: `calc(${width})`, marginLeft: `max(0px, min((100% - ${width}) / 2, 100% - ${width} - ${room}px))` }}
         className={cn("relative flex flex-col", open && "pointer-events-auto",
           !active && "origin-bottom-right transition-[opacity,scale] duration-200 ease-out", !active && !open && "scale-90")}>
         {/* The composer moves with the liquid (clipTo); what floats above it (reply, review) fades in once it has arrived. */}

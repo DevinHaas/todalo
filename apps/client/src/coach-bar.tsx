@@ -11,11 +11,16 @@
 // tasks? This can't be undone."); a change whose task changed since is left out.
 // Ticket 32: a "Tidy up" chip (shown while stale tasks wait) sends TIDY_PROMPT;
 // the Weekly review sends the same through askCoach.
+// The liquid Coach button (liquid-coach.tsx): closed, the bar rests as a living drop
+// in the corner; opening (the button, o a, focusCoachBar, askCoach) flows it out into
+// the bar, and the button becomes its ×. A pending draft's pill stays beside the
+// closed button, so changes waiting for a decision are never hidden.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, Image, Paperclip, Sparkles, X } from "lucide-react";
 import { coach, coachReads, goalReads, reads } from "./runtime";
 import { coachKeys, draftCounts, draftMutations, type CoachChatDto, type CoachDocumentDto, type DraftDto } from "./coach";
+import type { LiquidParams } from "./liquid";
 import { draftOps, type DraftOp } from "../../../packages/server/src/drafts";
 import { documentProblem } from "../../../packages/server/src/coach-documents";
 import { TIDY_PROMPT, staleTasks } from "../../../packages/server/src/task-dto";
@@ -25,6 +30,8 @@ import { goalColorValue } from "./goals";
 import { localZone } from "./seasons";
 import { modalOpen } from "./keyboard";
 import { reportCoachError } from "./coach-errors";
+import { LiquidCoach } from "./liquid-coach";
+import { LiquidPanel, useLiquidPanelToggle, useLiquidParams } from "./liquid-panel";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   Button, Hint, List, Spinner, Textarea, cn,
@@ -33,23 +40,33 @@ import {
 /** Accepted in the picker (the server checks again, by kind). */
 const ACCEPT = ".pdf,.docx,.txt,.md,.markdown,.csv,.png,.jpg,.jpeg,.gif,.webp,application/pdf,text/*,image/png,image/jpeg,image/gif,image/webp";
 
-let state = { focus: 0, prompt: null as string | null, send: false };
+let state = { focus: 0, prompt: null as string | null, send: false, open: false };
 const watchers = new Set<() => void>();
 const barState = { get: () => state, subscribe: (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; } };
-/** Focuses the bar's field; `prompt` pre-fills it (a recommendation's "Chat with coach") for the user to edit and send. */
-export const focusCoachBar = (prompt?: string) => { state = { focus: state.focus + 1, prompt: prompt ?? null, send: false }; watchers.forEach(watcher => watcher()); };
-/** Ticket 32: sends `prompt` from the bar as if typed (the Weekly review's "Tidy up"). */
-export const askCoach = (prompt: string) => { state = { focus: state.focus + 1, prompt, send: true }; watchers.forEach(watcher => watcher()); };
+const update = (next: Partial<typeof state>) => { state = { ...state, ...next }; watchers.forEach(watcher => watcher()); };
+/** Opens the bar and focuses its field; `prompt` pre-fills it (a recommendation's "Chat with coach") for the user to edit and send. */
+export const focusCoachBar = (prompt?: string) => update({ focus: state.focus + 1, prompt: prompt ?? null, send: false, open: true });
+/** Ticket 32: opens the bar and sends `prompt` as if typed (the Weekly review's "Tidy up"). */
+export const askCoach = (prompt: string) => update({ focus: state.focus + 1, prompt, send: true, open: true });
+/** Back to the button in the corner. */
+const closeCoachBar = () => update({ open: false });
 
 /** Only with a Coach provider connected: without one there is no bar. */
 export function CoachBar({ userId }: { userId: string }) {
   const connected = Boolean(useQuery(coachReads.provider(userId)).data?.provider);
-  return connected ? <Bar userId={userId} /> : null;
+  // Dev builds: ?liquid or Alt+Shift+L shows the liquid's parameter panel.
+  const [params, setParams] = useLiquidParams();
+  const [panel, setPanel] = useLiquidPanelToggle();
+  if (!connected) return null;
+  return <>
+    <Bar userId={userId} params={params} />
+    {import.meta.env.DEV && panel && <LiquidPanel params={params} onChange={setParams} onClose={() => setPanel(false)} />}
+  </>;
 }
 
-function Bar({ userId }: { userId: string }) {
+function Bar({ userId, params }: { userId: string; params: LiquidParams }) {
   const cache = useQueryClient();
-  const { focus, prompt, send: sending } = useSyncExternalStore(barState.subscribe, barState.get);
+  const { focus, prompt, send: sending, open } = useSyncExternalStore(barState.subscribe, barState.get);
   const chat = useQuery(coachReads.chat(userId));
   const drafts = useQuery(coachReads.drafts(userId));
   const goals = useQuery(goalReads.list(userId));
@@ -143,11 +160,29 @@ function Bar({ userId }: { userId: string }) {
     return () => window.removeEventListener("keydown", close);
   }, [replyOpen, reviewing]);
   const submit = () => { const body = text.trim(); if (body && !send.isPending) send.mutate(body); };
+  // The pending changes: above the field while open, beside the button while closed (never hidden).
+  const pill = draft && <div role="group" aria-label="Coach changes" data-coach-draft={draft.id}
+        className="flex items-center gap-2 rounded-full border border-border bg-background py-1 pr-1 pl-3 shadow-popover">
+        <span aria-hidden="true" className="flex -space-x-1">{(colors.length ? colors : [null]).map((color, index) =>
+          <span key={index} className={cn("size-2.5 rounded-full border border-background", !color && "bg-muted-foreground")} style={color ? { backgroundColor: color } : undefined} />)}</span>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-1 text-left text-sm" aria-expanded={reviewing} data-coach-bar-action="review"
+          onClick={() => { setReviewing(current => !current); if (!open) update({ open: true }); }}>
+          <span className="truncate" data-draft-counts="">{draftCounts(draft.items) || "Tasks that don't fit"}</span>
+          <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", reviewing && "rotate-180")} />
+          <span className="sr-only">{reviewing ? "Hide" : "Review"} each change</span>
+        </button>
+        {pending.length > 0 && <>
+          <Button type="button" variant="ghost" size="icon" aria-label="Decline all changes" title="Decline all" disabled={decide.isPending}
+            onClick={() => onDecide(false)} data-draft-action="decline-all"><X /></Button>
+          <Button type="button" size="icon" className="rounded-full" aria-label="Accept all changes" title="Accept all" disabled={decide.isPending}
+            onClick={() => onDecide(true)} data-draft-action="accept-all">{decide.isPending ? <Spinner /> : <Check />}</Button>
+        </>}
+      </div>;
   const files = (list: FileList | null | undefined) => [...list ?? []];
 
   // Centred over the main column: a right sidebar inside the page (Plan, rituals; gap-4 beside it) is left out.
-  return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" data-coach-bar="">
-    <div className="pointer-events-auto relative flex w-full max-w-(--spacing-page) flex-col">
+  return <LiquidCoach open={open} params={params} docked={!open && pill ? pill : undefined}
+    onOpenChange={(next) => { if (next) focusCoachBar(); else closeCoachBar(); }}>
       {/* The reply, review and pill float above the composer, so they never take height from the page (the calendar). */}
       <div className="absolute inset-x-0 bottom-full flex flex-col gap-2 pb-2 empty:hidden">
       {replyOpen && (send.isPending || reply) && <section aria-label="Coach reply" aria-live="polite" data-coach-reply=""
@@ -161,26 +196,12 @@ function Bar({ userId }: { userId: string }) {
         <ChangeGroups draft={draft} deciding={decide.isPending || overflow.isPending}
           onDecide={onDecide} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
       </div>}
-      {draft && <div role="group" aria-label="Coach changes" data-coach-draft={draft.id}
-        className="flex items-center gap-2 rounded-full border border-border bg-background py-1 pr-1 pl-3 shadow-popover">
-        <span aria-hidden="true" className="flex -space-x-1">{(colors.length ? colors : [null]).map((color, index) =>
-          <span key={index} className={cn("size-2.5 rounded-full border border-background", !color && "bg-muted-foreground")} style={color ? { backgroundColor: color } : undefined} />)}</span>
-        <button type="button" className="flex min-w-0 flex-1 items-center gap-1 text-left text-sm" aria-expanded={reviewing} data-coach-bar-action="review"
-          onClick={() => setReviewing(open => !open)}>
-          <span className="truncate" data-draft-counts="">{draftCounts(draft.items) || "Tasks that don't fit"}</span>
-          <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", reviewing && "rotate-180")} />
-          <span className="sr-only">{reviewing ? "Hide" : "Review"} each change</span>
-        </button>
-        {pending.length > 0 && <>
-          <Button type="button" variant="ghost" size="icon" aria-label="Decline all changes" title="Decline all" disabled={decide.isPending}
-            onClick={() => onDecide(false)} data-draft-action="decline-all"><X /></Button>
-          <Button type="button" size="icon" className="rounded-full" aria-label="Accept all changes" title="Accept all" disabled={decide.isPending}
-            onClick={() => onDecide(true)} data-draft-action="accept-all">{decide.isPending ? <Spinner /> : <Check />}</Button>
-        </>}
-      </div>}
+      {open && pill}
       </div>
-      <form aria-label="Talk to the Coach" data-coach-bar-composer="" data-dragging={dragging || undefined}
-        className={cn("flex flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 shadow-popover", dragging && "border-dashed border-brand")}
+      {/* The liquid draws the composer's surface (and clips it to its outline) while it is active. */}
+      <form aria-label="Talk to the Coach" data-coach-bar-composer="" data-liquid-target="" data-dragging={dragging || undefined}
+        className={cn("flex flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 shadow-popover in-data-[liquid=on]:border-transparent in-data-[liquid=on]:bg-transparent in-data-[liquid=on]:shadow-none",
+          dragging && "border-dashed border-brand in-data-[liquid=on]:border-brand")}
         onSubmit={(event) => { event.preventDefault(); submit(); }}
         onDragOver={(event: DragEvent) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); setDragging(true); }}
         onDragLeave={(event: DragEvent) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
@@ -204,16 +225,16 @@ function Bar({ userId }: { userId: string }) {
             onChange={(event) => setText(event.target.value)}
             onPaste={(event: ClipboardEvent) => { const pasted = files(event.clipboardData.files); if (pasted.length) { event.preventDefault(); attach(pasted); } }}
             onKeyDown={(event) => {
-              // Enter sends, Shift+Enter is a new line; Escape closes the reply first, then leaves the field.
+              // Enter sends, Shift+Enter is a new line; Escape closes the reply first, then the bar.
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
-              if (event.key === "Escape") { event.preventDefault(); if (replyOpen || reviewing) { setReplyOpen(false); setReviewing(false); } else field.current?.blur(); }
+              // With nothing above it open, Escape goes on to the liquid, which closes the bar.
+              if (event.key === "Escape" && (replyOpen || reviewing)) { event.preventDefault(); setReplyOpen(false); setReviewing(false); }
             }} />
           <Button type="submit" size="icon" className="size-control!" aria-label="Send" title="Send (Enter)" disabled={!text.trim() || send.isPending} data-coach-bar-action="send">
             {send.isPending ? <Spinner /> : <ArrowUp />}
           </Button>
         </div>
       </form>
-    </div>
     {deleting && draft && <AlertDialog open onOpenChange={(open) => { if (!open) setDeleting(null); }}>
       <AlertDialogContent data-coach-delete-confirm="">
         <AlertDialogHeader><AlertDialogTitle>{deleting.count === 1 ? "Delete 1 task?" : `Delete ${deleting.count} tasks?`}</AlertDialogTitle>
@@ -225,7 +246,7 @@ function Bar({ userId }: { userId: string }) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>}
-  </div>;
+  </LiquidCoach>;
 }
 
 /** One group per kind of change, in the draft's order ("Added 4", "Moved 1"…). */
