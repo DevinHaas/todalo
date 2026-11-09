@@ -288,22 +288,42 @@ fn callback_target(head: &[u8]) -> Option<String> {
         .then(|| target.to_owned())
 }
 
+/// The callback page's styles: the app's theme colors, light and dark.
+/// ponytail: duplicated in apps/api/src/coach-routes.ts (callbackPage); keep the two in sync.
+const CALLBACK_STYLE: &str = ":root{color-scheme:light dark;--bg:#f7f7f7;--card:#fff;--fg:#202020;--muted:#666;--border:#e6e6e6;--ok:#058527;--bad:#d1453b;--brand:#dc4c3e}\
+@media (prefers-color-scheme:dark){:root{--bg:#1e1e1e;--card:#262626;--fg:#e6e6e6;--muted:#a3a3a3;--border:#3d3d3d;--ok:#25b84c;--bad:#ff7066;--brand:#de4c4a}}\
+*{box-sizing:border-box}\
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:1.5rem;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased}\
+main{width:100%;max-width:26rem;padding:2.25rem 2rem 2rem;background:var(--card);border:1px solid var(--border);border-radius:1rem;box-shadow:0 1px 2px #0000000d,0 12px 32px #00000014;text-align:center}\
+.icon{display:grid;place-items:center;width:3rem;height:3rem;margin:0 auto 1.25rem;border-radius:999px;color:var(--tone);background:color-mix(in srgb,var(--tone) 14%,transparent)}\
+.icon svg{width:1.5rem;height:1.5rem}\
+h1{margin:0 0 .5rem;font-size:1.25rem;font-weight:600;letter-spacing:-.01em}\
+p{margin:0;color:var(--muted)}\
+.brand{margin-top:1.75rem;font-size:.8125rem;font-weight:700;letter-spacing:.02em;color:var(--brand)}";
+
 /// The page the browser shows after coming back.
 async fn respond(stream: &mut tokio::net::TcpStream, signed_in: bool) {
     use tokio::io::AsyncWriteExt;
-    let (title, text) = if signed_in {
+    let (title, text, tone, path) = if signed_in {
         (
             "ChatGPT is connected",
             "The Coach now runs on your ChatGPT plan. You can close this tab and return to todalo.",
+            "ok",
+            "M20 6 9 17l-5-5",
         )
     } else {
         (
             "ChatGPT sign-in failed",
             "Return to todalo to see why and try again.",
+            "bad",
+            "M18 6 6 18M6 6l12 12",
         )
     };
     let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>todalo</title><body style=\"font:16px system-ui;margin:3rem auto;max-width:32rem;padding:0 1rem\"><h1 style=\"font-size:1.25rem\">{title}</h1><p>{text}</p></body>"
+        "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>todalo</title><style>{style}</style>\
+<body><main style=\"--tone:var(--{tone})\"><div class=\"icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"{path}\"/></svg></div>\
+<h1>{title}</h1><p>{text}</p><div class=\"brand\">todalo</div></main></body>",
+        style = CALLBACK_STYLE
     );
     let reply = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
