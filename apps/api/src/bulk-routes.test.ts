@@ -69,6 +69,7 @@ describe("bulk routes", () => {
       ["/bulk/metadata", { ids: ["a"] }],
       ["/bulk/metadata", { ids: ["a"], priority: 5 }],
       ["/bulk/metadata", { ids: ["a"], labelIds: ["bob-label"] }],
+      ["/bulk/metadata", { ids: ["a"], horizon: "someday" }],
       ["/bulk/move", { ids: ["a"], projectId: null, sectionId: "s" }],
       ["/tasks/a/reorder", { anchorId: "a", position: "after" }],
       ["/tasks/a/reorder", { anchorId: "b", position: "middle" }],
@@ -88,6 +89,9 @@ describe("bulk routes", () => {
       .toEqual({ status: 200, body: { completed: ["a"], changed: ["b"] } });
     expect(await json(await post("/bulk/metadata", { ids: ["a", "b"], deadline: null }))).toEqual({ status: 200, body: { ids: ["a", "b"] } });
     expect((await post("/bulk/metadata", { ids: ["a"], deadline: "2026-10-10T00:00:00.000Z" })).status).toBe(200);
+    // Goals ticket 31: Now, Next, Later, or unsorted again.
+    expect((await post("/bulk/metadata", { ids: ["a", "b"], horizon: "later" })).status).toBe(200);
+    expect((await post("/bulk/metadata", { ids: ["a"], horizon: null })).status).toBe(200);
     expect((await post("/bulk/move", { ids: ["a"], projectId: "work", sectionId: null })).status).toBe(200);
     expect((await post("/bulk/move", { ids: ["a"], projectId: "bob-project", sectionId: null })).status).toBe(404);
     expect(await json(await post("/tasks/b/reorder", { anchorId: "a", position: "before" }))).toEqual({ status: 200, body: { id: "b" } });
@@ -97,6 +101,8 @@ describe("bulk routes", () => {
       `complete:${TAP}:a@2026-10-05T09:00:00.000Z,b@none`,
       `metadata:a,b:{"deadline":null}`,
       `metadata:a:{"deadline":"2026-10-10T00:00:00.000Z"}`,
+      `metadata:a,b:{"horizon":"later"}`,
+      `metadata:a:{"horizon":null}`,
       "move:a:work",
       "reorder:b:before:a:-",
       "reorder:b:end:-:in_progress",

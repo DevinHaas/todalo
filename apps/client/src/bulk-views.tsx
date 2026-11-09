@@ -3,7 +3,8 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { dateInputValue, localInstant, type TaskDto } from "./tasks";
+import { dateInputValue, horizonNames, localInstant, type TaskDto } from "./tasks";
+import { horizons, type Horizon } from "../../../packages/server/src/task-dto";
 import type { BulkCompletionDto, BulkMetadataChange, Destination, ReorderPosition } from "./bulk";
 import type { DestinationsDto } from "./organization";
 import { focusDialog, MoveDialog } from "./organization-views";
@@ -66,7 +67,7 @@ export interface BulkActions {
   onRetryDestinations(): void;
 }
 
-type Field = "priority" | "labels" | "deadline";
+type Field = "priority" | "labels" | "deadline" | "horizon";
 // A bulk 404 writes nothing: some selected task was deleted or moved out of reach meanwhile.
 // A toasted failure (toasts.ts) is not repeated inline.
 const message = (reason: unknown) => toasted(reason) ? null : reason instanceof AccountTransportError && reason.code === "TASK_NOT_FOUND"
@@ -106,6 +107,7 @@ export function SelectionToolbar({ selection, tasks, actions }: { selection: Sel
       <button type="button" className="button small outline" disabled={pending} data-bulk="priority" onClick={() => setDialog({ field: "priority", tasks: selected })}>Priority</button>
       <button type="button" className="button small outline" disabled={pending} data-bulk="labels" onClick={() => setDialog({ field: "labels", tasks: selected })}>Labels</button>
       <button type="button" className="button small outline" disabled={pending} data-bulk="deadline" onClick={() => setDialog({ field: "deadline", tasks: selected })}>Deadline</button>
+      <button type="button" className="button small outline" disabled={pending} data-bulk="horizon" onClick={() => setDialog({ field: "horizon", tasks: selected })}>Horizon</button>
       <button type="button" className="button small outline" disabled={pending} data-bulk="move" onClick={() => { setError(null); setDialog({ field: "move", tasks: selected }); }}>Move</button>
       <button type="button" className="button small outline" disabled={pending} onClick={() => void run(() => actions.clearDates(selected))}>Clear date</button>
       <button type="button" className="button small ghost" onClick={selection.stop}>Clear selection</button>
@@ -119,7 +121,7 @@ export function SelectionToolbar({ selection, tasks, actions }: { selection: Sel
   </>;
 }
 
-const titles: Record<Field, string> = { priority: "Choose priority", labels: "Edit labels", deadline: "Choose deadline" };
+const titles: Record<Field, string> = { priority: "Choose priority", labels: "Edit labels", deadline: "Choose deadline", horizon: "Choose horizon" };
 
 /** Legacy bulk picker: one field, seeded from the first selected task; only that field is saved. */
 function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose }: {
@@ -130,11 +132,13 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
   const [priority, setPriority] = useState(first?.priority ?? 4);
   const [deadline, setDeadline] = useState(dateInputValue(first?.deadline ?? null));
   const [labelIds, setLabelIds] = useState(first?.labelIds ?? []);
+  // Goals ticket 31: "" is unsorted.
+  const [horizon, setHorizon] = useState<Horizon | "">(first?.horizon ?? "");
   const title = `${titles[field]}${tasks.length > 1 ? ` for ${tasks.length} tasks` : ""}`;
   function submit(event: FormEvent) {
     event.preventDefault();
     if (pending || (field === "labels" && !labels)) return;
-    void onSave(field === "priority" ? { priority } : field === "labels" ? { labelIds: labelIds.filter(id => labels!.some(label => label.id === id)) } : { deadline: deadline ? localInstant(deadline) : null });
+    void onSave(field === "priority" ? { priority } : field === "horizon" ? { horizon: horizon || null } : field === "labels" ? { labelIds: labelIds.filter(id => labels!.some(label => label.id === id)) } : { deadline: deadline ? localInstant(deadline) : null });
   }
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
@@ -143,6 +147,9 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
       {field === "labels" && !labels ? <p role="status" className="state">Loading labels…</p> : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>
         {field === "priority" && <label>Priority<select autoFocus value={priority} onChange={(event) => setPriority(Number(event.target.value))}>
           {[1, 2, 3, 4].map(value => <option key={value} value={value}>Priority {value}{value === 1 ? " — highest" : value === 4 ? " — normal" : ""}</option>)}
+        </select></label>}
+        {field === "horizon" && <label>Horizon<select autoFocus value={horizon} onChange={(event) => setHorizon(event.target.value as Horizon | "")}>
+          {horizons.map(value => <option key={value} value={value}>{horizonNames[value]}</option>)}<option value="">Not sorted</option>
         </select></label>}
         {field === "deadline" && <label>Deadline<input autoFocus type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} /></label>}
         {field === "labels" && labels && <fieldset className="label-choices"><legend>Labels</legend>

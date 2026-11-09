@@ -23,7 +23,20 @@ export interface TaskDto {
   updatedAt: string | null;
   /** List indicator; absent from copies cached before comments existed. */
   commentCount?: number;
+  /** Goals ticket 31: Now, Next or Later; null (or absent, older copies) is unsorted. See effectiveHorizon. */
+  horizon?: Horizon | null;
+  /** Ticket 31: the Plan's "oldest first". */
+  createdAt?: string | null;
 }
+
+/** Goals ticket 31: where a task without a time waits (CONTEXT.md: horizon). */
+export const horizons = ["now", "next", "later"] as const;
+export type Horizon = typeof horizons[number];
+/**
+ * Ticket 31: a task is sorted once it has a horizon or a project; a sorted task
+ * without a horizon counts as Next. null: unsorted (an Inbox task without one).
+ */
+export const effectiveHorizon = (task: { horizon?: Horizon | null; projectId: string | null }): Horizon | null => task.horizon ?? (task.projectId ? "next" : null);
 
 export interface RecurrenceDto { n: number; unit: "day" | "week" | "month" | "year"; basedOn: "scheduled" | "completed"; until: string | null }
 
@@ -39,6 +52,8 @@ export interface TaskRecord {
   recurrence?: { n: number; unit: RecurrenceDto["unit"]; basedOn: RecurrenceDto["basedOn"]; until?: DateLike } | null;
   updatedAt?: DateLike;
   commentCount?: number;
+  horizon?: Horizon | null;
+  createdAt?: DateLike;
 }
 
 /** Allow-lists fields: user IDs, calendar event IDs and sort internals never leave the server. */
@@ -49,5 +64,6 @@ export function toTaskDto(task: TaskRecord): TaskDto {
     deadline: iso(task.deadline), completedAt: iso(task.completedAt), labelIds: [...task.labelIds],
     recurrence: task.recurrence ? { n: task.recurrence.n, unit: task.recurrence.unit, basedOn: task.recurrence.basedOn, until: iso(task.recurrence.until) } : null,
     updatedAt: iso(task.updatedAt), commentCount: task.commentCount ?? 0,
+    horizon: task.horizon ?? null, createdAt: iso(task.createdAt),
   };
 }

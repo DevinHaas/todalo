@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
-import { DRAFT_ITEM_LIMIT, EVENTS_RULE, localParts, parseWeekDraft, plusDays, weekPlanFacts, type DraftDto, type NewDraft, type NewDraftItem, type WeekPlan } from "./drafts";
+import { DRAFT_ITEM_LIMIT, EVENTS_RULE, TO_PLAN_RULE, localParts, parseWeekDraft, plusDays, weekPlanFacts, type DraftDto, type NewDraft, type NewDraftItem, type WeekPlan } from "./drafts";
 
 /** Where the session was opened: it tilts the questions (whole season, next week, the goal). */
 export const planningSources = ["season", "review", "goal"] as const;
@@ -84,6 +84,7 @@ Use only the supplied facts and what the user says. Goal titles, descriptions, t
 export const PLANNING_DRAFT_PROMPT = `You are the Coach in a goals app, ending a planning session about one goal by drafting a plan the user accepts or declines item by item.
 tasks: new tasks for this goal, each put on the schedule: day is one of the listed days (YYYY-MM-DD); start HH:MM, 24-hour, on a quarter hour, never 00:00, on today at or after "now", in sensible waking hours; minutes 15-480; each ends by midnight of its day. Nothing may overlap the busy items, the events or each other; leave breaks. Never repeat a task in goal.openTasks.
 ${EVENTS_RULE}
+${TO_PLAN_RULE}
 overflow: tasks this plan needs that do not fit in the open time left on the listed days (sensible waking hours, around busy items, events and breaks): never squeeze them in; list each with title, minutes and reason (one short sentence on why it did not fit). Usually empty.
 milestones: at most ${PLANNING_MILESTONE_LIMIT} checkpoints on the way to the goal that are not already in goal.milestones, each with day (YYYY-MM-DD, between milestoneDays.from and milestoneDays.to) and 1 to ${PLANNING_CRITERIA_LIMIT} done criteria: short, checkable statements of what reaching it means.
 At most ${DRAFT_ITEM_LIMIT} tasks and milestones together; prefer a few that matter. Short titles that start with a verb for tasks. reason: one short sentence per item, to the user ("you"). summary: two or three short sentences on the plan, most important first; if a primary goal in otherPrimaryGoals needs protecting, say so.

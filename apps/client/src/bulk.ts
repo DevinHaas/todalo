@@ -3,7 +3,7 @@ import type { MutationOptions, QueryClient, QueryFilters } from "@tanstack/react
 import { optimistic, type Write } from "./optimistic";
 import { planReorder, type BulkCompletionDto, type BulkMetadataChange, type ReorderInput, type ReorderPosition, type TaskStatus } from "../../../packages/server/src/bulk-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { operationId as newOperationId, taskChanges, taskKeys, treeOrder, type TaskDto } from "./tasks";
+import { horizonNames, operationId as newOperationId, taskChanges, taskKeys, treeOrder, type TaskDto } from "./tasks";
 import type { Feedback } from "./feedback";
 import { confirmingCriteria } from "./goals";
 
@@ -125,6 +125,8 @@ const ids = ({ tasks }: BulkSelection) => tasks.map(task => task.id);
 export const selectionName = ({ tasks }: BulkSelection) => tasks.length === 1 ? `"${tasks[0]!.title}"` : `${tasks.length} tasks`;
 const priorityName = (change: BulkMetadataChange, selection: BulkSelection) =>
   change.priority !== undefined ? `set ${selectionName(selection)} to priority ${change.priority}`
+    // Goals ticket 31.
+    : change.horizon !== undefined ? `move ${selectionName(selection)} to ${change.horizon ? horizonNames[change.horizon] : "unsorted"}`
     : change.labelIds !== undefined ? `change the labels of ${selectionName(selection)}` : `change the deadline of ${selectionName(selection)}`;
 
 /**

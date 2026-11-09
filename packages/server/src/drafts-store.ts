@@ -15,7 +15,11 @@ import { syncToCalendar } from "./tasks";
 import { planDecline, type AcceptedWrite, type DayContext, type DraftRecord, type DraftTask, type NewDraft } from "./drafts";
 import type { DraftRevision } from "./coach-chat";
 
-const taskColumns = { id: tasks.id, title: tasks.title, status: tasks.status, projectId: tasks.projectId, parentId: tasks.parentId, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, updatedAt: tasks.updatedAt };
+// Ticket 31: horizon, priority and createdAt rank the tasks to plan.
+const taskColumns = {
+  id: tasks.id, title: tasks.title, status: tasks.status, projectId: tasks.projectId, parentId: tasks.parentId, dueDate: tasks.dueDate, dueDateEnd: tasks.dueDateEnd, updatedAt: tasks.updatedAt,
+  horizon: tasks.horizon, priority: tasks.priority, createdAt: tasks.createdAt,
+};
 
 export async function getDayContext(userId: string): Promise<DayContext> {
   // Ticket 28: the events Today shows (enabled calendars, accounts showing events, no echoes of our own tasks).
@@ -97,6 +101,8 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
   for (const write of accepted) {
     const times = { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd };
     if (write.op === "complete" || write.op === "delete") (write.op === "complete" ? completed : deleted).push(write.taskId!);
+    // Ticket 31: a new horizon only (its times stay).
+    else if (write.op === "horizon") writes.push(db.update(tasks).set({ horizon: write.horizon ?? null, updatedAt: new Date() }).where(and(eq(tasks.id, write.taskId!), eq(tasks.userId, userId))));
     else if (write.place?.keepsDate) continue;
     else if (write.op === "subtask") {
       const parentId = parentOf(write);

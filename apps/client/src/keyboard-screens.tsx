@@ -358,6 +358,10 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "task.priority-3": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 3 } })),
       "task.priority-4": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { priority: 4 } })),
       "task.priority": () => picker("priority", "priority"),
+      // Goals ticket 31: h then n, x or l.
+      "task.horizon-now": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { horizon: "now" } })),
+      "task.horizon-next": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { horizon: "next" } })),
+      "task.horizon-later": () => rowWrite(tasks => latest.current.metadata.mutateAsync({ tasks, change: { horizon: "later" } })),
       "task.labels": () => picker("labels", "labels"),
       "task.goals": () => picker(null, "goals"),
       // Absent until the task has a linked goal: the sheet opens without focusing a field.

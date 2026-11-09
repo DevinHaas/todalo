@@ -36,7 +36,7 @@ describe("dayPlan", () => {
 
   it("lists what the Plan sidebar lists, goal tasks first (primary before secondary), with refs instead of IDs", () => {
     expect(facts.toPlan.map(entry => [entry.title, entry.waiting, entry.goal])).toEqual([
-      ["run", "overdue", "g1"], ["side", "due today", "g2"], ["later", "due this week", null], ["inbox", "inbox", null],
+      ["run", "overdue", "g1"], ["side", "due today", "g2"], ["later", "due this week", null], ["in-project", "next", null], ["inbox", "inbox", null],
     ]);
     expect(facts.goals).toEqual([{ ref: "g1", title: "Become fit", tier: "primary" }, { ref: "g2", title: "Side project", tier: "secondary" }]);
     expect(JSON.stringify(facts)).not.toContain("p-side");
@@ -45,6 +45,28 @@ describe("dayPlan", () => {
   it("shows today's timed tasks in local time; ritual items are fixed", () => {
     expect(facts).toMatchObject({ day: "2026-02-09", weekday: "Monday", now: "09:10" });
     expect(facts.scheduled.map(entry => [entry.title, entry.start, entry.minutes, entry.fixed])).toEqual([["check-in", "09:00", 30, true], ["meeting", "10:00", 60, false]]);
+  });
+});
+
+describe("toPlan by horizon (ticket 31)", () => {
+  const ranked = context([
+    task("unsorted", { createdAt: at("2026-01-01T00:00:00Z") }),
+    task("parked", { horizon: "later", projectId: "p-other" }),
+    task("parked, due", { horizon: "later", dueDate: at("2026-02-08T23:00:00Z") }),
+    task("project next", { projectId: "p-other", createdAt: at("2026-01-20T00:00:00Z") }),
+    task("older next", { horizon: "next", createdAt: at("2026-01-10T00:00:00Z") }),
+    task("now", { horizon: "now", projectId: "p-other" }),
+    task("p1 inbox", { priority: 1 }),
+    task("side now", { horizon: "now", projectId: "p-side" }),
+    task("run", { horizon: "later" }),
+    task("step", { horizon: "now", parentId: "now" }),
+  ]);
+  const rows = (plan: { toPlan: Map<string, { task: DraftTask; waiting: string }> }) => [...plan.toPlan.values()].map(entry => [entry.task.id, entry.waiting]);
+
+  it("adds Now, then Next (a project task without a horizon), then the Inbox's unsorted; Later only once due; goal tier, then priority first", () => {
+    const expected = [["side now", "now"], ["p1 inbox", "inbox"], ["parked, due", "due today"], ["now", "now"], ["older next", "next"], ["project next", "next"], ["unsorted", "inbox"]];
+    expect(rows(dayPlan({ now, zone, context: ranked }))).toEqual(expected);
+    expect(rows(weekPlan({ now, zone, context: ranked, start: "2026-02-09" }))).toEqual(expected.map(([id, waiting]) => [id, waiting === "due today" ? "due" : waiting]));
   });
 });
 

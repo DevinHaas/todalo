@@ -95,6 +95,8 @@ const app = createDraftRoutes({
       // Ticket 30: the app's own complete, delete and move (moveTasks) in production.
       if (write.op === "complete") { tasks.get(write.taskId!)!.status = "done"; continue; }
       if (write.op === "delete") { tasks.delete(write.taskId!); continue; }
+      // Ticket 31: only the horizon changes.
+      if (write.op === "horizon") { Object.assign(tasks.get(write.taskId!)!, { horizon: write.horizon, updatedAt: clock }); continue; }
       if (write.place) tasks.get(write.taskId!)!.projectId = write.place.projectId;
       if (write.place?.keepsDate) continue;
       const id = write.taskId ?? `new-${write.itemId}`;
@@ -478,6 +480,34 @@ describe("sub-tasks and attachments (ticket 29)", () => {
     expect(attachments).toEqual([]);
     const after = await (await decide(false, ["c1-new"])).json() as DraftDayDto;
     expect(after.draft!.items.filter(row => row.state === "declined").map(row => row.id)).toEqual(["c1-new", "c1-step"]);
+  });
+});
+
+describe("horizons (ticket 31)", () => {
+  const base = { goalId: null, reason: "Parked.", startAt: new Date("2026-02-09T08:10:00Z"), endAt: null, seenUpdatedAt: v1, state: "pending" as const };
+  beforeEach(() => {
+    drafts.push({ id: "c3", userId: "alice", status: "open", kind: "chat", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { ...base, id: "c3-later", op: "horizon", taskId: "run", title: "run", horizon: "later" },
+      { ...base, id: "c3-now", op: "horizon", taskId: "admin", title: "admin", horizon: "now" },
+    ] });
+  });
+
+  it("lists the horizon, and accepting sets only the horizon (the times stay)", async () => {
+    const listed = await (await call("GET", `/coach/drafts?timeZone=${zone}`, { user: "alice" })).json() as DraftsDto;
+    expect(listed.drafts.find(row => row.id === "c3")!.items[0]).toMatchObject({ op: "horizon", horizon: "later" });
+    const before = { ...tasks.get("admin")! };
+    expect(await (await call("POST", "/coach/drafts/c3/accept", { user: "alice", body: {} })).json()).toEqual({ draft: null });
+    expect(tasks.get("run")!.horizon).toBe("later");
+    expect(tasks.get("admin")).toMatchObject({ horizon: "now", dueDate: before.dueDate, dueDateEnd: before.dueDateEnd });
+    expect(pushed).toEqual([]);
+  });
+
+  it("a task edited since rejects only its re-sort", async () => {
+    tasks.get("run")!.updatedAt = clock;
+    const result = await (await call("POST", "/coach/drafts/c3/accept", { user: "alice", body: {} })).json() as DraftDayDto;
+    expect(result.message).toBe("1 change was left out: its task changed since the Coach drafted.");
+    expect(tasks.get("run")!.horizon).toBeUndefined();
+    expect(tasks.get("admin")!.horizon).toBe("now");
   });
 });
 

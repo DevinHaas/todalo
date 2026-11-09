@@ -5,14 +5,15 @@
 // keeps its own routes (task.menu, task.copy-url, task.unschedule, 1–4, …).
 import { useState, type PointerEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CalendarMinus, CalendarPlus, CircleCheck, Flag, Link2, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import { ArrowUpDown, CalendarMinus, CalendarPlus, CircleCheck, Flag, Link2, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { reads } from "./runtime";
 import { useTaskWrites } from "./task-writes";
 import { useBulkWrites } from "./bulk-screens";
 import { copyTaskLink } from "./links";
 import { inlineError } from "./toasts";
 import { durationOf, isTimed, nextSlot, scheduledDetails, unscheduledDetails } from "./schedule";
-import { operationId } from "./tasks";
+import { horizonNames, operationId } from "./tasks";
+import { horizons, type Horizon } from "../../../packages/server/src/task-dto";
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuRadioGroup, ContextMenuRadioItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent,
   ContextMenuSubTrigger, ContextMenuTrigger,
@@ -52,6 +53,16 @@ export function TaskContextMenu({ userId, onOpen, children }: { userId: string; 
           <ContextMenuSubContent className="ui">
             <ContextMenuRadioGroup value={task.priority} onValueChange={(value) => run(metadata.mutateAsync({ tasks: [task], change: { priority: value as number } }))}>
               {[1, 2, 3, 4].map(priority => <ContextMenuRadioItem key={priority} value={priority}><Flag className={priorityTone[priority]} />Priority {priority}</ContextMenuRadioItem>)}
+            </ContextMenuRadioGroup>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        {/* Goals ticket 31: Now, Next, Later; "Not sorted" is the Inbox's unsorted (a project task counts as Next). */}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger><ArrowUpDown />Horizon</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="ui">
+            <ContextMenuRadioGroup value={task.horizon ?? ""} onValueChange={(value) => run(metadata.mutateAsync({ tasks: [task], change: { horizon: (value as Horizon | "") || null } }))}>
+              {horizons.map(horizon => <ContextMenuRadioItem key={horizon} value={horizon} data-horizon={horizon}>{horizonNames[horizon]}</ContextMenuRadioItem>)}
+              <ContextMenuRadioItem value="">{task.projectId ? "Next (project default)" : "Not sorted"}</ContextMenuRadioItem>
             </ContextMenuRadioGroup>
           </ContextMenuSubContent>
         </ContextMenuSub>

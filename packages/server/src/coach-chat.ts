@@ -8,6 +8,8 @@
 // syllabus), sub-tasks, and attaches documents to tasks; all of it is a draft.
 // Ticket 30: when the user asks, it also completes, deletes and moves any open
 // task (to a day with or without a time, and/or another project or section).
+// Ticket 31: and sets a task's horizon (Now, Next, Later): "horizon", labelled
+// "Re-sorted" in the bar. Later tasks are never proposed unless named.
 // Revising pending drafts (2026-11-09): the Coach sees the pending changes of
 // the user's open drafts ("c1"…) and revises one in place when asked (a new
 // time, a new name, or dropped), instead of proposing it a second time; a new
@@ -19,8 +21,9 @@ import { MAX_SUBTASK_DEPTH } from "@todalo/db/task-parent-validation";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { documentFacts, type CoachDocumentDto, type CoachDocumentRecord } from "./coach-documents";
 import { zonedTaskDate } from "./dates";
+import { effectiveHorizon, horizons } from "./task-dto";
 import {
-  CHAT_DRAFT_ITEM_LIMIT, DRAFT_ITEM_LIMIT, EVENTS_RULE, OVERFLOW_RULE, draftCounts, draftOps, localParts, overflowSchema, parseWeekDraft, plusDays, weekDraftSchema, weekPlanFacts,
+  CHAT_DRAFT_ITEM_LIMIT, DRAFT_ITEM_LIMIT, EVENTS_RULE, OVERFLOW_RULE, TO_PLAN_RULE, draftCounts, draftOps, localParts, overflowSchema, parseWeekDraft, plusDays, weekDraftSchema, weekPlanFacts,
   type DayContext, type DraftDto, type DraftItemRecord, type DraftPlace, type DraftRecord, type DraftTask, type NewDraft, type NewDraftItem, type WeekPlan,
 } from "./drafts";
 
@@ -113,7 +116,8 @@ export function chatFacts(plan: WeekPlan, notes: ReadonlyMap<string, ChatGoalNot
       const note = notes.get(plan.goals.get(goal.ref)!.goalId);
       return { ...goal, target: note?.target.slice(0, 500) ?? "", status: note?.status ?? "" };
     }),
-    tasks: [...extras?.others ?? []].map(([ref, task]) => ({ ref, title: task.title.slice(0, 200) })),
+    // Ticket 31: a Later task is parked: never proposed unless the user names it.
+    tasks: [...extras?.others ?? []].map(([ref, task]) => ({ ref, title: task.title.slice(0, 200), ...(effectiveHorizon(task) === "later" && { later: true }) })),
     documents: documentFacts([...extras?.documents.values() ?? []], images),
     // Ticket 30: where "move" may put a task.
     projects: [...extras?.places ?? []].filter(([ref]) => ref.startsWith("p")).map(([ref, place]) => ({
@@ -139,8 +143,10 @@ Schedule items follow the week draft rules: "add" puts a task from toPlan (task 
 A new task due on a day without a time (e.g. each assignment of a syllabus): "add" with task "", a short title, day its due day (today up to a year ahead), start "" and minutes 0.
 "subtask" adds a new sub-task (short title) under parent; "attach" attaches a document (document = its ref, title "") to parent. parent is a task ref (scheduled, toPlan or tasks) or "#N" for the N-th item of this list when that is a new task you add above it. For both use day "", start "" and minutes 0. Turn a document into tasks or sub-tasks only when the user asks; attach a document to the task it belongs to when that helps.
 Only when the user asks for it, never on your own: "complete" marks an open task done (a repeating one moves on to its next date); "delete" deletes a task with its sub-tasks; for both task is its ref (scheduled, toPlan or tasks), day "", start "" and minutes 0. "move" also puts a task on a day without a time (start "" and minutes 0) and/or in another project or section: project = a projects ref or "inbox", section = a section ref of that project ("" for none); with day "" and start "" it keeps its date. Never complete, delete or move fixed tasks.
-title is "" unless the task or sub-task is new; goal is a goal ref only for a new task, else ""; parent, document, project and section are "" unless the op needs them. At most ${CHAT_DRAFT_ITEM_LIMIT} items in all. reason: one short sentence per item. summary: one or two sentences on the draft ("" without items).
+"horizon" sorts an open task (task = its ref; day "", start "" and minutes 0) into horizon "now" (the next things to plan), "next" or "later" (parked, out of the way): only when the user asks to sort, re-sort, park or prioritise tasks. Tasks with later: true are parked: never plan or propose them unless the user names them.
+title is "" unless the task or sub-task is new; goal is a goal ref only for a new task, else ""; parent, document, project, section and horizon are "" unless the op needs them. At most ${CHAT_DRAFT_ITEM_LIMIT} items in all. reason: one short sentence per item. summary: one or two sentences on the draft ("" without items).
 ${EVENTS_RULE}
+${TO_PLAN_RULE}
 ${OVERFLOW_RULE} Overflow is part of the draft: say so in reply when you leave tasks out.`;
 
 const { items: weekItems } = weekDraftSchema.schema.properties as Record<string, { items: { properties: Record<string, unknown>; required: string[] } }>;
@@ -154,8 +160,8 @@ export const chatSchema: CoachSchema = {
         type: "array",
         items: {
           ...weekItems!.items,
-          properties: { ...weekItems!.items.properties, op: { type: "string", enum: [...draftOps] }, parent: { type: "string" }, document: { type: "string" }, project: { type: "string" }, section: { type: "string" } },
-          required: [...weekItems!.items.required, "parent", "document", "project", "section"],
+          properties: { ...weekItems!.items.properties, op: { type: "string", enum: [...draftOps] }, parent: { type: "string" }, document: { type: "string" }, project: { type: "string" }, section: { type: "string" }, horizon: { type: "string" } },
+          required: [...weekItems!.items.required, "parent", "document", "project", "section", "horizon"],
         },
       },
       overflow: overflowSchema,
@@ -178,7 +184,7 @@ export function chatMessages(facts: ReturnType<typeof chatFacts>, history: reado
 const chatReply = z.object({ reply: z.string(), summary: z.string(), items: z.array(z.unknown()), overflow: z.array(z.unknown()).default([]) });
 const chatItem = z.object({
   op: z.enum(draftOps), task: z.string(), title: z.string(), day: z.string().default(""), start: z.string(), minutes: z.number().int(), goal: z.string(), reason: z.string(),
-  parent: z.string().default(""), document: z.string().default(""), project: z.string().default(""), section: z.string().default(""),
+  parent: z.string().default(""), document: z.string().default(""), project: z.string().default(""), section: z.string().default(""), horizon: z.string().default(""),
 });
 const cap = (text: string, length: number) => { const flat = text.replace(/\s+/g, " ").trim(); return flat.length > length ? `${flat.slice(0, length - 1).trimEnd()}…` : flat; };
 
@@ -230,6 +236,7 @@ function outcome(draft: Omit<NewDraft, "kind" | "period"> | null, revisions: rea
  * Ticket 30: complete, delete and moves without a time name any open, non-fixed
  * task once; a timed move of a task not on the schedule is placed by the week
  * rules as an "add" would be, then stays a move (with its place, if any).
+ * Ticket 31: "horizon" names any open, non-fixed task once, with "now", "next" or "later".
  * Pending changes: a "move" or "remove" of a pending ref ("c1") revises that
  * item instead (by the same rules; the pending times count as busy), and a new
  * task titled as a pending new task (case and spaces aside) is a move of it.
@@ -299,6 +306,13 @@ function parseChatDraft(summary: string, raw: unknown[], overflow: unknown[], pl
     if (item.op === "complete" || item.op === "delete") {
       const { task, goalId } = taskOf(item.task);
       results[index] = { ...base, op: item.op, taskId: task.id, title: task.title, goalId, seenUpdatedAt: task.updatedAt };
+      return;
+    }
+    if (item.op === "horizon") {
+      const { task, goalId } = taskOf(item.task);
+      const horizon = horizons.find(value => value === item.horizon);
+      if (!horizon) return fail(`horizon "${item.horizon}"`);
+      results[index] = { ...base, op: "horizon", taskId: task.id, title: task.title, goalId, seenUpdatedAt: task.updatedAt, horizon };
       return;
     }
     if (item.op === "move") {

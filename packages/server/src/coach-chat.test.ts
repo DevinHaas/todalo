@@ -50,7 +50,7 @@ describe("due-day tasks, sub-tasks and attachments (ticket 29)", () => {
     expect(facts.tasks.every(row => Number(row.ref.slice(1)) > plan.scheduled.size + plan.toPlan.size)).toBe(true);
     expect(facts.documents).toEqual([{ ref: "d1", name: "syllabus.pdf", kind: "pdf", text: "Week 1: essay" }]);
     const ops = (chatSchema.schema as { properties: { items: { items: { properties: { op: { enum: string[] } }; required: string[] } } } }).properties.items.items;
-    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach", "complete", "delete"]);
+    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon"]);
     expect(ops.required).toEqual(expect.arrayContaining(["parent", "document", "day"]));
   });
 
@@ -129,6 +129,35 @@ describe("complete, delete and move (ticket 30)", () => {
     ["an unknown place", [item("move", { task: "t2", project: "p9" })], /place p9/],
     ["a section of another project", [item("move", { task: "t2", project: "p1", section: "s1" })], /place s1/],
     ["a day in the past", [item("move", { task: "t2", day: "2026-02-01" })], /day "2026-02-01"/],
+  ])("drops the draft for %s", (_, items, why) => {
+    const result = parse(items);
+    expect(result.draft).toBeNull();
+    expect(result.reply).toMatch(why);
+  });
+});
+
+describe("horizons (ticket 31)", () => {
+  const context = { tasks: [task("run"), task("parked", { title: "Taxes", horizon: "later" }), task("ritual", { title: "Check-in" })], fixedTaskIds: ["ritual"] };
+  const extras = chatExtras(plan, context, []);
+  const other = (title: string) => [...extras.others].find(([, row]) => row.title === title)![0];
+  const parse = (items: unknown[]) => parseChatReply(reply(items), plan, extras);
+
+  it("marks Later tasks in the facts and asks for a horizon on every item", () => {
+    expect(chatFacts(plan, new Map(), extras, false).tasks.find(row => row.title === "Taxes")).toMatchObject({ later: true });
+    expect((chatSchema.schema as { properties: { items: { items: { required: string[] } } } }).properties.items.items.required).toContain("horizon");
+  });
+
+  it("re-sorts any open task by ref, counted as re-sorted", () => {
+    const result = parse([item("horizon", { task: "t2", horizon: "later" }), item("horizon", { task: other("Taxes"), horizon: "now" })]);
+    expect(result.draft!.items.map(row => [row.op, row.taskId, row.horizon, row.seenUpdatedAt])).toEqual([["horizon", "run", "later", now], ["horizon", "parked", "now", now]]);
+    expect(result.reply).toContain("Proposed: 2 re-sorted.");
+  });
+
+  it.each([
+    ["an unknown horizon", [item("horizon", { task: "t2", horizon: "someday" })], /horizon "someday"/],
+    ["no horizon", [item("horizon", { task: "t2" })], /horizon ""/],
+    ["a fixed task", [item("horizon", { task: other("Check-in"), horizon: "later" })], /cannot change/],
+    ["the same task twice", [item("horizon", { task: "t2", horizon: "now" }), item("complete", { task: "t2" })], /t2 appears twice/],
   ])("drops the draft for %s", (_, items, why) => {
     const result = parse(items);
     expect(result.draft).toBeNull();

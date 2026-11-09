@@ -4,7 +4,10 @@
 // onto a slot (with a ghost there), scheduled from its popover, or opened. A
 // scheduled task dragged back onto the sidebar is unscheduled. While the
 // Check-in runs it heads the same sidebar. Pure view: the screen passes rows and writes.
-import { useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+// Ticket 31: tasks without a date in Now, Next, Inbox (unsorted) and Later
+// sections; Inbox and Later start collapsed, and each user's choice is kept
+// (localStorage). Now warns when it needs more time than the week has free.
+import { useEffect, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CalendarClock, CalendarDays, Check, ChevronDown, Ellipsis, GitBranch, Hash, Inbox, MessageSquare, Plus, X } from "lucide-react";
 import {
   Button, ButtonGroup, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Field, FieldLabel, Hint, Input, List, Popover,
@@ -12,7 +15,7 @@ import {
 } from "./ui";
 import { GoalIcon } from "./goal-views";
 import { goalColorValue } from "./goals";
-import { DRAG_THRESHOLD, planGroupOrder, type PlanGroup } from "./schedule";
+import { DRAG_THRESHOLD, planGroupOrder, planGroupsClosed, type PlanGroup } from "./schedule";
 import type { IncomingTask } from "./schedule-views";
 import type { TaskDto } from "./tasks";
 
@@ -77,7 +80,17 @@ export interface PlanRowData {
   /** The suggested time today (HH:MM): the next free slot. */
   slot: string;
 }
-const groupTitles: Record<PlanGroup, string> = { overdue: "Overdue", today: "Today", week: "Next 7 days", inbox: "Inbox" };
+const groupTitles: Record<PlanGroup, string> = { overdue: "Overdue", today: "Today", week: "Next 7 days", now: "Now", next: "Next", inbox: "Inbox", later: "Later" };
+/** Ticket 31: the sections the user collapsed, under `key` (default: Inbox and Later). */
+function storedClosed(key: string | undefined): ReadonlySet<PlanGroup> {
+  try {
+    const saved: unknown = key ? JSON.parse(localStorage.getItem(key) ?? "null") : null;
+    if (Array.isArray(saved)) return new Set(saved.filter((group): group is PlanGroup => planGroupOrder.includes(group)));
+  } catch { /* private mode or a bad value: the defaults */ }
+  return new Set(planGroupsClosed);
+}
+/** "45 min", "14 h" (ticket 31's Now warning). */
+export const hoursLabel = (minutes: number) => minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
 const toneClass = { overdue: "text-destructive", today: "text-today", tomorrow: "text-attention" } as const;
 const ALL = "all", INBOX = "inbox";
 
@@ -188,8 +201,12 @@ function PlanRow({ row, slots, checkIn, onLeave }: { row: PlanRowData; slots: Pl
  * The Plan sidebar. `ritual` (the Check-in) adds its header, progress and Done;
  * its "Leave" drops a row from this run only.
  */
-export function PlanSidebar({ groups, projects, projectId, onProject, slots, ritual, coach }: {
+export function PlanSidebar({ groups, projects, projectId, onProject, slots, ritual, coach, remember, nowLoad }: {
   groups: Record<PlanGroup, PlanRowData[]>;
+  /** Ticket 31: the localStorage key keeping which sections the user collapsed. */
+  remember?: string;
+  /** Ticket 31: the Now tasks' minutes (30 without an estimate) and the open minutes left this week. */
+  nowLoad?: { minutes: number; free: number };
   projects: { id: string; name: string }[];
   /** undefined: all projects; null: the Inbox. */
   projectId: string | null | undefined; onProject(projectId: string | null | undefined): void;
@@ -197,7 +214,10 @@ export function PlanSidebar({ groups, projects, projectId, onProject, slots, rit
   /** Ticket 19: the Coach's draft of today (only with a provider connected). */
   coach?: ReactNode;
 }) {
-  const [closed, setClosed] = useState<ReadonlySet<PlanGroup>>(new Set());
+  const [closed, setClosed] = useState(() => storedClosed(remember));
+  useEffect(() => {
+    if (remember) try { localStorage.setItem(remember, JSON.stringify([...closed])); } catch { /* private mode: in memory only */ }
+  }, [closed, remember]);
   const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
   const [text, setText] = useState("");
   const [chips, setChips] = useState<ReadonlySet<string>>(new Set());
@@ -250,11 +270,13 @@ export function PlanSidebar({ groups, projects, projectId, onProject, slots, rit
             {group === "overdue" && <Button type="button" variant="link" size="xs" className="px-0 text-destructive" data-plan-action="reschedule"
               onClick={() => slots.onReschedule(rows.map(row => row.id))}>Reschedule</Button>}
           </div>
+          {group === "now" && nowLoad && nowLoad.minutes > nowLoad.free && <Hint className="pt-1 text-xs text-attention" role="status" data-plan-now-warning="">
+            Now has {hoursLabel(nowLoad.minutes)}; about {hoursLabel(nowLoad.free)} are free this week.</Hint>}
           {open && <List aria-label={groupTitles[group]}>{rows.map(row => <PlanRow key={row.id} row={row} slots={slots} checkIn={Boolean(ritual)}
             onLeave={() => setLeft(current => new Set(current).add(row.id))} />)}</List>}
         </section>;
       })}
-      {!all.length ? <Hint className="py-2">Nothing to plan: no overdue, upcoming or Inbox tasks without a time.</Hint>
+      {!all.length ? <Hint className="py-2">Nothing to plan: no overdue, upcoming, Now, Next, Inbox or Later tasks without a time.</Hint>
         : !shownIds.size && <Hint className="py-2">No task matches the search or filters.</Hint>}
       <Button type="button" variant="ghost" size="sm" className="-ml-2 self-start font-normal text-muted-foreground hover:text-brand" data-plan-action="add" onClick={slots.onAdd}>
         <Plus className="text-brand" />Add task</Button>

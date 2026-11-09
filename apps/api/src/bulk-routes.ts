@@ -3,6 +3,7 @@ import { bulkCompleteInput, bulkIdsInput, bulkMetadataInput, bulkMoveInput, reor
 import { MissingReferenceError } from "@todalo/server/metadata-input";
 import { writeUser } from "./project-routes";
 import { CRITERIA_OPEN } from "./task-routes";
+import type { Horizon } from "@todalo/server/task-dto";
 
 /**
  * Shared @todalo/server/bulk operations (ticket 15). Each checks that every
@@ -17,7 +18,7 @@ export interface BulkWrites {
   remove(userId: string, ids: string[]): Promise<boolean>;
   clearDates(userId: string, ids: string[]): Promise<boolean>;
   /** Throws MissingReferenceError for a deleted or foreign label. */
-  metadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[] }): Promise<boolean>;
+  metadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[]; horizon?: Horizon | null }): Promise<boolean>;
   move(userId: string, ids: string[], destination: { projectId: string | null; sectionId: string | null }): Promise<boolean>;
   /** Place next to an anchor and/or set a status (appending without an anchor). "invalid": the anchor is in another collection (or is the task itself). */
   reorder(userId: string, id: string, move: ReorderInput): Promise<boolean | "invalid" | "criteria">;

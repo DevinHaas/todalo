@@ -99,3 +99,11 @@ _Avoid_: health, RAG status, trajectory
 **Sub-task**:
 A task whose `parentId` references another task. Nesting is single-level only — a sub-task cannot itself have sub-tasks.
 _Avoid_: child task, nested task
+
+**Horizon**:
+Where a task without a time waits to be planned: **Now** (the next things to plan), **Next** (the default once a task is sorted) or **Later** (parked: still listed, muted, never proposed by the Coach until the user names it or it comes due). A scheduled task keeps its horizon.
+_Avoid_: bucket, status, someday
+
+**Unsorted**:
+An Inbox task without a horizon. Sorting a task means giving it a horizon, a project, or both; a project task without a horizon counts as Next.
+_Avoid_: untriaged, new

@@ -4,7 +4,7 @@
 import { useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { coach, coachReads, goalReads, metadataReads, projectReads, reads } from "./runtime";
+import { coach, coachReads, goalReads, metadataReads, projectReads, reads, seasonReads } from "./runtime";
 import { draftMutations, type DraftDto } from "./coach";
 import { DraftPanel } from "./draft-views";
 import { goalColorValue } from "./goals";
@@ -12,7 +12,7 @@ import { useTaskWrites } from "./task-writes";
 import { Composer, Failure, listTree, TaskDialogs, TaskRow, type SelectionSlots } from "./views";
 import { CalendarView, TodaySchedule, UpcomingList, useDisplay, type DraftBlock, type PlannerSlots, type ScheduleSlots } from "./schedule-views";
 import {
-  addDays, datedDetails, dayKey, dropRange, dueDetails, durationOf, goalOf, labels, nextFreeSlot, parseDayKey, planGroupOrder, planGroups, rescheduledDetails,
+  addDays, datedDetails, dayKey, dropRange, dueDetails, durationOf, freeMinutesLeft, goalOf, labels, nextFreeSlot, parseDayKey, planGroupOrder, planGroups, rescheduledDetails,
   sameDay, scheduledDetails, startOfDay, startOfWeek, unscheduledDetails,
 } from "./schedule";
 import { PlanSidebar, planRitual, useTaskDrag, type PlanRowData } from "./plan-views";
@@ -82,6 +82,9 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const links = useQuery({ ...goalReads.links(userId), enabled });
   const metadata = useQuery({ ...metadataReads.list(userId), enabled });
   const projects = useQuery({ ...projectReads.list(userId), enabled });
+  // Ticket 31: the season's tiers order the undated sections; the week's events count against Now.
+  const season = useQuery({ ...seasonReads.current(userId), enabled });
+  const events = useCalendarEvents(userId);
   const cache = useQueryClient();
   const ritualItems = useRitualTaskIds(userId);
   const ritual = useSyncExternalStore(planRitual.subscribe, planRitual.get);
@@ -132,7 +135,10 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   };
   const now = new Date();
   const labelList = metadata.data?.labels ?? [];
-  const groups = planGroups(tasks, goalList, goalLinks, { projectId, skip: new Set(ritualItems.keys()) }, now);
+  const tiers = new Map((season.data?.season?.goals ?? []).map(goal => [goal.goalId, goal.tier]));
+  const groups = planGroups(tasks, goalList, goalLinks, { projectId, skip: new Set(ritualItems.keys()), tiers }, now);
+  // Ticket 31: what Now needs (30 min without an estimate) against the open time left this week.
+  const nowLoad = { minutes: groups.now.reduce((sum, { task }) => sum + durationOf(task), 0), free: freeMinutesLeft(tasks, events, addDays(startOfWeek(now, 1), 7), now) };
   const rowOf = ({ task, goal }: (typeof groups)["today"][number]): PlanRowData => {
     const subtasks = subtasksOf(task.id, tasks);
     return {
@@ -150,7 +156,7 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     key={ritual ? "check-in" : "plan"}
     groups={Object.fromEntries(planGroupOrder.map(group => [group, groups[group].map(rowOf)])) as Record<keyof typeof groups, PlanRowData[]>}
     projects={(projects.data ?? []).map(project => ({ id: project.id, name: project.name }))}
-    projectId={projectId} onProject={setProjectId} ritual={ritual} coach={coachDraft.panel}
+    projectId={projectId} onProject={setProjectId} ritual={ritual} coach={coachDraft.panel} remember={`todalo:plan-closed:${userId}`} nowLoad={nowLoad}
     slots={{
       onComplete: withTask(writes.actions.complete), onOpen: withTask(openTask),
       onDragStart: (id, event) => { const task = find(id); if (task) drag.start(task, event); },
@@ -205,8 +211,8 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   // Every other open draft's timed changes show too (a day draft's item the Coach moved to Wednesday shows on Wednesday).
   const chatPending = drafts.data?.drafts.filter(item => item.id !== draft?.id).flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
   return {
-    // Ticket 30: a move that only changes the project or section leaves the schedule as it is.
-    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" || item.place?.keepsDate ? [] : [{
+    // Ticket 30: a move that only changes the project or section leaves the schedule as it is; ticket 31: so does a new horizon.
+    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" || item.op === "horizon" || item.place?.keepsDate ? [] : [{
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
     }]),
     panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}

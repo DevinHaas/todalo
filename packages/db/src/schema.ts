@@ -163,6 +163,9 @@ export const tasks = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     priority: integer("priority").default(4).notNull(),
+    // Goals ticket 31: Now, Next or Later for a task without a time; null is unsorted
+    // (an Inbox task without one; a project task without one counts as Next).
+    horizon: text("horizon", { enum: ["now", "next", "later"] }),
     deadline: timestamp("deadline"),
     status: taskStatus("status").default("todo").notNull(),
     dueDate: timestamp("due_date"),
@@ -439,8 +442,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   draftId: text("draft_id").notNull().references(() => coachDrafts.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  // Goals ticket 30: "complete" and "delete" (chat drafts, when the user asks).
-  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach", "complete", "delete"] }).notNull(),
+  // Goals ticket 30: "complete" and "delete" (chat drafts, when the user asks); ticket 31: "horizon".
+  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach", "complete", "delete", "horizon"] }).notNull(),
   taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   startAt: timestamp("start_at").notNull(),
@@ -458,6 +461,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   documentId: text("document_id").references(() => coachDocuments.id, { onDelete: "cascade" }),
   // Goals ticket 30: a "move" to another project or section (drafts.ts DraftPlace); checked again when accepted.
   place: jsonb("place").$type<{ projectId: string | null; sectionId: string | null; label: string; keepsDate?: true }>(),
+  // Goals ticket 31: the horizon a "horizon" item sets.
+  horizon: text("horizon", { enum: ["now", "next", "later"] }),
 }, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
 
 // Goals ticket 21: a goal's last Coach recommendation, reused while inputsHash

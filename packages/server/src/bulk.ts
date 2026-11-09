@@ -12,6 +12,7 @@ import { completeTask, syncToCalendar } from "./tasks";
 import { manualOrder } from "./today";
 import { criteriaAllowDone, tasksWithOpenCriteria } from "./milestones";
 import { bulkIds, planReorder, type BulkCompletionDto, type ReorderInput } from "./bulk-input";
+import type { Horizon } from "./task-dto";
 
 /** One neon-http batch: the statements commit together or not at all. */
 export async function atomically(writes: BatchItem<"pg">[]) {
@@ -65,10 +66,10 @@ export async function clearTaskDates(userId: string, ids: string[]): Promise<boo
 
 /**
  * Legacy bulkTaskMetadata: priority and deadline for every task, and labels
- * replacing each task's set. Throws MissingReferenceError for a deleted or
+ * replacing each task's set. Goals ticket 31: or the horizon (Now, Next, Later). Throws MissingReferenceError for a deleted or
  * foreign label. All rows change in one batch.
  */
-export async function updateTasksMetadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[] }): Promise<boolean> {
+export async function updateTasksMetadata(userId: string, ids: string[], change: { priority?: number; deadline?: Date | null; labelIds?: string[]; horizon?: Horizon | null }): Promise<boolean> {
   const rows = await ownedTasks(userId, ids);
   if (!rows) return false;
   const { labelIds, ...fields } = change;

@@ -1,6 +1,7 @@
 // Pure bulk-action and reorder schemas plus the reorder planner (zod only, no
 // database) so the shared client and the QA API can import them.
 import { z } from "zod";
+import { horizons } from "./task-dto";
 
 const id = z.string().min(1).max(128);
 const isoDate = z.iso.datetime({ offset: true });
@@ -26,7 +27,9 @@ export const bulkMetadataInput = z.object({
   priority: z.number().int().min(1).max(4).optional(),
   deadline: isoDate.nullable().optional(),
   labelIds: z.array(id).max(50).optional(),
-}).strict().refine(input => input.priority !== undefined || input.deadline !== undefined || input.labelIds !== undefined, { message: "Choose a change" });
+  /** Goals ticket 31: Now, Next or Later (null: unsorted again). */
+  horizon: z.enum(horizons).nullable().optional(),
+}).strict().refine(input => input.priority !== undefined || input.deadline !== undefined || input.labelIds !== undefined || input.horizon !== undefined, { message: "Choose a change" });
 export type BulkMetadataInput = z.infer<typeof bulkMetadataInput>;
 export type BulkMetadataChange = Omit<BulkMetadataInput, "ids">;
 

@@ -95,6 +95,7 @@ fn present<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Option<S
 }
 
 /// The legacy bulk picker changes one field: priority, deadline or the label set.
+/// Goals ticket 31: or the horizon ("now", "next", "later"; null is unsorted).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MetadataChange {
@@ -104,20 +105,36 @@ pub struct MetadataChange {
     deadline: Option<Option<String>>,
     #[serde(default)]
     label_ids: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "present")]
+    horizon: Option<Option<String>>,
 }
 
 fn metadata_body(ids: &[String], change: &MetadataChange) -> Result<Value, &'static str> {
     selection(ids)?;
     let mut body = json!({ "ids": ids });
-    match (&change.priority, &change.deadline, &change.label_ids) {
-        (Some(priority), None, None) if (1..=4).contains(priority) => {
+    match (
+        &change.priority,
+        &change.deadline,
+        &change.label_ids,
+        &change.horizon,
+    ) {
+        (Some(priority), None, None, None) if (1..=4).contains(priority) => {
             body["priority"] = json!(priority)
         }
-        (None, Some(deadline), None) if instant(deadline) => body["deadline"] = json!(deadline),
-        (None, None, Some(labels))
+        (None, Some(deadline), None, None) if instant(deadline) => {
+            body["deadline"] = json!(deadline)
+        }
+        (None, None, Some(labels), None)
             if labels.len() <= 50 && labels.iter().all(|id| valid_id(id)) =>
         {
             body["labelIds"] = json!(labels)
+        }
+        (None, None, None, Some(horizon))
+            if horizon
+                .as_deref()
+                .is_none_or(|value| ["now", "next", "later"].contains(&value)) =>
+        {
+            body["horizon"] = json!(horizon)
         }
         _ => return Err(INVALID),
     }
@@ -282,7 +299,17 @@ mod tests {
             metadata(&selection, json!({ "labelIds": [] })).unwrap(),
             json!({ "ids": ["a"], "labelIds": [] })
         );
+        assert_eq!(
+            metadata(&selection, json!({ "horizon": "later" })).unwrap(),
+            json!({ "ids": ["a"], "horizon": "later" })
+        );
+        assert_eq!(
+            metadata(&selection, json!({ "horizon": null })).unwrap(),
+            json!({ "ids": ["a"], "horizon": null })
+        );
         for change in [
+            json!({ "horizon": "someday" }),
+            json!({ "horizon": "now", "priority": 1 }),
             json!({}),
             json!({ "priority": 5 }),
             json!({ "priority": 1, "deadline": null }),

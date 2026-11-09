@@ -85,7 +85,7 @@ describe("task read API", () => {
     expect(await response.json()).toEqual({ openCount: 1, tasks: [{
       id: "alice-task", title: "alice task", description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
       dueDate: "2026-10-04T12:30:00.000Z", dueDateEnd: null, deadline: null, completedAt: null, labelIds: ["label"],
-      recurrence: null, updatedAt: VERSION, commentCount: 0,
+      recurrence: null, updatedAt: VERSION, commentCount: 0, horizon: null, createdAt: null,
     }] });
   });
 

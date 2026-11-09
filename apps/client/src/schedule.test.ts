@@ -11,7 +11,7 @@ import { navigateViewDate as legacyNavigate } from "../../web/lib/view-navigatio
 import type { TaskDto } from "./tasks";
 import {
   addDays, addMonths, blockFor, datedDetails, dayKey, planGroups, rescheduledDetails, dragRange, dropRange, dueDetails, durationOf, nextFreeSlot, goalOf, nextSlot, overlapColumns, scheduledDetails, unscheduledDetails, rangeAt, spanFor, taskItem, eachDay, extendWindow, labels, monthGrid, navigateViewDate, nextLayout, slotAt, tasksByDay,
-  upcomingSections, upcomingWindow, weekOf,
+  upcomingSections, upcomingWindow, weekOf, freeMinutesLeft, startOfWeek,
 } from "./schedule";
 import { CalendarView, TodaySchedule, UpcomingList, type ScheduleSlots } from "./schedule-views";
 import { TodayView } from "./views";
@@ -333,11 +333,12 @@ describe("Plan sidebar groups and the next free slot (goals tickets 14b, 14c)", 
     task("Linked inbox", {}),
     task("In a week", { dueDate: "2026-02-27T23:00:00.000Z" }),
     task("Tomorrow", { projectId: "p1", dueDate: "2026-02-21T23:00:00.000Z" }),
-    // Not listed: an undated sub-task, 8 days out, a time today, a project without a date, done, a ritual item.
+    // Ticket 31: a project task without a date is Next.
+    task("Someday", { projectId: "p1" }),
+    // Not listed: an undated sub-task, 8 days out, a time today, done, a ritual item.
     task("Inbox step", { parentId: "Inbox" }),
     task("Later", { dueDate: "2026-02-28T23:00:00.000Z" }),
     task("Timed today", { dueDate: "2026-02-21T13:00:00.000Z" }),
-    task("Someday", { projectId: "p1" }),
     task("Done", { status: "done" }),
     task("Check-in", { dueDate: "2026-02-20T23:00:00.000Z" }),
   ];
@@ -347,11 +348,43 @@ describe("Plan sidebar groups and the next free slot (goals tickets 14b, 14c)", 
   };
   it.each([
     ["every project: goal tasks first, then by date", {}, {
-      overdue: ["Overdue", "Timed overdue"], today: ["Goal today:g2", "Due today"], week: ["Tomorrow", "In a week"], inbox: ["Linked inbox:g1", "Inbox"],
+      overdue: ["Overdue", "Timed overdue"], today: ["Goal today:g2", "Due today"], week: ["Tomorrow", "In a week"], now: [], next: ["Someday"], inbox: ["Linked inbox:g1", "Inbox"], later: [],
     }],
-    ["one project", { projectId: "p1" }, { overdue: ["Overdue"], today: ["Due today"], week: ["Tomorrow"], inbox: [] }],
-    ["the Inbox", { projectId: null }, { overdue: ["Timed overdue"], today: [], week: ["In a week"], inbox: ["Linked inbox:g1", "Inbox"] }],
+    ["one project", { projectId: "p1" }, { overdue: ["Overdue"], today: ["Due today"], week: ["Tomorrow"], now: [], next: ["Someday"], inbox: [], later: [] }],
+    ["the Inbox", { projectId: null }, { overdue: ["Timed overdue"], today: [], week: ["In a week"], now: [], next: [], inbox: ["Linked inbox:g1", "Inbox"], later: [] }],
   ] as const)("groups %s", (_name, filter, expected) => expect(listed(filter)).toEqual(expected));
+
+  it("sorts undated tasks by horizon (ticket 31): primary, secondary, priority, oldest first; Later until due", () => {
+    const old = "2026-01-01T00:00:00.000Z", young = "2026-02-01T00:00:00.000Z";
+    const sorted = [
+      task("Young P4", { horizon: "now", createdAt: young }),
+      task("Old P4", { horizon: "now", createdAt: old }),
+      task("P1", { horizon: "now", priority: 1, createdAt: young }),
+      task("Secondary", { horizon: "now", projectId: "p-goal", createdAt: young }),
+      task("Primary", { horizon: "now", createdAt: young }),
+      task("Next in Inbox", { horizon: "next" }),
+      task("Parked", { horizon: "later", projectId: "p1" }),
+      task("Parked, due", { horizon: "later", dueDate: "2026-02-20T23:00:00.000Z" }),
+      task("Unsorted", {}),
+    ];
+    const groups = planGroups(sorted, goals, { projects: links.projects, tasks: [{ goalId: "g1", taskId: "Primary" }] }, { tiers: new Map([["g1", "primary"], ["g2", "secondary"]]) }, now);
+    expect(Object.fromEntries(Object.entries(groups).map(([group, items]) => [group, items.map(item => item.task.id)]))).toEqual({
+      overdue: [], today: ["Parked, due"], week: [], now: ["Primary", "Secondary", "P1", "Old P4", "Young P4"], next: ["Next in Inbox"], inbox: ["Unsorted"], later: ["Parked"],
+    });
+  });
+
+  it("counts the open time left this week by the overflow rules (ticket 31's Now warning)", () => {
+    // Saturday 10:07: today 10:07–22:00 and Sunday 08:00–22:00, less a 1 h task, a 30 min event and an overlapping 45 min one; all-day events never block.
+    const sunday = addDays(startOfWeek(now, 1), 7);
+    const busy = [task("Gym", { dueDate: "2026-02-21T11:00:00.000Z", dueDateEnd: "2026-02-21T12:00:00.000Z" })];
+    const events = [
+      { start: "2026-02-22T09:00:00.000Z", end: "2026-02-22T09:30:00.000Z", allDay: false },
+      { start: "2026-02-22T09:15:00.000Z", end: "2026-02-22T10:00:00.000Z", allDay: false },
+      { start: "2026-02-22T00:00:00.000Z", end: "2026-02-23T00:00:00.000Z", allDay: true },
+    ];
+    expect(freeMinutesLeft(busy, events, sunday, now)).toBe((11 * 60 + 53) + 14 * 60 - 60 - 60);
+    expect(freeMinutesLeft([], [], sunday, new Date("2026-02-22T21:30:00.000Z"))).toBe(0);
+  });
 
   it("reschedules an overdue task to today at its own time and length; undo puts its dates back", () => {
     const timed = tasks[2]!;

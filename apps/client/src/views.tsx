@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { CalendarDays, ChevronDown, ChevronRight, Flag, FlagTriangleRight, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
+import { Archive, CalendarDays, ChevronDown, ChevronRight, Flag, FlagTriangleRight, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
 import {
   dateInputValue, deadlineLabel, dueLabel, isDueToday, isOverdue, localInstant, repeatChoice, repeatLabel, repeatPresets, shortDateLabel, timeInputValue,
   todayHeading, todaySections, treeDepths, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto, type TodayDto,
@@ -110,7 +110,9 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   const labelNames = task.labelIds.map(id => labels?.find(label => label.id === id)?.name).filter(Boolean);
   const editor = dialog?.editor?.(task);
   if (editor && !hidden) return <>{editor}</>;
-  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} ${pendingRowClass(change)}`} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+  // Goals ticket 31: a Later task stays listed, muted, with a "Later" chip.
+  const later = task.horizon === "later" && task.status !== "done";
+  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
     data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && !ownLook(change) && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
@@ -126,6 +128,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
         <PendingAttachments items={under} />
         {task.recurrence && <span className="pill" aria-label={repeatLabel(task.recurrence)}><Repeat /></span>}
         {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}><Flag data-priority={task.priority} />P{task.priority}</span>}
+        {later && <span className="pill" data-horizon-chip="later"><Archive />Later</span>}
         {task.deadline && <span className="pill"><Goal />Deadline {deadlineLabel(task.deadline)}</span>}
         {task.labelIds.length > 0 && <span className="pill"><Tag />{labelNames.length === task.labelIds.length ? labelNames.join(", ") : `${task.labelIds.length} label${task.labelIds.length > 1 ? "s" : ""}`}</span>}
         {subtasks.total > 0 && <button type="button" className="pill subtasks" aria-expanded={showing}

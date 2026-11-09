@@ -5,8 +5,9 @@ import {
 } from "lucide-react";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
+import { horizons, type Horizon } from "../../../packages/server/src/task-dto";
 import {
-  dateInputValue, deadlineLabel, localInstant, repeatChoice, repeatLabel, repeatPresets, shortDateLabel, timeInputValue,
+  dateInputValue, deadlineLabel, horizonNames, localInstant, repeatChoice, repeatLabel, repeatPresets, shortDateLabel, timeInputValue,
   type NewTask, type RecurrenceDto, type RepeatChoice, type TaskDetails, type TaskDto,
 } from "./tasks";
 import { AccountTransportError } from "./errors";
@@ -57,7 +58,7 @@ export interface CommentSlots {
  * are kept. Keyboard commands press its controls (`.task-editor .sheet-form`,
  * `data-field`, `data-navigate`, `data-insert`, the submit button).
  */
-export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation, onComplete, onRemove, onMove, onOpen, onAddSubtask, comments, goals, milestone }: {
+export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, navigation, onComplete, onRemove, onMove, onHorizon, onOpen, onAddSubtask, comments, goals, milestone }: {
   task: TaskDto; labels?: { id: string; name: string }[];
   /** The resolved https task link (ticket 18); "Copy link" shows once known. */
   shareUrl?: string;
@@ -71,6 +72,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   onRemove?: () => void;
   /** Project picker: resolves with the moved copy (the draft keeps its text). */
   onMove?: (projectId: string | null) => Promise<TaskDto>;
+  /** Goals ticket 31: the horizon picker (saved at once, as the project is; null: unsorted). */
+  onHorizon?: (horizon: Horizon | null) => void;
   /** Opens a sub-task or parent in the sheet. */
   onOpen?: (id: string) => void;
   onAddSubtask?: (task: NewTask) => Promise<unknown>;
@@ -219,6 +222,11 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
                   onChange={(value) => void move(value || null)} />
                 : <span className="property-value">{projectIcon}<span>{projectName}</span></span>}
             </Property>
+            {onHorizon && <Property label="Horizon">
+              <Dropdown label="Horizon" value={task.horizon ?? ""} className="property-value" chevron={false} data={{ "data-field": "horizon" }}
+                options={[...horizons.map(value => ({ value, label: horizonNames[value] })), { value: "" as const, label: task.projectId ? "Next (project default)" : "Not sorted" }]}
+                onChange={(value) => onHorizon(value || null)} />
+            </Property>}
             <DateProperty draft={draft} edit={edit} />
             <Property label="Deadline" add={!draft.deadline}>
               <Popover label={draft.deadline ? `Deadline: ${deadlineLabel(localInstant(draft.deadline))}` : "Add deadline"} triggerClassName={draft.deadline ? "property-value" : "icon-button property-add"} data={{ "data-field": "deadline" }}

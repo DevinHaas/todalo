@@ -8,6 +8,8 @@ import type { Feedback } from "./feedback";
 import { confirmingCriteria } from "./goals";
 
 export type { RecurrenceDto, TaskDto, TodayDto };
+/** Goals ticket 31: the horizons as the user reads them. */
+export const horizonNames = { now: "Now", next: "Next", later: "Later" } as const;
 /** Everything the edit dialog saves (ticket 11), with the version it started from. */
 export type TaskDetails = TaskDetailsInput;
 /** One completion tap; the operation ID is reused by that tap's retries. */

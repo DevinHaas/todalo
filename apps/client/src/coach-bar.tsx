@@ -209,7 +209,7 @@ function Bar({ userId }: { userId: string }) {
 }
 
 /** One group per kind of change, in the draft's order ("Added 4", "Moved 1"…). */
-const groupLabels: Record<DraftOp, string> = { add: "Added", move: "Moved", remove: "Removed", subtask: "Sub-tasks", attach: "Attached", complete: "Completed", delete: "Deleted" };
+const groupLabels: Record<DraftOp, string> = { add: "Added", move: "Moved", remove: "Removed", subtask: "Sub-tasks", attach: "Attached", complete: "Completed", delete: "Deleted", horizon: "Re-sorted" };
 
 /**
  * The review under the pill: the pending changes grouped by kind. A group opens to its changes;
