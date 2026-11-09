@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { defaultPreferences, effectiveBindings, KeyboardDispatcher, parsePreferences, snapshotPreferences } from "./keyboard";
-import { editKeyboardBindings } from "./keyboard-edit";
+import { defaultPreferences, effectiveBindings, KeyboardDispatcher, parsePreferences, snapshotPreferences, validatePreferences } from "./keyboard";
+import { editKeyboardBindings, releaseBinding } from "./keyboard-edit";
 it("removing the last binding leaves an empty assignment that does not dispatch, and restore enables it", () => {
   const empty = editKeyboardBindings(defaultPreferences(), "general.capture", "portable", { remove: 0 });
   const persisted = parsePreferences(snapshotPreferences(empty));
@@ -41,4 +41,19 @@ it("keeps platform-specific alternate sets when editing an index absent elsewher
   const onlyMac = editKeyboardBindings(next, "calendar.today", "mac", { remove: 1 });
   expect(effectiveBindings("calendar.today", onlyMac, "mac")).toEqual(["t"]);
   expect(effectiveBindings("calendar.today", onlyMac, "windows")).toEqual(["t", "Ctrl+Shift+9"]);
+});
+it("Replace on a conflict moves the keys over and leaves no conflict", () => {
+  const taken = editKeyboardBindings(defaultPreferences(), "general.capture", "mac", { replace: 0, binding: "Meta+k" });
+  expect(validatePreferences(taken).some(error => error.otherId === "general.quick-find" || error.commandId === "general.quick-find")).toBe(true);
+  const moved = releaseBinding(taken, "general.capture", "mac", "Meta+k");
+  expect(validatePreferences(moved)).toEqual([]);
+  expect(effectiveBindings("general.capture", moved, "mac")).toEqual(["Meta+k"]);
+  expect(effectiveBindings("general.quick-find", moved, "mac")).toEqual([]);
+  expect(effectiveBindings("general.quick-find", moved, "windows")).toEqual(["Ctrl+k"]);
+});
+it("Replace with a sequence prefix frees every sequence it would shadow", () => {
+  const taken = editKeyboardBindings(defaultPreferences(), "general.capture", "portable", { replace: 0, binding: "g" });
+  const moved = releaseBinding(taken, "general.capture", "portable", "g");
+  expect(validatePreferences(moved)).toEqual([]);
+  expect(effectiveBindings("navigation.today", moved, "linux")).toEqual([]);
 });

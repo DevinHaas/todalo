@@ -242,8 +242,9 @@ describe("shortcut views", () => {
     const html = renderToStaticMarkup(createElement(ShortcutSettings, { preferences, platform: "mac", syncError: null, onRetry: () => {}, onSave: async () => {}, onHelp: () => {} }));
     expect(html).toContain("mac: This combination is reserved by macOS.");
     expect(html).toContain("Use available alternative");
-    expect(html).toContain('aria-label="Change Command plus h for Show keyboard shortcuts"');
-    expect(html).toContain('aria-label="Restore defaults for Show keyboard shortcuts"');
-    expect(html).toContain('aria-label="Add shortcut for Capture task"');
+    expect(html).toContain('aria-label="Shortcut for Show keyboard shortcuts: Command plus h. Press to change"');
+    expect(html).toContain('aria-label="Add another shortcut for Capture task"');
+    expect(html).toContain("Reset all shortcuts");
+    expect(html).not.toContain("Save shortcuts");
   });
 });

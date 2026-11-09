@@ -25,11 +25,37 @@ describe("single chord shortcut recording", () => {
     record(event("x", { ctrlKey: true }));
     expect(save).toHaveBeenCalledExactlyOnceWith("Ctrl+x");
   });
-  it("keeps Escape bindable and adapts Control for portable Windows bindings", () => {
+  it("adapts Control for portable Windows bindings", () => {
     const save = vi.fn();
-    createShortcutRecorder("portable", "windows", save)(event("Escape"));
-    expect(save).toHaveBeenLastCalledWith("Escape");
     createShortcutRecorder("portable", "windows", save)(event("k", { ctrlKey: true }));
     expect(save).toHaveBeenLastCalledWith("Primary+k");
+  });
+  it("waits briefly after a plain key for a sequence step, then saves either", () => {
+    vi.useFakeTimers();
+    const save = vi.fn(); const step = vi.fn();
+    const record = createShortcutRecorder("mac", "mac", save, { onStep: step });
+    record(event("o"));
+    expect(step).toHaveBeenCalledWith("o");
+    vi.advanceTimersByTime(900);
+    record(event("s"));
+    expect(save).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(save).toHaveBeenCalledExactlyOnceWith("o then s");
+    const single = vi.fn();
+    createShortcutRecorder("mac", "mac", single)(event("x"));
+    vi.advanceTimersByTime(1000);
+    expect(single).toHaveBeenCalledExactlyOnceWith("x");
+    vi.useRealTimers();
+  });
+  it("cancels on Escape without saving, even mid-sequence", () => {
+    vi.useFakeTimers();
+    const save = vi.fn(); const cancel = vi.fn();
+    const record = createShortcutRecorder("mac", "mac", save, { onCancel: cancel });
+    record(event("g"));
+    record(event("Escape"));
+    vi.advanceTimersByTime(2000);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
