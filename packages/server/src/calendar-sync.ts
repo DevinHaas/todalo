@@ -3,7 +3,7 @@
 // Server-only: provider access tokens come from Better Auth's account store and
 // never leave this module. googleapis and the auth instance load lazily (as in
 // calendar.ts) so importing this module constructs no provider client.
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { calendar_v3 } from "googleapis";
 import { db } from "@todalo/db";
 import { account, calendarEvents, syncedCalendars, tasks } from "@todalo/db/schema";
@@ -66,38 +66,37 @@ export async function syncCalendar(cal: SyncedCalendar, client?: Pick<CalendarCl
   if (cal.tasksOnly) changed = await applyTaskEvents(cal.userId, items);
   else {
     if (reset) await db.delete(calendarEvents).where(eq(calendarEvents.calendarId, cal.id));
-    for (const event of items) {
-      if (!event.id || event.eventType === "workingLocation") continue;
-
-      if (event.status === "cancelled") {
-        await db
-          .delete(calendarEvents)
-          .where(and(eq(calendarEvents.calendarId, cal.id), eq(calendarEvents.googleEventId, event.id)));
-        changed = true;
-        continue;
-      }
-
+    // Batched: one round trip per 500 events, not one per event (~200 ms each to
+    // Neon), so showing a big calendar answers well within the Mac app's 20 s.
+    // Last change per event wins, so a batch never upserts one event twice.
+    const latest = new Map<string, calendar_v3.Schema$Event>();
+    for (const event of items) if (event.id && event.eventType !== "workingLocation") latest.set(event.id, event);
+    const cancelled: string[] = [];
+    const rows: (typeof calendarEvents.$inferInsert)[] = [];
+    for (const [id, event] of latest) {
+      if (event.status === "cancelled") { cancelled.push(id); continue; }
       const startRaw = event.start?.dateTime ?? event.start?.date;
       const endRaw = event.end?.dateTime ?? event.end?.date;
       if (!startRaw || !endRaw) continue;
-
-      const fields = {
+      rows.push({
+        calendarId: cal.id, userId: cal.userId, googleEventId: id,
         title: event.summary ?? "(no title)",
         start: new Date(startRaw),
         end: new Date(endRaw),
         allDay: !event.start?.dateTime,
         eventType: event.eventType ?? null,
         htmlLink: event.htmlLink ?? null,
-      };
-      await db
-        .insert(calendarEvents)
-        .values({ calendarId: cal.id, userId: cal.userId, googleEventId: event.id, ...fields })
-        .onConflictDoUpdate({
-          target: [calendarEvents.calendarId, calendarEvents.googleEventId],
-          set: { ...fields, updatedAt: new Date() },
-        });
-      changed = true;
+      });
     }
+    for (let i = 0; i < cancelled.length; i += 500)
+      await db.delete(calendarEvents).where(and(eq(calendarEvents.calendarId, cal.id), inArray(calendarEvents.googleEventId, cancelled.slice(i, i + 500))));
+    for (let i = 0; i < rows.length; i += 500)
+      await db.insert(calendarEvents).values(rows.slice(i, i + 500)).onConflictDoUpdate({
+        target: [calendarEvents.calendarId, calendarEvents.googleEventId],
+        set: { title: sql`excluded.title`, start: sql`excluded.start`, end: sql`excluded."end"`, allDay: sql`excluded.all_day`,
+          eventType: sql`excluded.event_type`, htmlLink: sql`excluded.html_link`, updatedAt: new Date() },
+      });
+    if (cancelled.length || rows.length) changed = true;
   }
 
   await db.update(syncedCalendars).set({ syncToken: nextSyncToken, syncedAt: new Date() }).where(eq(syncedCalendars.id, cal.id));
