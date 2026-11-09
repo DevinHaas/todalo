@@ -2,12 +2,13 @@
 // in liquid.test.ts) drawn by one WebGL2 signed-distance shader. Shapes join with
 // a smooth minimum ("goo"); a stretching capsule between two shapes is the neck
 // that thins as it lengthens and drains, and pinches off below a threshold into
-// beads (satellites) that flow on into the body. Opening, the resting blob flows
-// to the bar's place and spreads into it; the × buds off the bar's right end.
-// Closing runs the same physics back to the corner.
+// beads (satellites) that fall back to the nearer end. The button in the corner
+// (the home drop) always stays: opening, liquid flows out of it to the bar's
+// place and spreads into the bar; closing, the bar gathers into a drop and flows
+// back into the button.
 
 export type LiquidParams = {
-  /** Resting blob radius, px. */
+  /** The button's radius, px. */
   size: number;
   /** Rough time for the morph, seconds (sets the spring frequency). */
   duration: number;
@@ -24,6 +25,8 @@ export type LiquidParams = {
   barWobble: number;
   /** Opening spreads into the bar once this fraction of the way is left. */
   spreadAt: number;
+  /** The drop that flows out, as a fraction of the button. */
+  flow: number;
   /** Squash and stretch along the velocity. */
   stretch: number;
   /** Smooth-minimum radius, px: how far apart two shapes still join. */
@@ -34,25 +37,22 @@ export type LiquidParams = {
   pinch: number;
   /** Beads a pinched neck breaks into. */
   satellites: number;
-  /** The × droplet's radius, px. */
-  closeSize: number;
-  /** 0 = the × is blob coloured, 1 = bar coloured. */
-  closeTint: number;
   gloss: number;
   shadow: number;
   blobColor: string;
 };
 
 export const liquidDefaults: LiquidParams = {
-  size: 24, duration: 0.45, tension: 1, viscosity: 0.6, lag: 0.7, spreadAt: 0.35,
+  size: 24, duration: 0.45, tension: 1, viscosity: 0.6, lag: 0.7, spreadAt: 0.35, flow: 0.75,
   wobbleSpeed: 1, wobbleAmp: 2.2, barWobble: 0.15, stretch: 1,
   goo: 16, neck: 46, pinch: 2.5, satellites: 2,
-  closeSize: 15, closeTint: 1, gloss: 0.55, shadow: 1,
+  gloss: 0.55, shadow: 1,
   blobColor: "#dc4c3e",
 };
 
 /** A rounded box: centre, half size, corner radius. */
 export type Box = { x: number; y: number; w: number; h: number; r: number };
+export type Targets = { blob: Box; bar: Box };
 
 type Body = Box & {
   vx: number; vy: number; vw: number; vh: number; vr: number;
@@ -86,92 +86,106 @@ const logSpring = (x: number, v: number, to: number, omega: number, zeta: number
   return [Math.exp(next) - 1, velocity] as const;
 };
 const radius = (box: Box) => Math.min(box.w, box.h);
+const round = (x: number, y: number, r: number): Box => ({ x, y, w: r, h: r, r });
 /** The closest point to (x, y) on a box's core (the box shrunk by its corner radius). */
 const core = (box: Box, x: number, y: number): [number, number] => {
   const r = Math.min(box.r, box.w, box.h);
   return [Math.max(box.x - box.w + r, Math.min(box.x + box.w - r, x)), Math.max(box.y - box.h + r, Math.min(box.y + box.h - r, y))];
 };
+const near = (box: Box, to: Box, slack: number) => Math.abs(box.x - to.x) + Math.abs(box.y - to.y) + Math.abs(box.w - to.w) + Math.abs(box.h - to.h) < slack;
 
 export class LiquidSim {
   params: LiquidParams;
   phase: Phase = "closed";
-  body: Body;
-  /** The remnant left behind at the start of a morph, draining through the neck. */
+  /** The button in the corner: always there (the × while open). */
+  home: Body;
+  /** The bar's liquid, from leaving the button until it flows back in. */
+  body: Body | null = null;
+  /** Closing, the remnant left at the bar's place, draining through the neck. */
   anchor: Body | null = null;
-  /** The × droplet. */
-  drop: Body | null = null;
   bridges: Bridge[] = [];
   satellites: Body[] = [];
   /** Counts pinch-offs (tests, and the lab's readout). */
   pinches = 0;
   private blob: Box;
   private bar: Box;
-  private close: Box;
   private seed = 1;
   private travel = 0;
-  private spreading = true;
-  private gathered = true;
+  private spreading = false;
+  private gathered = false;
 
-  constructor(params: LiquidParams, targets: { blob: Box; bar: Box; close: Box }) {
+  constructor(params: LiquidParams, targets: Targets) {
     this.params = params;
-    this.blob = targets.blob; this.bar = targets.bar; this.close = targets.close;
-    this.body = makeBody(this.blob, 0, 0);
+    this.blob = targets.blob; this.bar = targets.bar;
+    this.home = makeBody(this.blob, 0, 0);
   }
 
-  setTargets(targets: { blob: Box; bar: Box; close: Box }) {
-    this.blob = targets.blob; this.bar = targets.bar; this.close = targets.close;
+  setTargets(targets: Targets) {
+    this.blob = targets.blob; this.bar = targets.bar;
   }
 
   setOpen(open: boolean) {
     if (open === (this.phase === "opening" || this.phase === "open")) return;
-    const { body } = this;
+    const p = this.params;
     this.phase = open ? "opening" : "closing";
-    // The remnant: a copy of the body where it is now, pinned, rounding into a drop and draining.
-    const anchor = { ...this.body, vx: 0, vy: 0, vw: 0, vh: 0, vr: 0, j: 0, vj: 0, seed: this.seed++ };
-    anchor.target = { ...anchor, w: radius(anchor), h: radius(anchor), r: radius(anchor) };
-    // Closing, the leftovers turn blob coloured as they flow (white beads on white read as ghosts).
-    anchor.targetMix = open ? anchor.mix : 0;
-    this.anchor = anchor;
-    this.bridges = this.bridges.filter(bridge => bridge.a !== body && bridge.b !== body);
-    this.bridges.push({ a: anchor, b: body, age: 0, base: radius(anchor), life: this.params.duration * 0.9 });
-    // Opening the drop first starts small (it spreads after flowing); closing gathers into a ball first.
-    if (open) { body.w = body.h = body.r = Math.min(radius(body), this.params.size) * 0.9; }
     this.spreading = false; this.gathered = false;
-    this.travel = Math.hypot(body.x - this.bar.x, body.y - this.bar.y);
-    // The × flows back into the body.
-    if (!open && this.drop) { this.drop.into = body; this.bridges = this.bridges.filter(bridge => bridge.b !== this.drop); this.satellites.push(this.drop); this.drop = null; }
+    const { home } = this;
+    if (open) {
+      // A drop wells out of the button, joined to it by a neck.
+      if (!this.body) {
+        const body = makeBody(round(home.x, home.y, p.size * p.flow), 0, this.seed++);
+        this.body = body;
+        this.bridges.push({ a: home, b: body, age: 0, base: p.size * p.flow, life: p.duration * 0.9 });
+        home.vj -= 0.4;
+      }
+      this.travel = Math.hypot(this.body.x - this.bar.x, this.body.y - this.bar.y);
+      return;
+    }
+    if (!this.body) { this.phase = "closed"; return; }
+    // The remnant: a copy of the bar where it is, pinned, rounding into a drop and draining.
+    const { body } = this;
+    const anchor: Body = { ...body, vx: 0, vy: 0, vw: 0, vh: 0, vr: 0, j: 0, vj: 0, seed: this.seed++, into: undefined };
+    anchor.target = round(anchor.x, anchor.y, radius(anchor));
+    anchor.targetMix = 0;
+    this.anchor = anchor;
+    this.bridges.push({ a: anchor, b: body, age: 0, base: radius(anchor), life: p.duration * 0.9 });
   }
 
   step(dt: number) {
     const p = this.params;
     const omega = 4.6 / Math.max(p.duration, 0.05);
     const zeta = p.viscosity;
-    const { body } = this;
+    const { home, body } = this;
     const opening = this.phase === "opening" || this.phase === "open";
-    // Opening, a drop flows to the bar's place and spreads into it over the last stretch;
-    // closing, the bar gathers into a drop where it is, then flows to the corner.
-    const drop = (to: Box): Box => ({ x: to.x, y: to.y, w: p.size, h: p.size, r: p.size });
-    if (opening && !this.spreading) this.spreading = this.phase === "open" || Math.hypot(body.x - this.bar.x, body.y - this.bar.y) <= this.travel * p.spreadAt + 1;
-    if (!opening && !this.gathered) this.gathered = Math.abs(body.w - p.size) + Math.abs(body.h - p.size) < p.size * 0.6;
-    body.target = opening ? (this.spreading ? this.bar : drop(this.bar)) : this.gathered ? this.blob : { ...drop(body), x: body.target.x, y: body.target.y };
-    body.targetMix = opening && this.spreading ? 1 : 0;
-    // Opening flows, then spreads; closing gathers, then flows.
-    body.posOmega = opening ? omega : omega * p.lag;
-    body.sizeOmega = opening ? omega * p.lag : omega;
-    body.wobble = p.wobbleAmp * (1 + (p.barWobble - 1) * body.mix);
+    home.target = this.blob; home.targetMix = 0;
+    home.posOmega = omega * 2; home.sizeOmega = omega;
+    home.wobble = p.wobbleAmp;
 
-    if (this.drop) { this.drop.target = this.close; this.drop.wobble = p.wobbleAmp * 0.35; }
+    if (body) {
+      // Opening, the drop flows to the bar's place and spreads into it over the last stretch;
+      // closing, the bar gathers into a drop where it is, then flows back into the button.
+      const drop = p.size * p.flow;
+      if (opening && !this.spreading) this.spreading = this.phase === "open" || Math.hypot(body.x - this.bar.x, body.y - this.bar.y) <= this.travel * p.spreadAt + 1;
+      if (!opening && !this.gathered) this.gathered = Math.abs(body.w - drop) + Math.abs(body.h - drop) < drop * 0.8;
+      body.target = opening ? (this.spreading ? this.bar : round(this.bar.x, this.bar.y, drop))
+        : this.gathered ? round(home.x, home.y, drop) : round(body.target.x, body.target.y, drop);
+      body.targetMix = opening && this.spreading ? 1 : 0;
+      // Opening flows, then spreads; closing gathers, then flows.
+      body.posOmega = opening ? omega : omega * p.lag;
+      body.sizeOmega = opening ? omega * p.lag : omega;
+      body.wobble = p.wobbleAmp * (1 + (p.barWobble - 1) * body.mix);
+    }
     if (this.anchor) {
       // Rounds into a drop (surface tension) while draining through the neck.
       const anchor = this.anchor;
       const drained = Math.max(0, radius(anchor.target) - dt * p.size * 0.9 / Math.max(p.duration, 0.05));
-      anchor.target = { ...anchor.target, w: drained, h: drained, r: drained };
+      anchor.target = round(anchor.target.x, anchor.target.y, drained);
       anchor.posOmega = 0; anchor.sizeOmega = omega * Math.sqrt(p.tension);
       anchor.wobble = p.wobbleAmp * 0.5;
     }
     for (const satellite of this.satellites) {
-      const into = satellite.into ?? body;
-      satellite.target = { x: into.x, y: into.y, w: 0, h: 0, r: 0 };
+      const into = satellite.into ?? home;
+      satellite.target = round(into.x, into.y, 0);
       satellite.posOmega = omega * 1.1; satellite.sizeOmega = omega * 0.5;
       satellite.targetMix = into.targetMix;
     }
@@ -190,36 +204,31 @@ export class LiquidSim {
       const count = Math.round(p.satellites);
       for (let index = 1; index <= count; index++) {
         const t = index / (count + 1);
-        const bead = makeBody({ x: ax + (bx - ax) * t, y: ay + (by - ay) * t, w: 0, h: 0, r: 0 }, bridge.a.mix + (bridge.b.mix - bridge.a.mix) * t, this.seed++);
-        bead.w = bead.h = bead.r = Math.max(p.pinch * 1.6, 2) * (1 - Math.abs(t - 0.5));
+        const bead = makeBody(round(ax + (bx - ax) * t, ay + (by - ay) * t, Math.max(p.pinch * 1.6, 2) * (1 - Math.abs(t - 0.5))), bridge.a.mix + (bridge.b.mix - bridge.a.mix) * t, this.seed++);
         bead.vx = bridge.b.vx * t; bead.vy = bridge.b.vy * t;
-        bead.into = bridge.b;
+        // A broken thread's beads fall back to the nearer end.
+        bead.into = t < 0.5 ? bridge.a : bridge.b;
         this.satellites.push(bead);
       }
-      // The snap: the receiving body recoils, and the remnant flows on into it.
+      // The snap: both ends recoil, and the remnant flows on into the body.
+      bridge.a.vj += 0.5 / Math.max(p.tension, 0.2);
       bridge.b.vj += 0.9 / Math.max(p.tension, 0.2);
       if (bridge.a === this.anchor) { this.anchor.into = bridge.b; this.satellites.push(this.anchor); this.anchor = null; }
     }
+    // Back home: the closing drop merges into the button, which takes the bump.
+    if (body && !opening && this.gathered && Math.hypot(body.x - home.x, body.y - home.y) < radius(home) * 0.6) {
+      this.body = null;
+      home.vj += 0.7 / Math.max(p.tension, 0.2);
+      this.bridges = this.bridges.filter(bridge => bridge.a !== body && bridge.b !== body);
+      for (const satellite of this.satellites) if (satellite.into === body) satellite.into = home;
+      this.phase = "closed";
+    }
     // Merged: a satellite inside its body is gone.
     this.satellites = this.satellites.filter(satellite => {
-      const into = satellite.into ?? body;
-      const inside = Math.hypot(satellite.x - into.x, satellite.y - into.y) < Math.max(radius(into) * 0.5, 2) || radius(satellite) < 0.4;
-      return !inside;
+      const into = satellite.into ?? home;
+      return Math.hypot(satellite.x - into.x, satellite.y - into.y) >= Math.max(radius(into) * 0.5, 2) && radius(satellite) >= 0.4;
     });
-
-    const near = (box: Box, to: Box, slack: number) => Math.abs(box.x - to.x) + Math.abs(box.y - to.y) + Math.abs(box.w - to.w) + Math.abs(box.h - to.h) < slack;
-    if (this.phase === "opening" && near(body, this.bar, Math.max(12, this.bar.w * 0.04))) this.phase = "open";
-    if (this.phase === "closing" && near(body, this.blob, 10)) this.phase = "closed";
-    // The × buds off the bar's right end as the bar arrives.
-    const budding = this.phase === "open" || (this.phase === "opening" && this.spreading && near(body, this.bar, Math.max(30, this.bar.w * 0.25)));
-    if (budding && !this.drop) {
-      const start = { x: this.bar.x + this.bar.w - this.close.w, y: this.bar.y, w: this.close.w * 0.6, h: this.close.w * 0.6, r: this.close.w * 0.6 };
-      const drop = makeBody(start, p.closeTint, this.seed++);
-      drop.posOmega = omega * 1.2; drop.sizeOmega = omega * 1.2; drop.targetMix = p.closeTint;
-      this.drop = drop;
-      this.bridges.push({ a: this.body, b: drop, age: 0, base: this.close.w, life: p.duration * 0.4 });
-    }
-    if (this.drop) this.drop.targetMix = p.closeTint;
+    if (this.phase === "opening" && this.body && near(this.body, this.bar, Math.max(12, this.bar.w * 0.04))) this.phase = "open";
   }
 
   /** The neck between two bodies: a capsule from core to core, thinning with gap and age. */
@@ -250,7 +259,7 @@ export class LiquidSim {
       [item.mix, item.vmix] = spring(item.mix, item.vmix, item.targetMix, item.sizeOmega * 2.5, 1, dt);
       // Braking along x squashes it wide, braking along y tall: the arrival wobble.
       const ax = (item.vx - vx0) / dt, ay = (item.vy - vy0) / dt;
-      item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00002 * p.stretch * dt * 60;
+      if (item !== this.home) item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00002 * p.stretch * dt * 60;
       [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, zeta * 0.6, dt);
       item.j = Math.max(-0.35, Math.min(0.35, item.j));
       item.w = Math.max(0, item.w); item.h = Math.max(0, item.h); item.r = Math.max(0, item.r);
@@ -258,9 +267,9 @@ export class LiquidSim {
   }
 
   private *bodies() {
-    yield this.body;
+    yield this.home;
+    if (this.body) yield this.body;
     if (this.anchor) yield this.anchor;
-    if (this.drop) yield this.drop;
     yield* this.satellites;
   }
 
@@ -270,12 +279,12 @@ export class LiquidSim {
     const out: Shape[] = [];
     for (const item of this.bodies()) {
       const speed = Math.hypot(item.vx, item.vy);
-      const round = radius(item) / Math.max(item.w, item.h, 1e-3);
+      const roundness = radius(item) / Math.max(item.w, item.h, 1e-3);
       out.push({
         x: item.x, y: item.y,
         w: item.w * (1 + item.j), h: item.h * (1 - item.j), r: item.r,
         wobble: item.wobble, mix: item.mix, seed: item.seed, segment: false,
-        stretch: Math.min(0.8, speed * p.stretch / 2400) * round,
+        stretch: Math.min(0.8, speed * p.stretch / 2400) * roundness,
         dx: speed ? item.vx / speed : 1, dy: speed ? item.vy / speed : 0,
       });
     }
@@ -286,24 +295,19 @@ export class LiquidSim {
     return out.slice(0, MAX);
   }
 
-  /** How far each part has arrived, 0–1: the DOM content fades in on these. */
+  /** How far the bar has arrived, 0–1: its content fades in on this, and out at once on closing. */
   arrival() {
     const { body } = this;
-    const distance = (to: Box) => Math.abs(body.x - to.x) + Math.abs(body.y - to.y) + Math.abs(body.w - to.w) + Math.abs(body.h - to.h);
-    const opening = this.phase === "opening" || this.phase === "open";
-    const ramp = (value: number, span: number) => Math.max(0, Math.min(1, 1 - value / span));
-    const drop = this.drop && !this.bridges.some(bridge => bridge.b === this.drop) ? ramp(Math.abs(this.drop.x - this.close.x) + Math.abs(this.drop.y - this.close.y) + Math.abs(this.drop.w - this.close.w), 10) : 0;
-    return {
-      bar: opening ? ramp(distance(this.bar), Math.max(60, this.bar.w * 0.15)) : 0,
-      blob: opening ? 0 : ramp(distance(this.blob), 24),
-      close: opening ? drop : 0,
-    };
+    if (!body || !(this.phase === "opening" || this.phase === "open")) return 0;
+    const distance = Math.abs(body.x - this.bar.x) + Math.abs(body.y - this.bar.y) + Math.abs(body.w - this.bar.w) + Math.abs(body.h - this.bar.h);
+    return Math.max(0, Math.min(1, 1 - distance / Math.max(60, this.bar.w * 0.15)));
   }
 
   /** At rest: nothing left to settle but the idle wobble. */
   settled() {
+    const { body } = this;
     return (this.phase === "open" || this.phase === "closed") && !this.anchor && !this.satellites.length && !this.bridges.length
-      && Math.hypot(this.body.vx, this.body.vy) < 0.5 && Math.hypot(this.body.vw, this.body.vh) < 0.02 && Math.abs(this.body.vj) < 0.01;
+      && (!body || (Math.hypot(body.vx, body.vy) < 0.5 && Math.hypot(body.vw, body.vh) < 0.02 && Math.abs(body.vj) < 0.01));
   }
 }
 

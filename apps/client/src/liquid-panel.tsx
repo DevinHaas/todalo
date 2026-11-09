@@ -33,7 +33,7 @@ type Slider = { key: keyof LiquidParams; name: string; min: number; max: number;
 const groups: { title: string; sliders: Slider[] }[] = [
   { title: "Shape", sliders: [
     { key: "size", name: "Blob size", min: 12, max: 48, step: 1, unit: "px" },
-    { key: "closeSize", name: "× size", min: 10, max: 24, step: 1, unit: "px" },
+    { key: "flow", name: "Drop that flows out", min: 0.3, max: 1.2, step: 0.05 },
     { key: "goo", name: "Gooeyness", min: 0, max: 48, step: 1, unit: "px" },
     { key: "gloss", name: "Gloss", min: 0, max: 1, step: 0.05 },
     { key: "shadow", name: "Shadow", min: 0, max: 2, step: 0.05 },
@@ -79,7 +79,6 @@ export function LiquidPanel({ params, onChange, onClose }: { params: LiquidParam
     <ControlSection>
       <ControlList>
         <ControlItem><ColorControl name="Blob colour" hex={params.blobColor} onValueChange={(value) => set("blobColor", value.hex)} /></ControlItem>
-        <ControlItem><SliderControl name="× tint (blob → bar)" value={params.closeTint} min={0} max={1} step={0.05} onValueChange={(value) => set("closeTint", value)} /></ControlItem>
       </ControlList>
     </ControlSection>
     {groups.map(group => <ControlSection key={group.title}>

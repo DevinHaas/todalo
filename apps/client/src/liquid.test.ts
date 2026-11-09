@@ -3,7 +3,6 @@ import { LiquidSim, liquidDefaults } from "./liquid";
 
 const blob = { x: 1000, y: 800, w: 24, h: 24, r: 24 };
 const bar = { x: 500, y: 790, w: 380, h: 22, r: 10 };
-const close = { x: 910, y: 790, w: 15, h: 15, r: 15 };
 
 /** Steps at 60 fps until `done` or `seconds` pass; returns the time it took. */
 const run = (sim: LiquidSim, seconds: number, done = () => false) => {
@@ -12,35 +11,39 @@ const run = (sim: LiquidSim, seconds: number, done = () => false) => {
 };
 
 describe("the liquid Coach button", () => {
-  it("flows into the bar, pinches off on the way, buds the × and flows back", () => {
-    const sim = new LiquidSim(liquidDefaults, { blob, bar, close });
+  it("flows out of the button into the bar and back in; the button never leaves", () => {
+    const sim = new LiquidSim(liquidDefaults, { blob, bar });
     run(sim, 1);
     expect(sim.phase).toBe("closed");
+    expect(sim.body).toBeNull();
 
     sim.setOpen(true);
-    const budded = run(sim, 3, () => sim.arrival().close > 0.9);
-    expect(budded).toBeLessThan(2);
+    expect(run(sim, 3, () => sim.arrival() > 0.9)).toBeLessThan(1.2);
     run(sim, 2);
     expect(sim.phase).toBe("open");
-    expect(sim.pinches).toBeGreaterThanOrEqual(2); // the remnant's neck and the ×'s
-    expect(sim.body.w).toBeCloseTo(bar.w, 0);
-    expect(Math.hypot(sim.drop!.x - close.x, sim.drop!.y - close.y)).toBeLessThan(1);
+    expect(sim.pinches).toBeGreaterThanOrEqual(1); // the neck to the button broke
+    expect(sim.body!.w).toBeCloseTo(bar.w, 0);
+    expect(Math.hypot(sim.home.x - blob.x, sim.home.y - blob.y)).toBeLessThan(1);
+    expect(sim.home.w).toBeCloseTo(blob.w, 0);
     expect(sim.settled()).toBe(true);
 
     sim.setOpen(false);
-    expect(sim.arrival().bar).toBe(0); // the content hides at once
-    run(sim, 4);
-    expect(sim.phase).toBe("closed");
-    expect(sim.drop).toBeNull();
-    expect(Math.hypot(sim.body.x - blob.x, sim.body.y - blob.y)).toBeLessThan(1);
-    expect(sim.body.w).toBeCloseTo(blob.w, 0);
+    expect(sim.arrival()).toBe(0); // the content hides at once
+    expect(run(sim, 4, () => sim.phase === "closed")).toBeLessThan(1.6);
+    expect(sim.body).toBeNull(); // merged back into the button
+    run(sim, 2);
+    expect(sim.home.w).toBeCloseTo(blob.w, 0);
     expect(sim.settled()).toBe(true);
   });
 
-  it("never inverts a shape while the bar gathers", () => {
-    const sim = new LiquidSim({ ...liquidDefaults, viscosity: 0.1 }, { blob, bar, close });
+  it("never inverts a shape while the bar gathers, and reverses mid-flow", () => {
+    const sim = new LiquidSim({ ...liquidDefaults, viscosity: 0.1 }, { blob, bar });
     sim.setOpen(true); run(sim, 4);
     sim.setOpen(false);
-    for (let index = 0; index < 240; index++) { sim.step(1 / 60); expect(sim.body.w).toBeGreaterThan(1); expect(sim.body.h).toBeGreaterThan(1); }
+    for (let index = 0; index < 20; index++) { sim.step(1 / 60); expect(sim.body!.w).toBeGreaterThan(1); expect(sim.body!.h).toBeGreaterThan(1); }
+    sim.setOpen(true);
+    run(sim, 4);
+    expect(sim.phase).toBe("open");
+    expect(sim.body!.w).toBeCloseTo(bar.w, 0);
   });
 });
