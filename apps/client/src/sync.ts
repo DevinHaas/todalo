@@ -123,10 +123,11 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
   let pulling: Promise<void> | null = null;
   let again = false;
   let busy = 0;
+  let lastSyncedAt: number | null = null;
   const listeners = new Set<() => void>();
   const working = async <T,>(run: () => Promise<T>) => {
     busy++; for (const listener of listeners) listener();
-    try { return await run(); } finally { busy--; for (const listener of listeners) listener(); }
+    try { const result = await run(); lastSyncedAt = Date.now(); return result; } finally { busy--; for (const listener of listeners) listener(); }
   };
   const everything = async () => { await idle(cache); await cache.invalidateQueries({ queryKey: taskKeys.user(userId) }); };
 
@@ -162,7 +163,19 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
       await everything();
     }),
     get state(): SyncState { return busy > 0 ? "syncing" : "synced"; },
+    /** When the last pull or reload finished successfully (epoch ms), null before the first. */
+    get lastSyncedAt() { return lastSyncedAt; },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }
 export type Sync = ReturnType<typeof createSync>;
+
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+/** "8 seconds ago", "5 minutes ago" for the account menu's Sync row. */
+export function syncedAgo(at: number, now = Date.now()) {
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  if (seconds < 60) return relative.format(-seconds, "second");
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), "minute");
+  if (seconds < 86400) return relative.format(-Math.floor(seconds / 3600), "hour");
+  return relative.format(-Math.floor(seconds / 86400), "day");
+}

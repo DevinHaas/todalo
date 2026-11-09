@@ -24,24 +24,31 @@ export function LiveUpdates({ userId }: { userId: string }) {
 }
 
 /** The toolbar's quiet Synced / Syncing… label; pressing it (or ⌘R / Ctrl+R) refetches everything behind a full-screen splash. */
-export function SyncStatus({ userId }: { userId: string }) {
+/** ⌘R-style reload with its splash (the toolbar's Synced button and the account menu's Sync row). */
+export function useSyncReload(userId: string) {
   const sync = syncFor(userId);
-  const state = useSyncExternalStore(sync.subscribe, () => sync.state);
   const [reloading, setReloading] = useState(false);
   const reload = () => {
     setReloading(true);
     // ponytail: 400 ms floor so a fast reload reads as a reload, not a flicker.
     void Promise.all([sync.reload().catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))]).finally(() => setReloading(false));
   };
+  const splash = reloading && <div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
+    <img src={logo} alt="todalo" className="size-16" />
+    <Spinner />
+  </div>;
+  return { sync, reload, splash };
+}
+
+export function SyncStatus({ userId }: { userId: string }) {
+  const { sync, reload, splash } = useSyncReload(userId);
+  const state = useSyncExternalStore(sync.subscribe, () => sync.state);
   return <>
     <Button variant="ghost" size="xs" className="text-muted-foreground" data-sync-now aria-live="polite"
       title="Sync now" onClick={reload}>
       {state === "syncing" ? "Syncing…" : "Synced"}
     </Button>
-    {reloading && <div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
-      <img src={logo} alt="todalo" className="size-16" />
-      <Spinner />
-    </div>}
+    {splash}
   </>;
 }
 

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AudioLines, CalendarClock, ChevronDown, HelpCircle, Layers,
-  LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search,
+  AudioLines, CalendarClock, ChevronDown, FlaskConical, Gift, HelpCircle, Layers,
+  LineChart, ListFilter, LogOut, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search, Settings,
 } from "lucide-react";
 import type { Account } from "./session";
 import { coachReads, connection, projectReads, queries, reads, session } from "./runtime";
@@ -18,9 +18,13 @@ import { BoardScreen } from "./board-screens";
 import { TaskAttachmentsScreen } from "./attachment-screens";
 import { TaskOrganizerScreen, useOrganizationMutations } from "./organization-screens";
 import { Popover } from "./popover";
-import { LiveUpdates, SyncStatus, useCalendarEvents } from "./calendar-screens";
+import { LiveUpdates, SyncStatus, useCalendarEvents, useSyncReload } from "./calendar-screens";
+import { syncedAgo, type Sync } from "./sync";
+import { appVersion, lastSeenKey, showWhatsNew } from "./releases";
+import { ReleaseDialog, type ReleaseDialogKind } from "./release-views";
+import { ShortcutKeys } from "./keyboard-views";
 import { QuickFind } from "./search-screens";
-import { KeyboardCommands, taskNeighbour } from "./keyboard-screens";
+import { KeyboardCommands, taskNeighbour, useCommandBindings } from "./keyboard-screens";
 import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds, useTaskGoalOf } from "./goal-screens";
@@ -259,15 +263,61 @@ export function TaskScreen({ account }: { account: Account }) {
     attachments={<TaskAttachmentsScreen userId={account.user.id} taskId={id} />} />;
 }
 
-/** Legacy sidebar account menu: Settings and Log out. */
+const right = "ml-auto pl-3 text-xs text-muted-foreground";
+
+/** The Sync row: time since the last sync, ticking while the menu is open. */
+function SyncRow({ sync, onSync }: { sync: Sync; onSync: () => void }) {
+  const state = useSyncExternalStore(sync.subscribe, () => sync.state);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const at = sync.lastSyncedAt;
+  return <button type="button" role="menuitem" className="popover-item" onClick={onSync}>
+    <RefreshCw /><span>Sync</span><span className={right} aria-live="polite">{state === "syncing" ? "Syncing…" : at === null ? "Not yet" : syncedAgo(at, now)}</span>
+  </button>;
+}
+
+/** Sidebar account menu (Todoist-style): Settings; What's new and Latest experiments; Sync; Log out; version and Changelog. */
 function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: () => void }) {
+  const userId = account.user.id;
   const openSettings = useOpenSettings();
+  const settingsKeys = useCommandBindings(userId, "navigation.settings");
+  const { sync, reload, splash } = useSyncReload(userId);
   const [pending, setPending] = useState(false);
-  return <Popover label="Account menu" role="menu" className="account-menu" triggerClassName="account-trigger"
-    trigger={<><span className="avatar">{account.user.name.slice(0, 1).toUpperCase()}</span><span>{account.user.name}</span><ChevronDown className="chevron" /></>}>
-    {close => <>
-      <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); openSettings(); }}>Settings</button>
-      <button type="button" role="menuitem" className="popover-item" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Log out"}</button>
-    </>}
-  </Popover>;
+  const [dialog, setDialog] = useState<ReleaseDialogKind | null>(null);
+  // After an update, What's new opens once; a first-ever run only records the version.
+  useEffect(() => {
+    const key = lastSeenKey(userId);
+    if (showWhatsNew(appVersion, localStorage.getItem(key))) setDialog("whats-new");
+    localStorage.setItem(key, appVersion);
+  }, [userId]);
+  const divider = <div role="separator" className="mx-1 h-px bg-border" />;
+  return <>
+    <Popover label="Account menu" role="menu" className="account-menu [&>.popover]:w-60" triggerClassName="account-trigger"
+      trigger={<><span className="avatar">{account.user.name.slice(0, 1).toUpperCase()}</span><span>{account.user.name}</span><ChevronDown className="chevron" /></>}>
+      {close => {
+        const show = (kind: ReleaseDialogKind) => () => { close(false); onNavigate(); setDialog(kind); };
+        return <>
+          <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); openSettings(); }}>
+            <Settings /><span>Settings</span>{settingsKeys.length > 0 && <span className={right}><ShortcutKeys bindings={settingsKeys.slice(0, 1)} /></span>}
+          </button>
+          {divider}
+          <button type="button" role="menuitem" className="popover-item" onClick={show("whats-new")}><Gift /><span>What's new</span></button>
+          <button type="button" role="menuitem" className="popover-item" onClick={show("experiments")}><FlaskConical /><span>Latest experiments</span></button>
+          {divider}
+          <SyncRow sync={sync} onSync={() => { close(false); onNavigate(); reload(); }} />
+          {divider}
+          <button type="button" role="menuitem" className="popover-item" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>
+            <LogOut /><span>{pending ? "Please wait…" : "Log out"}</span>
+          </button>
+          {divider}
+          <p className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
+            <span>v{appVersion}</span><span aria-hidden="true">·</span>
+            <button type="button" role="menuitem" className="cursor-pointer rounded-sm border-0 bg-transparent p-0 font-medium text-brand hover:underline focus-visible:underline focus-visible:outline-none" onClick={show("changelog")}>Changelog</button>
+          </p>
+        </>;
+      }}
+    </Popover>
+    <ReleaseDialog kind={dialog} onClose={() => setDialog(null)} />
+    {splash}
+  </>;
 }

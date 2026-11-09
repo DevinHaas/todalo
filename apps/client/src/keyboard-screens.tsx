@@ -38,6 +38,11 @@ function useShortcuts(userId: string) {
   return { query, preferences: query.data?.preferences ?? defaultPreferences(), effective: resolved.preferences, syncError };
 }
 
+/** One command's effective bindings for this user and platform (e.g. the account menu's Settings shortcut). */
+export function useCommandBindings(userId: string, id: string) {
+  return effectiveBindings(id, useShortcuts(userId).effective, platform);
+}
+
 // Task rows are found in the page (legacy data-task-id), so every list view
 // (Today, Upcoming, projects, labels, filters, search, board) shares one handler.
 const ROWS = "main [data-task-id], main button.composer";
