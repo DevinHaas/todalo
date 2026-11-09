@@ -25,15 +25,24 @@ describe("the liquid Coach button", () => {
     expect(sim.body!.w).toBeCloseTo(bar.w, 0);
     expect(Math.hypot(sim.home.x - blob.x, sim.home.y - blob.y)).toBeLessThan(1);
     expect(sim.home.w).toBeCloseTo(blob.w, 0);
-    expect(sim.settled()).toBe(true);
+    // The snap sloshes the button for a while, then it comes to rest.
+    expect(run(sim, 8, () => sim.settled())).toBeLessThan(6);
 
     sim.setOpen(false);
     expect(sim.arrival()).toBe(0); // the content hides at once
     expect(run(sim, 4, () => sim.phase === "closed")).toBeLessThan(1.6);
     expect(sim.body).toBeNull(); // merged back into the button
-    run(sim, 2);
+    expect(run(sim, 8, () => sim.settled())).toBeLessThan(6);
     expect(sim.home.w).toBeCloseTo(blob.w, 0);
-    expect(sim.settled()).toBe(true);
+    expect(Math.hypot(sim.home.sx, sim.home.sy)).toBeLessThan(0.2);
+  });
+
+  it("sloshes the button's liquid away from the bar when the neck snaps", () => {
+    const sim = new LiquidSim(liquidDefaults, { blob, bar });
+    sim.setOpen(true);
+    let furthest = 0;
+    run(sim, 1.5, () => { furthest = Math.max(furthest, sim.home.sx); return false; });
+    expect(furthest).toBeGreaterThan(3); // the bar is to the left: the energy pushes right
   });
 
   it("never inverts a shape while the bar gathers, and reverses mid-flow", () => {
