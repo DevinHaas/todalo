@@ -70,8 +70,9 @@ function RightSidebar({ title, actions, className, children, ...props }: Omit<Re
 }) {
   return (
     <aside data-slot="right-sidebar" className={cn("sticky top-0 flex h-svh w-sidebar shrink-0 flex-col gap-2 self-start overflow-y-auto border-l border-border pt-2 pb-4 pl-4", className)} {...props}>
-      <div className="flex h-control items-center justify-between gap-2">
-        <h2 className="min-w-0 truncate text-sm font-bold">{title}</h2>{actions && <div className="flex items-center gap-1">{actions}</div>}
+      {/* The Mac window drags by this header, as by the toolbar (Tauri ignores the buttons in it). */}
+      <div className="flex h-control items-center justify-between gap-2" data-tauri-drag-region="">
+        <h2 className="min-w-0 truncate text-sm font-bold" data-tauri-drag-region="">{title}</h2>{actions && <div className="flex items-center gap-1">{actions}</div>}
       </div>
       {children}
     </aside>
