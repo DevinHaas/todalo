@@ -153,7 +153,7 @@ button.composer:hover { color: var(--foreground); }
 .quick-add-backdrop { overflow: hidden; color: transparent; pointer-events: none; }
 .composer-form .quick-add-title input { background: transparent; -webkit-appearance: none; appearance: none; }
 /* 1px halo (not more) so two matches one space apart do not merge into one pill. */
-.quick-add-match { position: relative; z-index: 1; margin: 0 -1px; padding: .125rem 1px; border-radius: .25rem; background: color-mix(in oklch, var(--destructive) 20%, transparent); pointer-events: auto; cursor: pointer; }
+.quick-add-match { position: relative; z-index: 1; /* padding, and the equal negative margin that keeps it aligned with the input's text: composer.tsx */ background: color-mix(in oklch, var(--destructive) 20%, transparent); pointer-events: auto; cursor: pointer; }
 .composer-pills { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
 .button.small { min-height: 2rem; gap: .375rem; padding: 0 .625rem; font-size: .8125rem; }
 .button.small svg { width: 1rem; height: 1rem; }

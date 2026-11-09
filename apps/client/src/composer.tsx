@@ -245,7 +245,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       <div className="quick-add-title">
         <div ref={backdrop} className="quick-add-backdrop" aria-hidden="true">
           {segments.map((segment, index) => segment.match
-            ? <span key={index} role="button" tabIndex={-1} className="quick-add-match" data-kind={segment.match.kind} onClick={() => reject(segment.match!)}>{segment.text}</span>
+            ? <span key={index} role="button" tabIndex={-1} className="quick-add-match -mx-0.5 rounded-[0.3125rem] px-0.5 py-[0.1875rem]" data-kind={segment.match.kind} onClick={() => reject(segment.match!)}>{segment.text}</span>
             : <span key={index}>{segment.text}</span>)}
         </div>
         <input ref={input} autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" autoComplete="off" value={title}
