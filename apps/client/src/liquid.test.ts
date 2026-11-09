@@ -25,7 +25,7 @@ describe("the liquid Coach button", () => {
     expect(sim.body!.w).toBeCloseTo(bar.w, 0);
     expect(Math.hypot(sim.home.x - blob.x, sim.home.y - blob.y)).toBeLessThan(1);
     expect(sim.home.w).toBeCloseTo(blob.w, 0);
-    // The snap sloshes the button for a while, then it comes to rest.
+    // Liquid flowing back leans the button for a while, then it comes to rest.
     expect(run(sim, 12, () => sim.settled())).toBeLessThan(10);
 
     sim.setOpen(false);
@@ -34,20 +34,25 @@ describe("the liquid Coach button", () => {
     expect(sim.body).toBeNull(); // merged back into the button
     expect(run(sim, 12, () => sim.settled())).toBeLessThan(10);
     expect(sim.home.w).toBeCloseTo(blob.w, 0);
-    expect(Math.hypot(sim.home.sx, sim.home.sy)).toBeLessThan(0.2);
+    expect(Math.hypot(sim.lean().x, sim.lean().y)).toBeLessThan(0.2);
   });
 
-  it("moves like a thick liquid: the snap pushes the button away from the bar, which creeps back without swinging", () => {
+  it("moves like a thick liquid: liquid flowing back carries on through the button, bulging it away from the bar, then creeps back", () => {
     const sim = new LiquidSim(liquidDefaults, { blob, bar });
+    // How far the liquid around the button reaches past its right edge.
+    const bulge = () => Math.max(...sim.shapes().filter(shape => !shape.segment && Math.abs(shape.x - blob.x) < 60).map(shape => shape.x + shape.w)) - (blob.x + blob.w);
     sim.setOpen(true);
-    let furthest = 0, widest = 0, swing = 0;
+    let furthest = 0, widest = 0, swing = 0, previous = 0, jump = 0;
     run(sim, 6, () => {
-      furthest = Math.max(furthest, sim.home.sx);
+      const lean = sim.lean().x;
+      jump = Math.max(jump, Math.abs(lean - previous)); previous = lean;
+      furthest = Math.max(furthest, bulge());
       widest = Math.max(widest, sim.body?.w ?? 0);
-      if (furthest > 3) swing = Math.min(swing, sim.home.sx);
+      if (furthest > 3) swing = Math.min(swing, lean);
       return false;
     });
-    expect(furthest).toBeGreaterThan(3); // the bar is to the left: the energy pushes right
+    expect(furthest).toBeGreaterThan(3); // the bar is to the left: the momentum carries on to the right
+    expect(jump).toBeLessThan(1); // one continuous motion, no kick (px per frame)
     expect(swing).toBeGreaterThan(-0.1); // overdamped: it never swings back past the centre
     expect(widest).toBeLessThan(bar.w * 1.01); // the bar spreads without overshooting
   });
