@@ -51,6 +51,10 @@ const groups: { title: string; sliders: Slider[] }[] = [
     { key: "pinch", name: "Pinch threshold", min: 0.5, max: 10, step: 0.25, unit: "px" },
     { key: "satellites", name: "Satellite beads", min: 0, max: 5, step: 1 },
   ] },
+  { title: "Recoil", sliders: [
+    { key: "recoil", name: "Energy back", min: 0, max: 3, step: 0.05 },
+    { key: "settle", name: "Settle time", min: 0.2, max: 4, step: 0.05, unit: "s" },
+  ] },
   { title: "Wobble", sliders: [
     { key: "wobbleSpeed", name: "Speed", min: 0, max: 4, step: 0.05 },
     { key: "wobbleAmp", name: "Amplitude", min: 0, max: 8, step: 0.1, unit: "px" },

@@ -2,10 +2,10 @@
 // in liquid.test.ts) drawn by one WebGL2 signed-distance shader. Shapes join with
 // a smooth minimum ("goo"); a stretching capsule between two shapes is the neck
 // that thins as it lengthens and drains, and pinches off below a threshold into
-// beads (satellites) that fall back to the nearer end. The button in the corner
-// (the home drop) always stays: opening, liquid flows out of it to the bar's
-// place and spreads into the bar; closing, the bar gathers into a drop and flows
-// back into the button.
+// optional beads. The button in the corner (the home drop) always stays: opening,
+// one drop flows out of it on a thick neck and spreads into the bar; when the neck
+// snaps, its stub runs back into the button, which wobbles and slowly settles.
+// Closing, the bar gathers into one drop that flows back in, with the same wobble.
 
 export type LiquidParams = {
   /** The button's radius, px. */
@@ -37,15 +37,19 @@ export type LiquidParams = {
   pinch: number;
   /** Beads a pinched neck breaks into. */
   satellites: number;
+  /** How hard the energy flowing back makes the button wobble. */
+  recoil: number;
+  /** Seconds for the button's wobble to die down. */
+  settle: number;
   gloss: number;
   shadow: number;
   blobColor: string;
 };
 
 export const liquidDefaults: LiquidParams = {
-  size: 24, duration: 0.45, tension: 1, viscosity: 0.6, lag: 0.7, spreadAt: 0.35, flow: 0.75,
+  size: 24, duration: 0.45, tension: 1, viscosity: 0.6, lag: 0.7, spreadAt: 0.35, flow: 1,
   wobbleSpeed: 1, wobbleAmp: 2.2, barWobble: 0.15, stretch: 1,
-  goo: 16, neck: 46, pinch: 2.5, satellites: 2,
+  goo: 20, neck: 110, pinch: 3.5, satellites: 0, recoil: 1, settle: 1.4,
   gloss: 0.55, shadow: 1,
   blobColor: "#dc4c3e",
 };
@@ -63,6 +67,8 @@ type Body = Box & {
   target: Box; targetMix: number;
   posOmega: number; sizeOmega: number;
   wobble: number; seed: number;
+  /** Extra surface ripple, px, dying down (the button after a snap). */
+  ripple: number;
   /** Merges into this body and disappears once inside. */
   into?: Body;
 };
@@ -74,7 +80,7 @@ export type Phase = "closed" | "opening" | "open" | "closing";
 
 const makeBody = (box: Box, mix: number, seed: number): Body => ({
   ...box, vx: 0, vy: 0, vw: 0, vh: 0, vr: 0, j: 0, vj: 0, mix, vmix: 0,
-  target: { ...box }, targetMix: mix, posOmega: 1, sizeOmega: 1, wobble: 0, seed,
+  target: { ...box }, targetMix: mix, posOmega: 1, sizeOmega: 1, wobble: 0, ripple: 0, seed,
 });
 const spring = (x: number, v: number, to: number, omega: number, zeta: number, dt: number) => {
   const a = omega * omega * (to - x) - 2 * zeta * omega * v;
@@ -101,8 +107,6 @@ export class LiquidSim {
   home: Body;
   /** The bar's liquid, from leaving the button until it flows back in. */
   body: Body | null = null;
-  /** Closing, the remnant left at the bar's place, draining through the neck. */
-  anchor: Body | null = null;
   bridges: Bridge[] = [];
   satellites: Body[] = [];
   /** Counts pinch-offs (tests, and the lab's readout). */
@@ -135,20 +139,20 @@ export class LiquidSim {
       if (!this.body) {
         const body = makeBody(round(home.x, home.y, p.size * p.flow), 0, this.seed++);
         this.body = body;
-        this.bridges.push({ a: home, b: body, age: 0, base: p.size * p.flow, life: p.duration * 0.9 });
+        this.bridges.push({ a: home, b: body, age: 0, base: p.size * p.flow, life: p.duration * 1.4 });
         home.vj -= 0.4;
       }
       this.travel = Math.hypot(this.body.x - this.bar.x, this.body.y - this.bar.y);
       return;
     }
-    if (!this.body) { this.phase = "closed"; return; }
-    // The remnant: a copy of the bar where it is, pinned, rounding into a drop and draining.
-    const { body } = this;
-    const anchor: Body = { ...body, vx: 0, vy: 0, vw: 0, vh: 0, vr: 0, j: 0, vj: 0, seed: this.seed++, into: undefined };
-    anchor.target = round(anchor.x, anchor.y, radius(anchor));
-    anchor.targetMix = 0;
-    this.anchor = anchor;
-    this.bridges.push({ a: anchor, b: body, age: 0, base: radius(anchor), life: p.duration * 0.9 });
+    if (!this.body) this.phase = "closed";
+  }
+
+  /** Energy arriving at the button: it squashes, ripples, and settles over `settle` seconds. */
+  private shake(amount: number) {
+    const p = this.params;
+    this.home.vj += 1.6 * p.recoil * amount / Math.max(p.tension, 0.2);
+    this.home.ripple += 3 * p.recoil * amount;
   }
 
   step(dt: number) {
@@ -175,17 +179,10 @@ export class LiquidSim {
       body.sizeOmega = opening ? omega * p.lag : omega;
       body.wobble = p.wobbleAmp * (1 + (p.barWobble - 1) * body.mix);
     }
-    if (this.anchor) {
-      // Rounds into a drop (surface tension) while draining through the neck.
-      const anchor = this.anchor;
-      const drained = Math.max(0, radius(anchor.target) - dt * p.size * 0.9 / Math.max(p.duration, 0.05));
-      anchor.target = round(anchor.target.x, anchor.target.y, drained);
-      anchor.posOmega = 0; anchor.sizeOmega = omega * Math.sqrt(p.tension);
-      anchor.wobble = p.wobbleAmp * 0.5;
-    }
+    home.ripple *= Math.exp(-dt / Math.max(p.settle * 0.6, 0.05));
     for (const satellite of this.satellites) {
       const into = satellite.into ?? home;
-      satellite.target = round(into.x, into.y, 0);
+      satellite.target = round(into.x, into.y, into === home ? radius(satellite) : 0);
       satellite.posOmega = omega * 1.1; satellite.sizeOmega = omega * 0.5;
       satellite.targetMix = into.targetMix;
     }
@@ -210,23 +207,28 @@ export class LiquidSim {
         bead.into = t < 0.5 ? bridge.a : bridge.b;
         this.satellites.push(bead);
       }
-      // The snap: both ends recoil, and the remnant flows on into the body.
-      bridge.a.vj += 0.5 / Math.max(p.tension, 0.2);
+      // The snap: the drop recoils, and the neck's stub runs back into the button with the energy.
       bridge.b.vj += 0.9 / Math.max(p.tension, 0.2);
-      if (bridge.a === this.anchor) { this.anchor.into = bridge.b; this.satellites.push(this.anchor); this.anchor = null; }
+      if (bridge.a === home) {
+        const stub = makeBody(round(ax, ay, Math.max(this.neck(bridge).r, p.pinch) * 1.6), home.mix, this.seed++);
+        stub.into = home;
+        this.satellites.push(stub);
+      }
     }
     // Back home: the closing drop merges into the button, which takes the bump.
     if (body && !opening && this.gathered && Math.hypot(body.x - home.x, body.y - home.y) < radius(home) * 0.6) {
       this.body = null;
-      home.vj += 0.7 / Math.max(p.tension, 0.2);
+      this.shake(1);
       this.bridges = this.bridges.filter(bridge => bridge.a !== body && bridge.b !== body);
       for (const satellite of this.satellites) if (satellite.into === body) satellite.into = home;
       this.phase = "closed";
     }
-    // Merged: a satellite inside its body is gone.
+    // Merged: a satellite inside its body is gone; one reaching the button shakes it.
     this.satellites = this.satellites.filter(satellite => {
       const into = satellite.into ?? home;
-      return Math.hypot(satellite.x - into.x, satellite.y - into.y) >= Math.max(radius(into) * 0.5, 2) && radius(satellite) >= 0.4;
+      const merged = Math.hypot(satellite.x - into.x, satellite.y - into.y) < Math.max(radius(into) * 0.5, 2);
+      if (merged && into === home) this.shake(0.8);
+      return !merged && radius(satellite) >= 0.4;
     });
     if (this.phase === "opening" && this.body && near(this.body, this.bar, Math.max(12, this.bar.w * 0.04))) this.phase = "open";
   }
@@ -260,7 +262,9 @@ export class LiquidSim {
       // Braking along x squashes it wide, braking along y tall: the arrival wobble.
       const ax = (item.vx - vx0) / dt, ay = (item.vy - vy0) / dt;
       if (item !== this.home) item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00002 * p.stretch * dt * 60;
-      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, zeta * 0.6, dt);
+      // The button rings down over `settle` seconds; everything else damps with the viscosity.
+      const jiggleZeta = item === this.home ? Math.min(zeta * 0.6, 1 / (jiggleOmega * Math.max(p.settle, 0.05))) : zeta * 0.6;
+      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, jiggleZeta, dt);
       item.j = Math.max(-0.35, Math.min(0.35, item.j));
       item.w = Math.max(0, item.w); item.h = Math.max(0, item.h); item.r = Math.max(0, item.r);
     }
@@ -269,7 +273,6 @@ export class LiquidSim {
   private *bodies() {
     yield this.home;
     if (this.body) yield this.body;
-    if (this.anchor) yield this.anchor;
     yield* this.satellites;
   }
 
@@ -283,7 +286,7 @@ export class LiquidSim {
       out.push({
         x: item.x, y: item.y,
         w: item.w * (1 + item.j), h: item.h * (1 - item.j), r: item.r,
-        wobble: item.wobble, mix: item.mix, seed: item.seed, segment: false,
+        wobble: item.wobble + item.ripple, mix: item.mix, seed: item.seed, segment: false,
         stretch: Math.min(0.8, speed * p.stretch / 2400) * roundness,
         dx: speed ? item.vx / speed : 1, dy: speed ? item.vy / speed : 0,
       });
@@ -306,7 +309,7 @@ export class LiquidSim {
   /** At rest: nothing left to settle but the idle wobble. */
   settled() {
     const { body } = this;
-    return (this.phase === "open" || this.phase === "closed") && !this.anchor && !this.satellites.length && !this.bridges.length
+    return (this.phase === "open" || this.phase === "closed") && !this.satellites.length && !this.bridges.length
       && (!body || (Math.hypot(body.vx, body.vy) < 0.5 && Math.hypot(body.vw, body.vh) < 0.02 && Math.abs(body.vj) < 0.01));
   }
 }
