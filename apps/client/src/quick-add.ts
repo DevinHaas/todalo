@@ -8,8 +8,8 @@ import type { Recurrence } from "@todalo/ramble/recurrence";
 import { dateInputValue, localInstant, type NewTask, type Placement, type RecurrenceDto } from "./tasks";
 
 /** Rejected phrases are kept lower-cased for the whole draft (legacy click-to-reject). */
-export function parseTitle(title: string, enabled: boolean, rejected: ReadonlySet<string>, now?: Date): ParseQuickAddResult {
-  return parseQuickAddOrPlain(title, enabled, now, { isRejected: (match) => rejected.has(match.text.toLowerCase()) });
+export function parseTitle(title: string, enabled: boolean, rejected: ReadonlySet<string>, now?: Date, baseTime?: { start: string; end: string | null }): ParseQuickAddResult {
+  return parseQuickAddOrPlain(title, enabled, now, { isRejected: (match) => rejected.has(match.text.toLowerCase()), baseTime });
 }
 
 const startOfDay = (now: Date) => { const day = new Date(now); day.setHours(0, 0, 0, 0); return day; };

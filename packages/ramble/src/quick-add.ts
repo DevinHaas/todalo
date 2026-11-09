@@ -212,7 +212,7 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
 
   // "19:30 for 30min", "7:30pm for 1h"
   const timeForDurationRe =
-    /\b(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)?\s+for\s+(\d+)\s*(min|mins|minutes|h|hr|hrs|hours)\b/gi;
+    /\b(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)?\s+for\s+(\d+)\s*(min|mins|minutes|m|h|hr|hrs|hours)\b/gi;
   while ((m = timeForDurationRe.exec(text))) {
     if (overlapsInvalidRange(m)) continue;
     const start = normalizeTime(m[1], m[2], m[3]);
@@ -253,7 +253,7 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
   // Resolve against the accepted start after rejection and overlap handling.
   // Where this overlaps timeForDurationRe's own match, resolveOverlaps drops
   // it in favor of that longer, already-complete candidate.
-  const standaloneDurationRe = /\bfor\s+(\d+)\s*(min|mins|minutes|h|hr|hrs|hours)\b/gi;
+  const standaloneDurationRe = /\bfor\s+(\d+)\s*(min|mins|minutes|m|h|hr|hrs|hours)\b/gi;
   while ((m = standaloneDurationRe.exec(text))) {
     const n = parseInt(m[1], 10);
     const minutes = m[2].toLowerCase().startsWith("h") ? n * 60 : n;
@@ -313,6 +313,11 @@ export interface ParseQuickAddOptions {
   // — how click-to-reject un-highlights a match for the rest of a compose
   // session without persisting anything. See CONTEXT.md's "Matched phrase".
   isRejected?: (match: QuickAddMatch) => boolean;
+  // The time the composer was opened with (a calendar slot, the task being
+  // edited): a lone duration ("for 1h") lengthens it, and with no time phrase
+  // the fields fall back to it, so deleting the phrase restores the slot.
+  // ponytail: a start picked by hand after opening is not the base; "for 1h" then measures from the slot.
+  baseTime?: { start: string; end: string | null };
 }
 
 export function parseQuickAdd(
@@ -334,10 +339,11 @@ export function parseQuickAdd(
   // first. `accepted` is start-position sorted, so the first truthy value
   // of each is the earliest-written one.
   const timeValues = accepted.filter((c) => c.kind === "time").map((c) => c.value as TimeValue);
-  const startTime = timeValues.map((v) => v.start).find(Boolean) ?? null;
+  const parsedStart = timeValues.map((v) => v.start).find(Boolean) ?? null;
+  const startTime = parsedStart ?? (options.baseTime?.start || null);
   const endTime = timeValues
     .map((v) => v.duration !== undefined && startTime ? addMinutesToTime(startTime, v.duration) : v.end)
-    .find(Boolean) ?? null;
+    .find(Boolean) ?? (parsedStart ? null : options.baseTime?.end ?? null);
   if (!startTime) {
     accepted = accepted.filter((c) => c.kind !== "time" || (c.value as TimeValue).duration === undefined);
   }

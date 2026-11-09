@@ -67,4 +67,14 @@ describe("date popover quick dates", () => {
     expect(first).toEqual({ label: "Today", day: "Thu", date: new Date(2026, 9, 15) });
     expect(rest).toEqual(quickDateOptions(now));
   });
+  it("lengthens a calendar slot's time with a duration alone, and restores the slot when the phrase goes", () => {
+    const base = { start: "17:45", end: "18:00" };
+    const slot = syncQuickAddFields(initialSyncState, { type: "seed", date: new Date(2026, 9, 15), time: base.start, endTime: base.end });
+    const parse = (title: string) => parseTitle(title, true, none, now, base);
+    expect(quickAddTask("Working on Todalo for 1h", slot, parse("Working on Todalo for 1h"), now))
+      .toEqual({ title: "Working on Todalo", dueDate: local(15, 17, 45), dueDateEnd: local(15, 18, 45), recurrence: null });
+    expect(submit("Call mom for 30m")).toMatchObject({ title: "Call mom for 30m", dueDate: null });
+    const lengthened = syncQuickAddFields(slot, { type: "parse", parsed: parse("Working for 30m") });
+    expect(quickAddTask("Working", lengthened, parse("Working"), now)).toMatchObject({ dueDate: local(15, 17, 45), dueDateEnd: local(15, 18) });
+  });
 });

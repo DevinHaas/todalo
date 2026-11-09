@@ -99,6 +99,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const [rejected, setRejected] = useState<ReadonlySet<string>>(() => new Set(editing ? parseTitle(editing.title, smartDates, new Set()).matches.map(match => match.text.toLowerCase()) : []));
   const [sync, dispatch] = useReducer(syncQuickAddFields, undefined, seed);
   const [seeded] = useState(() => scheduleOf(sync).date);
+  // The slot's (or edited task's) time: "for 1h" alone lengthens it.
+  const [base] = useState(() => sync.time.value ? { start: sync.time.value, end: sync.endTime.value || null } : undefined);
     const [customRepeat, setCustomRepeat] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,10 +116,10 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
 
   useEffect(() => { const timer = setTimeout(() => setParsedTitle(title), PARSE_DEBOUNCE_MS); return () => clearTimeout(timer); }, [title]);
   // Debounced, so field sync does not refire on every keystroke…
-  const parsed = useMemo(() => parseTitle(parsedTitle, smartDates, rejected), [parsedTitle, smartDates, rejected]);
+  const parsed = useMemo(() => parseTitle(parsedTitle, smartDates, rejected, undefined, base), [parsedTitle, smartDates, rejected, base]);
   useEffect(() => dispatch({ type: "parse", parsed }), [parsed]);
   // …while the highlight offsets always follow the title as typed.
-  const live = useMemo(() => parseTitle(title, smartDates, rejected), [title, smartDates, rejected]);
+  const live = useMemo(() => parseTitle(title, smartDates, rejected, undefined, base), [title, smartDates, rejected, base]);
   const segments = highlightSegments(title, live.matches);
   const schedule = scheduleOf(sync);
 
@@ -159,7 +161,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     const direction = event.currentTarget.dataset.direction === "above" ? "above" : "below";
     delete event.currentTarget.dataset.direction;
     if (!title.trim() || pending) return;
-    const fields = quickAddTask(title, sync, parseTitle(title, smartDates, rejected));
+    const fields = quickAddTask(title, sync, parseTitle(title, smartDates, rejected, undefined, base));
     if (editing) {
       setPending(true); setError(null);
       try {
