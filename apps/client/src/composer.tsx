@@ -14,6 +14,7 @@ import {
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
 import { inlineError } from "./toasts";
+import { cn } from "./ui";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -244,9 +245,16 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
         <div ref={backdrop} className="quick-add-backdrop" aria-hidden="true">
-          {segments.map((segment, index) => segment.match
-            ? <span key={index} role="button" tabIndex={-1} className="quick-add-match -mx-0.5 rounded-[0.3125rem] px-0.5 py-[0.1875rem]" data-kind={segment.match.kind} onClick={() => reject(segment.match!)}>{segment.text}</span>
-            : <span key={index}>{segment.text}</span>)}
+          {segments.map((segment, index) => {
+            // Phrases only a space apart share one highlight ("today 4pm for 1h"); its ends get the
+            // padding, offset by an equal negative margin so the highlight stays on the input's text.
+            const lit = (at: number) => Boolean(segments[at]?.match) || (/^\s+$/.test(segments[at]?.text ?? "x") && Boolean(segments[at - 1]?.match && segments[at + 1]?.match));
+            if (!lit(index)) return <span key={index}>{segment.text}</span>;
+            const ends = cn("py-1", !lit(index - 1) && "-ml-1 rounded-l-md pl-1", !lit(index + 1) && "-mr-1 rounded-r-md pr-1");
+            return segment.match
+              ? <span key={index} role="button" tabIndex={-1} className={cn("quick-add-match", ends)} data-kind={segment.match.kind} onClick={() => reject(segment.match!)}>{segment.text}</span>
+              : <span key={index} className={cn("quick-add-match pointer-events-none", ends)}>{segment.text}</span>;
+          })}
         </div>
         <input ref={input} autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" autoComplete="off" value={title}
           onChange={(event) => setTitle(event.target.value)} onScroll={syncScroll} onSelect={syncScroll} />
