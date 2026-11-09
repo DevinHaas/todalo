@@ -175,7 +175,9 @@ export function Shell({ account }: { account: Account }) {
   return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
     <aside className="sidebar" data-tauri-drag-region aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
-      <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" onClick={() => { setCollapsed(true); setMobileOpen(false); }}><PanelLeft /></button>
+      {/* Desktop: the one toggle, open and collapsed (it stays visible, styles.css). Mobile: closes the drawer. */}
+      <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" aria-expanded={!collapsed}
+        onClick={() => { if (mobileOpen) setMobileOpen(false); else setCollapsed(closed => !closed); }}><PanelLeft /></button>
       <AccountMenu account={account} onNavigate={() => setMobileOpen(false)} />
       <div className="add-row">
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>

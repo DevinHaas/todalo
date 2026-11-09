@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { cn } from "../../lib/utils";
 
@@ -68,8 +69,28 @@ const sidebarItemClassName = [
 function RightSidebar({ title, actions, className, children, ...props }: Omit<React.ComponentProps<"aside">, "title"> & {
   title: React.ReactNode; actions?: React.ReactNode;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    slide(el, "in");
+    // Callers unmount the panel to close it, so a detached copy plays the slide out
+    // in its place. ponytail: the copy is a static snapshot (no handlers), fine for .25s.
+    return () => {
+      if (!el.isConnected) return;
+      const ghost = el.cloneNode(true) as HTMLElement;
+      ghost.inert = true;
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.style.pointerEvents = "none";
+      el.after(ghost);
+      ghost.scrollTop = el.scrollTop;
+      const animation = slide(ghost, "out");
+      if (animation) animation.onfinish = animation.oncancel = () => ghost.remove();
+      else ghost.remove();
+    };
+  }, []);
   return (
-    <aside data-slot="right-sidebar" className={cn("sticky top-0 flex h-svh w-sidebar shrink-0 flex-col gap-2 self-start overflow-y-auto border-l border-border pt-2 pb-4 pl-4", className)} {...props}>
+    <aside ref={ref} data-slot="right-sidebar" className={cn("sticky top-0 flex h-svh w-sidebar shrink-0 flex-col gap-2 self-start overflow-y-auto border-l border-border pt-2 pb-4 pl-4", className)} {...props}>
       {/* The Mac window drags by this header, as by the toolbar (Tauri ignores the buttons in it). */}
       <div className="flex h-control items-center justify-between gap-2" data-tauri-drag-region="">
         <h2 className="min-w-0 truncate text-sm font-bold" data-tauri-drag-region="">{title}</h2>{actions && <div className="flex items-center gap-1">{actions}</div>}
@@ -77,6 +98,21 @@ function RightSidebar({ title, actions, className, children, ...props }: Omit<Re
       {children}
     </aside>
   );
+}
+
+/**
+ * Slides a right sidebar in or out. Beside the page (desktop) a negative right margin
+ * lets the page column widen/narrow with it at a fixed panel width; as a full-screen
+ * overlay (mobile, position: fixed) it slides across instead.
+ */
+function slide(el: HTMLElement, direction: "in" | "out") {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+  const hidden = getComputedStyle(el).position === "fixed"
+    ? { transform: "translateX(100%)" }
+    : { marginRight: `${-el.offsetWidth}px` };
+  const shown = "transform" in hidden ? { transform: "none" } : { marginRight: "0px" };
+  return el.animate(direction === "in" ? [hidden, shown] : [shown, hidden],
+    { duration: 250, easing: "cubic-bezier(.2, .8, .2, 1)", fill: direction === "out" ? "forwards" : "none" });
 }
 
 export { Hint, List, ListRow, PageHeader, PageSection, RightSidebar, SidebarSectionHeader, sidebarItemClassName };

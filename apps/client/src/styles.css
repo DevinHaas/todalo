@@ -26,15 +26,15 @@ dt { color: var(--muted-foreground); margin-top: .75rem; }
 dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
 
 /* App shell: mirrors the legacy shadcn sidebar/inset dimensions (apps/web). */
-.app-shell { display: flex; min-height: 100svh; font-size: .875rem; }
+/* overflow-x: clip hides sidebars mid-slide (negative margins) without a scrollbar; clip, unlike hidden, keeps sticky working. */
+.app-shell { display: flex; min-height: 100svh; font-size: .875rem; overflow-x: clip; }
 .app-shell svg { width: 1rem; height: 1rem; flex-shrink: 0; }
 .sidebar { position: sticky; top: 0; height: 100svh; width: 16rem; flex-shrink: 0; display: flex; flex-direction: column; gap: .75rem; padding: max(.5rem, env(safe-area-inset-top)) .5rem max(.5rem, env(safe-area-inset-bottom)) max(.5rem, env(safe-area-inset-left)); background: var(--sidebar); border-right: 1px solid var(--border); overflow-y: auto; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border: 0; border-radius: .375rem; background: transparent; color: inherit; padding: 0; cursor: pointer; }
 .icon-button:hover:not([aria-disabled]), .nav-item:hover:not([aria-disabled]), .account-trigger:hover { background: var(--sidebar-accent); }
 .sidebar-toggle { align-self: flex-end; }
-/* Mac overlay title bar: traffic lights sit left of the sidebar toggle; with the sidebar hidden the toolbar makes room. */
+/* Mac overlay title bar: traffic lights sit left of the sidebar toggle; with the sidebar hidden the toolbar makes room (--toggle-home below). */
 html[data-titlebar="overlay"] .sidebar-toggle { width: 2rem; height: 2rem; }
-html[data-titlebar="overlay"] .app-shell[data-collapsed="true"] .toolbar { padding-left: 5.5rem; }
 
 .account-menu { align-self: flex-start; }
 .account-trigger { display: flex; align-items: center; gap: .5rem; padding: .25rem; border: 0; border-radius: .375rem; background: none; color: inherit; font: inherit; font-size: .875rem; text-decoration: none; font-weight: 500; cursor: pointer; }
@@ -58,8 +58,29 @@ html[data-titlebar="overlay"] .app-shell[data-collapsed="true"] .toolbar { paddi
 .layout-label { font-size: .75rem; color: var(--muted-foreground); padding: 0 .25rem; }
 .display-button { display: inline-flex; align-items: center; gap: .375rem; padding: .375rem .5rem; font-size: .75rem; font-weight: 500; }
 .trigger { display: none; }
-.app-shell[data-collapsed="true"] .sidebar { display: none; }
-.app-shell[data-collapsed="true"] .trigger { display: inline-flex; }
+/* Collapse slides the sidebar out via negative margin so the inset grows with it; visibility keeps it out of tab order once hidden. */
+.sidebar { transition: margin-left .25s cubic-bezier(.2, .8, .2, 1), visibility .25s; }
+.app-shell[data-collapsed="true"] .sidebar { margin-left: -16rem; visibility: hidden; }
+/*
+ * Desktop: one sidebar toggle, pinned to the window's top-left. It glides between the
+ * sidebar's top-right corner (open) and the toolbar's start (collapsed) as the sidebar
+ * slides, instead of a second toolbar button popping in. --toggle-home: where the
+ * collapsed toggle sits (right of the Mac traffic lights under the overlay title bar).
+ */
+@media (min-width: 768px) {
+  .app-shell { --toggle-home: 1rem; }
+  html[data-titlebar="overlay"] .app-shell { --toggle-home: 5.5rem; }
+  /* z-index: sticky makes the sidebar its own stacking context, so the toggle's z-index only
+     counts within it; without this the page column (later in the DOM) covers the collapsed toggle. */
+  .sidebar { z-index: 21; padding-top: calc(max(.5rem, env(safe-area-inset-top)) + 2.75rem); }
+  .sidebar-toggle { position: fixed; z-index: 21; top: max(.5rem, env(safe-area-inset-top)); left: calc(16rem - 1px - .5rem - 2rem); width: 2rem; height: 2rem; visibility: visible;
+    transition: left .25s cubic-bezier(.2, .8, .2, 1); }
+  .app-shell[data-collapsed="true"] .sidebar-toggle { left: var(--toggle-home); }
+  /* The collapsed toolbar leaves room for the toggle (and the traffic lights). */
+  .toolbar { transition: padding-left .25s cubic-bezier(.2, .8, .2, 1); }
+  .app-shell[data-collapsed="true"] .toolbar { padding-left: calc(var(--toggle-home) + 2.25rem); }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar, .sidebar-backdrop, .sidebar-toggle, .toolbar { transition: none !important; } }
 .content { padding: 1.5rem 1.5rem max(1.5rem, env(safe-area-inset-bottom)); }
 .page-title { margin: 0 0 .25rem; font-size: 1.5rem; line-height: 2rem; font-weight: 600; overflow-wrap: anywhere; }
 .page-count { margin: 0 0 1rem; color: var(--muted-foreground); }
@@ -439,10 +460,12 @@ input.switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--row-tint
 body::before { content: ""; position: fixed; inset: 0 0 auto; z-index: 25; height: env(safe-area-inset-top); background: var(--background); pointer-events: none; }
 
 @media (max-width: 767px) {
-  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 18rem; display: none; }
-  .app-shell[data-mobile-open="true"] .sidebar { display: flex; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 18rem; transform: translateX(-100%); visibility: hidden; transition: transform .25s cubic-bezier(.2, .8, .2, 1), visibility .25s; }
+  .app-shell[data-collapsed] .sidebar { margin-left: 0; }
+  .app-shell[data-mobile-open="true"] .sidebar { transform: none; visibility: visible; }
   /* cursor: iOS WebKit only dispatches clicks on elements it considers clickable. */
-  .app-shell[data-mobile-open="true"] .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 10; background: #0000004d; cursor: pointer; }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 10; background: #0000004d; cursor: pointer; opacity: 0; visibility: hidden; transition: opacity .25s, visibility .25s; }
+  .app-shell[data-mobile-open="true"] .sidebar-backdrop { opacity: 1; visibility: visible; }
   .trigger { display: inline-flex; width: 2.75rem !important; height: 2.75rem !important; }
   .toolbar { padding-left: max(1rem, env(safe-area-inset-left)); }
   .content { padding-left: max(1.5rem, env(safe-area-inset-left)); }
