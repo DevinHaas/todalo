@@ -77,4 +77,14 @@ describe("date popover quick dates", () => {
     const lengthened = syncQuickAddFields(slot, { type: "parse", parsed: parse("Working for 30m") });
     expect(quickAddTask("Working", lengthened, parse("Working"), now)).toMatchObject({ dueDate: local(15, 17, 45), dueDateEnd: local(15, 18) });
   });
+  it("reads compound and decimal durations", () => {
+    const end = (title: string) => parseTitle(title, true, none, now, { start: "17:15", end: "18:15" }).endTime;
+    expect(end("Finish Todalo for 1h 30min")).toBe("18:45");
+    expect(end("x for 1h30")).toBe("18:45");
+    expect(end("x for 1.5 hours")).toBe("18:45");
+    expect(end("x for 2 hours and 15 minutes")).toBe("19:30");
+    expect(end("x for 1 hour")).toBe("18:15");
+    expect(parseTitle("x for 1h 3 people", true, none, now).matches.map(match => match.text)).toEqual([]);
+    expect(parseTitle("x 17:00 for 1h 30min", true, none, now)).toMatchObject({ startTime: "17:00", endTime: "18:30" });
+  });
 });

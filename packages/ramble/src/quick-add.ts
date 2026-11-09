@@ -210,16 +210,14 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
     (range) => match.index < range.end && match.index + match[0].length > range.start,
   );
 
-  // "19:30 for 30min", "7:30pm for 1h"
-  const timeForDurationRe =
-    /\b(?:at\s+)?(\d{1,2}):(\d{2})\s*(am|pm)?\s+for\s+(\d+)\s*(min|mins|minutes|m|h|hr|hrs|hours)\b/gi;
+  // "19:30 for 30min", "7:30pm for 1h", "17:00 for 1h 30min"
+  const timeForDurationRe = new RegExp(`\\b(?:at\\s+)?(\\d{1,2}):(\\d{2})\\s*(am|pm)?\\s+for\\s+${DURATION}\\b`, "gi");
   while ((m = timeForDurationRe.exec(text))) {
     if (overlapsInvalidRange(m)) continue;
     const start = normalizeTime(m[1], m[2], m[3]);
     if (!start) continue;
-    const n = parseInt(m[4], 10);
-    const minutes = m[5].toLowerCase().startsWith("h") ? n * 60 : n;
-    push(m, "time", { start, end: addMinutesToTime(start, minutes) });
+    const minutes = durationMinutes(m[4]);
+    if (minutes) push(m, "time", { start, end: addMinutesToTime(start, minutes) });
   }
 
   // Single 12-hour times need only their meridiem, not an introducing word
@@ -253,11 +251,10 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
   // Resolve against the accepted start after rejection and overlap handling.
   // Where this overlaps timeForDurationRe's own match, resolveOverlaps drops
   // it in favor of that longer, already-complete candidate.
-  const standaloneDurationRe = /\bfor\s+(\d+)\s*(min|mins|minutes|m|h|hr|hrs|hours)\b/gi;
+  const standaloneDurationRe = new RegExp(`\\bfor\\s+${DURATION}\\b`, "gi");
   while ((m = standaloneDurationRe.exec(text))) {
-    const n = parseInt(m[1], 10);
-    const minutes = m[2].toLowerCase().startsWith("h") ? n * 60 : n;
-    push(m, "time", { start: "", end: null, duration: minutes });
+    const minutes = durationMinutes(m[1]);
+    if (minutes) push(m, "time", { start: "", end: null, duration: minutes });
   }
 
   const namedRecurrenceRe = /\b(daily|weekly|monthly)\b/gi;
@@ -278,6 +275,15 @@ function collectCandidates(text: string, reference: Date): Candidate[] {
   }
 
   return candidates;
+}
+
+// A duration after "for": "30min", "1h", "1.5 hours", "1h 30min", "1h30", "2 hours and 15 minutes".
+const DURATION = String.raw`(\d+(?:[.,]\d+)?\s*(?:h|hrs?|hours?)(?:\s*(?:and\s+)?\d+\s*(?:m|mins?|minutes?)|\d{2})?|\d+\s*(?:m|mins?|minutes?))`;
+function durationMinutes(text: string): number {
+  const hours = /^(\d+(?:[.,]\d+)?)\s*h/i.exec(text);
+  if (!hours) return parseInt(text, 10);
+  const rest = /(\d+)\D*$/.exec(text.slice(hours[0].length));
+  return Math.round(parseFloat(hours[1].replace(",", ".")) * 60) + (rest ? parseInt(rest[1], 10) : 0);
 }
 
 // Longest match wins on overlaps; ties break toward the earlier start so
