@@ -7,6 +7,8 @@ import { coachProviderKinds as serverProviderKinds } from "../../../packages/ser
 import { localZone } from "./seasons";
 import type { DraftDayDto, DraftDto, DraftItemDto, DraftsDto } from "../../../packages/server/src/drafts";
 import type { ChatMessageDto, CoachChatDto } from "../../../packages/server/src/coach-chat";
+import type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource } from "../../../packages/server/src/coach-planning";
+export type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource };
 import { taskKeys } from "./tasks";
 
 export type { ChatMessageDto, CoachChatDto };
@@ -19,6 +21,7 @@ export interface CoachProviderInput { provider: CoachProviderKind; model: string
 export interface CoachTestResult { ok: boolean; message?: string }
 const noDraft: DraftDayDto = { draft: null, message: "Connect an AI provider first in Settings › Coach." };
 const noChat: CoachChatDto = { messages: [], draft: null, message: noDraft.message };
+const noPlanning: PlanningDto = { question: null, draft: null, message: "Connect an AI provider first in Settings › Coach, or open a goal that is still there." };
 const noRecommendation: DraftDayDto = { draft: null, message: "This recommendation is no longer there." };
 const notConnected: CoachTestResult = { ok: false, message: "Connect an AI provider first in Settings › Coach." };
 
@@ -62,6 +65,8 @@ export interface CoachTransport {
   /** The conversation after the reply, with its draft; `message` (nothing stored) when the Coach could not answer. */
   sendChat(timeZone: string, message: string): Promise<CoachChatDto>;
   clearChat(): Promise<CoachChatDto>;
+  /** Ticket 23: one planning-session turn: the next question, or the plan draft. */
+  planning(timeZone: string, input: PlanningInput): Promise<PlanningDto>;
 }
 
 const named = (provider?: string) => provider ? `?${new URLSearchParams({ provider })}` : "";
@@ -108,6 +113,7 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     chat: () => request("GET", "/api/v1/coach/chat"),
     sendChat: (timeZone, message) => request<CoachChatDto | null>("POST", `/api/v1/coach/chat?${new URLSearchParams({ timeZone })}`, { message }).then(result => result ?? noChat),
     clearChat: () => request("DELETE", "/api/v1/coach/chat"),
+    planning: (timeZone, input) => request<PlanningDto | null>("POST", `/api/v1/coach/planning?${new URLSearchParams({ timeZone })}`, input).then(result => result ?? noPlanning),
   };
 }
 
@@ -141,6 +147,7 @@ export function coachTransport(): CoachTransport {
     chat: () => command("coach_chat"),
     sendChat: async (timeZone, message) => (await command<CoachChatDto | null>("send_coach_chat", { timeZone, message })) ?? noChat,
     clearChat: async () => (await command<CoachChatDto | null>("clear_coach_chat")) ?? { messages: [] },
+    planning: async (timeZone, { goalId, source, ramble, turns, finish }) => (await command<PlanningDto | null>("coach_planning", { timeZone, goalId, source, ramble, turns, finish: finish ?? false })) ?? noPlanning,
   };
 }
 

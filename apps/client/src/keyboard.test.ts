@@ -16,6 +16,14 @@ describe("client keyboard commands", () => {
   const handlers = { "general.capture": vi.fn(), "navigation.today": vi.fn(), "task.next": vi.fn(() => false), "general.quick-find": vi.fn() };
   const commands = (preferences = defaultPreferences()) => dispatchCommands(handlers, id => effectiveBindings(id, preferences, "mac"));
 
+  it("lets the planning session's Draft now through its dialog and answer field, but not Open planning", () => {
+    const draft = vi.fn();
+    const planning = dispatchCommands({ "coach.planning-draft": draft, "coach.planning": vi.fn() }, id => effectiveBindings(id, defaultPreferences(), "mac"));
+    const dispatcher = new KeyboardDispatcher();
+    expect(dispatcher.dispatch(key("B", { altKey: true, shiftKey: true }), planning, "view", 0, { typing: true, modal: true }).commandId).toBe("coach.planning-draft");
+    expect(dispatcher.dispatch(key("o"), planning, "view", 0, { modal: true }).consumed).toBe(false);
+  });
+
   it("matches saved bindings, sequences and the Mac Command profile", () => {
     const dispatcher = new KeyboardDispatcher();
     expect(dispatcher.dispatch(key("q"), commands(), "today").commandId).toBe("general.capture");

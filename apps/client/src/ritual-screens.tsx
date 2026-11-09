@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { Mic, Square } from "lucide-react";
-import { ritualReads, rituals, seasonReads, seasons } from "./runtime";
+import { coachReads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
 import { seasonMutations, type NextSeason } from "./seasons";
 import { EndSeasonStep, seasonRange } from "./season-views";
 import { addDays, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
@@ -16,6 +16,8 @@ import { openPlan } from "./schedule-screens";
 import { planRitual } from "./plan-views";
 import { LoadFailure, Loading } from "./goal-views";
 import { Button, Hint } from "./ui";
+import { openPlanning } from "./planning-screens";
+import { patternMutations } from "./patterns";
 
 // Goals ticket 11: ritual settings, the sidebar entry and the step runner in the right sidebar.
 
@@ -76,7 +78,7 @@ export function RitualsSidebar({ userId }: { userId: string }) {
  * Spoken context through Ramble's capture: each phrase Ramble segments is
  * appended as text when the user stops. Nothing is saved as a task.
  */
-function VoiceContext({ onText }: { onText: (text: string) => void }) {
+export function VoiceContext({ onText }: { onText: (text: string) => void }) {
   const [view, setView] = useState<RambleView | null>(null);
   const recorder = useRef<ReturnType<typeof createRambleRecorder> | null>(null);
   const said = (current: RambleView | null) => (current?.state?.todos ?? []).map(todo => todo.title).join(". ");
@@ -157,6 +159,8 @@ export function RitualHost({ userId }: { userId: string }) {
   const weekly = useQuery({ ...ritualReads.weekly(userId), enabled: open === "weeklyReview" });
   const looking = useQuery({ ...ritualReads.seasonReview(userId), enabled: open === "seasonReview" });
   const { record, review } = useRitualWrites(userId);
+  const connected = Boolean(useQuery(coachReads.provider(userId)).data?.provider);
+  const cache = useQueryClient();
   useRitualNotifications(userId, query.data, query.refetch);
   // Ending refetches the season before the review closes: keep showing the season under review meanwhile.
   const reviewed = useRef<typeof season.data>(undefined);
@@ -216,7 +220,12 @@ export function RitualHost({ userId }: { userId: string }) {
   // The week summary failing to load never blocks rating the week.
   const { period, status } = query.data.weeklyReview;
   const nextWeek = weekly.data?.nextWeek ?? addDays(period, 7);
-  const done = (run: Omit<RitualRun, "kind" | "period">) => { record.mutate({ kind: "weeklyReview", period, ...run }); close(); };
+  const done = (run: Omit<RitualRun, "kind" | "period">) => {
+    const recorded = record.mutateAsync({ kind: "weeklyReview", period, ...run });
+    close();
+    // Goals ticket 24: a finished Weekly review is when the Coach learns patterns (one model call; Settings › Coach shows them).
+    if (connected && run.status === "completed") void recorded.then(() => patternMutations(cache, userId).learn()).catch(() => undefined);
+  };
   return <RitualPanel key={period} copy={weeklyReviewCopy(period)} goals={goals} status={status} pending={record.isPending} initial={weekly.data?.ratings} voice={voice}
     summary={goalId => {
       if (!weekly.data) return <LoadFailure error={weekly.error} onRetry={() => void weekly.refetch()} />;
@@ -226,5 +235,8 @@ export function RitualHost({ userId }: { userId: string }) {
     onFinish={(ratings: RatingDto[], planning: PlanningAnswer) => {
       done({ status: "completed", ratings, planning });
       if (planning === "help") { navigate("/upcoming"); setPlan({ path: "/upcoming", day: nextWeek }); }
-    }} onSkip={() => done({ status: "skipped", ratings: [] })} onClose={close} />;
+    }}
+    // Ticket 23: finish the review, then plan a goal with the Coach (only with a provider).
+    onCoachPlan={connected ? (ratings) => { done({ status: "completed", ratings, planning: "help" }); openPlanning({ source: "review" }); } : undefined}
+    onSkip={() => done({ status: "skipped", ratings: [] })} onClose={close} />;
 }

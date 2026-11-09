@@ -194,7 +194,8 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   const draft = drafts.data?.drafts.find(item => item.kind === scope.kind && item.period === scope.period) ?? null;
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
   // Ticket 22: a draft from the Coach chat shows dashed too (it is decided in the chat).
-  const chatPending = drafts.data?.drafts.filter(item => item.kind === "chat").flatMap(item => item.items.filter(row => row.state === "pending")) ?? [];
+  // Ticket 23: and a planning session's timed tasks (its milestones have no time).
+  const chatPending = drafts.data?.drafts.filter(item => item.kind === "chat" || item.kind === "plan").flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
   return {
     blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].map(item => ({
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),

@@ -7,6 +7,7 @@ import {
 } from "@todalo/server/coach-chat";
 import { localParts, toDraftDto, weekPlan, type DayContext, type DraftRecord, type NewDraft } from "@todalo/server/drafts";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
+import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
 
@@ -25,6 +26,8 @@ export interface CoachChatStore {
   clear(userId: string): Promise<void>;
   /** The drafts' only write (closes the open chat draft of the same day). */
   saveDraft(userId: string, draft: NewDraft): Promise<DraftRecord>;
+  /** Ticket 24: the user's Patterns, sent with every message. */
+  patterns?(userId: string): Promise<PatternRecord[]>;
   now?: () => Date;
 }
 
@@ -86,12 +89,12 @@ export function createCoachChatRoutes(store: CoachChatStore) {
       const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
       const at = now();
       const today = localParts(at, zone).day;
-      const [context, notes, earlier] = await Promise.all([store.dayContext(userId), goalNotes(userId, zone, at), store.messages(userId, CHAT_CONTEXT_TURNS)]);
+      const [context, notes, earlier, patterns] = await Promise.all([store.dayContext(userId), goalNotes(userId, zone, at), store.messages(userId, CHAT_CONTEXT_TURNS), store.patterns?.(userId) ?? []]);
       // The seven days from today: what the Coach can see and draft.
       const plan = weekPlan({ context, zone, now: at, start: today });
       let answer: ReturnType<typeof parseChatReply>;
       try {
-        const content = await store.model(saved).complete({ messages: chatMessages(chatFacts(plan, notes), earlier, input.data.message), schema: chatSchema }, request.signal);
+        const content = await store.model(saved).complete({ messages: withPatterns(chatMessages(chatFacts(plan, notes), earlier, input.data.message), patterns), schema: chatSchema }, request.signal);
         answer = parseChatReply(content, plan);
       } catch (error) {
         if (error instanceof CoachModelError) return failed(error.message);

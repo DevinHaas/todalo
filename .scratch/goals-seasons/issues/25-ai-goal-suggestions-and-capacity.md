@@ -4,11 +4,11 @@
 
 **Blocked by:** 03, 04, 17
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] AI suggestions merged with rule-based ones, still click-to-link
-- [ ] Capacity estimate shown when setting primary goals, warning when over capacity
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] AI suggestions merged with rule-based ones, still click-to-link
+- [x] Capacity estimate shown when setting primary goals, warning when over capacity
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

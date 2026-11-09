@@ -6,6 +6,7 @@ import {
   type AcceptedWrite, type DayContext, type DraftDayDto, type DraftKind, type DraftRecord, type DraftsDto, type DraftTask, type NewDraft,
 } from "@todalo/server/drafts";
 import { recommendationDraftMessages, recommendationWeek } from "@todalo/server/coach-recommendations";
+import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { writeUser } from "./project-routes";
 import { zoneOrUtc } from "./season-routes";
 
@@ -25,6 +26,8 @@ export interface DraftStore {
   resolve(userId: string, draft: DraftRecord, decision: { accepted: AcceptedWrite[]; declined: string[] }): Promise<void>;
   /** Ticket 21: the goal's Coach recommendation unless dismissed, or null. */
   recommendation(userId: string, goalId: string): Promise<string | null>;
+  /** Ticket 24: the user's Patterns, sent with every draft. */
+  patterns?(userId: string): Promise<PatternRecord[]>;
   now?: () => Date;
 }
 
@@ -103,7 +106,8 @@ export function createDraftRoutes(store: DraftStore) {
     })();
     if (!ask) return status(404, NO_RECOMMENDATION);
     let drafted: Omit<NewDraft, "kind" | "period">;
-    try { drafted = ask.parse(await store.model(saved).complete({ messages: ask.messages, schema: ask.schema }, request.signal)); }
+    const messages = withPatterns(ask.messages, await store.patterns?.(userId) ?? []);
+    try { drafted = ask.parse(await store.model(saved).complete({ messages, schema: ask.schema }, request.signal)); }
     catch (error) {
       if (error instanceof CoachModelError) return { draft: null, message: error.message } satisfies DraftDayDto;
       if (error instanceof Error && error.name === "AbortError") return { draft: null, message: "The Coach took too long. Try again." } satisfies DraftDayDto;

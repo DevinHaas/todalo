@@ -12,6 +12,7 @@ import { CoachSecretError } from "@todalo/server/coach-secret";
 import {
   dismissedThisWeek, parseRecommendation, recommendationFacts, recommendationMessages, recommendationSchema, type CoachRecommendationsDto, type TaskMove,
 } from "@todalo/server/coach-recommendations";
+import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { goalStatus, seasonSignals, type StatusInputs } from "@todalo/server/goal-status";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
 import { todayIn } from "@todalo/server/season-days";
@@ -54,6 +55,8 @@ export interface CoachStore {
   /** False when the goal has no recommendation. */
   dismissRecommendation(userId: string, goalId: string, at: Date): Promise<boolean>;
   moves(userId: string, since: Date): Promise<TaskMove[]>;
+  /** Ticket 24: the user's Patterns, sent with every explanation and recommendation. */
+  patterns?(userId: string): Promise<PatternRecord[]>;
   now?: () => Date;
 }
 
@@ -326,13 +329,13 @@ export function createCoachRoutes(store: CoachStore) {
     const clock = now(), today = todayIn(zone, clock);
     const { season } = current;
     const seasonGoals = current.goals.filter(goal => !goal.archivedAt);
-    const inputs = await store.statusInputs(userId, season);
+    const [inputs, patterns] = await Promise.all([store.statusInputs(userId, season), store.patterns?.(userId) ?? []]);
     const { day, perGoal } = seasonSignals({ ...season, today, now: clock, zone, goalIds: seasonGoals.map(goal => goal.goalId), inputs });
     const goals = seasonGoals.map(goal => {
       const weeks = perGoal.get(goal.goalId)!;
       return { goal, facts: explanationFacts({ goal, weeks, day, length: season.lengthDays, status: goalStatus({ day, length: season.lengthDays, weeks, reviewed: inputs.reviewed }) }) };
     });
-    return { saved, season, zone, clock, today, inputs, goals };
+    return { saved, season, zone, clock, today, inputs, goals, patterns: patterns.map(({ statement }) => ({ statement })) };
   }
 
   /**
@@ -340,13 +343,14 @@ export function createCoachRoutes(store: CoachStore) {
    * day are unchanged, else one model call. A failure hides only that goal's
    * text (null); Test connection shows why.
    */
-  async function ask(measured: { saved: CoachConfig; today: string }, facts: unknown, hit: { inputsHash: string; text: string } | undefined, signal: AbortSignal,
+  async function ask(measured: { saved: CoachConfig; today: string; patterns: { statement: string }[] }, facts: unknown, hit: { inputsHash: string; text: string } | undefined, signal: AbortSignal,
     request: Parameters<CoachModel["complete"]>[0], parse: (content: string) => string, save: (hash: string, text: string) => Promise<void>): Promise<string | null> {
-    const { saved, today } = measured;
-    const hash = createHash("sha256").update(JSON.stringify({ facts, provider: saved.provider, model: saved.model, today })).digest("hex");
+    const { saved, today, patterns } = measured;
+    // Ticket 24: an edited or deleted pattern asks again (no patterns: the hash is unchanged).
+    const hash = createHash("sha256").update(JSON.stringify({ facts, provider: saved.provider, model: saved.model, today, ...patterns.length ? { patterns } : {} })).digest("hex");
     if (hit?.inputsHash === hash) return hit.text;
     try {
-      const text = parse(await store.model(saved).complete(request, signal));
+      const text = parse(await store.model(saved).complete({ ...request, messages: withPatterns(request.messages, patterns) }, signal));
       await save(hash, text);
       return text;
     } catch (error) {

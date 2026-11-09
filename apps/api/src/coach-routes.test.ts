@@ -39,6 +39,8 @@ let reviewed: boolean;
 let recs: Map<string, { inputsHash: string; text: string; dismissedAt: Date | null }>;
 let moveRows: TaskMove[];
 let advise: (facts: { goal?: string }) => string;
+/** Ticket 24: Alice's stored patterns. */
+let patternRows: { id: string; statement: string; evidence: string; source: string; learnedAt: Date; editedAt: Date | null }[];
 
 beforeEach(() => {
   providers = new Map();
@@ -51,6 +53,7 @@ beforeEach(() => {
   reviewed = true;
   recs = new Map();
   moveRows = [];
+  patternRows = [];
   advise = (facts) => JSON.stringify({ recommendation: `Move ${facts.goal} to your mornings.` });
   clock = new Date("2026-02-18T12:00:00Z");
   chatgptRows = new Map();
@@ -124,6 +127,7 @@ const store: CoachStore = {
     return Boolean(row);
   },
   moves: async (userId, since) => userId === "alice" ? moveRows.filter(move => move.movedAt >= since) : [],
+  patterns: async (userId) => userId === "alice" ? patternRows : [],
   now: () => clock,
 };
 const app = createCoachRoutes(store);
@@ -477,6 +481,21 @@ describe("goal status explanations", () => {
     await connect("alice", { provider: "openai", model: "other" });
     await explanations();
     expect(calls).toHaveLength(6);
+  });
+
+  it("sends only the stored patterns, and asks again once one is edited or deleted", async () => {
+    await connect("alice", { provider: "openai", model: "m", apiKey: "sk-12345678" });
+    patternRows = [{ id: "p1", statement: "Ships best in the mornings", evidence: "9 of 12 done before noon.", source: "Season", learnedAt: clock, editedAt: null }];
+    await explanations();
+    const notes = (index: number) => calls[index]!.messages.filter(message => message.role === "system").map(message => message.content).join("\n");
+    expect(notes(0)).toContain("- Ships best in the mornings");
+    expect(notes(0)).not.toContain("9 of 12");
+    await explanations();
+    expect(calls).toHaveLength(2);
+    patternRows = [];
+    await explanations();
+    expect(calls).toHaveLength(4);
+    expect(notes(3)).not.toContain("Ships best");
   });
 
   it("says nothing while every goal is Too early", async () => {

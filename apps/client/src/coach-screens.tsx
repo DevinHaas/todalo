@@ -7,6 +7,7 @@ import {
   type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
 } from "./coach";
 import { FormError, LoadFailure, Loading } from "./goal-views";
+import { CoachPatterns } from "./pattern-screens";
 import {
   Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input, cn,
 } from "./ui";
@@ -92,7 +93,8 @@ function CoachSettings({ userId, coach: state, open, setOpen }: { userId: string
         </li>;
       })}
     </ul>
-    <Hint>When connected, your goal titles, season targets and status numbers are sent to the active provider to write the explanations. Nothing is sent without a provider.</Hint>
+    <CoachPatterns userId={userId} connected={state.provider !== null} />
+    <Hint>When connected, your goal titles, season targets and status numbers (and your patterns) are sent to the active provider to write the explanations. Nothing is sent without a provider.</Hint>
   </div>;
 }
 

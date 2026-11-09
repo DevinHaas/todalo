@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-season-capacity"
+description = "Enables the season_capacity command without any pre-configured scope."
+commands.allow = ["season_capacity"]
+
+[[permission]]
+identifier = "deny-season-capacity"
+description = "Denies the season_capacity command without any pre-configured scope."
+commands.deny = ["season_capacity"]

@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
+import { CoachModelError, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
+import { meaningFacts, meaningMessages, meaningSchema, mergeSuggestions, parseMeaning } from "@todalo/server/coach-suggestions";
 import { createGoalInput, goalLinkKinds, milestoneInput, milestoneReached, type CriterionDto, type GoalMilestoneDto, type MilestoneDto, type MilestoneInput, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type GoalSuggestionsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
 import { suggestGoals, type SuggestionTask } from "@todalo/server/goal-suggestions";
 import { toProjectDto, type ProjectRecord } from "@todalo/server/project-dto";
@@ -27,8 +31,8 @@ export interface GoalStore {
   link(userId: string, goalId: string, kind: GoalLinkKind, targetId: string): Promise<boolean>;
   /** Removes only the link; false when the goal is missing or foreign. */
   unlink(userId: string, goalId: string, kind: GoalLinkKind, targetId: string): Promise<boolean>;
-  /** The owner's tasks with their project and labels (ticket 03 suggestions). */
-  tasks(userId: string): Promise<SuggestionTask[]>;
+  /** The owner's tasks with their project and labels (ticket 03 suggestions); title and description for the Coach (ticket 25). */
+  tasks(userId: string): Promise<(SuggestionTask & { title: string; description: string | null })[]>;
   dismissed(userId: string, taskId: string): Promise<string[]>;
   /** Idempotent; false when the goal or task is missing or foreign. */
   dismiss(userId: string, taskId: string, goalId: string): Promise<boolean>;
@@ -40,6 +44,15 @@ export interface GoalStore {
   clearMilestone(userId: string, taskId: string): Promise<boolean>;
   /** An owned goal's milestones: task IDs with their criteria. */
   milestones(userId: string, goalId: string): Promise<{ taskId: string; criteria: CriterionDto[] }[]>;
+  /** Ticket 25: the Coach's suggestions by meaning. Omitted, or no provider: rule-based only. */
+  coach?: {
+    provider(userId: string): Promise<CoachConfig | null>;
+    model(config: CoachConfig): CoachModel;
+    cached(userId: string, taskId: string): Promise<{ inputsHash: string; goalIds: string[] } | null>;
+    cache(userId: string, taskId: string, inputsHash: string, goalIds: string[]): Promise<void>;
+    /** Ticket 24: the user's stored patterns, the only ones a Coach prompt may use. */
+    patterns?(userId: string): Promise<PatternRecord[]>;
+  };
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -55,6 +68,36 @@ const linkKind = (value: string) => goalLinkKinds.find(kind => kind === value) ?
 // IDs share one 404 so IDs cannot be probed.
 export function createGoalRoutes(store: GoalStore) {
   const writer = (request: Request) => writeUser(store, request);
+
+  /** Ticket 03's inputs and ranking; null when the task is missing or foreign. `open`: Goals shown and the task has no active goal. */
+  async function suggestionInputs(userId: string, taskId: string) {
+    const [tasks, goals, links, dismissed, hidden] = await Promise.all([store.tasks(userId), store.list(userId), store.links(userId), store.dismissed(userId, taskId), store.hidden(userId)]);
+    const task = tasks.find(item => item.id === taskId);
+    if (!task) return null;
+    const active = new Set(goals.map(goal => goal.id));
+    // Hidden Goals show no hints.
+    const open = !hidden && !links.tasks.some(link => link.taskId === taskId && active.has(link.goalId));
+    const rules = open ? suggestGoals({ task, tasks, taskLinks: links.tasks, projectLinks: links.projects, goalIds: goals.map(goal => goal.id), dismissed }) : [];
+    return { task, goals, dismissed, rules, open };
+  }
+
+  /** The Coach's goals for the task's text: cached while the text, candidate goals, provider and model are unchanged; a failure is none. */
+  async function meaning(userId: string, task: { id: string; title: string; description: string | null }, goals: GoalRecord[], config: CoachConfig, hit: { inputsHash: string; goalIds: string[] } | null, signal: AbortSignal) {
+    const built = meaningFacts(task, goals);
+    if (!built || !store.coach) return [];
+    const patterns = (await store.coach.patterns?.(userId) ?? []).map(({ statement }) => ({ statement }));
+    // An edited or deleted pattern asks again (no patterns: the hash is unchanged).
+    const hash = createHash("sha256").update(JSON.stringify({ facts: built.facts, ids: [...built.refs.values()], provider: config.provider, model: config.model, ...patterns.length ? { patterns } : {} })).digest("hex");
+    if (hit?.inputsHash === hash) return hit.goalIds;
+    try {
+      const goalIds = parseMeaning(await store.coach.model(config).complete({ messages: withPatterns(meaningMessages(built.facts), patterns), schema: meaningSchema }, signal), built.refs);
+      await store.coach.cache(userId, task.id, hash, goalIds);
+      return goalIds;
+    } catch (error) {
+      if (error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError")) return [];
+      throw error;
+    }
+  }
 
   return new Elysia({ prefix: "/api/v1" })
     .onAfterHandle(({ set }) => { set.headers["cache-control"] = "no-store"; })
@@ -113,11 +156,23 @@ export function createGoalRoutes(store: GoalStore) {
     .get("/tasks/:id/goal-suggestions", async ({ request, params, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const [tasks, goals, links, dismissed, hidden] = await Promise.all([store.tasks(userId), store.list(userId), store.links(userId), store.dismissed(userId, params.id), store.hidden(userId)]);
-      const task = tasks.find(item => item.id === params.id);
-      if (!task) return status(404, TASK_NOT_FOUND);
-      // Hidden Goals show no hints.
-      return { goalIds: hidden ? [] : suggestGoals({ task, tasks, taskLinks: links.tasks, projectLinks: links.projects, goalIds: goals.map(goal => goal.id), dismissed }) } satisfies GoalSuggestionsDto;
+      const inputs = await suggestionInputs(userId, params.id);
+      if (!inputs) return status(404, TASK_NOT_FOUND);
+      return { goalIds: inputs.rules } satisfies GoalSuggestionsDto;
+    })
+    // Ticket 25: the rule-based suggestions with the Coach's by meaning after them
+    // (`coach` names those). A separate read, so the rules never wait on a model.
+    // One model call per task content (cached); without a provider just the rules.
+    .get("/tasks/:id/goal-suggestions/coach", async ({ request, params, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      // Read the provider and the cached answer alongside the rules' inputs (each is a few queries).
+      const [inputs, provider, hit] = await Promise.all([suggestionInputs(userId, params.id), store.coach?.provider(userId) ?? null, store.coach?.cached(userId, params.id) ?? null]);
+      if (!inputs) return status(404, TASK_NOT_FOUND);
+      const { task, goals, dismissed, rules, open } = inputs;
+      const config = open ? provider : null;
+      const byMeaning = config ? await meaning(userId, task, goals, config, hit, request.signal) : [];
+      return mergeSuggestions(rules, byMeaning, { active: goals.map(goal => goal.id), dismissed }) satisfies GoalSuggestionsDto;
     })
     .delete("/tasks/:id/goal-suggestions/:goalId", async ({ request, params, status }) => {
       const userId = await writer(request);

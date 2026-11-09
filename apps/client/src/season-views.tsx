@@ -1,11 +1,11 @@
 import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link, NavLink } from "react-router";
-import { CalendarRange, History, Pencil, Plus } from "lucide-react";
+import { CalendarRange, History, Pencil, Plus, Sparkles } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
 import { CoachExplanation, CoachRecommendation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
 import { TrajectoryChart } from "./trajectory-chart";
 import type { RecommendationSlot } from "./goal-views";
-import { primaryGuideline, seasonLengths, tooManyPrimary, type CurrentSeasonDto, type GoalStatusDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { primaryGuideline, seasonLengths, tooManyPrimary, type CapacityDto, type CurrentSeasonDto, type GoalStatusDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import {
@@ -64,10 +64,11 @@ export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Seaso
   return `Day ${day} of ${length} · ${daysLeft ? `${plural(daysLeft, "day")} left` : "last day"}`;
 }
 
-export function SeasonView({ state, goals, past, explanations, recommendations, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, write }: {
+export function SeasonView({ state, goals, past, explanations, recommendations, capacity, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, onPlan, write }: {
   state: ReadState<CurrentSeasonDto>; goals: GoalDto[]; past: SeasonDto[]; onRetry: () => void;
   /** Ticket 17: the Coach's status explanations by goal ID (empty without a provider). */ explanations?: Record<string, string>;
   /** Ticket 21: the Coach's recommendations by goal ID (none without a provider). */ recommendations?: Record<string, RecommendationSlot>;
+  /** Ticket 25: the Coach's capacity estimate (undefined without a provider). */ capacity?: CapacitySlot;
   onStart: (startDate: string, lengthDays: number) => Promise<unknown>;
   /** Creates a goal and adds it to this season. */
   onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>;
@@ -76,6 +77,8 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
   onEnd: (next: NextSeason | null) => Promise<unknown>;
   /** Ticket 14: while the Season review is on; `due` from the season's last day. */
   review?: { due: boolean; done: boolean; onStart: () => void };
+  /** Ticket 23: a planning session with the Coach (only with a provider). */
+  onPlan?: () => void;
   write: Write;
 }) {
   const [ending, setEnding] = useState(false);
@@ -92,6 +95,7 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
   const { day, length, phase } = season.progress;
   return <div className="ui max-w-page" data-season-id={season.id}>
     <PageHeader title="Season" actions={<>
+      {onPlan && <Button variant="outline" size="sm" data-season-action="plan" onClick={onPlan}><Sparkles className="text-brand" />Plan with the Coach</Button>}
       {review && <Button variant="outline" size="sm" data-season-action="review" onClick={review.onStart}>Season review</Button>}
       <Button variant="outline" size="sm" data-season-action="end" onClick={() => setEnding(true)}>End season</Button>
     </>} />
@@ -110,6 +114,7 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
         ? <TrajectoryChart goals={season.goals} statuses={season.statuses} day={phase === "upcoming" ? 0 : day} length={length} />
         : <Hint className="py-2" data-trajectory-pending="">Your trajectory appears after your first Weekly review, once a week of ratings and tasks has been measured. Until then every goal shows Too early.</Hint>}
     </PageSection>}
+    {capacity && primary.length > 0 && <Capacity key={capacity.data?.availableMinutes ?? "none"} slot={capacity} goals={primary} />}
     <TierSections goals={season.goals} row={goal => <SeasonGoalRow key={goal.id} goal={goal} status={season.statuses[goal.goalId]} explanation={explanations?.[goal.goalId]} recommendation={recommendations?.[goal.goalId]} onUpdate={onUpdate} onRemove={onRemove} write={write} />}
       empty={{ primary: "No primary goals yet. These get your best time.", secondary: "No secondary goals. These are the first to drop when time runs short." }} />
     {/* Choosing among existing goals belongs to setting up a season (Start / End season); a running season only adds new ones. */}
@@ -119,6 +124,45 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
       <DialogContent size="xl">{ending && <EndSeason season={season} onEnd={onEnd} onCancel={() => setEnding(false)} write={write} />}</DialogContent>
     </Dialog>
   </div>;
+}
+
+export interface CapacitySlot { data: CapacityDto | undefined; loading: boolean; saving: boolean; error: string | null; onSave(availableMinutes: number | null): Promise<unknown> }
+
+const hours = (minutes: number) => `${Math.round(minutes / 30) / 2} h`;
+
+/**
+ * Ticket 25: what the primary goals need a week (the Coach's estimate) against
+ * the time the user says they have; a warning when they need more.
+ */
+function Capacity({ slot, goals }: { slot: CapacitySlot; goals: SeasonGoalDto[] }) {
+  const { data } = slot;
+  const saved = data?.availableMinutes ?? null;
+  const [value, setValue] = useState(saved === null ? "" : String(saved / 60));
+  const parsed = value.trim() === "" ? null : Number(value);
+  const valid = parsed === null || (Number.isFinite(parsed) && parsed >= 0 && parsed <= 168);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try { await slot.onSave(parsed === null ? null : Math.round(parsed * 60)); } catch { /* shown through slot.error */ }
+  }
+  const titles = new Map(goals.map(goal => [goal.goalId, goal.title]));
+  return <PageSection title="Capacity" aria-label="Primary goal capacity" data-capacity="">
+    {data?.over && <div role="status" className="mb-3" data-capacity-over=""><Alert><AlertDescription>
+      Your primary goals need about {hours(data.neededMinutes ?? 0)} a week, more than the {hours(data.availableMinutes ?? 0)} you have. Consider making one secondary or lowering a target.
+    </AlertDescription></Alert></div>}
+    {slot.loading ? <Hint className="py-1">The Coach is estimating what your primary goals need…</Hint>
+      : data?.goals ? <>
+        {!data.over && <p className="text-sm" data-capacity-needed={data.neededMinutes}>Your primary goals need about <strong className="font-semibold">{hours(data.neededMinutes ?? 0)} a week</strong>{saved !== null ? `; you have ${hours(saved)}.` : "."}</p>}
+        <ul className="mt-1 flex flex-col gap-0.5 text-xs-plus text-muted-foreground">
+          {data.goals.map(goal => <li key={goal.goalId}>{titles.get(goal.goalId) ?? "Goal"}: {hours(goal.minutesPerWeek)} · {goal.reason}</li>)}
+        </ul>
+      </> : <Hint className="py-1">The Coach could not estimate this time. Test the connection in Settings › Coach.</Hint>}
+    <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={submit}>
+      <Field className="w-auto"><FieldLabel htmlFor="season-capacity">Time you have for primary goals <span className="font-normal text-muted-foreground">hours a week</span></FieldLabel>
+        <Input id="season-capacity" className="w-28" type="number" inputMode="decimal" min={0} max={168} step={0.5} value={value} onChange={event => setValue(event.target.value)} placeholder="e.g. 10" aria-invalid={!valid} /></Field>
+      <Button type="submit" variant="outline" data-season-action="capacity" disabled={slot.saving || !valid || (saved === null ? parsed === null : parsed === saved / 60)}>Save</Button>
+    </form>
+    {slot.error && <FormError>{slot.error}</FormError>}
+  </PageSection>;
 }
 
 function TierSections({ goals, row, empty }: { goals: SeasonGoalDto[]; row: (goal: SeasonGoalDto) => ReactNode; empty: Record<SeasonTier, string> }) {

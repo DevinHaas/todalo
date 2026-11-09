@@ -27,6 +27,7 @@ import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMi
 import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 import { CoachChatButton, CoachChatHost } from "./coach-chat-screens";
+import { PlanningHost } from "./planning-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -195,6 +196,7 @@ export function Shell({ account }: { account: Account }) {
     </div>
     <RitualHost userId={account.user.id} />
     <CoachChatHost userId={account.user.id} />
+    <PlanningHost userId={account.user.id} />
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}
     <LiveUpdates userId={account.user.id} />
     <CriteriaConfirmHost />

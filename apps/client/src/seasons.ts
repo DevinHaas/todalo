@@ -4,8 +4,9 @@ import { change, optimisticWrite } from "./optimistic";
 import { goalKeys, type GoalsDto } from "./goals";
 import type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier } from "../../../packages/server/src/season-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
+import type { CapacityDto } from "../../../packages/server/src/coach-suggestions";
 
-export type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier };
+export type { CapacityDto, CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier };
 export { primaryGuideline, seasonLengths, tooManyPrimary } from "../../../packages/server/src/season-dto";
 export type { GoalBand, GoalStatusDto } from "../../../packages/server/src/goal-status";
 export { bandLabels, statusRules } from "../../../packages/server/src/goal-status";
@@ -28,6 +29,10 @@ export interface SeasonTransport {
   past(): Promise<SeasonDto[]>;
   /** Ends the season and, in the same operation, starts next (if given); null when the season or a carried goal is refused. */
   end(seasonId: string, next: NextSeason | null): Promise<EndSeasonDto | null>;
+  /** Ticket 25: the Coach's estimate of the primary goals' weekly time against the time available. */
+  capacity(): Promise<CapacityDto>;
+  /** Saves the minutes a week available for primary goals (null clears it). */
+  saveCapacity(availableMinutes: number | null): Promise<CapacityDto>;
 }
 
 export function browserSeasonTransport(fetcher: typeof fetch = fetch): SeasonTransport {
@@ -57,6 +62,8 @@ export function browserSeasonTransport(fetcher: typeof fetch = fetch): SeasonTra
     removeGoal: async (seasonId, goalId) => Boolean(await request("DELETE", `${goals(seasonId)}/${encodeURIComponent(goalId)}`)),
     past: async () => required(await request<PastSeasonsDto>("GET", "/api/v1/seasons/past"), "TASKS_UNAVAILABLE").seasons,
     end: (seasonId, next) => request<EndSeasonDto>("POST", `/api/v1/seasons/${encodeURIComponent(seasonId)}/end`, { next }),
+    capacity: async () => required(await request<CapacityDto>("GET", "/api/v1/coach/capacity"), "TASKS_UNAVAILABLE"),
+    saveCapacity: async (availableMinutes) => required(await request<CapacityDto>("PUT", "/api/v1/coach/capacity", { availableMinutes }), "SAVE_FAILED"),
   };
 }
 
@@ -75,6 +82,8 @@ export function seasonTransport(): SeasonTransport {
     removeGoal: async (seasonId, goalId) => Boolean(await command<unknown>("remove_season_goal", { seasonId, goalId })),
     past: async () => (await command<PastSeasonsDto>("past_seasons")).seasons,
     end: (seasonId, next) => command<EndSeasonDto | null>("end_season", { seasonId, next }),
+    capacity: () => command<CapacityDto>("season_capacity"),
+    saveCapacity: (availableMinutes) => command<CapacityDto>("save_capacity", { availableMinutes }),
   };
 }
 
@@ -86,12 +95,15 @@ export const seasonKeys = {
   all: (userId: string) => ["user", userId, "seasons"] as const,
   current: (userId: string) => ["user", userId, "seasons", "current"] as const,
   past: (userId: string) => ["user", userId, "seasons", "past"] as const,
+  // Under "seasons": a tier or target change refetches it (the server re-asks only when the primary goals changed).
+  capacity: (userId: string) => ["user", userId, "seasons", "capacity"] as const,
 };
 
 export function seasonQueries(transport: SeasonTransport) {
   return {
     current: (userId: string) => queryOptions({ queryKey: seasonKeys.current(userId), queryFn: () => transport.current(localZone()) }),
     past: (userId: string) => queryOptions({ queryKey: seasonKeys.past(userId), queryFn: () => transport.past() }),
+    capacity: (userId: string) => queryOptions({ queryKey: seasonKeys.capacity(userId), queryFn: () => transport.capacity() }),
   };
 }
 

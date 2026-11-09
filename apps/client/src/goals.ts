@@ -29,6 +29,8 @@ export interface GoalTransport {
   link(id: string, kind: GoalLinkKind, targetId: string, linked: boolean): Promise<boolean>;
   /** Goals suggested for a task, best first (ticket 03); null when the task is missing or foreign. */
   suggestions(taskId: string): Promise<GoalSuggestionsDto | null>;
+  /** Ticket 25: the same with the Coach's by meaning after them (`coach`); only asked with a provider. */
+  coachSuggestions(taskId: string): Promise<GoalSuggestionsDto | null>;
   /** Hides one suggestion for one task (never links); false when the task or goal is missing or foreign. */
   dismiss(taskId: string, goalId: string): Promise<boolean>;
   /** Ticket 06: the task's milestone; null when it is not one (or the task is missing or foreign). */
@@ -67,6 +69,7 @@ export function browserGoalTransport(fetcher: typeof fetch = fetch): GoalTranspo
     links: async () => required(await request<GoalLinksDto>("GET", "/api/v1/goal-links"), "TASKS_UNAVAILABLE"),
     link: async (id, kind, targetId, linked) => (await request(linked ? "PUT" : "DELETE", `${path(id)}/${kind}/${encodeURIComponent(targetId)}`)) !== null,
     suggestions: (taskId) => request<GoalSuggestionsDto>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions`),
+    coachSuggestions: (taskId) => request<GoalSuggestionsDto>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions/coach`),
     dismiss: async (taskId, goalId) => (await request("DELETE", `/api/v1/tasks/${encodeURIComponent(taskId)}/goal-suggestions/${encodeURIComponent(goalId)}`)) !== null,
     milestone: async (taskId) => (await request<{ milestone: MilestoneDto | null }>("GET", `/api/v1/tasks/${encodeURIComponent(taskId)}/milestone`))?.milestone ?? null,
     setMilestone: async (taskId, milestone) => (await request(milestone ? "PUT" : "DELETE", `/api/v1/tasks/${encodeURIComponent(taskId)}/milestone`, milestone ?? undefined)) !== null,
@@ -90,6 +93,7 @@ export function goalTransport(): GoalTransport {
     links: () => command<GoalLinksDto>("goal_links"),
     link: async (id, kind, targetId, linked) => (await command<unknown>("link_goal", { id, kind, targetId, linked })) !== null,
     suggestions: (taskId) => command<GoalSuggestionsDto | null>("goal_suggestions", { taskId }),
+    coachSuggestions: (taskId) => command<GoalSuggestionsDto | null>("coach_goal_suggestions", { taskId }),
     dismiss: async (taskId, goalId) => (await command<unknown>("dismiss_goal_suggestion", { taskId, goalId })) !== null,
     milestone: async (taskId) => (await command<{ milestone: MilestoneDto | null } | null>("milestone", { taskId }))?.milestone ?? null,
     setMilestone: async (taskId, milestone) => (await command<unknown>("set_milestone", { taskId, milestone })) !== null,
@@ -104,6 +108,7 @@ export const goalKeys = {
   links: (userId: string) => ["user", userId, "goals", "links"] as const,
   // Under "goals", so every link write refreshes them.
   suggestions: (userId: string, taskId: string) => ["user", userId, "goals", "suggestions", taskId] as const,
+  coachSuggestions: (userId: string, taskId: string) => ["user", userId, "goals", "suggestions", taskId, "coach"] as const,
   // Under "goals" too: unlinking a goal drops the milestone with the link.
   milestone: (userId: string, taskId: string) => ["user", userId, "goals", "milestone", taskId] as const,
 };
@@ -114,6 +119,8 @@ export function goalQueries(transport: GoalTransport) {
     detail: (userId: string, id: string) => queryOptions({ queryKey: goalKeys.detail(userId, id), queryFn: () => transport.goal(id) }),
     links: (userId: string) => queryOptions({ queryKey: goalKeys.links(userId), queryFn: () => transport.links() }),
     suggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.suggestions(userId, taskId), queryFn: () => transport.suggestions(taskId) }),
+    // The server caches the Coach's answer per task text, so a refetch rarely calls the model.
+    coachSuggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.coachSuggestions(userId, taskId), queryFn: () => transport.coachSuggestions(taskId) }),
     milestone: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.milestone(userId, taskId), queryFn: () => transport.milestone(taskId) }),
   };
 }
@@ -159,7 +166,8 @@ export function goalMutations(transport: GoalTransport, cache: QueryClient, user
         async () => { ok(await transport.link(id, kind, targetId, linked)); });
     },
     dismiss(taskId: string, goalId: string) {
-      return write([change<GoalSuggestionsDto | null | undefined>(goalKeys.suggestions(userId, taskId), data => data && { goalIds: data.goalIds.filter(id => id !== goalId) })],
+      const without = (data: GoalSuggestionsDto | null | undefined) => data && { ...data, goalIds: data.goalIds.filter(id => id !== goalId) };
+      return write([change<GoalSuggestionsDto | null | undefined>(goalKeys.suggestions(userId, taskId), without), change<GoalSuggestionsDto | null | undefined>(goalKeys.coachSuggestions(userId, taskId), without)],
         async () => { ok(await transport.dismiss(taskId, goalId)); });
     },
     /**

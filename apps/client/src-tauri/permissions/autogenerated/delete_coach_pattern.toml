@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-coach-pattern"
+description = "Enables the delete_coach_pattern command without any pre-configured scope."
+commands.allow = ["delete_coach_pattern"]
+
+[[permission]]
+identifier = "deny-delete-coach-pattern"
+description = "Denies the delete_coach_pattern command without any pre-configured scope."
+commands.deny = ["delete_coach_pattern"]

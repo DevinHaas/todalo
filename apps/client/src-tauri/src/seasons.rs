@@ -308,3 +308,31 @@ mod tests {
         }
     }
 }
+
+/// Goals ticket 25: the Coach's estimate of what the primary goals need a week, against the time the user has.
+#[tauri::command]
+pub async fn season_capacity(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    state
+        .read("/api/v1/coach/capacity")
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// Saves the minutes a week the user has for primary goals (None clears it).
+#[tauri::command]
+pub async fn save_capacity(
+    state: tauri::State<'_, NativeAuth>,
+    available_minutes: Option<u16>,
+) -> Result<Value, String> {
+    if available_minutes.is_some_and(|minutes| minutes > 7 * 24 * 60) {
+        return Err(INVALID.to_owned());
+    }
+    state
+        .write(
+            Method::PUT,
+            "/api/v1/coach/capacity",
+            Some(json!({ "availableMinutes": available_minutes })),
+        )
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}

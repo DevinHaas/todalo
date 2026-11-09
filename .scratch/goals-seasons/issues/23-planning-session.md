@@ -4,13 +4,13 @@
 
 **Blocked by:** 19, 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Start from season setup, Weekly review or goal page
-- [ ] Voice input via Ramble capture, or typing
-- [ ] Multiple-choice follow-ups with progress indicator and 'Something else…'
-- [ ] Ends in a draft of tasks (with scheduled times) and milestones
-- [ ] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
-- [ ] Any new user action has a keyboard command in the shortcut registry
+- [x] Start from season setup, Weekly review or goal page
+- [x] Voice input via Ramble capture, or typing
+- [x] Multiple-choice follow-ups with progress indicator and 'Something else…'
+- [x] Ends in a draft of tasks (with scheduled times) and milestones
+- [x] Behaviour covered by tests at the API seam (route factory with in-memory fakes), following the existing route tests
+- [x] Any new user action has a keyboard command in the shortcut registry
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

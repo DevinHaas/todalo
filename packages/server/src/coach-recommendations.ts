@@ -27,18 +27,17 @@ export interface RecommendationFacts extends Omit<ExplanationFacts, "weeks"> {
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 /** The season week (1-based) a calendar day falls in. */
 export const seasonWeekOf = (startDate: string, day: string) => Math.floor(daysBetween(startDate, day) / 7) + 1;
-const partOfDay = (time: string) => time < "12:00" ? "morning" : time < "17:00" ? "afternoon" : "evening";
+export const partOfDay = (time: string) => time < "12:00" ? "morning" : time < "17:00" ? "afternoon" : "evening";
 const weekdayOf = (day: string) => new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long" }).format(new Date(`${day}T12:00:00Z`));
 
 /**
- * The facts for one goal, or null when there is nothing to recommend: Too
- * early (no explanation facts) or On track.
+ * How one goal's tasks were moved and done this season (ticket 24's patterns
+ * read it too): moves per season week, the slots they were moved away from
+ * (most often first) and when in the day its tasks got done.
  */
-export function recommendationFacts({ explanation, goalId, startDate, zone, now, links, tasks, moves }: {
-  explanation: ExplanationFacts | null; goalId: string; startDate: string; zone: string; now: Date;
-  links: WeekLinks; tasks: WeekTask[]; moves: TaskMove[];
-}): RecommendationFacts | null {
-  if (!explanation || explanation.status === bandLabels.on_track) return null;
+export function goalHabits({ goalId, startDate, zone, links, tasks, moves }: {
+  goalId: string; startDate: string; zone: string; links: WeekLinks; tasks: WeekTask[]; moves: TaskMove[];
+}) {
   const own = moves.filter(move => serves({ id: move.taskId, projectId: move.projectId }, goalId, links));
   const slots = new Map<string, RecommendationFacts["movedFrom"][number]>();
   const movedPerWeek = new Map<number, number>();
@@ -58,13 +57,29 @@ export function recommendationFacts({ explanation, goalId, startDate, zone, now,
     const when = partOfDay(localParts(task.completedAt, zone).time);
     doneAt.set(when, (doneAt.get(when) ?? 0) + 1);
   }
+  return {
+    goalTasks, movedPerWeek,
+    movedFrom: [...slots.values()].sort((a, b) => b.times - a.times || a.sinceWeek - b.sinceWeek).slice(0, 5),
+    doneAt: [...doneAt].map(([when, count]) => ({ partOfDay: when, tasks: count })),
+  };
+}
+
+/**
+ * The facts for one goal, or null when there is nothing to recommend: Too
+ * early (no explanation facts) or On track.
+ */
+export function recommendationFacts({ explanation, goalId, startDate, zone, now, links, tasks, moves }: {
+  explanation: ExplanationFacts | null; goalId: string; startDate: string; zone: string; now: Date;
+  links: WeekLinks; tasks: WeekTask[]; moves: TaskMove[];
+}): RecommendationFacts | null {
+  if (!explanation || explanation.status === bandLabels.on_track) return null;
+  const { goalTasks, movedPerWeek, movedFrom, doneAt } = goalHabits({ goalId, startDate, zone, links, tasks, moves });
   const soon = new Date(now.getTime() + 7 * 86_400_000);
   const ahead = goalTasks.filter(task => task.status !== "done" && task.dueDate && task.dueDate >= now && task.dueDate < soon && hasTimeIn(task.dueDate, zone));
   return {
     ...explanation,
     weeks: explanation.weeks.map(week => ({ ...week, tasksMoved: movedPerWeek.get(week.week) ?? 0 })),
-    movedFrom: [...slots.values()].sort((a, b) => b.times - a.times || a.sinceWeek - b.sinceWeek).slice(0, 5),
-    doneAt: [...doneAt].map(([when, count]) => ({ partOfDay: when, tasks: count })),
+    movedFrom, doneAt,
     nextSevenDays: { tasksScheduled: ahead.length, minutesScheduled: ahead.reduce((sum, task) => sum + taskMinutes(task), 0) },
   };
 }

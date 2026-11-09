@@ -116,6 +116,8 @@ export interface GoalSlots {
   goals: GoalDto[]; linked: string[]; onToggle(goalId: string, linked: boolean): void; error: string | null;
   /** Ticket 03 (tasks only): goals suggested while the task has none, best first. Accepting is onToggle(id, true). */
   suggested?: GoalDto[]; onDismiss?(goalId: string): void;
+  /** Ticket 25: which suggested goals the Coach found by meaning (no shared project or label). */
+  byCoach?: string[];
 }
 
 /** The best suggestion as a hint under the Goals field: Link it or dismiss it; nothing links without a click. */
@@ -123,7 +125,7 @@ export function GoalSuggestion({ slots }: { slots: GoalSlots }) {
   const goal = slots.suggested?.[0];
   if (!goal) return null;
   return <p className="ui col-span-full flex items-center gap-1.5 pt-1 text-xs-plus text-muted-foreground" data-goal-suggestion={goal.id}>
-    <Target className="size-3.5" /><span className="min-w-0 [overflow-wrap:anywhere]">Suggested: {goal.title}</span>
+    <Target className="size-3.5" /><span className="min-w-0 [overflow-wrap:anywhere]" data-suggestion-source={slots.byCoach?.includes(goal.id) ? "coach" : "rules"}>{slots.byCoach?.includes(goal.id) ? "Coach suggests" : "Suggested"}: {goal.title}</span>
     <Button variant="link" size="xs" data-suggestion="accept" onClick={() => slots.onToggle(goal.id, true)}>Link</Button>
     <Button variant="ghost" size="icon-xs" data-suggestion="dismiss" aria-label={`Dismiss suggestion ${goal.title}`} title="Dismiss" onClick={() => slots.onDismiss?.(goal.id)}><X /></Button>
   </p>;
@@ -257,10 +259,12 @@ const linkClass = "inline-flex min-w-0 items-center gap-2 [overflow-wrap:anywher
  * keeps its data. Shows its season target (that lives on the season, not the
  * goal) and lists its milestones and linked projects and tasks.
  */
-export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, write }: {
+export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, onPlan, write }: {
   state: ReadState<GoalDetailDto | null>; season?: GoalSeason | null; onRetry: () => void; onSave: (patch: GoalPatch) => Promise<unknown>; onArchive: (archived: boolean) => void;
   /** Removes only the link; the project or task stays. */
   onUnlink: (kind: GoalLinkKind, targetId: string) => void; write: Write;
+  /** Ticket 23: a planning session with the Coach about this goal (only with a provider). */
+  onPlan?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
@@ -282,6 +286,7 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
     aria-label={`Unlink ${name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink(kind, id)}><X /></Button>;
   return <div className="ui max-w-page" data-goal-id={goal.id}>
     <PageHeader icon={<GoalIcon color={goal.color} icon={goal.icon} size="lg" />} title={goal.title} actions={<>
+      {onPlan && !goal.archived && <Button variant="outline" size="sm" data-goal-action="plan" onClick={onPlan}><Sparkles className="text-brand" />Plan with the Coach</Button>}
       {!goal.archived && <Button variant="outline" size="sm" data-goal-action="edit" aria-expanded={editing} onClick={() => editing ? setEditing(false) : edit()}><Pencil />Edit</Button>}
       <Button variant="ghost" size="sm" disabled={write.pending} onClick={() => onArchive(!goal.archived)}>{goal.archived ? "Restore" : "Archive"}</Button>
     </>} />

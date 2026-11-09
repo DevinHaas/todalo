@@ -7,7 +7,8 @@ import { openRitual, showWeekPlan } from "./ritual-screens";
 import { seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import { draftMutations } from "./coach";
 import { openCoachChat } from "./coach-chat-screens";
-import { PastSeasonView, SeasonsNav, SeasonView } from "./season-views";
+import { openPlanning, useCoachConnected } from "./planning-screens";
+import { PastSeasonView, SeasonsNav, SeasonView, type CapacitySlot } from "./season-views";
 import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { goalOf } from "./schedule";
@@ -68,6 +69,24 @@ function useCoachRecommendations(userId: string, season: { goals: SeasonGoalDto[
   }]));
 }
 
+/**
+ * Ticket 25: the Coach's estimate of the primary goals' weekly time against the
+ * time the user has. Undefined without a provider (no Coach UI at all).
+ */
+function useCapacity(userId: string, primaryCount: number): CapacitySlot | undefined {
+  const cache = useQueryClient();
+  const provider = useQuery(coachReads.provider(userId));
+  const options = seasonReads.capacity(userId);
+  const query = useQuery({ ...options, enabled: Boolean(provider.data?.provider) && primaryCount > 0 });
+  const save = useMutation({
+    mutationFn: (minutes: number | null) => seasons.saveCapacity(minutes),
+    onSuccess: (data) => cache.setQueryData(options.queryKey, data),
+    meta: { action: () => "save your time for primary goals" },
+  });
+  if (!provider.data?.provider) return undefined;
+  return { data: query.data, loading: query.isPending && query.fetchStatus !== "idle", saving: save.isPending, error: save.error?.message ?? null, onSave: save.mutateAsync };
+}
+
 /** Whether the sidebar shows Goals; hidden (or not loaded yet) shows nothing, so tasks never wait on goals. */
 export function useGoalsShown(userId: string) {
   const query = useQuery(goalReads.list(userId));
@@ -124,12 +143,14 @@ export function GoalScreen({ account }: { account: Account }) {
   const current = useQuery(seasonReads.current(account.user.id));
   const inSeason = current.data?.season?.goals.find(goal => goal.goalId === id);
   const explanations = useCoachExplanations(account.user.id, current.data?.season?.statuses);
+  const coachConnected = useCoachConnected(account.user.id);
   const writes = useGoalMutations(account.user.id);
   const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch), meta: { action: (patch: GoalPatch) => patch.archived === undefined ? "save the goal" : patch.archived ? "archive the goal" : "restore the goal" } });
   const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false), meta: { action: ({ kind }: { kind: GoalLinkKind }) => `unlink the ${kind === "projects" ? "project" : "task"} from the goal` } });
   return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target, status: current.data?.season?.statuses[id], explanation: explanations?.[id] } : null} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
     onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
+    onPlan={coachConnected ? () => openPlanning({ goalId: id, source: "goal" }) : undefined}
     write={{ pending: update.isPending || unlink.isPending, error: (update.error ?? unlink.error)?.message ?? null }} />;
 }
 
@@ -144,15 +165,19 @@ export function useGoalSlots(userId: string, kind: GoalLinkKind, targetId: strin
   const toggle = useMutation({ mutationFn: ({ goalId, linked }: { goalId: string; linked: boolean }) => writes.link(goalId, kind, targetId!, linked), meta: { action: ({ linked }: { linked: boolean }) => linked ? "link the goal" : "unlink the goal" } });
   // Ticket 03: tasks only. Refetched each time the sheet opens, so label or project edits show on reopen.
   const suggestions = useQuery({ ...goalReads.suggestions(userId, targetId ?? ""), enabled: kind === "tasks" && Boolean(targetId) && list.data?.hidden === false });
+  // Ticket 25: with a provider, a second read adds the Coach's by meaning. The rules show first and never wait on it.
+  const provider = useQuery({ ...coachReads.provider(userId), enabled: kind === "tasks" });
+  const coachSuggestions = useQuery({ ...goalReads.coachSuggestions(userId, targetId ?? ""), enabled: kind === "tasks" && Boolean(targetId) && list.data?.hidden === false && Boolean(provider.data?.provider) });
   const dismiss = useMutation({ mutationFn: (goalId: string) => writes.dismiss(targetId!, goalId), meta: { action: () => "dismiss the suggestion" } });
   if (!targetId || !list.data || list.data.hidden || !links.data) return undefined;
   const linked = linkedGoalIds(links.data, kind, targetId);
   const active = list.data.goals;
   // Only while the task has no goal; the server says the same, this just hides the hint at once on accept.
-  const suggested = linked.some(id => active.some(goal => goal.id === id)) ? [] : (suggestions.data?.goalIds ?? []).flatMap(id => active.filter(goal => goal.id === id));
+  const merged = coachSuggestions.data ?? suggestions.data;
+  const suggested = linked.some(id => active.some(goal => goal.id === id)) ? [] : (merged?.goalIds ?? []).flatMap(id => active.filter(goal => goal.id === id));
   return {
     goals: active, linked, onToggle: (goalId, linked) => toggle.mutate({ goalId, linked }),
-    suggested, onDismiss: (goalId) => dismiss.mutate(goalId),
+    suggested, onDismiss: (goalId) => dismiss.mutate(goalId), byCoach: merged?.coach,
     error: (toggle.error ?? dismiss.error)?.message ?? null,
   };
 }
@@ -216,6 +241,7 @@ export function SeasonScreen({ account }: { account: Account }) {
   const past = useQuery(seasonReads.past(userId));
   const explanations = useCoachExplanations(userId, query.data?.season?.statuses);
   const recommendations = useCoachRecommendations(userId, query.data?.season);
+  const capacity = useCapacity(userId, query.data?.season?.goals.filter(goal => goal.tier === "primary").length ?? 0);
   const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   const seasonId = query.data?.season?.id ?? "";
   const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays), meta: { action: () => "start the season" } });
@@ -230,13 +256,15 @@ export function SeasonScreen({ account }: { account: Account }) {
   const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next), meta: { action: () => "end the season" } });
   const writing = [start, create, update, remove, end];
   const ritualState = useQuery(ritualReads.state(userId)).data;
+  const coachConnected = useCoachConnected(userId);
   const review = ritualState?.settings.seasonReview.enabled
     ? { due: ritualState.seasonReview.due, done: ritualState.seasonReview.status !== null, onStart: () => openRitual("seasonReview") } : undefined;
-  return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} recommendations={recommendations} onRetry={() => void query.refetch()}
+  return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} recommendations={recommendations} capacity={capacity} onRetry={() => void query.refetch()}
     onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
     onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
     onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)} review={review}
+    onPlan={coachConnected ? () => openPlanning({ source: "season" }) : undefined}
     write={{ pending: writing.some(write => write.isPending), error: writing.find(write => write.error)?.error?.message ?? null }} />;
 }
 

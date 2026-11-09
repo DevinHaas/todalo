@@ -22,6 +22,11 @@ import { createDraftRoutes } from "./draft-routes";
 import * as drafts from "@todalo/server/drafts-store";
 import { createCoachChatRoutes } from "./coach-chat-routes";
 import * as coachChat from "@todalo/server/coach-chat-store";
+import { createCoachPlanningRoutes } from "./coach-planning-routes";
+import { createCoachPatternRoutes } from "./coach-pattern-routes";
+import * as coachPatterns from "@todalo/server/coach-patterns-store";
+import { createCapacityRoutes } from "./capacity-routes";
+import * as coachSuggestions from "@todalo/server/coach-suggestions-store";
 import * as rituals from "@todalo/server/rituals";
 import * as goals from "@todalo/server/goals";
 import * as milestones from "@todalo/server/milestones";
@@ -120,6 +125,23 @@ const app = createApi(dependencies)
   setMilestone: milestones.setMilestone,
   clearMilestone: milestones.clearMilestone,
   milestones: milestones.getGoalMilestones,
+  coach: {
+    provider: coach.getCoachProvider,
+    model: (config) => createCoachModel(config),
+    cached: coachSuggestions.getCachedGoalSuggestions,
+    cache: coachSuggestions.cacheGoalSuggestions,
+    patterns: coachPatterns.getPatterns,
+  },
+})).use(createCapacityRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  model: (config) => createCoachModel(config),
+  season: seasons.getCurrentSeason,
+  capacity: coachSuggestions.getCapacity,
+  saveAvailable: coachSuggestions.saveAvailableMinutes,
+  cache: coachSuggestions.cacheCapacity,
+  patterns: coachPatterns.getPatterns,
 })).use(createSeasonRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
@@ -167,6 +189,19 @@ const app = createApi(dependencies)
   cacheRecommendation: coach.cacheRecommendation,
   dismissRecommendation: coach.dismissRecommendation,
   moves: coach.getTaskMoves,
+  patterns: coachPatterns.getPatterns,
+})).use(createCoachPatternRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  model: (config) => createCoachModel(config),
+  season: seasons.getCurrentSeason,
+  statusInputs: rituals.getStatusInputs,
+  moves: coach.getTaskMoves,
+  patterns: coachPatterns.getPatterns,
+  add: coachPatterns.addPatterns,
+  update: coachPatterns.updatePattern,
+  remove: coachPatterns.removePattern,
 })).use(createDraftRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
@@ -178,6 +213,7 @@ const app = createApi(dependencies)
   tasks: drafts.getDraftTasks,
   resolve: drafts.resolveDraft,
   recommendation: coach.getRecommendation,
+  patterns: coachPatterns.getPatterns,
 })).use(createCoachChatRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
@@ -190,6 +226,18 @@ const app = createApi(dependencies)
   append: coachChat.appendChatMessages,
   clear: coachChat.clearChat,
   saveDraft: drafts.saveDraft,
+  patterns: coachPatterns.getPatterns,
+})).use(createCoachPlanningRoutes({
+  verify,
+  allowedOrigins: dependencies.allowedOrigins,
+  provider: coach.getCoachProvider,
+  model: (config) => createCoachModel(config),
+  dayContext: drafts.getDayContext,
+  goal: goals.getOwnedGoal,
+  season: seasons.getCurrentSeason,
+  milestones: milestones.getGoalMilestones,
+  saveDraft: drafts.saveDraft,
+  patterns: coachPatterns.getPatterns,
 })).use(createAttachmentRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

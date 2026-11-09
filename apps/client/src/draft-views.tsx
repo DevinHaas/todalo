@@ -9,9 +9,10 @@ import { labels } from "./schedule";
 
 const opIcons = { add: Plus, move: ArrowRight, remove: Minus } as const;
 const opLabels = { add: "Add", move: "Move", remove: "Remove" } as const;
-/** "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule". */
-export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end">, week = false) =>
-  item.op === "remove" || !item.end ? "Off the schedule"
+/** "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule"; ticket 23's milestone: "Milestone, due Mar 1". */
+export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria">, week = false) =>
+  item.criteria ? `Milestone, due ${labels.monthDay(new Date(item.start))}`
+  : item.op === "remove" || !item.end ? "Off the schedule"
     : `${week ? `${labels.weekday(new Date(item.start))} ` : ""}${labels.time(new Date(item.start))}–${labels.time(new Date(item.end))}`;
 
 const scopeCopy = {
@@ -60,6 +61,7 @@ export function DraftPanel({ scope, week, draft, drafting, deciding, message, on
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className={item.op === "remove" ? "text-sm line-through" : "text-sm"}><span className="sr-only">{opLabels[item.op]}: </span>{item.title}</span>
           <span className="text-xs text-muted-foreground">{draftTime(item, scope === "week")}</span>
+          {item.criteria && <ul aria-label="Done criteria" className="list-disc pl-4 text-xs text-muted-foreground">{item.criteria.map(text => <li key={text}>{text}</li>)}</ul>}
           {item.reason && <span className="text-xs text-muted-foreground">{item.reason}</span>}
         </div>
         <div className="-my-0.5 flex shrink-0 items-center">

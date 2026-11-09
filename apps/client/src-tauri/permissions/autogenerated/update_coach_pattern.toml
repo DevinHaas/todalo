@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-coach-pattern"
+description = "Enables the update_coach_pattern command without any pre-configured scope."
+commands.allow = ["update_coach_pattern"]
+
+[[permission]]
+identifier = "deny-update-coach-pattern"
+description = "Denies the update_coach_pattern command without any pre-configured scope."
+commands.deny = ["update_coach_pattern"]

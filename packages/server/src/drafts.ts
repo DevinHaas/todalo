@@ -16,8 +16,9 @@ export type DraftItemState = "pending" | "accepted" | "declined";
 /**
  * "day": today's plan (period: the day). "week": a week's plan (period: its first day, a Monday from the client).
  * Ticket 22 "chat": proposed in the Coach chat over the seven days from `period` (the day it was asked).
+ * Ticket 23 "plan": a planning session's new tasks over the seven days from `period` and its milestones.
  */
-export type DraftKind = "day" | "week" | "chat";
+export type DraftKind = "day" | "week" | "chat" | "plan";
 
 /**
  * One operation. `start`/`end` are the task's new dueDate/dueDateEnd: "add"
@@ -25,13 +26,17 @@ export type DraftKind = "day" | "week" | "chat";
  * time of one already scheduled, "remove" takes it off the schedule (its day
  * at midnight, no end: it keeps its day, as Unschedule does).
  */
-export interface DraftItemDto { id: string; op: DraftOp; taskId: string | null; title: string; start: string; end: string | null; goalId: string | null; reason: string; state: DraftItemState }
+export interface DraftItemDto {
+  id: string; op: DraftOp; taskId: string | null; title: string; start: string; end: string | null; goalId: string | null; reason: string; state: DraftItemState;
+  /** Ticket 23: a new milestone (an "add" due on `start`'s day, no end) with its done criteria. */
+  criteria?: string[];
+}
 export interface DraftDto { id: string; kind: DraftKind; period: string; summary: string; createdAt: string; items: DraftItemDto[] }
 export interface DraftsDto { drafts: DraftDto[] }
 /** POST /coach/drafts/day and /week: the new draft, or null with the reason the Coach could not draft. */
 export interface DraftDayDto { draft: DraftDto | null; message?: string }
 
-export interface DraftItemRecord { id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState }
+export interface DraftItemRecord { id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState; criteria?: string[] | null }
 export interface DraftRecord { id: string; kind: DraftKind; period: string; summary: string; createdAt: Date; items: DraftItemRecord[] }
 export type NewDraftItem = Omit<DraftItemRecord, "id" | "state">;
 export interface NewDraft { kind: DraftKind; period: string; summary: string; items: NewDraftItem[] }
@@ -40,7 +45,7 @@ export const toDraftDto = (draft: DraftRecord): DraftDto => ({
   id: draft.id, kind: draft.kind, period: draft.period, summary: draft.summary, createdAt: draft.createdAt.toISOString(),
   items: draft.items.map(item => ({
     id: item.id, op: item.op, taskId: item.taskId, title: item.title, start: item.startAt.toISOString(), end: item.endAt?.toISOString() ?? null,
-    goalId: item.goalId, reason: item.reason, state: item.state,
+    goalId: item.goalId, reason: item.reason, state: item.state, ...(item.criteria && { criteria: item.criteria }),
   })),
 });
 
@@ -363,7 +368,7 @@ function parseDraft(content: string, plan: DayPlan | WeekPlan, week: boolean): O
 // ---- Accepting ----
 
 /** One accepted item's task write: create (taskId null) or set the task's times. */
-export interface AcceptedWrite { itemId: string; taskId: string | null; title: string; goalId: string | null; dueDate: Date; dueDateEnd: Date | null }
+export interface AcceptedWrite { itemId: string; taskId: string | null; title: string; goalId: string | null; dueDate: Date; dueDateEnd: Date | null; criteria?: string[] | null }
 
 /**
  * What accepting `itemIds` (every pending item when omitted) writes. "missing":
@@ -380,7 +385,7 @@ export function planAccept(draft: DraftRecord, itemIds: readonly string[] | unde
       const task = current.find(row => row.id === item.taskId);
       if (!task || task.status === "done" || task.updatedAt.getTime() !== item.seenUpdatedAt?.getTime()) return "changed";
     }
-    writes.push({ itemId: item.id, taskId: item.taskId, title: item.title, goalId: item.goalId, dueDate: item.startAt, dueDateEnd: item.endAt });
+    writes.push({ itemId: item.id, taskId: item.taskId, title: item.title, goalId: item.goalId, dueDate: item.startAt, dueDateEnd: item.endAt, ...(item.criteria && { criteria: item.criteria }) });
   }
   return writes;
 }

@@ -421,7 +421,7 @@ export const coachExplanations = pgTable("coach_explanations", {
 export const coachDrafts = pgTable("coach_drafts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: ["day", "week", "chat"] }).notNull(),
+  kind: text("kind", { enum: ["day", "week", "chat", "plan"] }).notNull(),
   period: date("period", { mode: "string" }).notNull(),
   summary: text("summary").notNull(),
   status: text("status", { enum: ["open", "closed"] }).default("open").notNull(),
@@ -446,6 +446,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   reason: text("reason").notNull(),
   seenUpdatedAt: timestamp("seen_updated_at"),
   state: text("state", { enum: ["pending", "accepted", "declined"] }).default("pending").notNull(),
+  // Goals ticket 23: a planning session's new milestone (an "add" due on startAt's day); accepting links it to goalId with these criteria.
+  criteria: jsonb("criteria").$type<string[]>(),
 }, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
 
 // Goals ticket 21: a goal's last Coach recommendation, reused while inputsHash
@@ -482,6 +484,39 @@ export const coachChatMessages = pgTable("coach_chat_messages", {
   draftId: text("draft_id").references(() => coachDrafts.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [index("coach_chat_messages_user_created_idx").on(table.userId, table.createdAt)]);
+
+// Goals ticket 24: a Pattern the Coach learned about how the user works, with
+// the facts behind it (`evidence`) and what it was learned from (`source`).
+// The user edits (editedAt) or deletes any; Coach prompts read only these rows.
+export const coachPatterns = pgTable("coach_patterns", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  statement: text("statement").notNull(),
+  evidence: text("evidence").notNull(),
+  source: text("source").notNull(),
+  learnedAt: timestamp("learned_at").defaultNow().notNull(),
+  editedAt: timestamp("edited_at"),
+}, table => [index("coach_patterns_user_idx").on(table.userId)]);
+
+// Goals ticket 25: the Coach's goal suggestions for one task by meaning, reused
+// while inputsHash (the task's text, the candidate goals, provider, model) is unchanged.
+export const coachGoalSuggestions = pgTable("coach_goal_suggestions", {
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  inputsHash: text("inputs_hash").notNull(),
+  goalIds: jsonb("goal_ids").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.userId, table.taskId] })]);
+
+// Ticket 25: the time a week the user has for primary goals, and the Coach's
+// last estimate of what they need (reused while inputsHash is unchanged).
+export const coachCapacity = pgTable("coach_capacity", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  availableMinutes: integer("available_minutes"),
+  inputsHash: text("inputs_hash"),
+  estimate: jsonb("estimate").$type<{ goalId: string; minutesPerWeek: number; reason: string }[]>(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
 
 export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

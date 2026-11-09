@@ -6,6 +6,7 @@ import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferen
 import { coach, coachReads, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
 import { coachMutations, coachProviderInfo, nextCoachProvider, usableCoachProviders } from "./coach";
 import { openCoachChat } from "./coach-chat-screens";
+import { openPlanning } from "./planning-screens";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
 import { parentCandidates } from "./organization";
@@ -465,6 +466,12 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         return coachCard("chatgpt", '[data-coach-action="chatgpt-sign-in"]');
       },
       "coach.chatgpt-open": () => press(document.querySelector("[data-coach-chatgpt]"), '[data-coach-action="chatgpt-open"]'),
+      // Goals ticket 24: Learn now on Settings › Coach; elsewhere opens it.
+      "coach.learn-patterns": () => {
+        const settings = document.querySelector("[data-coach-settings]");
+        if (!settings) return modalOpen() ? false : latest.current.openSettings("coach");
+        return press(settings, '[data-pattern-action="learn"]');
+      },
       "coach.chatgpt-sign-out": () => coachCard("chatgpt", '[data-coach-action="chatgpt-sign-out"]'),
       // Goals ticket 17c: the next configured provider becomes the active one (the picker shows it).
       "coach.next-provider": () => {
@@ -486,10 +493,18 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // Ticket 22: the toolbar's Coach button exists only with a provider connected.
       "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; openCoachChat(); },
       "coach.chat-clear": () => press(document.querySelector("[data-coach-chat]"), '[data-coach-chat-action="clear"]'),
+      // Ticket 23: the goal page shown, else the season's first primary goal.
+      "coach.planning": () => {
+        if (!document.querySelector("[data-coach-chat-toggle]")) return false;
+        openPlanning({ goalId: document.querySelector<HTMLElement>("main [data-goal-id]")?.dataset.goalId, source: "goal" });
+      },
+      "coach.planning-draft": () => press(document.querySelector("[data-planning]"), '[data-planning-action="draft-now"]'),
       // Ticket 21: the Season page's recommendation holding focus, else the first.
       "coach.recommendation-schedule": () => press(recommendation(), '[data-recommendation-action="schedule"]'),
       "coach.recommendation-chat": () => press(recommendation(), '[data-recommendation-action="chat"]'),
       "coach.recommendation-dismiss": () => press(recommendation(), '[data-recommendation-action="dismiss"]'),
+      // Ticket 25: the Season page's capacity field (shown only with a Coach provider and a primary goal).
+      "season.capacity": () => { const input = document.querySelector<HTMLInputElement>("#season-capacity"); if (!input) return false; input.focus(); input.select(); },
       "ritual.skip": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="skip"]'),
       // Goals ticket 13: the Weekly review's planning question; passes on until it is shown.
       "ritual.plan-clear": () => press(document.querySelector("[data-ritual-panel]"), '[data-ritual-action="plan-clear"]'),

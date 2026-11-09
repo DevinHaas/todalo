@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CalendarCheck, CalendarRange, CircleCheck, Moon, Sunrise, X } from "lucide-react";
+import { CalendarCheck, CalendarRange, CircleCheck, Moon, Sparkles, Sunrise, X } from "lucide-react";
 import { progressRatings, ratingLabels, type PlanningAnswer, type ProgressRating, type RatingDto, type RatingHistoryItem, type RitualKind, type RitualSettingsDto, type RitualsDto, type RunStatus, type WeekGoalSummary } from "./rituals";
 import { GoalIcon } from "./goal-views";
 import {
@@ -137,7 +137,7 @@ export function RatingHistory({ goalId, history }: { goalId: string; history: Ra
  * question (tickets 12 and 13). Either answer finishes the ritual; "help" also
  * opens the schedule to plan. Skip records a skip; closing keeps nothing (do it later).
  */
-export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, final, onFinish, onSkip, onClose }: {
+export function RitualPanel({ copy, goals, status, pending, initial = [], summary, voice, final, onFinish, onCoachPlan, onSkip, onClose }: {
   copy: RitualCopy; goals: CheckInGoal[]; status: RunStatus | null; pending: boolean;
   /** A redo starts from the ratings given before. */
   initial?: RatingDto[];
@@ -148,6 +148,8 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   /** Replaces the planning answers as the last step (the Season review's next season); `back` returns to the last goal. */
   final?: (ratings: RatingDto[], back: ReactNode) => ReactNode;
   onFinish: (ratings: RatingDto[], planning: PlanningAnswer) => void; onSkip: () => void; onClose: () => void;
+  /** Ticket 23 (only with a Coach provider): finishes with these ratings and opens a planning session. */
+  onCoachPlan?: (ratings: RatingDto[]) => void;
 }) {
   const [step, setStep] = useState(0);
   const [ratings, setRatings] = useState<Record<string, { rating?: ProgressRating; context: string }>>(
@@ -177,6 +179,7 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
       <Hint>{copy.planHint}</Hint>
       {final ? final(given(), back) : <><div className="flex flex-col gap-2">
         <Button type="button" disabled={pending} onClick={() => finish("help")} data-ritual-action="plan-help">{copy.planYes}</Button>
+        {onCoachPlan && <Button type="button" variant="outline" disabled={pending} onClick={() => onCoachPlan(given())} data-ritual-action="plan-coach"><Sparkles className="text-brand" />Plan a goal with the Coach</Button>}
         <Button type="button" variant="outline" disabled={pending} onClick={() => finish("clear")} data-ritual-action="plan-clear">No, I've got a clear idea</Button>
       </div>
       {back}</>}

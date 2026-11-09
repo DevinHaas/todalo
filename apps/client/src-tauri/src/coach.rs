@@ -326,7 +326,7 @@ pub(crate) fn zoned(path: &str, time_zone: String) -> Result<String, String> {
 }
 
 /// Draft and item IDs are server UUIDs: anything else could reach another path.
-fn draft_id(id: &str) -> bool {
+pub(crate) fn draft_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 100 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 

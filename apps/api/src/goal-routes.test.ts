@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { planReorder } from "@todalo/server/bulk-input";
+import { CoachModelError, type CoachConfig, type CoachMessage } from "@todalo/server/coach";
 import { createGoalRoutes } from "./goal-routes";
 
 type Row = { id: string; userId: string; title: string; description: string | null; color: string; icon?: string; sortOrder: number; archivedAt: Date | null };
@@ -14,6 +15,12 @@ const tasks = [task("alice-protein", "alice", "Eat enough protein"), task("alice
   task("alice-squats", "alice", "Squats", "alice-meals", ["legs"]), task("bob-run", "bob", "Bob's run", "alice-run")];
 let dismissals: { userId: string; taskId: string; goalId: string }[] = [];
 let links: { goalId: string; kind: "projects" | "tasks"; targetId: string }[] = [];
+// Ticket 25: a fake Coach provider with canned replies; never a real model.
+let coachConfig: CoachConfig | null = null;
+let replies: (string | Error)[] = [];
+let asked: CoachMessage[][] = [];
+let coachCache = new Map<string, { inputsHash: string; goalIds: string[] }>();
+let patterns: { id: string; statement: string; evidence: string; source: string; learnedAt: Date; editedAt: Date | null }[] = [];
 beforeEach(() => {
   links = [];
   dismissals = [];
@@ -82,6 +89,13 @@ const app = createGoalRoutes({
   setMilestone: async () => "missing",
   clearMilestone: async () => false,
   milestones: async () => [],
+  coach: {
+    provider: async () => coachConfig,
+    model: () => ({ complete: async ({ messages }) => { asked.push(messages); const reply = replies.shift() ?? '{"goals":[]}'; if (reply instanceof Error) throw reply; return reply; } }),
+    cached: async (userId, taskId) => coachCache.get(`${userId}:${taskId}`) ?? null,
+    cache: async (userId, taskId, inputsHash, goalIds) => { coachCache.set(`${userId}:${taskId}`, { inputsHash, goalIds }); },
+    patterns: async () => patterns,
+  },
 });
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
   const headers = new Headers();
@@ -303,6 +317,93 @@ describe("goal API", () => {
     it("skips archived goals", async () => {
       linkTask("alice-old", "alice-run-1");
       expect(await suggested("alice-run-2")).toEqual([]);
+    });
+
+    describe("by meaning (ticket 25)", () => {
+      const coachRead = async (taskId: string, user = "alice") => (await call("GET", `/tasks/${taskId}/goal-suggestions/coach`, { user })).json() as Promise<{ goalIds: string[]; coach: string[] }>;
+      beforeEach(() => {
+        coachConfig = { provider: "openrouter", model: "fake", baseUrl: null, apiKey: "key" };
+        replies = []; asked = []; coachCache = new Map(); patterns = [];
+      });
+
+      it("sends only the stored patterns (ticket 24); editing one asks again", async () => {
+        patterns = [{ id: "p1", statement: "Trains in the mornings", evidence: "", source: "", learnedAt: new Date(), editedAt: null }];
+        replies = ['{"goals":["g1"]}', '{"goals":["g1"]}'];
+        await coachRead("alice-protein");
+        await coachRead("alice-protein");
+        expect(asked).toHaveLength(1);
+        expect(asked[0]!.filter(message => message.role === "system").map(message => message.content).join("\n")).toContain("- Trains in the mornings");
+        patterns[0]!.statement = "Trains in the evenings";
+        await coachRead("alice-protein");
+        expect(asked).toHaveLength(2);
+      });
+
+      it("adds the Coach's goals after the rule-based ones, from the task's text only, and links nothing", async () => {
+        linkTask("alice-v2", "alice-run-1");
+        replies = ['{"goals":["g1","g2"]}'];
+        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2", "alice-fit"], coach: ["alice-fit"] });
+        // The model saw the task's words and the goals under refs, never IDs.
+        const sent = asked[0]!.at(-1)!.content;
+        expect(JSON.parse(sent)).toEqual({ task: { title: "10k", description: "" }, goals: [{ ref: "g1", title: "Become fit", description: "Run a marathon" }, { ref: "g2", title: "Ship v2", description: "" }] });
+        expect(sent).not.toContain("alice-");
+        expect(links).toHaveLength(1);
+        // The plain read stays rule-based and asks no model.
+        expect(await suggested("alice-run-2")).toEqual(["alice-v2"]);
+        expect(asked).toHaveLength(1);
+      });
+
+      it("suggests by meaning with no shared project or label", async () => {
+        replies = ['{"goals":["g1"]}'];
+        expect(await coachRead("alice-protein")).toEqual({ goalIds: ["alice-fit"], coach: ["alice-fit"] });
+      });
+
+      it("asks once per task content: cached until the text or the goals change", async () => {
+        replies = ['{"goals":["g1"]}', '{"goals":["g2"]}', '{"goals":["g2"]}'];
+        await coachRead("alice-protein");
+        expect((await coachRead("alice-protein")).goalIds).toEqual(["alice-fit"]);
+        expect(asked).toHaveLength(1);
+        tasks.find(item => item.id === "alice-protein")!.title = "Eat enough protein daily";
+        try { expect((await coachRead("alice-protein")).goalIds).toEqual(["alice-v2"]); }
+        finally { tasks.find(item => item.id === "alice-protein")!.title = "Eat enough protein"; }
+        goals.find(goal => goal.id === "alice-v2")!.title = "Ship v3";
+        await coachRead("alice-protein");
+        expect(asked).toHaveLength(3);
+      });
+
+      it("drops unknown refs; a dismissed Coach suggestion stays hidden without asking again", async () => {
+        replies = ['{"goals":["g7","g2"]}'];
+        expect((await coachRead("alice-protein")).goalIds).toEqual(["alice-v2"]);
+        expect((await call("DELETE", "/tasks/alice-protein/goal-suggestions/alice-v2", { user: "alice" })).status).toBe(200);
+        expect(await coachRead("alice-protein")).toEqual({ goalIds: [], coach: [] });
+        expect(asked).toHaveLength(1);
+      });
+
+      it("no provider, a task with a goal or hidden Goals: no model call, rules only", async () => {
+        coachConfig = null;
+        linkTask("alice-v2", "alice-run-1");
+        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2"], coach: [] });
+        coachConfig = { provider: "openrouter", model: "fake", baseUrl: null, apiKey: "key" };
+        linkTask("alice-fit", "alice-protein");
+        expect(await coachRead("alice-protein")).toEqual({ goalIds: [], coach: [] });
+        hidden.set("alice", true);
+        expect(await coachRead("alice-stretch")).toEqual({ goalIds: [], coach: [] });
+        expect(asked).toEqual([]);
+      });
+
+      it("a failing or malformed model hides only the Coach's part and is not cached", async () => {
+        linkTask("alice-v2", "alice-run-1");
+        replies = [new CoachModelError("down"), "not json", '{"goals":["g1"]}'];
+        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2"], coach: [] });
+        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2"], coach: [] });
+        expect((await coachRead("alice-run-2")).coach).toEqual(["alice-fit"]);
+      });
+
+      it("foreign and missing tasks share the 404; signed out is 401", async () => {
+        expect((await call("GET", "/tasks/bob-page/goal-suggestions/coach", { user: "alice" })).status).toBe(404);
+        expect((await call("GET", "/tasks/nope/goal-suggestions/coach", { user: "alice" })).status).toBe(404);
+        expect((await call("GET", "/tasks/alice-protein/goal-suggestions/coach")).status).toBe(401);
+        expect(asked).toEqual([]);
+      });
     });
 
     it("dismissing hides that suggestion for that task only and creates no link", async () => {

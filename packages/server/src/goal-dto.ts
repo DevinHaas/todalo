@@ -43,8 +43,8 @@ export interface GoalMilestoneDto { task: TaskDto; criteria: CriterionDto[]; rea
 export interface GoalDetailDto { goal: GoalDto; projects: ProjectDto[]; tasks: TaskDto[]; milestones: GoalMilestoneDto[] }
 /** Every link of the signed-in user, for the task sheet and project page pickers. */
 export interface GoalLinksDto { projects: { goalId: string; projectId: string }[]; tasks: { goalId: string; taskId: string; milestone: boolean }[] }
-/** Ticket 03: goals suggested for a task, best first; empty once it has a goal or while Goals is hidden. */
-export interface GoalSuggestionsDto { goalIds: string[] }
+/** Ticket 03: goals suggested for a task, best first; empty once it has a goal or while Goals is hidden. Ticket 25: `coach` lists the goals in goalIds the Coach suggested by meaning (the coach read only). */
+export interface GoalSuggestionsDto { goalIds: string[]; coach?: string[] }
 /** What a goal links to; also the URL segment (/goals/:id/projects/:projectId). */
 export type GoalLinkKind = "projects" | "tasks";
 export const goalLinkKinds: readonly GoalLinkKind[] = ["projects", "tasks"];

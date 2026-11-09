@@ -42,7 +42,7 @@ export async function getOpenDrafts(userId: string, draftId?: string): Promise<D
 /** Stores a new draft, closing the open one of the same kind and period in the same batch. */
 export async function saveDraft(userId: string, draft: NewDraft): Promise<DraftRecord> {
   const id = crypto.randomUUID();
-  const items = draft.items.map((item, position) => ({ ...item, id: crypto.randomUUID(), userId, draftId: id, position, state: "pending" as const }));
+  const items = draft.items.map((item, position) => ({ ...item, criteria: item.criteria ?? null, id: crypto.randomUUID(), userId, draftId: id, position, state: "pending" as const }));
   const writes: BatchItem<"pg">[] = [
     db.update(coachDrafts).set({ status: "closed" }).where(and(eq(coachDrafts.userId, userId), eq(coachDrafts.kind, draft.kind), eq(coachDrafts.period, draft.period), eq(coachDrafts.status, "open"))),
     db.insert(coachDrafts).values({ id, userId, kind: draft.kind, period: draft.period, summary: draft.summary }),
@@ -72,7 +72,9 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
       // A new task lands in the Inbox; the item keeps pointing at it.
       const taskId = crypto.randomUUID();
       writes.push(db.insert(tasks).values({ id: taskId, userId, title: write.title, ...times }));
-      if (write.goalId) writes.push(db.insert(goalTasks).values({ userId, goalId: write.goalId, taskId }).onConflictDoNothing());
+      // Ticket 23: a drafted milestone is the goal link with its done criteria (milestones.ts).
+      const milestoneCriteria = write.criteria?.map(text => ({ text, done: false })) ?? null;
+      if (write.goalId) writes.push(db.insert(goalTasks).values({ userId, goalId: write.goalId, taskId, milestoneCriteria }).onConflictDoNothing());
       writes.push(db.update(coachDraftItems).set({ taskId }).where(and(eq(coachDraftItems.id, write.itemId), eq(coachDraftItems.userId, userId))));
       touched.push(taskId);
     }

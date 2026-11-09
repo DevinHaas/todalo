@@ -157,6 +157,20 @@ pub async fn goal_suggestions(
         .await?)
 }
 
+/// Ticket 25: the rule-based suggestions with the Coach's by meaning after them.
+#[tauri::command]
+pub async fn coach_goal_suggestions(
+    state: tauri::State<'_, NativeAuth>,
+    task_id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&task_id) {
+        return Ok(None);
+    }
+    Ok(state
+        .read(&format!("/api/v1/tasks/{task_id}/goal-suggestions/coach"))
+        .await?)
+}
+
 /// Hides one suggestion for one task; never links.
 #[tauri::command]
 pub async fn dismiss_goal_suggestion(

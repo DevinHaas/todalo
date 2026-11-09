@@ -4,6 +4,8 @@ mod bulk;
 mod calendar;
 mod coach;
 mod coach_chat;
+mod coach_patterns;
+mod coach_planning;
 mod comments;
 mod credentials;
 mod endpoint;
@@ -132,6 +134,7 @@ pub fn run() {
             goals::goal_links,
             goals::link_goal,
             goals::goal_suggestions,
+            goals::coach_goal_suggestions,
             goals::dismiss_goal_suggestion,
             goals::milestone,
             goals::set_milestone,
@@ -142,6 +145,8 @@ pub fn run() {
             seasons::remove_season_goal,
             seasons::past_seasons,
             seasons::end_season,
+            seasons::season_capacity,
+            seasons::save_capacity,
             rituals::rituals,
             rituals::update_ritual_settings,
             rituals::record_ritual_run,
@@ -168,6 +173,11 @@ pub fn run() {
             coach_chat::coach_chat,
             coach_chat::send_coach_chat,
             coach_chat::clear_coach_chat,
+            coach_patterns::coach_patterns,
+            coach_patterns::learn_coach_patterns,
+            coach_patterns::update_coach_pattern,
+            coach_patterns::delete_coach_pattern,
+            coach_planning::coach_planning,
             organization::destinations,
             organization::create_section,
             organization::delete_section,

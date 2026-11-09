@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-learn-coach-patterns"
+description = "Enables the learn_coach_patterns command without any pre-configured scope."
+commands.allow = ["learn_coach_patterns"]
+
+[[permission]]
+identifier = "deny-learn-coach-patterns"
+description = "Denies the learn_coach_patterns command without any pre-configured scope."
+commands.deny = ["learn_coach_patterns"]
