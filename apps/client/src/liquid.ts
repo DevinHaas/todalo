@@ -4,8 +4,10 @@
 // that thins as it lengthens and drains, and pinches off below a threshold into
 // optional beads. The button in the corner (the home drop) always stays: opening,
 // one drop flows out of it on a thick neck and spreads into the bar; when the neck
-// snaps, its stub runs back into the button, which wobbles and slowly settles.
-// Closing, the bar gathers into one drop that flows back in, with the same wobble.
+// snaps, its stub runs back into the button and its momentum sloshes the button's
+// liquid along that direction, swinging back and forth until it settles. Closing,
+// the bar gathers into one drop that flows back in, with the same slosh. The slosh
+// is its own motion, apart from the idle surface wobble.
 
 export type LiquidParams = {
   /** The button's radius, px. */
@@ -37,9 +39,9 @@ export type LiquidParams = {
   pinch: number;
   /** Beads a pinched neck breaks into. */
   satellites: number;
-  /** How hard the energy flowing back makes the button wobble. */
+  /** How far the energy flowing back sloshes the button's liquid. */
   recoil: number;
-  /** Seconds for the button's wobble to die down. */
+  /** Seconds for the slosh to die down. */
   settle: number;
   gloss: number;
   shadow: number;
@@ -67,8 +69,8 @@ type Body = Box & {
   target: Box; targetMix: number;
   posOmega: number; sizeOmega: number;
   wobble: number; seed: number;
-  /** Extra surface ripple, px, dying down (the button after a snap). */
-  ripple: number;
+  /** The slosh: the liquid's offset from its centre, px, and its velocity (the button only). */
+  sx: number; sy: number; svx: number; svy: number;
   /** Merges into this body and disappears once inside. */
   into?: Body;
 };
@@ -80,7 +82,7 @@ export type Phase = "closed" | "opening" | "open" | "closing";
 
 const makeBody = (box: Box, mix: number, seed: number): Body => ({
   ...box, vx: 0, vy: 0, vw: 0, vh: 0, vr: 0, j: 0, vj: 0, mix, vmix: 0,
-  target: { ...box }, targetMix: mix, posOmega: 1, sizeOmega: 1, wobble: 0, ripple: 0, seed,
+  target: { ...box }, targetMix: mix, posOmega: 1, sizeOmega: 1, wobble: 0, sx: 0, sy: 0, svx: 0, svy: 0, seed,
 });
 const spring = (x: number, v: number, to: number, omega: number, zeta: number, dt: number) => {
   const a = omega * omega * (to - x) - 2 * zeta * omega * v;
@@ -140,7 +142,8 @@ export class LiquidSim {
         const body = makeBody(round(home.x, home.y, p.size * p.flow), 0, this.seed++);
         this.body = body;
         this.bridges.push({ a: home, b: body, age: 0, base: p.size * p.flow, life: p.duration * 1.4 });
-        home.vj -= 0.4;
+        // Releasing the drop pulls the button's liquid after it.
+        this.shake(this.bar.x - home.x, this.bar.y - home.y, 0.12);
       }
       this.travel = Math.hypot(this.body.x - this.bar.x, this.body.y - this.bar.y);
       return;
@@ -148,11 +151,13 @@ export class LiquidSim {
     if (!this.body) this.phase = "closed";
   }
 
-  /** Energy arriving at the button: it squashes, ripples, and settles over `settle` seconds. */
-  private shake(amount: number) {
-    const p = this.params;
-    this.home.vj += 1.6 * p.recoil * amount / Math.max(p.tension, 0.2);
-    this.home.ripple += 3 * p.recoil * amount;
+  /** Momentum arriving at the button along (dx, dy): its liquid sloshes that way, then swings back. */
+  private shake(dx: number, dy: number, amount: number) {
+    const length = Math.hypot(dx, dy);
+    if (!length) return;
+    const speed = this.params.recoil * amount * this.params.size * 4;
+    this.home.svx += dx / length * speed;
+    this.home.svy += dy / length * speed;
   }
 
   step(dt: number) {
@@ -179,7 +184,6 @@ export class LiquidSim {
       body.sizeOmega = opening ? omega * p.lag : omega;
       body.wobble = p.wobbleAmp * (1 + (p.barWobble - 1) * body.mix);
     }
-    home.ripple *= Math.exp(-dt / Math.max(p.settle * 0.6, 0.05));
     for (const satellite of this.satellites) {
       const into = satellite.into ?? home;
       satellite.target = round(into.x, into.y, into === home ? radius(satellite) : 0);
@@ -210,7 +214,11 @@ export class LiquidSim {
       // The snap: the drop recoils, and the neck's stub runs back into the button with the energy.
       bridge.b.vj += 0.9 / Math.max(p.tension, 0.2);
       if (bridge.a === home) {
-        const stub = makeBody(round(ax, ay, Math.max(this.neck(bridge).r, p.pinch) * 1.6), home.mix, this.seed++);
+        // The stub starts where the thread broke, a third of the way out, and runs home.
+        const dx = bx - home.x, dy = by - home.y, length = Math.hypot(dx, dy) || 1;
+        const out = radius(home) + Math.max(0, length - radius(home) - radius(bridge.b)) / 3;
+        const stub = makeBody(round(home.x + dx / length * out, home.y + dy / length * out, Math.max(this.neck(bridge).r, p.pinch) * 1.8), home.mix, this.seed++);
+        stub.vx = -dx / length * p.size * 8; stub.vy = -dy / length * p.size * 8;
         stub.into = home;
         this.satellites.push(stub);
       }
@@ -218,7 +226,7 @@ export class LiquidSim {
     // Back home: the closing drop merges into the button, which takes the bump.
     if (body && !opening && this.gathered && Math.hypot(body.x - home.x, body.y - home.y) < radius(home) * 0.6) {
       this.body = null;
-      this.shake(1);
+      this.shake(body.vx || home.x - body.x, body.vy || home.y - body.y, 1);
       this.bridges = this.bridges.filter(bridge => bridge.a !== body && bridge.b !== body);
       for (const satellite of this.satellites) if (satellite.into === body) satellite.into = home;
       this.phase = "closed";
@@ -227,7 +235,7 @@ export class LiquidSim {
     this.satellites = this.satellites.filter(satellite => {
       const into = satellite.into ?? home;
       const merged = Math.hypot(satellite.x - into.x, satellite.y - into.y) < Math.max(radius(into) * 0.5, 2);
-      if (merged && into === home) this.shake(0.8);
+      if (merged && into === home) this.shake(satellite.vx || home.x - satellite.x, satellite.vy || home.y - satellite.y, 1);
       return !merged && radius(satellite) >= 0.4;
     });
     if (this.phase === "opening" && this.body && near(this.body, this.bar, Math.max(12, this.bar.w * 0.04))) this.phase = "open";
@@ -262,12 +270,15 @@ export class LiquidSim {
       // Braking along x squashes it wide, braking along y tall: the arrival wobble.
       const ax = (item.vx - vx0) / dt, ay = (item.vy - vy0) / dt;
       if (item !== this.home) item.vj += (Math.abs(ax) - Math.abs(ay)) * 0.00002 * p.stretch * dt * 60;
-      // The button rings down over `settle` seconds; everything else damps with the viscosity.
-      const jiggleZeta = item === this.home ? Math.min(zeta * 0.6, 1 / (jiggleOmega * Math.max(p.settle, 0.05))) : zeta * 0.6;
-      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, jiggleZeta, dt);
+      [item.j, item.vj] = spring(item.j, item.vj, 0, jiggleOmega, zeta * 0.6, dt);
       item.j = Math.max(-0.35, Math.min(0.35, item.j));
       item.w = Math.max(0, item.w); item.h = Math.max(0, item.h); item.r = Math.max(0, item.r);
     }
+    // The slosh rings down over `settle` seconds (envelope e^-ζωt).
+    const home = this.home, sloshOmega = jiggleOmega * 0.8;
+    const sloshZeta = Math.min(0.9, 1 / (sloshOmega * Math.max(p.settle, 0.05)));
+    [home.sx, home.svx] = spring(home.sx, home.svx, 0, sloshOmega, sloshZeta, dt);
+    [home.sy, home.svy] = spring(home.sy, home.svy, 0, sloshOmega, sloshZeta, dt);
   }
 
   private *bodies() {
@@ -283,12 +294,15 @@ export class LiquidSim {
     for (const item of this.bodies()) {
       const speed = Math.hypot(item.vx, item.vy);
       const roundness = radius(item) / Math.max(item.w, item.h, 1e-3);
+      // The slosh moves the liquid's centre off the button and draws it out along the swing.
+      const slosh = Math.hypot(item.sx, item.sy);
+      const sloshing = slosh > speed / 60;
       out.push({
-        x: item.x, y: item.y,
+        x: item.x + item.sx, y: item.y + item.sy,
         w: item.w * (1 + item.j), h: item.h * (1 - item.j), r: item.r,
-        wobble: item.wobble + item.ripple, mix: item.mix, seed: item.seed, segment: false,
-        stretch: Math.min(0.8, speed * p.stretch / 2400) * roundness,
-        dx: speed ? item.vx / speed : 1, dy: speed ? item.vy / speed : 0,
+        wobble: item.wobble, mix: item.mix, seed: item.seed, segment: false,
+        stretch: sloshing ? Math.min(0.5, slosh / Math.max(item.w, 1) * 0.9) : Math.min(0.8, speed * p.stretch / 2400) * roundness,
+        dx: sloshing ? item.sx / slosh : speed ? item.vx / speed : 1, dy: sloshing ? item.sy / slosh : speed ? item.vy / speed : 0,
       });
     }
     for (const bridge of this.bridges) {
@@ -310,6 +324,7 @@ export class LiquidSim {
   settled() {
     const { body } = this;
     return (this.phase === "open" || this.phase === "closed") && !this.satellites.length && !this.bridges.length
+      && Math.hypot(this.home.sx, this.home.sy) < 0.2 && Math.hypot(this.home.svx, this.home.svy) < 2
       && (!body || (Math.hypot(body.vx, body.vy) < 0.5 && Math.hypot(body.vw, body.vh) < 0.02 && Math.abs(body.vj) < 0.01));
   }
 }

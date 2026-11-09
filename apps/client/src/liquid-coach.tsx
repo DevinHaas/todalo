@@ -96,7 +96,8 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
 
   const size = params.size * 2;
   // The bar stays centred and clear of the button on both sides.
-  const room = (size + 28) * 2;
+  // Farther from the button than the goo reaches (plus the slosh), or the two would melt together.
+  const room = (size + 16 + params.goo + 16) * 2;
   return <LiquidActive.Provider value={active}>
     <div ref={host} data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
       className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
