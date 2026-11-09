@@ -6,14 +6,14 @@
 
 **Blocked by:** 19, 20
 
-**Status:** needs-review
+**Status:** ready-for-agent
 
 - [ ] Visible, non-all-day calendar events in the drafted range join the busy list in every draft kind
 - [ ] The draft parser rejects any item that overlaps a calendar event, the same way it rejects overlapping tasks
 - [ ] Items that don't fit come back as "overflow" with a reason and are not placed in the draft
 - [ ] The draft card shows the overflow: "3 tasks don't fit today. Schedule them tomorrow?" with Yes and No
 - [ ] Yes drafts the overflow onto the next day with room (the same draft rules, stale check on accept); No drops them
-- [ ] Event titles go to the provider only as "busy" plus their times, unless the user allows titles (privacy)
+- [ ] Setting in Settings › Coach, "Share event titles with the AI": off (default) sends only busy times, on sends titles too (user decision 2026-11-09)
 - [ ] Tests at the draft parser and API seam, with fakes for events
 
 Spec: ../spec.md. Vocabulary: CONTEXT.md.

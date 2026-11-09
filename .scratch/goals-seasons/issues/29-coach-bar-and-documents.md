@@ -14,12 +14,12 @@
 
 Every effect is a draft change, shown and accepted like the others; nothing is written until accepted.
 
-**Blocked by:** 22 (chat), 19 (drafts)
+**Blocked by:** 22 (chat), 19 (drafts), 28
 
-**Status:** needs-review
+**Status:** ready-for-agent
 
 - [ ] Floating bar on all main views; focus shortcut in the registry; Esc closes the reply
-- [ ] Chat reuses ticket 22's conversation and draft kinds; the sidebar chat stays or goes (decision)
+- [ ] Decision (2026-11-09): all interaction with the Coach (typing, replies, accept and decline) happens in the new bar. The sidebar stays as a read-only list: what the user asked for, and every task the pending change affects (added, moved, removed, sub-tasks, attachments), each linked to its task. The sidebar's chat input goes away; the conversation reuses ticket 22's chat and draft kinds
 - [ ] New draft change kinds: add sub-task, attach document, move, remove (in addition to add task)
 - [ ] Per-change keep/drop plus Accept all and Decline all; stale check on accept
 - [ ] Pending changes rendered in calendar, Today, lists and task detail (dashed, struck through)
