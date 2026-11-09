@@ -82,8 +82,8 @@ html[data-titlebar="overlay"] .app-shell[data-collapsed="true"] .toolbar { paddi
 .checkbox { --ring-color: var(--muted-foreground); width: 1.25rem; height: 1.25rem; margin-top: .125rem; flex-shrink: 0; border: 1px solid var(--ring-color); border-radius: 999px; box-shadow: none; }
 .checkbox[data-priority="1"] { --ring-color: oklch(0.6 0.22 27); } .checkbox[data-priority="2"] { --ring-color: oklch(0.72 0.17 60); } .checkbox[data-priority="3"] { --ring-color: oklch(0.62 0.16 255); }
 .checkbox[data-priority]:not([data-priority="4"]) { background: color-mix(in oklch, var(--ring-color) 12%, var(--background)); }
-.checkbox[aria-checked="true"], .task-row[data-done] .checkbox { background: var(--muted-foreground); border-color: var(--muted-foreground); }
-.checkbox[aria-checked="true"]::before, .task-row[data-done] .checkbox::before { content: ""; position: absolute; left: 35%; top: 18%; width: 25%; height: 45%; border: solid var(--background); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.checkbox[aria-checked="true"], .task-row[data-done] .checkbox, .task-row[data-pending="complete"] .checkbox { background: var(--muted-foreground); border-color: var(--muted-foreground); }
+.checkbox[aria-checked="true"]::before, .task-row[data-done] .checkbox::before, .task-row[data-pending="complete"] .checkbox::before { content: ""; position: absolute; left: 35%; top: 18%; width: 25%; height: 45%; border: solid var(--background); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 span.checkbox { position: relative; }
 .row-body { flex: 1; min-width: 0; display: grid; gap: .25rem; }
 .task-title { font-size: 1rem; line-height: 1.5rem; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
@@ -732,8 +732,9 @@ button.property-value:hover { background: var(--accent); }
 .sheet-side[data-dimmed] { opacity: .45; transition: opacity .15s; }
 
 /* A done task kept on the calendar for its time slot. */
-.timed-block[data-done] { opacity: .6; }
-.timed-block[data-done] .timed-title { text-decoration: line-through; }
+/* Goals ticket 30: a task the Coach will complete looks done (ticked, faded) until the draft is decided. */
+.timed-block[data-done], .timed-block[data-draft="complete"] { opacity: .6; }
+.timed-block[data-done] .timed-title, .timed-block[data-draft="complete"] .timed-title { text-decoration: line-through; }
 
 /* List pages keep a readable column (the rows and the ⌘E editor share it). */
 .content[data-layout="list"] { width: 100%; max-width: 52.5rem; margin-inline: auto; }

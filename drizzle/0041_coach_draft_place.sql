@@ -1,0 +1,1 @@
+ALTER TABLE "coach_draft_items" ADD COLUMN "place" jsonb;

@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
-  dayDraftMessages, dayDraftSchema, dayPlan, draftCurrent, draftDecisionInput, localParts, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto,
+  dayDraftMessages, dayDraftSchema, dayPlan, draftCurrent, draftDecisionInput, localParts, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, staleItems, toDraftDto,
   weekDraftMessages, weekDraftSchema, weekDraftStart, weekPlan,
   type AcceptedWrite, type DayContext, type DraftDayDto, type DraftKind, type DraftRecord, type DraftsDto, type DraftTask, type NewDraft,
 } from "@todalo/server/drafts";
@@ -63,13 +63,23 @@ export function createDraftRoutes(store: DraftStore) {
     const { itemIds } = input.data;
     if (input.data.overflow) return overflow(request, userId, draft, accept, status);
     let decision: { accepted: AcceptedWrite[]; declined: string[] };
+    let message: string | undefined;
     if (accept) {
       // Ticket 29: and the existing tasks sub-tasks and attachments go under.
       const ids = draft.items.flatMap(item => item.state === "pending" ? [item.taskId, item.parentId].filter((id): id is string => Boolean(id)) : []);
-      const accepted = planAccept(draft, itemIds, await store.tasks(userId, ids));
+      const current = await store.tasks(userId, ids);
+      let accepted = planAccept(draft, itemIds, current);
       if (accepted === "missing") return status(404, NOT_FOUND);
-      if (accepted === "changed") return status(412, CHANGED);
-      decision = { accepted, declined: [] };
+      // Ticket 30: a task changed since rejects only its change (declined); with nothing else left, the whole accept is refused.
+      const stale = accepted === "changed" ? staleItems(draft, itemIds, current) : [];
+      if (accepted === "changed") {
+        const rest = (itemIds ?? draft.items.filter(item => item.state === "pending").map(item => item.id)).filter(id => !stale.includes(id));
+        accepted = rest.length ? planAccept(draft, rest, current) : "changed";
+        if (accepted === "missing") return status(404, NOT_FOUND);
+        if (accepted === "changed") return status(412, CHANGED);
+        message = `${stale.length === 1 ? "1 change was" : `${stale.length} changes were`} left out: ${stale.length === 1 ? "its task" : "their tasks"} changed since the Coach drafted.`;
+      }
+      decision = { accepted, declined: stale };
     } else {
       const declined = planDecline(draft, itemIds);
       if (declined === "missing") return status(404, NOT_FOUND);
@@ -77,7 +87,7 @@ export function createDraftRoutes(store: DraftStore) {
     }
     await store.resolve(userId, draft, decision);
     const [after] = await store.drafts(userId, id);
-    return { draft: after ? toDraftDto(after) : null } satisfies DraftDayDto;
+    return { draft: after ? toDraftDto(after) : null, ...(message && { message }) } satisfies DraftDayDto;
   }
 
   /**

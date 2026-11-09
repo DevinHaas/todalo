@@ -5,9 +5,10 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@todalo/db";
 import { coachDocuments, coachDraftItems, coachDrafts, goalTasks, taskAttachments, tasks, userSettings } from "@todalo/db/schema";
-import { atomically } from "./bulk";
+import { atomically, completeTasks, deleteTasks } from "./bulk";
 import { getCalendarEventsForUser } from "./calendar-connections";
 import { getGoalLinks } from "./goals";
+import { getOrganizationDestinations, moveTasks } from "./organization";
 import { getRitualSettings } from "./rituals";
 import { getCurrentSeason } from "./seasons";
 import { syncToCalendar } from "./tasks";
@@ -17,10 +18,12 @@ const taskColumns = { id: tasks.id, title: tasks.title, status: tasks.status, pr
 
 export async function getDayContext(userId: string): Promise<DayContext> {
   // Ticket 28: the events Today shows (enabled calendars, accounts showing events, no echoes of our own tasks).
-  const [rows, current, links, rituals, events, [settings]] = await Promise.all([
+  // Ticket 30: and the projects and sections a chat move may use.
+  const [rows, current, links, rituals, events, [settings], destinations] = await Promise.all([
     db.select(taskColumns).from(tasks).where(eq(tasks.userId, userId)),
     getCurrentSeason(userId), getGoalLinks(userId), getRitualSettings(userId), getCalendarEventsForUser(userId),
     db.select({ share: userSettings.coachShareEventTitles }).from(userSettings).where(eq(userSettings.userId, userId)),
+    getOrganizationDestinations(userId),
   ]);
   return {
     tasks: rows, links,
@@ -28,6 +31,7 @@ export async function getDayContext(userId: string): Promise<DayContext> {
     fixedTaskIds: Object.values(rituals.taskIds).filter(id => id !== null),
     events: events.map(({ title, start, end, allDay }) => ({ title, start, end, allDay })),
     shareEventTitles: settings?.share ?? false,
+    destinations,
   };
 }
 
@@ -68,6 +72,12 @@ export async function saveDraft(userId: string, draft: NewDraft): Promise<DraftR
  * ponytail: the caller's stale check (planAccept) and this batch are separate
  * statements (no neon-http interactive transactions); an edit landing in
  * between is last-write-wins, as in updateTask.
+ * Ticket 30: after the batch, moves to another place, completions and deletions
+ * go through the app's own commands (moveTasks, completeTasks, deleteTasks:
+ * recurring tasks advance, sub-tasks move and go along, calendar events follow).
+ * ponytail: those run after the items are marked accepted; a failure there
+ * leaves the item accepted with the task unchanged (the toast says the accept
+ * failed, and the task is still there to change by hand).
  */
 export async function resolveDraft(userId: string, draft: DraftRecord, { accepted, declined }: { accepted: AcceptedWrite[]; declined: string[] }) {
   const writes: BatchItem<"pg">[] = [];
@@ -82,9 +92,12 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
   // A new task's ID by its item, for what goes under it (created in this batch or accepted earlier).
   const created = new Map(draft.items.flatMap(item => item.taskId && item.state === "accepted" ? [[item.id, item.taskId] as const] : []));
   const parentOf = (write: AcceptedWrite) => write.parentId ?? created.get(write.parentItemId ?? "") ?? null;
+  const completed: string[] = [], deleted: string[] = [];
   for (const write of accepted) {
     const times = { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd };
-    if (write.op === "subtask") {
+    if (write.op === "complete" || write.op === "delete") (write.op === "complete" ? completed : deleted).push(write.taskId!);
+    else if (write.place?.keepsDate) continue;
+    else if (write.op === "subtask") {
       const parentId = parentOf(write);
       const place = parents.find(row => row.id === parentId) ?? { projectId: null, sectionId: null };
       const taskId = crypto.randomUUID();
@@ -121,7 +134,11 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
     writes.push(db.update(coachDrafts).set({ status: "closed" }).where(and(eq(coachDrafts.id, draft.id), eq(coachDrafts.userId, userId))));
   }
   await atomically(writes);
+  for (const write of accepted) if (write.place) await moveTasks(userId, [write.taskId!], { projectId: write.place.projectId, sectionId: write.place.sectionId });
   for (const taskId of touched) await syncToCalendar(userId, taskId);
+  // The accept is the user's confirmation, also of a milestone's open done criteria.
+  if (completed.length) await completeTasks(userId, completed.map(id => ({ id })), undefined, true);
+  if (deleted.length) await deleteTasks(userId, deleted);
 }
 
 /** Ticket 28: the overflow answered (scheduled or dropped); the draft closes when nothing else is pending. */

@@ -16,7 +16,7 @@ import { Dropdown, type Option } from "./popover";
 import { ComposerChoices } from "./composer";
 import { MilestoneTasks, TaskGoals, TaskTree, subtasksOf } from "./task-tree";
 import { GoalIcon } from "./goal-views";
-import { PendingAttachments, PendingChip, PendingNewTasks, PendingSubtaskRows, pendingRowClass, usePendingChanges } from "./pending-changes";
+import { PendingAttachments, PendingChip, PendingNewTasks, PendingSubtaskRows, ownLook, pendingRowClass, usePendingChanges } from "./pending-changes";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -111,7 +111,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   const editor = dialog?.editor?.(task);
   if (editor && !hidden) return <>{editor}</>;
   return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} ${pendingRowClass(change)}`} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
-    data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && change.op !== "remove" && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
+    data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && !ownLook(change) && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions

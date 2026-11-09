@@ -92,6 +92,11 @@ const app = createDraftRoutes({
       const parentId = write.parentId ?? (write.parentItemId ? `new-${write.parentItemId}` : null);
       if (write.op === "subtask") { task(userId, `new-${write.itemId}`, { title: write.title, parentId }); continue; }
       if (write.op === "attach") { attachments.push(`${write.documentId}>${parentId}`); continue; }
+      // Ticket 30: the app's own complete, delete and move (moveTasks) in production.
+      if (write.op === "complete") { tasks.get(write.taskId!)!.status = "done"; continue; }
+      if (write.op === "delete") { tasks.delete(write.taskId!); continue; }
+      if (write.place) tasks.get(write.taskId!)!.projectId = write.place.projectId;
+      if (write.place?.keepsDate) continue;
       const id = write.taskId ?? `new-${write.itemId}`;
       if (write.taskId) Object.assign(tasks.get(id)!, { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd, updatedAt: clock });
       else task(userId, id, { title: write.title, dueDate: write.dueDate, dueDateEnd: write.dueDateEnd, updatedAt: clock, goalIds: write.goalId ? [write.goalId] : [] } as Partial<DraftTask>);
@@ -321,16 +326,20 @@ describe("accepting and declining", () => {
     expect(pushed).toEqual([]);
   });
 
-  it("writes nothing when a drafted task changed since (412)", async () => {
+  it("ticket 30: a task changed since rejects only its change; alone it is refused (412)", async () => {
     const { draft } = await draftDay();
     Object.assign(tasks.get("admin")!, { title: "admin (edited)", updatedAt: new Date("2026-02-09T08:30:00Z") });
     const before = snapshot();
-    const response = await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: {} });
+    const removal = draft!.items.find(row => row.op === "remove")!.id;
+    const response = await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: { itemIds: [removal] } });
     expect(response.status).toBe(412);
     expect((await response.json() as { code: string }).code).toBe("TASK_CHANGED");
     expect(snapshot()).toBe(before);
-    // Items whose own tasks are unchanged can still be accepted one by one.
-    expect((await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: { itemIds: [draft!.items[0]!.id] } })).status).toBe(200);
+    const result = await (await call("POST", `/coach/drafts/${draft!.id}/accept`, { user: "alice", body: {} })).json() as DraftDayDto;
+    expect(result).toEqual({ draft: null, message: "1 change was left out: its task changed since the Coach drafted." });
+    expect(tasks.get("admin")!.dueDate).toEqual(new Date("2026-02-09T14:00:00Z"));
+    expect(pushed).toContain("run");
+    expect(drafts.find(row => row.id === draft!.id)!.items.find(row => row.id === removal)!.state).toBe("declined");
   });
 
   it("keeps drafts private, checks the origin and rejects bad bodies", async () => {
@@ -469,6 +478,40 @@ describe("sub-tasks and attachments (ticket 29)", () => {
     expect(attachments).toEqual([]);
     const after = await (await decide(false, ["c1-new"])).json() as DraftDayDto;
     expect(after.draft!.items.filter(row => row.state === "declined").map(row => row.id)).toEqual(["c1-new", "c1-step"]);
+  });
+});
+
+describe("complete, delete and move (ticket 30)", () => {
+  const base = { goalId: null, reason: "", startAt: new Date("2026-02-09T08:10:00Z"), endAt: null, seenUpdatedAt: v1, state: "pending" as const };
+  beforeEach(() => {
+    task("alice", "report", { title: "Report" });
+    drafts.push({ id: "c2", userId: "alice", status: "open", kind: "chat", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { ...base, id: "c2-done", op: "complete", taskId: "run", title: "run" },
+      { ...base, id: "c2-drop", op: "delete", taskId: "admin", title: "admin" },
+      { ...base, id: "c2-place", op: "move", taskId: "report", title: "Report", place: { projectId: "health", sectionId: null, label: "Health", keepsDate: true } },
+      { ...base, id: "c2-day", op: "move", taskId: "meeting", title: "meeting", startAt: new Date("2026-02-11T23:00:00Z") },
+    ] });
+  });
+  const accept = (itemIds?: string[]) => call("POST", "/coach/drafts/c2/accept", { user: "alice", body: itemIds ? { itemIds } : {} });
+
+  it("lists them with their place, and accepting completes, deletes and moves", async () => {
+    const listed = await (await call("GET", `/coach/drafts?timeZone=${zone}`, { user: "alice" })).json() as DraftsDto;
+    expect(listed.drafts.find(row => row.id === "c2")!.items[2]).toMatchObject({ op: "move", place: { projectId: "health", label: "Health", keepsDate: true } });
+    expect(await (await accept()).json()).toEqual({ draft: null });
+    expect(tasks.get("run")!.status).toBe("done");
+    expect(tasks.has("admin")).toBe(false);
+    expect(tasks.get("report")).toMatchObject({ projectId: "health", dueDate: null });
+    expect(tasks.get("meeting")).toMatchObject({ dueDate: new Date("2026-02-11T23:00:00Z"), dueDateEnd: null });
+  });
+
+  it("a task completed or edited since rejects only its change", async () => {
+    tasks.get("admin")!.status = "done";
+    tasks.get("report")!.updatedAt = clock;
+    const result = await (await accept(["c2-drop", "c2-done", "c2-place"])).json() as DraftDayDto;
+    expect(result.message).toBe("2 changes were left out: their tasks changed since the Coach drafted.");
+    expect(result.draft!.items.map(row => [row.id, row.state])).toEqual([["c2-done", "accepted"], ["c2-drop", "declined"], ["c2-place", "declined"], ["c2-day", "pending"]]);
+    expect(tasks.get("run")!.status).toBe("done");
+    expect(tasks.get("report")!.projectId).toBeNull();
   });
 });
 

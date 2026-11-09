@@ -5,6 +5,8 @@
 // Review lists them one by one). The changes show dashed in place meanwhile
 // (pending-changes.tsx, the calendar); nothing is written until accepted. The
 // right sidebar (coach-chat-screens.tsx) is the read-only record.
+// Ticket 30: accepting a change that deletes tasks asks once more ("Delete 3
+// tasks? This can't be undone."); a change whose task changed since is left out.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Check, ChevronDown, FileText, Image, Paperclip, Sparkles, X } from "lucide-react";
@@ -16,7 +18,10 @@ import { goalColorValue } from "./goals";
 import { localZone } from "./seasons";
 import { modalOpen } from "./keyboard";
 import { reportCoachError } from "./coach-errors";
-import { Button, Hint, Spinner, Textarea, cn } from "./ui";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  Button, Hint, Spinner, Textarea, cn,
+} from "./ui";
 
 /** Accepted in the picker (the server checks again, by kind). */
 const ACCEPT = ".pdf,.docx,.txt,.md,.markdown,.csv,.png,.jpg,.jpeg,.gif,.webp,application/pdf,text/*,image/png,image/jpeg,image/gif,image/webp";
@@ -45,6 +50,8 @@ function Bar({ userId }: { userId: string }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [dragging, setDragging] = useState(false);
+  /** Ticket 30: an accept that deletes tasks, waiting for the second confirm. */
+  const [deleting, setDeleting] = useState<{ itemIds?: string[]; count: number } | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -78,7 +85,7 @@ function Bar({ userId }: { userId: string }) {
     onSuccess: (result) => setChat({ documents: result.documents }),
     meta: { action: () => "remove the document" },
   });
-  const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the changes" : "decline the changes" } });
+  const decide = useMutation({ mutationFn: writes.decide, onSuccess: (result) => setMessage(result.message ?? null), meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the changes" : "decline the changes" } });
   const overflow = useMutation({ mutationFn: writes.overflow, onSuccess: (result) => setMessage(result.message ?? result.next?.summary ?? null), meta: { action: ({ schedule }: { schedule: boolean }) => schedule ? "schedule the tasks that didn't fit" : "drop the tasks that didn't fit" } });
 
   const documents = chat.data?.documents ?? [];
@@ -99,6 +106,13 @@ function Bar({ userId }: { userId: string }) {
     return goal ? [goalColorValue(goal.color)] : [];
   }))].slice(0, 3);
   useEffect(() => { if (!draft) setReviewing(false); }, [draft]);
+  // Accepting (all, or some) asks again first when it deletes tasks; declining never does.
+  const onDecide = (accept: boolean, itemIds?: string[]) => {
+    if (!draft) return;
+    const count = accept ? pending.filter(item => item.op === "delete" && (!itemIds || itemIds.includes(item.id))).length : 0;
+    if (count) setDeleting({ itemIds, count });
+    else decide.mutate({ draftId: draft.id, accept, itemIds });
+  };
   // Escape closes the reply (and the review) while no dialog owns the keyboard.
   useEffect(() => {
     if (!replyOpen && !reviewing) return;
@@ -124,7 +138,7 @@ function Bar({ userId }: { userId: string }) {
       </section>}
       {draft && reviewing && <div className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background p-1 shadow-popover" data-coach-review="">
         <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null}
-          onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
+          onDecide={onDecide} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
       </div>}
       {draft && <div role="group" aria-label="Coach changes" data-coach-draft={draft.id}
         className="flex items-center gap-2 rounded-full border border-border bg-background py-1 pr-1 pl-3 shadow-popover">
@@ -138,9 +152,9 @@ function Bar({ userId }: { userId: string }) {
         </button>
         {pending.length > 0 && <>
           <Button type="button" variant="ghost" size="icon" aria-label="Decline all changes" title="Decline all" disabled={decide.isPending}
-            onClick={() => decide.mutate({ draftId: draft.id, accept: false })} data-draft-action="decline-all"><X /></Button>
+            onClick={() => onDecide(false)} data-draft-action="decline-all"><X /></Button>
           <Button type="button" size="icon" className="rounded-full" aria-label="Accept all changes" title="Accept all" disabled={decide.isPending}
-            onClick={() => decide.mutate({ draftId: draft.id, accept: true })} data-draft-action="accept-all">{decide.isPending ? <Spinner /> : <Check />}</Button>
+            onClick={() => onDecide(true)} data-draft-action="accept-all">{decide.isPending ? <Spinner /> : <Check />}</Button>
         </>}
       </div>}
       <form aria-label="Talk to the Coach" data-coach-bar-composer="" data-dragging={dragging || undefined}
@@ -174,6 +188,17 @@ function Bar({ userId }: { userId: string }) {
         </div>
       </form>
     </div>
+    {deleting && draft && <AlertDialog open onOpenChange={(open) => { if (!open) setDeleting(null); }}>
+      <AlertDialogContent data-coach-delete-confirm="">
+        <AlertDialogHeader><AlertDialogTitle>{deleting.count === 1 ? "Delete 1 task?" : `Delete ${deleting.count} tasks?`}</AlertDialogTitle>
+          <AlertDialogDescription>This can't be undone. Sub-tasks are deleted with their task.</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setDeleting(null)}>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive-outline" autoFocus data-draft-action="confirm-delete"
+            onClick={() => { decide.mutate({ draftId: draft.id, accept: true, itemIds: deleting.itemIds }); setDeleting(null); }}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>}
   </div>;
 }
 

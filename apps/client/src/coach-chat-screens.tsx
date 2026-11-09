@@ -98,7 +98,7 @@ function AffectedTask({ item, parent }: { item: DraftItemDto; parent?: string })
   return <li className="flex items-start gap-2 border-t border-border-subtle py-1.5" data-affected-task={item.id} data-draft-op={item.op}>
     <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
     <div className="flex min-w-0 flex-1 flex-col">
-      <span className={cn("text-sm", item.op === "remove" && "line-through")}><span className="sr-only">{opLabels[item.op]}: </span>
+      <span className={cn("text-sm", (item.op === "remove" || item.op === "complete" || item.op === "delete") && "line-through", item.op === "delete" && "text-destructive")}><span className="sr-only">{opLabels[item.op]}: </span>
         {target ? <Link to={taskPath(target)} className="hover:underline">{name}</Link> : name}</span>
       <span className="text-xs text-muted-foreground">{draftTime(item, true, parent)}</span>
     </div>

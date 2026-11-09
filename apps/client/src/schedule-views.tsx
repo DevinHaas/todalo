@@ -116,7 +116,7 @@ export interface PlannerSlots {
 }
 
 /** One pending draft item on the grid: where it puts the task (add, move) or which block it takes off (remove). */
-export interface DraftBlock { itemId: string; op: "add" | "move" | "remove"; taskId: string | null; title: string; start: Date; end: Date | null; color: string | null }
+export interface DraftBlock { itemId: string; /** Ticket 30: complete and delete mark the task's own block. */ op: "add" | "move" | "remove" | "complete" | "delete"; taskId: string | null; title: string; start: Date; end: Date | null; color: string | null }
 
 /** Legacy UpcomingListView: week strip, scroll-spy and one section per day for a year. */
 export function UpcomingList({ tasks, events = [], slots, composer, now = new Date() }: { tasks: TaskDto[]; events?: CalendarEventDto[]; slots: ScheduleSlots; composer: (day: Date) => ReactNode; now?: Date }) {
@@ -310,7 +310,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
   const incoming = planner?.incoming;
   const drafted = planner?.draft ?? [];
   // A task the draft moves fades at its old time; one it removes shows dashed and struck through.
-  const draftOf = new Map(drafted.flatMap(block => block.taskId && block.op !== "add" ? [[block.taskId, block.op as "move" | "remove"] as const] : []));
+  const draftOf = new Map(drafted.flatMap(block => block.taskId && block.op !== "add" ? [[block.taskId, block.op as Exclude<DraftBlock["op"], "add">] as const] : []));
   const shown = ghost ?? (incoming ? { ...dropRange(parseDayKey(incoming.day), incoming.y, durationOf(incoming.task)), title: incoming.task.title, color: planner.taskColor(incoming.task) } : null);
 
   return <>
@@ -371,12 +371,14 @@ const tone = (color: string | null): CSSProperties => color ? { borderLeft: `3px
  * One scheduled task on the grid, in its goal's colour. Drag to move, drag the
  * bottom edge to resize; Enter or a click opens it, right-click opens its menu.
  */
-function BlockView({ item, style, draggable, lifted, draft, onOpen, onDrag }: { item: ScheduleItem; style: CSSProperties; draggable: boolean; lifted: boolean; draft?: "move" | "remove"; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
+function BlockView({ item, style, draggable, lifted, draft, onOpen, onDrag }: { item: ScheduleItem; style: CSSProperties; draggable: boolean; lifted: boolean; draft?: Exclude<DraftBlock["op"], "add">; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
   // Tailwind's button reset outranks the legacy .timed-block layout and fill, so they are restated here.
   return <button type="button" className={cn("timed-block z-[1] flex flex-col justify-start bg-muted text-left", draggable && "touch-none", (lifted || draft === "move") && "opacity-40",
     // Ticket 29: a removed block is grey, dashed, hatched and struck through.
-    draft === "remove" && "border border-dashed border-border-strong bg-hatched opacity-60 [&_.timed-title]:line-through")}
-    data-block="task" data-task-id={item.task.id} data-done={item.done || undefined} data-draft={draft} style={{ ...spanFor(item.start, item.end), ...(draft !== "remove" && tone(item.color)), ...style }}
+    draft === "remove" && "border border-dashed border-border-strong bg-hatched opacity-60 [&_.timed-title]:line-through",
+    // Ticket 30: one to delete is red, dashed and struck through; one to complete looks done (styles.css).
+    draft === "delete" && "border border-dashed border-destructive opacity-70 [&_.timed-title]:text-destructive [&_.timed-title]:line-through")}
+    data-block="task" data-task-id={item.task.id} data-done={item.done || undefined} data-draft={draft} style={{ ...spanFor(item.start, item.end), ...(draft !== "remove" && draft !== "delete" && tone(item.color)), ...style }}
     onClick={(event) => { event.stopPropagation(); onOpen(); }} onPointerDown={draggable ? (event) => onDrag("move", event) : undefined}>
     <span className="timed-title">{item.title}</span><span className="timed-range">{labels.time(item.start)}–{labels.time(item.end)}</span>
     {draggable && <span aria-hidden="true" data-resize="" className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" onPointerDown={(event) => onDrag("resize", event)} />}

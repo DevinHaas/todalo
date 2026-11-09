@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CoachModelError } from "./coach";
 import {
-  dayPlan, dayPlanFacts, draftCounts, draftCurrent, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto, weekDraftStart, weekPlan, weekPlanFacts,
+  dayPlan, dayPlanFacts, draftCounts, draftCurrent, overflowDraft, parseDayDraft, parseWeekDraft, planAccept, planDecline, staleItems, toDraftDto, weekDraftStart, weekPlan, weekPlanFacts,
   type DayContext, type DraftRecord, type DraftTask,
 } from "./drafts";
 
@@ -303,6 +303,12 @@ describe("accepting and declining", () => {
     ["deleted since", []],
   ])("writes nothing when a task was %s", (_name, tasks) => expect(planAccept(draft, undefined, tasks)).toBe("changed"));
 
+  it("ticket 30: names only the stale items among the chosen ones", () => {
+    expect(staleItems(draft, undefined, current)).toEqual([]);
+    expect(staleItems(draft, undefined, [task("run", { status: "done" })])).toEqual(draft.items.filter(item => item.state === "pending" && item.taskId).map(item => item.id));
+    expect(staleItems(draft, ["x"], [])).toEqual([]);
+  });
+
   it("declines the pending items, or the chosen ones", () => {
     expect(planDecline(draft, undefined)).toEqual(["i1", "i2"]);
     expect(planDecline(draft, ["i1"])).toEqual(["i1"]);
@@ -313,6 +319,7 @@ describe("accepting and declining", () => {
     expect(draftCounts(draft.items)).toBe("2 added");
     expect(draftCounts([{ op: "add", state: "pending" }, { op: "move", state: "pending" }, { op: "remove", state: "pending" }, { op: "add", state: "pending" }])).toBe("2 added, 1 moved, 1 removed");
     expect(draftCounts([{ op: "subtask", state: "pending" }, { op: "subtask", state: "pending" }, { op: "attach", state: "pending" }, { op: "subtask", state: "declined" }])).toBe("2 sub-tasks, 1 attached");
+    expect(draftCounts([{ op: "complete", state: "pending" }, { op: "move", state: "pending" }, { op: "delete", state: "pending" }, { op: "complete", state: "pending" }])).toBe("1 moved, 2 completed, 1 deleted");
   });
 });
 

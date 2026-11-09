@@ -288,6 +288,13 @@
       "when": 1794227155233,
       "tag": "0040_coach_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794230171036,
+      "tag": "0041_coach_draft_place",
+      "breakpoints": true
     }
   ]
 }

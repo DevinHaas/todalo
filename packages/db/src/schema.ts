@@ -439,7 +439,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   draftId: text("draft_id").notNull().references(() => coachDrafts.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach"] }).notNull(),
+  // Goals ticket 30: "complete" and "delete" (chat drafts, when the user asks).
+  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach", "complete", "delete"] }).notNull(),
   taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   startAt: timestamp("start_at").notNull(),
@@ -455,6 +456,8 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   parentId: text("parent_id").references(() => tasks.id, { onDelete: "cascade" }),
   parentItemId: text("parent_item_id"),
   documentId: text("document_id").references(() => coachDocuments.id, { onDelete: "cascade" }),
+  // Goals ticket 30: a "move" to another project or section (drafts.ts DraftPlace); checked again when accepted.
+  place: jsonb("place").$type<{ projectId: string | null; sectionId: string | null; label: string; keepsDate?: true }>(),
 }, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
 
 // Goals ticket 21: a goal's last Coach recommendation, reused while inputsHash

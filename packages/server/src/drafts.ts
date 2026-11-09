@@ -10,14 +10,16 @@
 // ones are context only), and tasks that do not fit come back as overflow.
 // Ticket 29: chat drafts also add sub-tasks ("subtask") and attach the chat's
 // documents to tasks ("attach"), under an existing task or a new one of the draft.
+// Ticket 30: and complete or delete open tasks, or move one to a day (with or
+// without a time) and/or another project or section, when the user asks.
 import { z } from "zod";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
 
 /** What a day or week draft (and the model's schedule items) can do. */
 export const scheduleOps = ["add", "move", "remove"] as const;
-/** Ticket 29: plus a new sub-task and an attached document (chat drafts). */
-export const draftOps = [...scheduleOps, "subtask", "attach"] as const;
+/** Ticket 29: plus a new sub-task and an attached document (chat drafts); ticket 30: completing and deleting a task. */
+export const draftOps = [...scheduleOps, "subtask", "attach", "complete", "delete"] as const;
 export type DraftOp = typeof draftOps[number];
 export type DraftItemState = "pending" | "accepted" | "declined";
 /**
@@ -42,7 +44,14 @@ export interface DraftItemDto {
    * of this draft (`parentItemId`); "attach" names the chat document (title: its name). `start` means nothing for them.
    */
   parentId?: string; parentItemId?: string; documentId?: string;
+  /** Ticket 30, "move": also to another project or section. */
+  place?: DraftPlace;
 }
+/**
+ * Ticket 30: where a "move" puts the task (projectId null: the Inbox), with the
+ * name the user reads ("Health › Errands"); keepsDate: only the place changes.
+ */
+export interface DraftPlace { projectId: string | null; sectionId: string | null; label: string; keepsDate?: true }
 /** Ticket 28: a task that did not fit the open time; not placed until the user schedules the overflow. */
 export interface DraftOverflowDto { title: string; minutes: number; reason: string }
 export interface DraftDto { id: string; kind: DraftKind; period: string; summary: string; createdAt: string; items: DraftItemDto[]; overflow?: DraftOverflowDto[] }
@@ -58,6 +67,8 @@ export interface DraftItemRecord {
   id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState; criteria?: string[] | null;
   /** Ticket 29 (see DraftItemDto). */
   parentId?: string | null; parentItemId?: string | null; documentId?: string | null;
+  /** Ticket 30. */
+  place?: DraftPlace | null;
 }
 /** Ticket 28: an overflow task as stored (jsonb, so seenUpdatedAt is ISO); taskId null for a new task. */
 export interface DraftOverflow { taskId: string | null; title: string; minutes: number; goalId: string | null; reason: string; seenUpdatedAt: string | null }
@@ -72,14 +83,16 @@ export const toDraftDto = (draft: DraftRecord): DraftDto => ({
     id: item.id, op: item.op, taskId: item.taskId, title: item.title, start: item.startAt.toISOString(), end: item.endAt?.toISOString() ?? null,
     goalId: item.goalId, reason: item.reason, state: item.state, ...(item.criteria && { criteria: item.criteria }),
     ...(item.parentId && { parentId: item.parentId }), ...(item.parentItemId && { parentItemId: item.parentItemId }), ...(item.documentId && { documentId: item.documentId }),
+    ...(item.place && { place: item.place }),
   })),
   ...(draft.overflow?.length ? { overflow: draft.overflow.map(({ title, minutes, reason }) => ({ title, minutes, reason })) } : {}),
 });
 
 const opWords: Record<DraftOp, (count: number) => string> = {
   add: () => "added", move: () => "moved", remove: () => "removed", subtask: count => count === 1 ? "sub-task" : "sub-tasks", attach: () => "attached",
+  complete: () => "completed", delete: () => "deleted",
 };
-/** "4 added, 1 moved, 1 removed" (ticket 29: ", 2 sub-tasks, 1 attached") over the items still to decide. */
+/** "4 added, 1 moved, 1 removed" (ticket 29: ", 2 sub-tasks, 1 attached"; ticket 30: ", 2 completed, 1 deleted") over the items still to decide. */
 export function draftCounts(items: readonly Pick<DraftItemDto, "op" | "state">[]) {
   return draftOps.flatMap(op => {
     const count = items.filter(item => item.op === op && item.state === "pending").length;
@@ -102,6 +115,8 @@ export interface DayContext {
   events?: BusyEvent[];
   /** Ticket 28: Settings › Coach "Share event titles with the AI"; off (default) sends only busy times. */
   shareEventTitles?: boolean;
+  /** Ticket 30: the projects and sections a chat "move" may put a task in. */
+  destinations?: { projects: { id: string; name: string }[]; sections: { id: string; projectId: string; name: string }[] };
 }
 /** Ticket 28: a calendar event; all-day ones (start and end at UTC midnight, end exclusive) never block time. */
 export interface BusyEvent { title: string; start: Date; end: Date; allDay: boolean }
@@ -535,7 +550,23 @@ export function overflowDraft({ draft, context, zone, now }: { draft: Pick<Draft
 export interface AcceptedWrite {
   itemId: string; op: DraftOp; taskId: string | null; title: string; goalId: string | null; dueDate: Date; dueDateEnd: Date | null; criteria?: string[] | null;
   parentId?: string | null; parentItemId?: string | null; documentId?: string | null;
+  /** Ticket 30: a "move" to another project or section; "complete" and "delete" go through the app's own commands. */
+  place?: DraftPlace | null;
 }
+
+/** A task the item changes, or the existing task it goes under, was edited, completed or deleted since the Coach drafted. */
+function staleItem(item: DraftItemRecord, current: readonly DraftTask[]) {
+  const open = (id: string) => current.find(row => row.id === id && row.status !== "done");
+  if (item.taskId && item.op !== "subtask") {
+    const task = open(item.taskId);
+    if (!task || task.updatedAt.getTime() !== item.seenUpdatedAt?.getTime()) return true;
+  }
+  return Boolean(item.parentId && !open(item.parentId));
+}
+
+/** Ticket 30: the pending items among `itemIds` (all when omitted) that are stale; accepting leaves only those out. */
+export const staleItems = (draft: DraftRecord, itemIds: readonly string[] | undefined, current: readonly DraftTask[]) =>
+  draft.items.filter(item => item.state === "pending" && (!itemIds || itemIds.includes(item.id)) && staleItem(item, current)).map(item => item.id);
 
 /**
  * What accepting `itemIds` (every pending item when omitted) writes, in the
@@ -555,17 +586,13 @@ export function planAccept(draft: DraftRecord, itemIds: readonly string[] | unde
     if (item.parentItemId && (!parent || parent.state === "declined")) return "missing";
     if (parent?.state === "pending") ids.add(parent.id);
   }
-  const open = (id: string) => current.find(row => row.id === id && row.status !== "done");
   const writes: AcceptedWrite[] = [];
   for (const item of draft.items.filter(row => ids.has(row.id))) {
-    if (item.taskId && item.op !== "subtask") {
-      const task = open(item.taskId);
-      if (!task || task.updatedAt.getTime() !== item.seenUpdatedAt?.getTime()) return "changed";
-    }
-    if (item.parentId && !open(item.parentId)) return "changed";
+    if (staleItem(item, current)) return "changed";
     writes.push({
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, goalId: item.goalId, dueDate: item.startAt, dueDateEnd: item.endAt, ...(item.criteria && { criteria: item.criteria }),
       ...(item.parentId && { parentId: item.parentId }), ...(item.parentItemId && { parentItemId: item.parentItemId }), ...(item.documentId && { documentId: item.documentId }),
+      ...(item.place && { place: item.place }),
     });
   }
   return writes;

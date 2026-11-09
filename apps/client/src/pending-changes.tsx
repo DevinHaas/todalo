@@ -4,6 +4,8 @@
 // dashed rows, new attachments as dashed chips. Lists, Today, the task sheet
 // and the task page read this context; the calendar draws its own blocks
 // (schedule-views DraftBlock). Shell provides it from the open drafts.
+// Ticket 30: a task to complete shows ticked and faded, one to delete red and
+// struck through; a move names its new project or section.
 import { createContext, useContext, type CSSProperties } from "react";
 import { CornerDownRight, Paperclip, Sparkles } from "lucide-react";
 import type { DraftDto, DraftItemDto } from "./coach";
@@ -12,7 +14,7 @@ import { dayKey } from "./schedule";
 import { cn } from "./ui";
 
 export interface PendingChanges {
-  /** A pending move, remove or (a task to plan placed) add, by the existing task it changes. */
+  /** A pending move, remove, complete, delete or (a task to plan placed) add, by the existing task it changes. */
   byTask: ReadonlyMap<string, DraftItemDto>;
   /** New sub-tasks and attachments by the task they go under (an existing task's ID, or a new task's item ID). */
   under: ReadonlyMap<string, DraftItemDto[]>;
@@ -35,16 +37,23 @@ export function pendingChanges(drafts: readonly DraftDto[]): PendingChanges {
   return { byTask, under, added };
 }
 
-/** A task row's look for its pending change (Tailwind on the legacy row): dashed in its goal colour, or struck through and hatched. */
+/**
+ * A task row's look for its pending change (Tailwind on the legacy row): dashed in its goal colour, or struck through and hatched;
+ * to complete: ticked (styles.css, data-pending) and faded; to delete: red, dashed and struck through.
+ */
 export function pendingRowClass(change: DraftItemDto | undefined) {
   if (!change) return "";
+  if (change.op === "complete") return "opacity-60 [&_.task-title]:line-through";
+  if (change.op === "delete") return "rounded-md outline-1 outline-dashed -outline-offset-1 outline-destructive [&_.task-title]:text-destructive [&_.task-title]:line-through";
   return change.op === "remove" ? "bg-hatched opacity-70 [&_.task-title]:line-through" : "rounded-md outline-1 outline-dashed -outline-offset-1 outline-brand";
 }
+/** Ticket 30: these keep their own look, not the goal's colour. */
+export const ownLook = (change: DraftItemDto | undefined) => change?.op === "remove" || change?.op === "complete" || change?.op === "delete";
 
-/** The chip that says what the Coach would change: "Coach: Tue 10:00–10:45" or "Coach: off the schedule". */
+/** The chip that says what the Coach would change: "Coach: Tue 10:00–10:45", "Coach: off the schedule" (ticket 30: "will complete", "will delete", "to Health"). */
 export function PendingChip({ change }: { change: DraftItemDto }) {
-  return <span className="pill border border-dashed border-brand text-brand" data-pending-change={change.op}>
-    <Sparkles aria-hidden="true" /><span className="sr-only">Coach draft: </span>{change.op === "remove" ? "Off the schedule" : draftTime(change, true)}
+  return <span className={cn("pill border border-dashed", change.op === "delete" ? "border-destructive text-destructive" : "border-brand text-brand")} data-pending-change={change.op}>
+    <Sparkles aria-hidden="true" /><span className="sr-only">Coach draft: </span>{draftTime(change, true)}
   </span>;
 }
 

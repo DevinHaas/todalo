@@ -4,20 +4,27 @@
 // Ticket 20: the same panel drafts the week shown beside the week calendar.
 // Ticket 28: tasks that did not fit (overflow) ask "Schedule them tomorrow?".
 // Ticket 29: the Coach bar shows it for chat drafts, with sub-tasks and attachments.
+// Ticket 30: and completions, deletions (red, struck through) and moves to another place.
 import { useContext } from "react";
-import { ArrowRight, Check, CornerDownRight, Minus, Paperclip, Plus, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, CircleCheck, CornerDownRight, Minus, Paperclip, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button, Hint, List, Spinner } from "./ui";
 import { draftCounts, type DraftDto, type DraftItemDto } from "./coach";
 import { dayKey, labels } from "./schedule";
 import { TaskTree } from "./task-tree";
 
-export const opIcons = { add: Plus, move: ArrowRight, remove: Minus, subtask: CornerDownRight, attach: Paperclip } as const;
-export const opLabels = { add: "Add", move: "Move", remove: "Remove", subtask: "Add sub-task", attach: "Attach" } as const;
+export const opIcons = { add: Plus, move: ArrowRight, remove: Minus, subtask: CornerDownRight, attach: Paperclip, complete: CircleCheck, delete: Trash2 } as const;
+export const opLabels = { add: "Add", move: "Move", remove: "Remove", subtask: "Add sub-task", attach: "Attach", complete: "Complete", delete: "Delete" } as const;
 /**
  * "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule"; ticket 23's milestone: "Milestone, due Mar 1".
  * Ticket 29: a new task without a time: "Due Mar 3"; a sub-task: "Under Essay"; an attachment: "On Essay" (`parent`: that task's title).
+ * Ticket 30: "Will complete", "Will delete"; a move to another place adds it ("Due Mar 3, Health › Gym"), or is just "To Health" when its date stays.
  */
-export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria">, week = false, parent = "a new task") =>
+export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria" | "place">, week = false, parent = "a new task") =>
+  item.op === "complete" ? "Will complete"
+  : item.op === "delete" ? "Will delete"
+  : item.place ? (item.place.keepsDate ? `To ${item.place.label}` : `${when(item, week, parent)}, ${item.place.label}`)
+  : when(item, week, parent);
+const when = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria">, week: boolean, parent: string) =>
   item.criteria ? `Milestone, due ${labels.monthDay(new Date(item.start))}`
   : item.op === "subtask" ? `Under ${parent}`
   : item.op === "attach" ? `On ${parent}`
@@ -87,7 +94,7 @@ export function DraftPanel({ scope, week, draft, drafting, deciding, message, on
       return <li key={item.id} data-draft-item={item.id} data-draft-op={item.op} className="flex items-start gap-2 border-t border-border-subtle py-1.5">
         <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className={item.op === "remove" ? "text-sm line-through" : "text-sm"}><span className="sr-only">{opLabels[item.op]}: </span>{item.title}</span>
+          <span className={item.op === "delete" ? "text-sm text-destructive line-through" : item.op === "remove" || item.op === "complete" ? "text-sm line-through" : "text-sm"}><span className="sr-only">{opLabels[item.op]}: </span>{item.title}</span>
           <span className="text-xs text-muted-foreground">{draftTime(item, scope === "week" || dayKey(new Date(item.start)) !== dayKey(new Date()), parentTitle(item))}</span>
           {item.criteria && <ul aria-label="Done criteria" className="list-disc pl-4 text-xs text-muted-foreground">{item.criteria.map(text => <li key={text}>{text}</li>)}</ul>}
           {item.reason && <span className="text-xs text-muted-foreground">{item.reason}</span>}

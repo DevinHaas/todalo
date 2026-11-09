@@ -50,7 +50,7 @@ describe("due-day tasks, sub-tasks and attachments (ticket 29)", () => {
     expect(facts.tasks.every(row => Number(row.ref.slice(1)) > plan.scheduled.size + plan.toPlan.size)).toBe(true);
     expect(facts.documents).toEqual([{ ref: "d1", name: "syllabus.pdf", kind: "pdf", text: "Week 1: essay" }]);
     const ops = (chatSchema.schema as { properties: { items: { items: { properties: { op: { enum: string[] } }; required: string[] } } } }).properties.items.items;
-    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach"]);
+    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach", "complete", "delete"]);
     expect(ops.required).toEqual(expect.arrayContaining(["parent", "document", "day"]));
   });
 
@@ -74,6 +74,61 @@ describe("due-day tasks, sub-tasks and attachments (ticket 29)", () => {
     ["an unknown document", [item("attach", { document: "d2", parent: other("Essay") })], /document d2/],
     ["the same document twice on a task", [item("attach", { document: "d1", parent: other("Essay") }), item("attach", { document: "d1", parent: other("Essay") })], /twice/],
     ["a due day in the past", [item("add", { title: "Late", day: "2026-02-01" })], /due day/],
+  ])("drops the draft for %s", (_, items, why) => {
+    const result = parse(items);
+    expect(result.draft).toBeNull();
+    expect(result.reply).toMatch(why);
+  });
+});
+
+describe("complete, delete and move (ticket 30)", () => {
+  const context = {
+    tasks: [task("run"), task("report", { title: "Report", projectId: "work", dueDate: new Date("2026-03-01T23:00:00Z") }), task("ritual", { title: "Check-in" }), task("old", { title: "Old QA", status: "done" })],
+    fixedTaskIds: ["ritual"],
+    destinations: { projects: [{ id: "work", name: "Work" }, { id: "health", name: "Health" }], sections: [{ id: "gym", projectId: "health", name: "Gym" }] },
+  };
+  const extras = chatExtras(plan, context, []);
+  const other = (title: string) => [...extras.others].find(([, row]) => row.title === title)![0];
+  const parse = (items: unknown[]) => parseChatReply(reply(items), plan, extras);
+
+  it("offers the projects and their sections as places", () => {
+    expect(chatFacts(plan, new Map(), extras, false).projects).toEqual([
+      { ref: "p1", name: "Work", sections: [] }, { ref: "p2", name: "Health", sections: [{ ref: "s1", name: "Gym" }] },
+    ]);
+  });
+
+  it("completes and deletes any open task by ref, as the user asked", () => {
+    const draft = parse([item("complete", { task: "t2" }), item("delete", { task: other("Report") })]).draft!;
+    expect(draft.items.map(row => [row.op, row.taskId, row.title, row.seenUpdatedAt])).toEqual([["complete", "run", "run", now], ["delete", "report", "Report", now]]);
+  });
+
+  it("moves a task to a day without a time, to a place keeping its date, or to a time on the week", () => {
+    const draft = parse([
+      item("move", { task: other("Report"), day: "2026-02-12" }),
+      item("move", { task: "t2", project: "p2", section: "s1" }),
+      item("move", { task: "t1", day: "2026-02-10", start: "16:00", minutes: 60, project: "p1" }),
+    ]).draft!;
+    expect(draft.items.map(row => [row.op, row.taskId, row.startAt.toISOString(), row.endAt?.toISOString() ?? null, row.place ?? null])).toEqual([
+      ["move", "report", "2026-02-11T23:00:00.000Z", null, null],
+      ["move", "run", now.toISOString(), null, { projectId: "health", sectionId: "gym", label: "Health › Gym", keepsDate: true }],
+      ["move", "talk", "2026-02-10T15:00:00.000Z", "2026-02-10T16:00:00.000Z", { projectId: "work", sectionId: null, label: "Work" }],
+    ]);
+  });
+
+  it("times a task that is not on the schedule as a move", () => {
+    const [moved] = parse([item("move", { task: other("Report"), day: "2026-02-11", start: "09:00", minutes: 30, project: "inbox" })]).draft!.items;
+    expect(moved).toMatchObject({ op: "move", taskId: "report", startAt: new Date("2026-02-11T08:00:00Z"), place: { projectId: null, label: "Inbox" } });
+  });
+
+  it.each([
+    ["a fixed (ritual) task", [item("complete", { task: other("Check-in") })], /cannot change/],
+    ["an unknown task", [item("delete", { task: "t99" })], /cannot change t99/],
+    ["a new task", [item("complete", { title: "x" })], /cannot change a new task/],
+    ["the same task twice", [item("complete", { task: "t2" }), item("delete", { task: "t2" })], /t2 appears twice/],
+    ["a move without a day or place", [item("move", { task: "t2" })], /nowhere/],
+    ["an unknown place", [item("move", { task: "t2", project: "p9" })], /place p9/],
+    ["a section of another project", [item("move", { task: "t2", project: "p1", section: "s1" })], /place s1/],
+    ["a day in the past", [item("move", { task: "t2", day: "2026-02-01" })], /day "2026-02-01"/],
   ])("drops the draft for %s", (_, items, why) => {
     const result = parse(items);
     expect(result.draft).toBeNull();

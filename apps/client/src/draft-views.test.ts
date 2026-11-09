@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DraftPanel, overflowQuestion } from "./draft-views";
+import { DraftPanel, draftTime, overflowQuestion } from "./draft-views";
+import { pendingRowClass } from "./pending-changes";
 import type { DraftDto } from "./coach";
 
 // Goals ticket 28: tasks that don't fit come with a Yes/No question, even when nothing else is pending.
@@ -22,5 +23,22 @@ describe("draft overflow", () => {
     expect(html).toContain('data-draft-action="overflow-schedule"');
     expect(html).toContain('data-draft-action="overflow-drop"');
     expect(html).not.toContain('data-draft-action="accept-all"');
+  });
+});
+
+// Goals ticket 30: completions, deletions and moves to another place.
+describe("complete, delete and move", () => {
+  const start = "2026-02-11T23:00:00Z";
+  it("says what will happen, with the target place", () => {
+    expect(draftTime({ op: "complete", start, end: null })).toBe("Will complete");
+    expect(draftTime({ op: "delete", start, end: null })).toBe("Will delete");
+    expect(draftTime({ op: "move", start, end: null, place: { projectId: "h", sectionId: null, label: "Health", keepsDate: true } })).toBe("To Health");
+    expect(draftTime({ op: "move", start, end: null, place: { projectId: "h", sectionId: "g", label: "Health › Gym" } })).toMatch(/^Due .+, Health › Gym$/);
+  });
+
+  it("fades a task to complete and strikes one to delete in red", () => {
+    const item = (op: "complete" | "delete") => ({ id: "i", op, taskId: "t", title: "t", start, end: null, goalId: null, reason: "", state: "pending" as const });
+    expect(pendingRowClass(item("complete"))).toContain("opacity-60");
+    expect(pendingRowClass(item("delete"))).toContain("outline-destructive");
   });
 });
