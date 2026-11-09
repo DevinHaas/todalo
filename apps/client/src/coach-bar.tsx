@@ -112,7 +112,8 @@ function Bar({ userId }: { userId: string }) {
   const submit = () => { const body = text.trim(); if (body && !send.isPending) send.mutate(body); };
   const files = (list: FileList | null | undefined) => [...list ?? []];
 
-  return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" data-coach-bar="">
+  // Centred over the main column: a right sidebar inside the page (Plan, rituals; gap-4 beside it) is left out.
+  return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:in-[.content:has([data-ritual-panel])]:pr-[calc(var(--spacing-sidebar)+1rem)] md:in-[.content:has([data-plan],[data-coach-chat])]:pr-[calc(var(--spacing-plan)+1rem)]" data-coach-bar="">
     <div className="pointer-events-auto flex w-full max-w-(--spacing-page) flex-col gap-2">
       {replyOpen && (send.isPending || reply) && <section aria-label="Coach reply" aria-live="polite" data-coach-reply=""
         className="flex items-start gap-2.5 rounded-xl border border-border bg-background p-3 shadow-popover">
@@ -154,12 +155,12 @@ function Bar({ userId }: { userId: string }) {
         </ul>}
         {message && <Hint className="px-1 text-xs text-destructive" role="alert">{message}</Hint>}
         <div className="flex items-end gap-1">
-          <Button type="button" variant="ghost" size="icon" aria-label="Attach a document" title="Attach a document (PDF, Word, text, image)"
+          <Button type="button" variant="ghost" size="icon" className="size-control!" aria-label="Attach a document" title="Attach a document (PDF, Word, text, image)"
             disabled={upload.isPending} onClick={() => picker.current?.click()} data-coach-bar-action="attach"><Paperclip /></Button>
           <input ref={picker} type="file" multiple accept={ACCEPT} hidden aria-hidden="true" tabIndex={-1}
             onChange={(event) => { attach(files(event.target.files)); event.target.value = ""; }} />
           <Textarea ref={field} rows={1} maxLength={4_000} aria-label="Message the Coach" placeholder="Ask the Coach or ask for a change…" value={text}
-            className="max-h-40 min-h-control flex-1 resize-none border-0 shadow-none focus-visible:ring-0" data-coach-bar-input=""
+            className="max-h-40 min-h-control flex-1 resize-none border-0 py-1.5 text-sm leading-5 shadow-none focus-visible:ring-0" data-coach-bar-input=""
             onChange={(event) => setText(event.target.value)}
             onPaste={(event: ClipboardEvent) => { const pasted = files(event.clipboardData.files); if (pasted.length) { event.preventDefault(); attach(pasted); } }}
             onKeyDown={(event) => {
@@ -167,7 +168,7 @@ function Bar({ userId }: { userId: string }) {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
               if (event.key === "Escape") { event.preventDefault(); if (replyOpen || reviewing) { setReplyOpen(false); setReviewing(false); } else field.current?.blur(); }
             }} />
-          <Button type="submit" size="icon" aria-label="Send" title="Send (Enter)" disabled={!text.trim() || send.isPending} data-coach-bar-action="send">
+          <Button type="submit" size="icon" className="size-control!" aria-label="Send" title="Send (Enter)" disabled={!text.trim() || send.isPending} data-coach-bar-action="send">
             {send.isPending ? <Spinner /> : <ArrowUp />}
           </Button>
         </div>
