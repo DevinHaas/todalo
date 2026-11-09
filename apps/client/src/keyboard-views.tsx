@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Pin, Search, X } from "lucide-react";
 import { adaptBinding, defaultPreferences, effectiveBindings, keyboardCommands, suggestBinding, validatePreferences, type KeyboardPreferences, type Platform } from "@todalo/ramble/keyboard";
 import { editKeyboardBindings, releaseBinding } from "@todalo/ramble/keyboard-edit";
 import { matchesShortcut, matchesShortcutFilter, type ShortcutFilter } from "@todalo/ramble/keyboard-search";
 import { createShortcutRecorder } from "@todalo/ramble/keyboard-recorder";
-import { clientCommands } from "./keyboard";
+import { clientCommands, paletteOrder, type ClientCommandId, type PaletteCommand, type PaletteMemory } from "./keyboard";
 import { releaseFocus } from "./software-keyboard";
 import { cn } from "./ui";
 
@@ -20,16 +20,72 @@ const text = (binding: string, platform: Platform) => adaptBinding(binding, plat
 const keycap = "ml-0 inline-flex h-[1.375rem] min-w-[1.375rem] items-center justify-center rounded-[5px] border border-border bg-background px-1.5 font-sans text-xs font-medium leading-none text-foreground shadow-[0_1px_0_var(--color-border)] dark:border-white/10 dark:bg-white/10 dark:shadow-none";
 
 /** Keys as keycaps; screen readers hear one spoken label per binding instead. */
-export function ShortcutKeys({ bindings }: { bindings: string[] }) {
+export function ShortcutKeys({ bindings, keyClassName }: { bindings: string[]; keyClassName?: string }) {
   return <span className="shortcut-keys">
     {bindings.map((binding, index) => <span key={`${binding}-${index}`} role="img" aria-label={label(binding)} className="inline-flex items-center gap-1">
       {index > 0 && <span className="text-xs text-muted-foreground" aria-hidden="true">or</span>}
       {binding.split(" then ").map((step, stepIndex) => <span key={stepIndex} aria-hidden="true" className="inline-flex items-center gap-0.5">
         {stepIndex > 0 && <span className="text-xs text-muted-foreground">then</span>}
-        {step.split("+").map((key, keyIndex) => <kbd key={keyIndex} className={keycap}>{glyph(key)}</kbd>)}
+        {step.split("+").map((key, keyIndex) => <kbd key={keyIndex} className={cn(keycap, keyClassName)}>{glyph(key)}</kbd>)}
       </span>)}
     </span>)}
   </span>;
+}
+
+const brandKey = "border-brand/30 bg-brand-tint text-brand-tint-foreground shadow-none dark:border-brand/40 dark:bg-brand-tint";
+
+/**
+ * The command palette (⌘P), Obsidian style: a combobox over every command
+ * that can run here. Arrows move, Enter runs, Escape closes, Option+P pins.
+ */
+export function CommandPalette({ commands, bindings, memory, onRun, onPin, onClose }: {
+  commands: PaletteCommand[]; bindings: (id: string) => string[]; memory: PaletteMemory;
+  onRun: (id: ClientCommandId) => void; onPin: (id: ClientCommandId) => void; onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const listed = paletteOrder(commands, query, memory.pins, memory.recent);
+  const index = Math.max(0, Math.min(active, listed.length - 1));
+  const current = listed[index];
+  const optionId = (id: string) => `command-palette-${id.replace(/\W/g, "-")}`;
+  useEffect(() => { if (current) document.getElementById(optionId(current.id))?.scrollIntoView?.({ block: "nearest" }); }, [current?.id]);
+  const onKeyDown = (event: ReactKeyboardEvent) => {
+    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (step) { event.preventDefault(); setActive(Math.max(0, Math.min(listed.length - 1, index + step))); }
+    else if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); if (current) onRun(current.id); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+    else if (event.altKey && event.code === "KeyP" && current) { event.preventDefault(); onPin(current.id); }
+  };
+  return <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[12vh] dark:bg-black/60" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKeyDown}
+      className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <input ref={releaseFocus} autoFocus role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="command-palette-list"
+          aria-activedescendant={current ? optionId(current.id) : undefined} aria-label="Search commands" placeholder="Select a command…"
+          autoComplete="off" spellCheck={false} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }}
+          className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 text-lg text-foreground shadow-none outline-none placeholder:text-muted-foreground" />
+        <button type="button" aria-label="Close command palette" onClick={onClose}
+          className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-full border-0 bg-muted p-0 text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>
+      </div>
+      <ul id="command-palette-list" role="listbox" aria-label="Commands" className="m-0 min-h-0 list-none overflow-y-auto p-1.5">
+        {listed.map((command, position) => {
+          const pinned = memory.pins.includes(command.id);
+          return <li key={command.id} id={optionId(command.id)} role="option" aria-selected={position === index}
+            onMouseMove={() => { if (position !== index) setActive(position); }} onClick={() => onRun(command.id)}
+            className={cn("group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-foreground", position === index && "bg-accent")}>
+            <span className="min-w-0 flex-1 truncate">{command.name}</span>
+            {bindings(command.id).length > 0 && <ShortcutKeys bindings={bindings(command.id)} keyClassName={brandKey} />}
+            <button type="button" tabIndex={-1} aria-label={`${pinned ? "Unpin" : "Pin"} ${command.name}`} aria-pressed={pinned}
+              onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); onPin(command.id); }}
+              className={cn("grid size-6 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 hover:bg-muted",
+                pinned ? "text-brand" : "text-muted-foreground opacity-0 group-hover:opacity-100 group-aria-selected:opacity-100")}>
+              <Pin className={cn("size-3.5", pinned && "fill-current")} /></button>
+          </li>;
+        })}
+        {!listed.length && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">No commands match.</li>}
+      </ul>
+    </div>
+  </div>;
 }
 
 export type TaskMenuAction = "edit" | "date" | "clear-date" | "complete" | "delete";

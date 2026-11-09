@@ -15,8 +15,8 @@ import type { TaskDto } from "./tasks";
 import { goalKeys, type GoalsDto } from "./goals";
 import { ritualKeys, type RitualsDto } from "./rituals";
 import { openRitual } from "./ritual-screens";
-import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, modalOpen, type ClientCommandId } from "./keyboard";
-import { ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
+import { adjacentRow, detectPlatform, dispatchCommands, isEditable, keyboardKeys, loadPaletteMemory, modalOpen, paletteCommands, rememberCommand, savePaletteMemory, togglePin, type ClientCommandId, type PaletteCommand, type PaletteMemory } from "./keyboard";
+import { CommandPalette, ShortcutHelp, ShortcutSettings, TaskMenu, type TaskMenuAction } from "./keyboard-views";
 import { collapsedTasks } from "./views";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
@@ -222,6 +222,10 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  // ⌘P: the commands that apply where it opened, and the element to give focus back to.
+  const [palette, setPalette] = useState<{ commands: PaletteCommand[]; opener: HTMLElement | null } | null>(null);
+  const [memory, setMemory] = useState<PaletteMemory>(() => loadPaletteMemory(userId));
+  const remember = (next: PaletteMemory) => { setMemory(next); savePaletteMemory(userId, next); };
   const handlers = useRef<Partial<Record<ClientCommandId, () => void | boolean>>>({});
   // Collapsed sub-tasks are page state (legacy provider per page).
   const { pathname, hash, key } = useLocation();
@@ -315,6 +319,15 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "general.capture": () => latest.current.onCapture(), "goal.create": () => latest.current.onNewGoal(), "general.ramble": go("/ramble"), "navigation.ui": go("/ui"), "general.sidebar": () => latest.current.onSidebar(),
       "general.help": openHelp, "navigation.help": openHelp,
       "general.search": () => latest.current.onFind(), "general.quick-find": () => latest.current.onFind(),
+      // Task commands need a focused row (or a selection), composer and editor keys their form, page keys their page.
+      "general.command-palette": () => setPalette({
+        opener: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+        commands: paletteCommands(handlers.current, {
+          global: true, view: true, task: Boolean(activeRow() ?? document.querySelector("main [data-task-id][data-selected]")),
+          editor: Boolean(editorForm()), "quick-add": Boolean(inComposerTitle()), project: Boolean(document.querySelector("main [data-project-action]")),
+          upcoming: Boolean(document.querySelector("main .upcoming")), calendar: Boolean(document.querySelector("main .calendar")),
+        }),
+      }),
       // ⌘R / Ctrl+R: the toolbar's Sync now (consumed, so the page never reloads).
       "general.sync": () => press(document, "[data-sync-now]"),
       "navigation.inbox": go("/inbox"), "navigation.sections": () => latest.current.onFind(true), "navigation.today": go("/today"), "navigation.upcoming": go("/upcoming"), "navigation.projects": go("/projects"),
@@ -557,6 +570,17 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("blur", reset); document.removeEventListener("focusin", reset); };
   }, [effective, userId]);
 
+  /** Closes the palette, gives focus back to where it opened (the focused row), then runs the command as its key would. */
+  const closePalette = (id?: ClientCommandId) => {
+    const opener = palette?.opener;
+    const name = palette?.commands.find(command => command.id === id)?.name;
+    setPalette(null);
+    if (id) remember(rememberCommand(memory, id));
+    requestAnimationFrame(() => {
+      if (opener?.isConnected) opener.focus();
+      if (id && handlers.current[id]?.() === false) toasts.add({ title: "Nothing to do here", description: `${name} doesn't apply to this page or focus.` });
+    });
+  };
   const close = () => { setHelp(false); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); }); };
   const menuCommands: Record<TaskMenuAction, ClientCommandId> = { edit: "task.edit", date: "task.date", "clear-date": "task.clear-date", complete: "task.complete", delete: "task.delete" };
   /** Closes the menu on its row, then runs the row command (its focused-row target). */
@@ -578,6 +602,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     {status && <p role="status" className="keyboard-notice">{status}</p>}
     {syncError && <div role="status" className="shortcut-sync">{syncError} <button type="button" className="text-action" onClick={() => openSettings("keyboard-shortcuts")}>Shortcut settings</button></div>}
     {menu && <TaskMenu title={menu.querySelector(TITLE)?.textContent ?? ""} onChoose={closeMenu} onClose={() => closeMenu()} />}
+    {palette && <CommandPalette commands={palette.commands} bindings={id => effectiveBindings(id, effective, platform)} memory={memory}
+      onRun={closePalette} onPin={id => remember(togglePin(memory, id))} onClose={() => closePalette()} />}
     {help && <ShortcutHelp bindings={id => effectiveBindings(id, effective, platform)} onClose={close}
       onCustomize={() => { setHelp(false); openSettings("keyboard-shortcuts"); }} />}
   </>;

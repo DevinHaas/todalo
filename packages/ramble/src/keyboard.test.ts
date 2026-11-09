@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPreferences, effectiveBindings, validatePreferences, KeyboardDispatcher, bindingFromEvent, parsePreferences, safePreferences, snapshotPreferences } from "./keyboard";
+import { defaultPreferences, effectiveBindings, keyboardCommands, validatePreferences, KeyboardDispatcher, bindingFromEvent, parsePreferences, safePreferences, snapshotPreferences } from "./keyboard";
 import { keyboardAccountPreferences } from "./keyboard-account-preferences";
 
 describe("account keyboard preferences", () => {
@@ -137,5 +137,15 @@ describe("browser dispatch", () => {
     expect(dispatcher.dispatch(event("t"), commands, "today", 2001).consumed).toBe(false);
     dispatcher.dispatch(event("g"), commands, "today", 3000);
     expect(dispatcher.dispatch(event("t"), commands, "other", 3001).consumed).toBe(false);
+  });
+});
+
+describe("command palette binding", () => {
+  it("owns ⌘P / Ctrl+P with no Print binding left to conflict", () => {
+    expect(keyboardCommands.some(command => command.id === "native.print")).toBe(false);
+    expect(keyboardCommands.filter(command => command.defaults.includes("Primary+p")).map(command => command.id)).toEqual(["general.command-palette"]);
+    expect(effectiveBindings("general.command-palette", defaultPreferences(), "mac")).toEqual(["Meta+p"]);
+    expect(effectiveBindings("general.command-palette", defaultPreferences(), "windows")).toEqual(["Ctrl+p"]);
+    expect(validatePreferences(defaultPreferences()).filter(error => error.commandId === "general.command-palette" || error.otherId === "general.command-palette")).toEqual([]);
   });
 });

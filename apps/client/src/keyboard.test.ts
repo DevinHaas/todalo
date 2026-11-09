@@ -3,11 +3,11 @@ import { defaultPreferences, effectiveBindings, KeyboardDispatcher, validatePref
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import { ShortcutHelp, ShortcutSettings, TaskMenu } from "./keyboard-views";
+import { CommandPalette, ShortcutHelp, ShortcutSettings, TaskMenu } from "./keyboard-views";
 import { collapsedTasks, TaskDialogs, TaskRow } from "./views";
 import { focusDialog } from "./organization-views";
 import type { TaskDto } from "./tasks";
-import { adjacentRow, browserKeyboardTransport, clientCommands, detectPlatform, dispatchCommands, isEditable } from "./keyboard";
+import { adjacentRow, browserKeyboardTransport, clientCommands, detectPlatform, dispatchCommands, fuzzyScore, isEditable, loadPaletteMemory, paletteCommands, paletteOrder, rankCommands, rememberCommand, savePaletteMemory, togglePin } from "./keyboard";
 
 const key = (key: string, extra: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; repeat: boolean }> = {}) =>
   ({ key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false, ...extra });
@@ -246,5 +246,69 @@ describe("shortcut views", () => {
     expect(html).toContain('aria-label="Add another shortcut for Capture task"');
     expect(html).toContain("Reset all shortcuts");
     expect(html).not.toContain("Save shortcuts");
+  });
+});
+
+describe("command palette", () => {
+  const all = Object.fromEntries(clientCommands.map(command => [command.id, () => {}]));
+  const scope = { global: true, view: true, task: false, editor: false, "quick-add": false, project: false, upcoming: false, calendar: false };
+
+  it("lists commands with a handler whose context is active, never itself", () => {
+    const ids = paletteCommands(all, scope).map(command => command.id);
+    expect(ids).toContain("navigation.inbox");
+    expect(ids).not.toContain("general.command-palette");
+    expect(ids).not.toContain("task.complete");
+    expect(ids).not.toContain("project.section");
+    expect(paletteCommands(all, { ...scope, task: true }).map(command => command.id)).toContain("task.complete");
+    const { "navigation.inbox": _, ...withoutInbox } = all;
+    expect(paletteCommands(withoutInbox, scope).map(command => command.id)).not.toContain("navigation.inbox");
+    expect(paletteCommands(all, { ...scope, task: true }).find(command => command.id === "task.complete")?.name).toBe("Task: Complete task");
+    expect(paletteCommands(all, scope).find(command => command.id === "navigation.inbox")?.name).toBe("Navigation: Go to Inbox");
+  });
+
+  it("ranks fuzzy matches: contiguous and word starts first, non-matches dropped", () => {
+    const items = [
+      { id: "a", name: "Navigation: Go to Labels", group: "Navigation" },
+      { id: "b", name: "Navigation: Go to Inbox", group: "Navigation" },
+      { id: "c", name: "Task: Choose date", group: "Task actions" },
+      { id: "d", name: "General: Quick Find", group: "General" },
+    ];
+    expect(rankCommands(items, "inbox").map(item => item.id)).toEqual(["b"]);
+    expect(rankCommands(items, "gtl")[0]!.id).toBe("a");
+    expect(rankCommands(items, "qf").map(item => item.id)).toEqual(["d"]);
+    expect(rankCommands(items, "task").map(item => item.id)[0]).toBe("c");
+    expect(rankCommands(items, "zzz")).toEqual([]);
+    expect(rankCommands(items, "  ")).toEqual(items);
+    expect(fuzzyScore("Go to Inbox", "inbox")!).toBeGreaterThan(fuzzyScore("Pinboxes", "inbox")!);
+    expect(fuzzyScore("Choose date", "cd")!).toBeGreaterThan(fuzzyScore("ascended", "cd")!);
+  });
+
+  it("puts pins, then five recent commands, first when there is no query", () => {
+    const items = "abcdefghij".split("").map(id => ({ id, name: `Command ${id}`, group: "G" }));
+    const ordered = paletteOrder(items, "", ["j", "i"], ["a", "j", "b", "c", "d", "e", "f"]).map(item => item.id);
+    expect(ordered.slice(0, 7)).toEqual(["j", "i", "a", "b", "c", "d", "e"]);
+    expect(ordered).toHaveLength(10);
+    expect(paletteOrder(items, "command j", ["a"], [])[0]!.id).toBe("j");
+    let memory = { pins: [] as string[], recent: [] as string[] };
+    for (const id of ["a", "b", "c", "d", "e", "f", "a"]) memory = rememberCommand(memory, id);
+    expect(memory.recent).toEqual(["a", "f", "e", "d", "c"]);
+    memory = togglePin(togglePin(memory, "x"), "y");
+    expect(togglePin(memory, "x").pins).toEqual(["y"]);
+    const store = new Map<string, string>();
+    const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value) };
+    savePaletteMemory("u1", memory, storage);
+    expect(loadPaletteMemory("u1", storage)).toEqual(memory);
+    expect(loadPaletteMemory("u2", storage)).toEqual({ pins: [], recent: [] });
+  });
+
+  it("renders a combobox with brand keycaps and pins first", () => {
+    const commands = paletteCommands(all, scope);
+    const html = renderToStaticMarkup(createElement(CommandPalette, { commands, bindings: id => id === "navigation.settings" ? ["o then s"] : [], memory: { pins: ["navigation.settings"], recent: [] }, onRun: () => {}, onPin: () => {}, onClose: () => {} }));
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('placeholder="Select a command…"');
+    expect(html).toContain('aria-activedescendant="command-palette-navigation-settings"');
+    expect(html.indexOf("Navigation: Settings")).toBeLessThan(html.indexOf("Navigation: Go to Inbox"));
+    expect(html).toContain("bg-brand-tint");
+    expect(html).toContain('aria-label="Unpin Navigation: Settings"');
   });
 });

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions } from "@tanstack/react-query";
-import { keyboardCommands, parsePreferences, type DispatchCommand, type KeyboardPreferences, type Platform } from "@todalo/ramble/keyboard";
+import { keyboardCommands, parsePreferences, type DispatchCommand, type KeyboardCommand, type KeyboardPreferences, type Platform } from "@todalo/ramble/keyboard";
 import { AccountTransportError, nativeAccountError } from "./errors";
 
 // Ticket 19: the legacy keyboard system (registry, conflicts, recording,
@@ -66,7 +66,7 @@ export const detectPlatform = (platform = navigator.platform): Platform =>
  * help and settings list only these. Every one has a click/touch path.
  */
 export const clientCommandIds = [
-  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find", "general.sync",
+  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find", "general.command-palette", "general.sync",
   "navigation.today", "navigation.upcoming", "navigation.projects", "navigation.labels", "navigation.filters",
   "navigation.settings", "navigation.account", "navigation.help", "navigation.theme", "navigation.inbox", "navigation.sections",
   "task.previous", "task.next", "view.first", "view.last",
@@ -116,6 +116,86 @@ export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () =>
     const owned = command.context === "editor" || command.context === "quick-add" || command.id === "general.sync" || command.id === "coach.planning-draft";
     const sheet = SHEET_COMMANDS.includes(command.id as ClientCommandId);
     const settings = SETTINGS_COMMANDS.includes(command.id as ClientCommandId);
-    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned, allowInModal: owned || sheet || settings, handle }] : [];
+    // The palette also opens from a field while its keys are a chord (⌘P), so the browser never prints there.
+    const chord = command.id === "general.command-palette" && bindings(command.id).every(binding => /^(Meta|Ctrl|Alt)\+/.test(binding));
+    return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned || chord, allowInModal: owned || sheet || settings, handle }] : [];
   });
 }
+
+// Command palette (⌘P): every client command that can run here, by name.
+export const PALETTE_ID = "general.command-palette";
+export type PaletteScope = Record<KeyboardCommand["context"], boolean>;
+export interface PaletteCommand { id: ClientCommandId; name: string; group: string }
+const groupPrefix: Record<string, string> = { "Task actions": "Task" };
+const pages = new Set(["navigation.inbox", "navigation.today", "navigation.upcoming", "navigation.labels", "navigation.projects", "navigation.filters", "navigation.season"]);
+/** "Task: Complete task", "Navigation: Go to Inbox". */
+export const paletteName = (command: KeyboardCommand) => `${groupPrefix[command.group] ?? command.group}: ${pages.has(command.id) ? `Go to ${command.label}` : command.label}`;
+
+/**
+ * The commands the palette lists: those with a handler (the same map the
+ * shortcuts dispatch) whose context is active, the palette itself excluded.
+ */
+export function paletteCommands(handlers: Partial<Record<ClientCommandId, unknown>>, scope: PaletteScope): PaletteCommand[] {
+  return clientCommands.filter(command => command.id !== PALETTE_ID && handlers[command.id as ClientCommandId] && scope[command.context])
+    .map(command => ({ id: command.id as ClientCommandId, name: paletteName(command), group: command.group }));
+}
+
+/**
+ * Fuzzy score of `query` in `text` (null: no match). A contiguous match beats
+ * a scattered one, a word start beats mid-word, earlier beats later.
+ */
+export function fuzzyScore(text: string, query: string): number | null {
+  const q = query.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!q) return 0;
+  const t = text.toLowerCase();
+  const wordStart = (at: number) => at === 0 || /[\s:&/-]/.test(t[at - 1]!);
+  const at = t.indexOf(q);
+  if (at >= 0) {
+    // Prefer an occurrence at a word start ("inbox" in "Go to Inbox").
+    let best = at;
+    for (let i = at; i >= 0; i = t.indexOf(q, i + 1)) if (wordStart(i)) { best = i; break; }
+    return 1000 + (wordStart(best) ? 500 : 0) - best;
+  }
+  let score = 0, from = 0, previous = -2;
+  for (const char of q.replace(/ /g, "")) {
+    const index = t.indexOf(char, from);
+    if (index < 0) return null;
+    score += 1 + (index === previous + 1 ? 5 : 0) + (wordStart(index) ? 3 : 0);
+    previous = index; from = index + 1;
+  }
+  return score - t.length / 100;
+}
+
+/** Matches by name and group, best first (registry order breaks ties). */
+export function rankCommands<T extends { name: string; group: string }>(commands: T[], query: string): T[] {
+  if (!query.trim()) return commands;
+  return commands.flatMap((command, index) => {
+    const name = fuzzyScore(command.name, query); const group = fuzzyScore(command.group, query);
+    const score = Math.max(name ?? -Infinity, group === null ? -Infinity : group - 1);
+    return score === -Infinity ? [] : [{ command, score, index }];
+  }).sort((a, b) => b.score - a.score || a.index - b.index).map(item => item.command);
+}
+
+/** No query: pins in pin order, then up to 5 recent, then the rest. A query ranks everything. */
+export function paletteOrder<T extends { id: string; name: string; group: string }>(commands: T[], query: string, pins: string[], recent: string[]): T[] {
+  if (query.trim()) return rankCommands(commands, query);
+  const byId = new Map(commands.map(command => [command.id, command]));
+  const first = [...pins, ...recent.filter(id => !pins.includes(id)).slice(0, 5)].flatMap(id => byId.get(id) ?? []);
+  return [...first, ...commands.filter(command => !first.includes(command))];
+}
+
+/** Pins and recent commands, per user in this browser. ponytail: localStorage; move into the account preferences if they should sync. */
+export interface PaletteMemory { pins: string[]; recent: string[] }
+const memoryKey = (userId: string) => `todalo:command-palette:${userId}`;
+export function loadPaletteMemory(userId: string, storage: Pick<Storage, "getItem"> = localStorage): PaletteMemory {
+  try {
+    const value = JSON.parse(storage.getItem(memoryKey(userId)) ?? "{}") as Partial<PaletteMemory>;
+    const ids = (list: unknown) => Array.isArray(list) ? list.filter((id): id is string => typeof id === "string") : [];
+    return { pins: ids(value.pins), recent: ids(value.recent).slice(0, 5) };
+  } catch { return { pins: [], recent: [] }; }
+}
+export function savePaletteMemory(userId: string, memory: PaletteMemory, storage: Pick<Storage, "setItem"> = localStorage) {
+  try { storage.setItem(memoryKey(userId), JSON.stringify(memory)); } catch { /* private mode: pins last this session */ }
+}
+export const rememberCommand = (memory: PaletteMemory, id: string): PaletteMemory => ({ ...memory, recent: [id, ...memory.recent.filter(item => item !== id)].slice(0, 5) });
+export const togglePin = (memory: PaletteMemory, id: string): PaletteMemory => ({ ...memory, pins: memory.pins.includes(id) ? memory.pins.filter(item => item !== id) : [...memory.pins, id] });
