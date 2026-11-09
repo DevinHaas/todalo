@@ -339,6 +339,8 @@ export function createCoachModel(config: CoachConfig, fetcher: typeof fetch = fe
     } catch { throw new CoachModelError(local(config) ? "Could not reach Ollama. Is it running?" : "Could not reach the provider.", "network", config.provider); }
     if (!response.ok) {
       const body = await response.text().catch(() => "");
+      // The provider's own reason (never the request, so no prompt or key leaks into the log).
+      console.warn(`Coach ${config.provider} ${config.model}: HTTP ${response.status} ${body.slice(0, 500)}`);
       throw httpFailure(response.status, config.provider, body.slice(0, 2_000), retryAfter(response.headers, now()));
     }
     return adapter.parse(response);

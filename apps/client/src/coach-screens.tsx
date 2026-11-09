@@ -258,10 +258,13 @@ function KeyForm({ userId, kind, saved }: { userId: string; kind: CoachProviderK
   const [tested, setTested] = useState<CoachTestResult | null>(null);
   const save = useMutation({ mutationFn: writes.save, meta: { action: () => `connect ${cardLabel[kind]}` } });
   const disconnect = useMutation({ mutationFn: () => writes.disconnect(kind), meta: { action: () => `disconnect ${cardLabel[kind]}` } });
-  const test = useMutation({ mutationFn: () => writes.test(kind), onSuccess: setTested, meta: { action: () => "test the connection" } });
-  const pending = save.isPending || disconnect.isPending || test.isPending;
   const local = kind === "ollama";
   const keepsKey = saved?.keyHint != null;
+  const payload = () => ({ provider: kind, model: model.trim(), ...local ? { baseUrl: baseUrl.trim() } : apiKey.trim() ? { apiKey: apiKey.trim() } : {} });
+  const unsaved = !!saved && (model.trim() !== saved.model || (!local && !!apiKey.trim()) || (local && baseUrl.trim() !== saved.baseUrl));
+  // An unsaved edit is saved first: Test checks what the form shows, not the old saved settings.
+  const test = useMutation({ mutationFn: async () => { if (unsaved) await save.mutateAsync(payload()); return writes.test(kind); }, onSuccess: setTested, meta: { action: () => "test the connection" } });
+  const pending = save.isPending || disconnect.isPending || test.isPending;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -270,7 +273,7 @@ function KeyForm({ userId, kind, saved }: { userId: string; kind: CoachProviderK
     if (local && !ollamaUrl(baseUrl)) return setCheck("Ollama must run on this computer: use a localhost address.");
     if (!local && !keepsKey && apiKey.trim().length < 8) return setCheck("Enter an API key.");
     setCheck(null);
-    await save.mutateAsync({ provider: kind, model: model.trim(), ...local ? { baseUrl: baseUrl.trim() } : apiKey.trim() ? { apiKey: apiKey.trim() } : {} }).catch(() => undefined);
+    await save.mutateAsync(payload()).catch(() => undefined);
   }
 
   return <form className="flex flex-col gap-3" onSubmit={submit} data-coach-form={kind}>
@@ -293,7 +296,7 @@ function KeyForm({ userId, kind, saved }: { userId: string; kind: CoachProviderK
     <div className="flex flex-wrap gap-2">
       <Button type="submit" data-coach-action="connect" disabled={pending || !model.trim()}>{saved ? "Save" : "Connect"}</Button>
       {saved && <Button type="button" variant="outline" data-coach-action="test-provider" disabled={pending} onClick={() => { setTested(null); test.mutate(); }}>
-        {test.isPending ? "Testing…" : "Test connection"}</Button>}
+        {test.isPending ? "Testing…" : unsaved ? "Save & test" : "Test connection"}</Button>}
       {saved && <Button type="button" variant="ghost" data-coach-action="disconnect" disabled={pending} onClick={() => { setTested(null); disconnect.mutate(); }}>Disconnect</Button>}
     </div>
     <div aria-live="polite">
@@ -335,7 +338,8 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
   const saveModel = useMutation({ mutationFn: writes.saveChatgptModel, meta: { action: () => "save the ChatGPT model" } });
   const signOut = useMutation({ mutationFn: writes.signOutChatgpt, meta: { action: () => "sign out of ChatGPT" } });
   const [tested, setTested] = useState<CoachTestResult | null>(null);
-  const test = useMutation({ mutationFn: () => writes.test("chatgpt"), onSuccess: setTested, meta: { action: () => "test the connection" } });
+  // An unsaved pick is saved first: Test checks the model the dropdown shows, not the old saved one.
+  const test = useMutation({ mutationFn: async () => { if (chatgpt && model.trim() && model.trim() !== chatgpt.model) await writes.saveChatgptModel(model.trim()); return writes.test("chatgpt"); }, onSuccess: setTested, meta: { action: () => "test the connection" } });
   const pending = start.isPending || paste.isPending || saveModel.isPending || signOut.isPending || test.isPending;
 
   useEffect(() => {
@@ -361,7 +365,7 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={pending || !model.trim() || model.trim() === chatgpt.model}>Save</Button>
           <Button type="button" variant="outline" data-coach-action="test-provider" disabled={pending} onClick={() => { setTested(null); test.mutate(); }}>
-            {test.isPending ? "Testing…" : "Test connection"}</Button>
+            {test.isPending ? "Testing…" : model.trim() !== chatgpt.model ? "Save & test" : "Test connection"}</Button>
           <Button type="button" variant="ghost" data-coach-action="chatgpt-sign-out" disabled={pending} onClick={() => signOut.mutate()}>Sign out of ChatGPT</Button>
         </div>
       </form>
