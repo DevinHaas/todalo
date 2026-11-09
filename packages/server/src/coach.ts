@@ -109,7 +109,12 @@ export interface CoachExplanationsDto { explanations: Record<string, string>; er
  * plaintext and stays server-side.
  */
 export interface CoachConfig { provider: CoachModelKind; model: string; baseUrl: string | null; apiKey: string | null }
-export interface CoachMessage { role: "system" | "user" | "assistant"; content: string }
+export interface CoachMessage {
+  role: "system" | "user" | "assistant"; content: string;
+  /** Ticket 29: images sent with a user message (base64), only to models that read them (coach-documents acceptsImages). */
+  images?: { mediaType: string; data: string }[];
+}
+const dataUrl = (image: { mediaType: string; data: string }) => `data:${image.mediaType};base64,${image.data}`;
 /** A JSON schema the reply must follow (strict: every property required, no extras). */
 export interface CoachSchema { name: string; schema: Record<string, unknown> }
 /** The one inference seam: fakes replace it in tests, tickets 18+ add adapters. Resolves with the reply text. */
@@ -155,7 +160,9 @@ const local = (config: CoachConfig) => config.provider === "ollama";
 export function chatRequest(config: CoachConfig, { messages, schema }: CoachRequest) {
   const base = config.provider === "ollama" ? `${ollamaUrl(config.baseUrl) ?? ollamaDefaultUrl}/v1` : hostedBase[config.provider as keyof typeof hostedBase];
   const body: Record<string, unknown> = {
-    model: config.model, stream: false, messages,
+    model: config.model, stream: false,
+    messages: messages.map(({ role, content, images }) => images?.length
+      ? { role, content: [{ type: "text", text: content }, ...images.map(image => ({ type: "image_url", image_url: { url: dataUrl(image) } }))] } : { role, content }),
     // Ollama's compatible endpoint reads max_tokens; hosted reasoning models need room to think first.
     ...local(config) ? { max_tokens: 2_000, temperature: 0.2 } : { max_completion_tokens: 4_000 },
     ...config.provider === "openrouter" ? { reasoning: { effort: "low", exclude: true }, provider: { require_parameters: Boolean(schema) } } : {},
@@ -185,7 +192,8 @@ export function anthropicRequest(config: CoachConfig, { messages, schema }: Coac
   const body = {
     model: config.model, max_tokens: 8_000,
     ...system ? { system } : {},
-    messages: messages.filter(message => message.role !== "system"),
+    messages: messages.filter(message => message.role !== "system").map(({ role, content, images }) => images?.length
+      ? { role, content: [...images.map(image => ({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } })), { type: "text", text: content }] } : { role, content }),
     output_config: { effort: "low", ...schema ? { format: { type: "json_schema", schema: schema.schema } } : {} },
   };
   return {
@@ -207,8 +215,8 @@ export function chatgptRequest(config: CoachConfig, { messages, schema }: CoachR
   const instructions = messages.filter(message => message.role === "system").map(message => message.content).join("\n\n");
   const body = {
     model: config.model, instructions, store: false, stream: true,
-    input: messages.filter(message => message.role !== "system").map(({ role, content }) =>
-      ({ type: "message", role, content: [{ type: role === "assistant" ? "output_text" : "input_text", text: content }] })),
+    input: messages.filter(message => message.role !== "system").map(({ role, content, images }) =>
+      ({ type: "message", role, content: [{ type: role === "assistant" ? "output_text" : "input_text", text: content }, ...(images ?? []).map(image => ({ type: "input_image", image_url: dataUrl(image) }))] })),
     reasoning: { effort: "low" },
     ...schema ? { text: { format: { type: "json_schema", name: schema.name, strict: true, schema: schema.schema } } } : {},
   };

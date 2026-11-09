@@ -1,134 +1,106 @@
 // Goals ticket 22: the Coach chat in the right sidebar. Only with a Coach
-// provider connected: without one there is no button, panel or key. A change
-// the Coach proposes arrives as a Draft (kind "chat") shown under its reply
-// and dashed on the schedule; nothing changes until it is accepted.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+// provider connected: without one there is no button, panel or key.
+// Ticket 29: talking moved to the Coach bar (coach-bar.tsx); the sidebar is
+// the read-only record: what the user asked, the documents, and every task the
+// pending changes affect (added, moved, removed, sub-tasks, attachments), each
+// linked to its task.
+import { useMemo, useSyncExternalStore } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Trash2, X } from "lucide-react";
-import { coach, coachReads } from "./runtime";
-import { coachKeys, draftMutations, type ChatMessageDto, type CoachChatDto } from "./coach";
-import { DraftPanel } from "./draft-views";
-import { localZone } from "./seasons";
-import { Button, Hint, List, RightSidebar, Spinner, Textarea, cn } from "./ui";
-import { reportCoachError } from "./coach-errors";
+import { FileText, Sparkles, Trash2, X } from "lucide-react";
+import { coach, coachReads, reads } from "./runtime";
+import { coachKeys, type DraftItemDto } from "./coach";
+import { draftTime, opIcons, opLabels } from "./draft-views";
+import { focusCoachBar } from "./coach-bar";
+import { taskPath } from "./links";
+import { Button, Hint, List, RightSidebar, cn } from "./ui";
 
-let state = { open: false, prompt: null as string | null, focus: 0 };
+let state = { open: false };
 const watchers = new Set<() => void>();
 const set = (next: Partial<typeof state>) => { state = { ...state, ...next }; watchers.forEach(watcher => watcher()); };
 const chatState = { get: () => state, subscribe: (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; } };
 
-/**
- * Opens the Coach chat and focuses its composer; `prompt` pre-fills it (e.g.
- * a recommendation's "Chat with coach"), for the user to edit and send.
- */
-export const openCoachChat = (prompt?: string) => set({ open: true, prompt: prompt ?? null, focus: state.focus + 1 });
+/** Ticket 29: talking to the Coach is the bar: focuses it, `prompt` pre-filled (e.g. a recommendation's "Chat with coach"). */
+export const openCoachChat = (prompt?: string) => focusCoachBar(prompt);
+export const toggleCoachSidebar = () => set({ open: !state.open });
 export const closeCoachChat = () => set({ open: false });
-export const coachChatOpen = () => state.open;
 
 /** Whether the Coach can chat (a provider is connected). */
 function useConnected(userId: string) {
   return Boolean(useQuery(coachReads.provider(userId)).data?.provider);
 }
 
-/** The toolbar's Coach button: opens and closes the chat. */
+/** The toolbar's Coach button: shows and hides the sidebar. */
 export function CoachChatButton({ userId }: { userId: string }) {
   const { open } = useSyncExternalStore(chatState.subscribe, chatState.get);
   if (!useConnected(userId)) return null;
-  return <Button type="button" variant={open ? "secondary" : "ghost"} size="icon-sm" aria-label="Coach chat" aria-pressed={open} title="Coach chat"
-    data-coach-chat-toggle="" onClick={() => open ? closeCoachChat() : openCoachChat()}><Sparkles className="text-brand" /></Button>;
+  return <Button type="button" variant={open ? "secondary" : "ghost"} size="icon-sm" aria-label="Coach sidebar" aria-pressed={open} title="Coach sidebar"
+    data-coach-chat-toggle="" onClick={toggleCoachSidebar}><Sparkles className="text-brand" /></Button>;
 }
 
 export function CoachChatHost({ userId }: { userId: string }) {
-  const { open, prompt, focus } = useSyncExternalStore(chatState.subscribe, chatState.get);
+  const { open } = useSyncExternalStore(chatState.subscribe, chatState.get);
   const connected = useConnected(userId);
   if (!open || !connected) return null;
-  return <CoachChat userId={userId} prompt={prompt} focus={focus} />;
+  return <CoachChat userId={userId} />;
 }
 
-function CoachChat({ userId, prompt, focus }: { userId: string; prompt: string | null; focus: number }) {
+function CoachChat({ userId }: { userId: string }) {
   const cache = useQueryClient();
   const chat = useQuery(coachReads.chat(userId));
   const drafts = useQuery(coachReads.drafts(userId));
-  const writes = useMemo(() => draftMutations(coach, cache, userId), [cache, userId]);
-  const [text, setText] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const composer = useRef<HTMLTextAreaElement>(null);
-  const end = useRef<HTMLDivElement>(null);
-  // Every open (also from a recommendation) focuses the composer, pre-filled when asked.
-  useEffect(() => {
-    if (prompt) setText(prompt);
-    composer.current?.focus();
-  }, [focus, prompt]);
-  const send = useMutation({
-    mutationFn: (body: string) => coach.sendChat(localZone(), body),
-    onMutate: () => setMessage(null),
-    onSuccess: (result: CoachChatDto, body) => {
-      // Ticket 17d: a failed model call toasts (Retry sends the same text); the composer keeps it.
-      if (reportCoachError(result.error, { retry: () => send.mutate(body) })) return;
-      if (result.message) { setMessage(result.message); return; }
-      cache.setQueryData(coachKeys.chat(userId), { messages: result.messages });
-      if (result.draft) void cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) });
-      setText(current => current === body ? "" : current);
-    },
-    meta: { action: () => "send your message to the Coach" },
-  });
+  // Every owned task, for the titles of the tasks a change goes under.
+  const tasks = useQuery(reads.today(userId)).data?.tasks;
   const clear = useMutation({
     mutationFn: () => coach.clearChat(),
-    onSuccess: (result) => { cache.setQueryData(coachKeys.chat(userId), result); setMessage(null); },
+    onSuccess: (result) => cache.setQueryData(coachKeys.chat(userId), result),
     meta: { action: () => "clear the Coach chat" },
   });
-  const decide = useMutation({ mutationFn: writes.decide, meta: { action: ({ accept }: { accept: boolean }) => accept ? "accept the draft" : "decline the draft" } });
-  // Ticket 28: Yes or No to the overflow; Yes's day draft shows on Today (or the week it lands in).
-  const overflow = useMutation({ mutationFn: writes.overflow, onSuccess: (result) => setMessage(result.message ?? result.next?.summary ?? null), meta: { action: ({ schedule }: { schedule: boolean }) => schedule ? "schedule the tasks that didn't fit" : "drop the tasks that didn't fit" } });
-  const messages: ChatMessageDto[] = chat.data?.messages ?? [];
-  const pendingText = send.isPending ? send.variables : null;
-  useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages.length, pendingText]);
-  const submit = () => { const body = text.trim(); if (body && !send.isPending) send.mutate(body); };
-  const open = new Map((drafts.data?.drafts ?? []).filter(draft => draft.kind === "chat").map(draft => [draft.id, draft]));
+  const asked = (chat.data?.messages ?? []).filter(item => item.role === "user");
+  const documents = chat.data?.documents ?? [];
+  const pending = useMemo(() => (drafts.data?.drafts ?? []).filter(draft => draft.kind === "chat")
+    .flatMap(draft => draft.items.filter(item => item.state === "pending").map(item => ({ item, draft }))), [drafts.data]);
+  const title = (id: string | undefined) => tasks?.find(task => task.id === id)?.title;
 
-  return <RightSidebar className="ui w-plan! pr-3 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label="Coach chat" data-coach-chat=""
+  return <RightSidebar className="ui w-plan! pr-3 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label="Coach" data-coach-chat=""
     title={<span className="flex items-center gap-1.5"><Sparkles aria-hidden="true" className="size-4 text-brand" />Coach</span>}
     actions={<>
-      {messages.length > 0 && <Button type="button" variant="ghost" size="icon-sm" aria-label="New conversation" title="New conversation" disabled={clear.isPending || send.isPending}
-        onClick={() => clear.mutate()} data-coach-chat-action="clear"><Trash2 /></Button>}
-      <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Coach chat" onClick={closeCoachChat}><X /></Button>
+      {(asked.length > 0 || documents.length > 0) && <Button type="button" variant="ghost" size="icon-sm" aria-label="New conversation" title="New conversation (also removes the documents)"
+        disabled={clear.isPending} onClick={() => clear.mutate()} data-coach-chat-action="clear"><Trash2 /></Button>}
+      <Button type="button" variant="ghost" size="icon-sm" aria-label="Close Coach sidebar" onClick={closeCoachChat}><X /></Button>
     </>}>
-    <List aria-label="Conversation" className="flex flex-col gap-2 pb-1" aria-live="polite">
-      {!messages.length && !pendingText && <li><Hint className="py-2">Ask the Coach about your goals or your plan, e.g. “What should I change this week?”. It never changes anything itself: proposals arrive as a draft you accept or decline.</Hint></li>}
-      {messages.map(item => {
-        const draft = item.draftId ? open.get(item.draftId) : undefined;
-        const pending = draft?.items.some(row => row.state === "pending") || draft?.overflow;
-        return <li key={item.id} className="flex flex-col gap-2" data-chat-message={item.role}>
-          <Bubble role={item.role} content={item.content} />
-          {draft && pending ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null}
-            onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
-            : item.draftId && <Hint className="text-xs">This draft was decided or replaced.</Hint>}
-        </li>;
-      })}
-      {pendingText && <li className="flex flex-col gap-2"><Bubble role="user" content={pendingText} />
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><Spinner />The Coach is thinking…</span></li>}
-    </List>
-    <div ref={end} />
-    <form className="sticky bottom-0 mt-auto flex flex-col gap-1.5 border-t border-border-subtle bg-background py-2" data-coach-chat-composer=""
-      onSubmit={(event) => { event.preventDefault(); submit(); }}>
-      {message && <Hint className="text-xs text-destructive" role="alert">{message}</Hint>}
-      <Textarea ref={composer} rows={3} maxLength={4_000} aria-label="Message the Coach" placeholder="Ask the Coach…" value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          // Enter sends, Shift+Enter is a new line, Escape closes the chat.
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); }
-          if (event.key === "Escape") { event.preventDefault(); closeCoachChat(); }
-        }} />
-      <div className="flex items-center justify-between gap-2">
-        <Hint className="text-xs">Enter to send, Shift+Enter for a new line</Hint>
-        <Button type="submit" size="sm" disabled={!text.trim() || send.isPending} data-coach-chat-action="send">{send.isPending && <Spinner />}Send</Button>
-      </div>
-    </form>
+    <div className="flex flex-col gap-4 pb-2">
+      {!asked.length && !pending.length && <Hint className="py-2">Talk to the Coach in the bar at the bottom. What you ask and the tasks its changes touch are listed here.</Hint>}
+      {pending.length > 0 && <section aria-label="Pending changes" className="flex flex-col gap-1">
+        <h3 className="text-xs font-semibold text-muted-foreground">Pending changes</h3>
+        <List aria-label="Tasks the changes affect">{pending.map(({ item, draft }) => <AffectedTask key={item.id} item={item}
+          parent={item.parentId ? title(item.parentId) : draft.items.find(other => other.id === item.parentItemId)?.title} />)}</List>
+        <Hint className="text-xs">Keep or drop them in the Coach bar.</Hint>
+      </section>}
+      {documents.length > 0 && <section aria-label="Documents" className="flex flex-col gap-1">
+        <h3 className="text-xs font-semibold text-muted-foreground">Documents</h3>
+        <List>{documents.map(document => <li key={document.id} className="flex items-center gap-1.5 py-0.5 text-sm"><FileText aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" /><span className="truncate">{document.name}</span></li>)}</List>
+      </section>}
+      {asked.length > 0 && <section aria-label="What you asked" className="flex flex-col gap-1">
+        <h3 className="text-xs font-semibold text-muted-foreground">What you asked</h3>
+        <List className="flex flex-col gap-1.5">{asked.map(item => <li key={item.id} data-chat-message="user"
+          className="whitespace-pre-wrap rounded-lg bg-brand-tint px-2.5 py-1.5 text-sm text-brand-tint-foreground">{item.content}</li>)}</List>
+      </section>}
+    </div>
   </RightSidebar>;
 }
 
-function Bubble({ role, content }: { role: ChatMessageDto["role"]; content: string }) {
-  return <div className={cn("max-w-[92%] whitespace-pre-wrap rounded-lg px-2.5 py-1.5 text-sm", role === "user" ? "self-end bg-brand-tint text-brand-tint-foreground" : "self-start bg-muted")}>
-    <span className="sr-only">{role === "user" ? "You: " : "Coach: "}</span>{content}
-  </div>;
+/** One change's task: linked when it exists (a sub-task's or attachment's parent when the task is new). */
+function AffectedTask({ item, parent }: { item: DraftItemDto; parent?: string }) {
+  const Icon = opIcons[item.op];
+  const target = item.taskId ?? item.parentId;
+  const name = item.op === "attach" ? `${item.title} → ${parent ?? "a new task"}` : item.title;
+  return <li className="flex items-start gap-2 border-t border-border-subtle py-1.5" data-affected-task={item.id} data-draft-op={item.op}>
+    <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+    <div className="flex min-w-0 flex-1 flex-col">
+      <span className={cn("text-sm", item.op === "remove" && "line-through")}><span className="sr-only">{opLabels[item.op]}: </span>
+        {target ? <Link to={taskPath(target)} className="hover:underline">{name}</Link> : name}</span>
+      <span className="text-xs text-muted-foreground">{draftTime(item, true, parent)}</span>
+    </div>
+  </li>;
 }

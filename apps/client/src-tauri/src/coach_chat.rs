@@ -1,9 +1,13 @@
 // Goals ticket 22: the Coach chat. Fixed paths; the message body is rebuilt
 // from one typed string so the webview cannot add fields or reach another path.
+// Ticket 29: the chat's documents, uploaded like task attachments (attachments.rs).
+use crate::attachments::multipart;
 use crate::auth::NativeAuth;
 use crate::coach::zoned;
+use crate::reads::valid_id;
 use reqwest::Method;
 use serde_json::Value;
+use tauri::ipc::Request;
 
 const INVALID: &str = "Check your entry and try again.";
 const INVALID_RESPONSE: &str = "The server returned an invalid response.";
@@ -40,6 +44,32 @@ pub async fn clear_coach_chat(
 ) -> Result<Option<Value>, String> {
     Ok(state
         .write(Method::DELETE, "/api/v1/coach/chat", None)
+        .await?)
+}
+
+/// Ticket 29: raw body and `x-todalo-files` as `upload_files`; `{ documents }`.
+#[tauri::command]
+pub async fn upload_coach_documents(
+    state: tauri::State<'_, NativeAuth>,
+    request: Request<'_>,
+) -> Result<Option<Value>, String> {
+    let (boundary, body) = multipart(&request)?;
+    Ok(state
+        .upload("/api/v1/coach/documents", &boundary, body)
+        .await?)
+}
+
+/// Ticket 29: `{ documents }` after removing one; Ok(None) for a malformed ID.
+#[tauri::command]
+pub async fn delete_coach_document(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+) -> Result<Option<Value>, String> {
+    if !valid_id(&id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(Method::DELETE, &format!("/api/v1/coach/documents/{id}"), None)
         .await?)
 }
 

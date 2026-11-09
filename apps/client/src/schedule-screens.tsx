@@ -201,11 +201,12 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
   // Ticket 22: a draft from the Coach chat shows dashed too (it is decided in the chat).
   // Ticket 23: and a planning session's timed tasks (its milestones have no time).
+  // Ticket 29: only schedule changes are blocks (sub-tasks and attachments show in lists and the task sheet).
   const chatPending = drafts.data?.drafts.filter(item => item.kind === "chat" || item.kind === "plan").flatMap(item => item.items.filter(row => row.state === "pending" && (item.kind === "chat" || row.end))) ?? [];
   return {
-    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].map(item => ({
+    blocks: (color: (item: (typeof pending)[number]) => string | null): DraftBlock[] => [...pending, ...chatPending].flatMap(item => item.op === "subtask" || item.op === "attach" ? [] : [{
       itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, start: new Date(item.start), end: item.end ? new Date(item.end) : null, color: color(item),
-    })),
+    }]),
     panel: connected ? <DraftPanel scope={scope.kind} week={scope.kind === "week" ? labels.week(parseDayKey(scope.period)) : undefined}
       draft={draft} drafting={propose.isPending} deciding={decide.isPending || overflow.isPending} message={message}
       onDraft={() => propose.mutate(scope)} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft!.id, accept, itemIds })}

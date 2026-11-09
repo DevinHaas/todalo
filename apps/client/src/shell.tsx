@@ -6,7 +6,7 @@ import {
   LineChart, ListFilter, MoreHorizontal, PanelLeft, Plus, Search,
 } from "lucide-react";
 import type { Account } from "./session";
-import { connection, projectReads, queries, reads, session } from "./runtime";
+import { coachReads, connection, projectReads, queries, reads, session } from "./runtime";
 import { taskKeys, todaySections, type NewTask, type TaskDto, type TodayDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
 import { Composer, TaskDialogs, TaskEditor, TaskTree, TaskView, TodayView, type RowActions, type TaskDialog } from "./views";
@@ -27,6 +27,8 @@ import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMi
 import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 import { CoachChatButton, CoachChatHost } from "./coach-chat-screens";
+import { CoachBar } from "./coach-bar";
+import { PendingChangesContext, pendingChanges } from "./pending-changes";
 import { PlanningHost } from "./planning-screens";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
@@ -101,6 +103,10 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
   const milestones = useMilestoneTaskIds(userId);
   const goalOfTask = useTaskGoalOf(userId);
+  // Ticket 29: the Coach drafts' pending changes, shown in place in rows and the sheet.
+  const coachConnected = Boolean(useQuery(coachReads.provider(userId)).data?.provider);
+  const openDrafts = useQuery({ ...coachReads.drafts(userId), enabled: coachConnected }).data?.drafts;
+  const pending = useMemo(() => pendingChanges(coachConnected ? openDrafts ?? [] : []), [coachConnected, openDrafts]);
   // Opening a ritual's item (Check-in, Evening review; list row, schedule block) starts that ritual instead.
   const ritualItems = useRitualTaskIds(userId);
   const { pathname } = useLocation();
@@ -129,7 +135,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
   const sheet = useTaskSheet(account, task, close);
-  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}><TaskGoals.Provider value={goalOfTask}>
+  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}><TaskGoals.Provider value={goalOfTask}><PendingChangesContext.Provider value={pending}>
     <TaskContextMenu userId={userId} onOpen={dialog.open}>{children}</TaskContextMenu>
     {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
@@ -137,7 +143,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       onSave={(details) => writes.update.mutateAsync({ id: task.id, details })}
       onOpen={setId}
       onInsert={(edge) => { close(); setInserting({ edge, task }); }} />}
-  </TaskGoals.Provider></MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
+  </PendingChangesContext.Provider></TaskGoals.Provider></MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
 }
 
 /** The page column: lists keep a readable width; board and calendar layouts use the full width. */
@@ -192,7 +198,8 @@ export function Shell({ account }: { account: Account }) {
         <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><CoachChatButton userId={account.user.id} /><DisplayMenu /></div>
       </div>
       <ConnectionStatus />
-      <Content><TaskDialogHost account={account}><Outlet /></TaskDialogHost></Content>
+      {/* Ticket 29: the Coach bar floats at the bottom of every main view. */}
+      <Content><TaskDialogHost account={account}><Outlet /><CoachBar userId={account.user.id} /></TaskDialogHost></Content>
     </div>
     <RitualHost userId={account.user.id} />
     <CoachChatHost userId={account.user.id} />

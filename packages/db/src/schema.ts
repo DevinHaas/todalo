@@ -439,7 +439,7 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   draftId: text("draft_id").notNull().references(() => coachDrafts.id, { onDelete: "cascade" }),
   position: integer("position").notNull(),
-  op: text("op", { enum: ["add", "move", "remove"] }).notNull(),
+  op: text("op", { enum: ["add", "move", "remove", "subtask", "attach"] }).notNull(),
   taskId: text("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   startAt: timestamp("start_at").notNull(),
@@ -450,6 +450,11 @@ export const coachDraftItems = pgTable("coach_draft_items", {
   state: text("state", { enum: ["pending", "accepted", "declined"] }).default("pending").notNull(),
   // Goals ticket 23: a planning session's new milestone (an "add" due on startAt's day); accepting links it to goalId with these criteria.
   criteria: jsonb("criteria").$type<string[]>(),
+  // Goals ticket 29: a new sub-task ("subtask") or an attached document ("attach") hangs off an existing task
+  // (parentId) or a new task of the same draft (parentItemId); "attach" copies documentId to the task on accept.
+  parentId: text("parent_id").references(() => tasks.id, { onDelete: "cascade" }),
+  parentItemId: text("parent_item_id"),
+  documentId: text("document_id").references(() => coachDocuments.id, { onDelete: "cascade" }),
 }, table => [index("coach_draft_items_draft_idx").on(table.draftId)]);
 
 // Goals ticket 21: a goal's last Coach recommendation, reused while inputsHash
@@ -486,6 +491,21 @@ export const coachChatMessages = pgTable("coach_chat_messages", {
   draftId: text("draft_id").references(() => coachDrafts.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [index("coach_chat_messages_user_created_idx").on(table.userId, table.createdAt)]);
+
+// Goals ticket 29: a document attached to the Coach chat (the session): its
+// bytes (base64, as task_attachments) and the text extracted on upload (null
+// for images). Cleared with the chat; copied to a task only when an "attach"
+// draft item is accepted.
+export const coachDocuments = pgTable("coach_documents", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  mediaType: text("media_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  content: text("content").notNull(),
+  text: text("text"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => [index("coach_documents_user_idx").on(table.userId)]);
 
 // Goals ticket 24: a Pattern the Coach learned about how the user works, with
 // the facts behind it (`evidence`) and what it was learned from (`source`).

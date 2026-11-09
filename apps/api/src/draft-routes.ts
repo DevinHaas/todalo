@@ -64,7 +64,8 @@ export function createDraftRoutes(store: DraftStore) {
     if (input.data.overflow) return overflow(request, userId, draft, accept, status);
     let decision: { accepted: AcceptedWrite[]; declined: string[] };
     if (accept) {
-      const ids = draft.items.flatMap(item => item.taskId && item.state === "pending" ? [item.taskId] : []);
+      // Ticket 29: and the existing tasks sub-tasks and attachments go under.
+      const ids = draft.items.flatMap(item => item.state === "pending" ? [item.taskId, item.parentId].filter((id): id is string => Boolean(id)) : []);
       const accepted = planAccept(draft, itemIds, await store.tasks(userId, ids));
       if (accepted === "missing") return status(404, NOT_FOUND);
       if (accepted === "changed") return status(412, CHANGED);

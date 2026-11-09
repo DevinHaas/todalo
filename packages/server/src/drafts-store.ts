@@ -4,7 +4,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@todalo/db";
-import { coachDraftItems, coachDrafts, goalTasks, tasks, userSettings } from "@todalo/db/schema";
+import { coachDocuments, coachDraftItems, coachDrafts, goalTasks, taskAttachments, tasks, userSettings } from "@todalo/db/schema";
 import { atomically } from "./bulk";
 import { getCalendarEventsForUser } from "./calendar-connections";
 import { getGoalLinks } from "./goals";
@@ -47,7 +47,11 @@ export async function getOpenDrafts(userId: string, draftId?: string): Promise<D
 /** Stores a new draft, closing the open one of the same kind and period in the same batch. */
 export async function saveDraft(userId: string, draft: NewDraft): Promise<DraftRecord> {
   const id = crypto.randomUUID();
-  const items = draft.items.map((item, position) => ({ ...item, criteria: item.criteria ?? null, id: crypto.randomUUID(), userId, draftId: id, position, state: "pending" as const }));
+  const ids = draft.items.map(() => crypto.randomUUID());
+  // Ticket 29: a sub-task or attachment under a new task of this draft points at that task's item.
+  const items = draft.items.map(({ parentIndex, ...item }, position) => ({
+    ...item, criteria: item.criteria ?? null, parentItemId: parentIndex === undefined ? null : ids[parentIndex]!, id: ids[position]!, userId, draftId: id, position, state: "pending" as const,
+  }));
   const writes: BatchItem<"pg">[] = [
     db.update(coachDrafts).set({ status: "closed" }).where(and(eq(coachDrafts.userId, userId), eq(coachDrafts.kind, draft.kind), eq(coachDrafts.period, draft.period), eq(coachDrafts.status, "open"))),
     db.insert(coachDrafts).values({ id, userId, kind: draft.kind, period: draft.period, summary: draft.summary, overflow: draft.overflow ?? null }),
@@ -68,9 +72,30 @@ export async function saveDraft(userId: string, draft: NewDraft): Promise<DraftR
 export async function resolveDraft(userId: string, draft: DraftRecord, { accepted, declined }: { accepted: AcceptedWrite[]; declined: string[] }) {
   const writes: BatchItem<"pg">[] = [];
   const touched: string[] = [];
+  // Ticket 29: what sub-tasks and attachments need: their existing parents' place and the documents' bytes.
+  const parentIds = [...new Set(accepted.flatMap(write => write.op === "subtask" && write.parentId ? [write.parentId] : []))];
+  const documentIds = [...new Set(accepted.flatMap(write => write.documentId ? [write.documentId] : []))];
+  const [parents, documents] = await Promise.all([
+    parentIds.length ? db.select({ id: tasks.id, projectId: tasks.projectId, sectionId: tasks.sectionId }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, parentIds))) : [],
+    documentIds.length ? db.select().from(coachDocuments).where(and(eq(coachDocuments.userId, userId), inArray(coachDocuments.id, documentIds))) : [],
+  ]);
+  // A new task's ID by its item, for what goes under it (created in this batch or accepted earlier).
+  const created = new Map(draft.items.flatMap(item => item.taskId && item.state === "accepted" ? [[item.id, item.taskId] as const] : []));
+  const parentOf = (write: AcceptedWrite) => write.parentId ?? created.get(write.parentItemId ?? "") ?? null;
   for (const write of accepted) {
     const times = { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd };
-    if (write.taskId) {
+    if (write.op === "subtask") {
+      const parentId = parentOf(write);
+      const place = parents.find(row => row.id === parentId) ?? { projectId: null, sectionId: null };
+      const taskId = crypto.randomUUID();
+      writes.push(db.insert(tasks).values({ id: taskId, userId, title: write.title, parentId, projectId: place.projectId, sectionId: place.sectionId }));
+      writes.push(db.update(coachDraftItems).set({ taskId }).where(and(eq(coachDraftItems.id, write.itemId), eq(coachDraftItems.userId, userId))));
+      created.set(write.itemId, taskId);
+    } else if (write.op === "attach") {
+      const taskId = parentOf(write);
+      const document = documents.find(row => row.id === write.documentId);
+      if (taskId && document) writes.push(db.insert(taskAttachments).values({ userId, taskId, name: document.name, mediaType: document.mediaType, byteSize: document.byteSize, content: document.content }));
+    } else if (write.taskId) {
       writes.push(db.update(tasks).set({ ...times, updatedAt: new Date() }).where(and(eq(tasks.id, write.taskId), eq(tasks.userId, userId))));
       touched.push(write.taskId);
     } else {
@@ -81,6 +106,7 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
       const milestoneCriteria = write.criteria?.map(text => ({ text, done: false })) ?? null;
       if (write.goalId) writes.push(db.insert(goalTasks).values({ userId, goalId: write.goalId, taskId, milestoneCriteria }).onConflictDoNothing());
       writes.push(db.update(coachDraftItems).set({ taskId }).where(and(eq(coachDraftItems.id, write.itemId), eq(coachDraftItems.userId, userId))));
+      created.set(write.itemId, taskId);
       touched.push(taskId);
     }
   }

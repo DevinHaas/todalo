@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CoachModelError } from "./coach";
-import { chatMessages, parseChatReply } from "./coach-chat";
+import { chatExtras, chatFacts, chatMessages, chatSchema, parseChatReply } from "./coach-chat";
 import { weekPlan, type DraftTask } from "./drafts";
 
 // Zurich, Monday 9 Feb 2026, 09:10 local.
@@ -37,6 +37,50 @@ describe("parseChatReply", () => {
   });
 });
 
+describe("due-day tasks, sub-tasks and attachments (ticket 29)", () => {
+  const context = { tasks: [task("run"), task("essay", { title: "Essay" }), task("deep", { parentId: "d2" }), task("d2", { parentId: "d1" }), task("d1", { parentId: "essay" })] };
+  const syllabus = { id: "doc", name: "syllabus.pdf", mediaType: "application/pdf", byteSize: 10, content: "", text: "Week 1: essay", createdAt: now };
+  const extras = chatExtras(plan, context, [syllabus]);
+  const other = (title: string) => [...extras.others].find(([, row]) => row.title === title)![0];
+  const parse = (items: unknown[]) => parseChatReply(reply(items), plan, extras);
+
+  it("offers the other open tasks after the plan's refs and the documents as d1…", () => {
+    const facts = chatFacts(plan, new Map(), extras, false);
+    expect(facts.tasks.map(row => row.title)).toContain("Essay");
+    expect(facts.tasks.every(row => Number(row.ref.slice(1)) > plan.scheduled.size + plan.toPlan.size)).toBe(true);
+    expect(facts.documents).toEqual([{ ref: "d1", name: "syllabus.pdf", kind: "pdf", text: "Week 1: essay" }]);
+    const ops = (chatSchema.schema as { properties: { items: { items: { properties: { op: { enum: string[] } }; required: string[] } } } }).properties.items.items;
+    expect(ops.properties.op.enum).toEqual(["add", "move", "remove", "subtask", "attach"]);
+    expect(ops.required).toEqual(expect.arrayContaining(["parent", "document", "day"]));
+  });
+
+  it("drafts a new task due on a day, its sub-task (#1) and attaches the document to an existing task", () => {
+    const draft = parse([
+      item("add", { title: "Midterm", day: "2026-03-03" }),
+      item("subtask", { title: "Review notes", parent: "#1" }),
+      item("attach", { document: "d1", parent: other("Essay") }),
+      item("add", { task: "t2", day: "2026-02-10", start: "08:00", minutes: 30 }),
+    ]).draft!;
+    expect(draft.items.map(row => [row.op, row.title, row.endAt, row.parentIndex ?? row.parentId ?? null, row.documentId ?? null])).toEqual([
+      ["add", "Midterm", null, null, null], ["subtask", "Review notes", null, 0, null], ["attach", "syllabus.pdf", null, "essay", "doc"], ["add", "run", expect.any(Date), null, null],
+    ]);
+    expect(draft.items[0]!.startAt.toISOString()).toBe("2026-03-02T23:00:00.000Z");
+  });
+
+  it.each([
+    ["a #N that is not a new task above", [item("subtask", { title: "x", parent: "#1" })], /parent #1/],
+    ["an unknown parent", [item("subtask", { title: "x", parent: "t99" })], /parent t99/],
+    ["a sub-task nested too deep", [item("subtask", { title: "x", parent: other("deep") })], /too deep/],
+    ["an unknown document", [item("attach", { document: "d2", parent: other("Essay") })], /document d2/],
+    ["the same document twice on a task", [item("attach", { document: "d1", parent: other("Essay") }), item("attach", { document: "d1", parent: other("Essay") })], /twice/],
+    ["a due day in the past", [item("add", { title: "Late", day: "2026-02-01" })], /due day/],
+  ])("drops the draft for %s", (_, items, why) => {
+    const result = parse(items);
+    expect(result.draft).toBeNull();
+    expect(result.reply).toMatch(why);
+  });
+});
+
 describe("chatMessages", () => {
   it("puts the prompt and facts first, then the last 20 turns and the new message", () => {
     const history = Array.from({ length: 25 }, (_, index) => ({ role: index % 2 ? "assistant" as const : "user" as const, content: `m${index}` }));
@@ -45,5 +89,10 @@ describe("chatMessages", () => {
     expect(messages[1]!.content).toBe('Facts: {"facts":true}');
     expect(messages.slice(2, -1).map(message => message.content)).toEqual(history.slice(5).map(message => message.content));
     expect(messages.at(-1)).toEqual({ role: "user", content: "now?" });
+  });
+
+  it("ticket 29: sends images with the new message", () => {
+    const image = { mediaType: "image/png", data: "aGk=" };
+    expect(chatMessages({} as never, [], "what is this?", [image]).at(-1)).toEqual({ role: "user", content: "what is this?", images: [image] });
   });
 });

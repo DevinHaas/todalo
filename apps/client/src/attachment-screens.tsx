@@ -4,6 +4,7 @@ import { attachmentReads, attachments } from "./runtime";
 import { attachmentKeys, attachmentMutations, type AttachmentDto } from "./attachments";
 import { AccountTransportError } from "./errors";
 import { ProjectFiles, TaskAttachments } from "./attachment-views";
+import { PendingAttachments, usePendingChanges } from "./pending-changes";
 
 export function ProjectFilesScreen({ userId, projectId }: { userId: string; projectId: string }) {
   const cache = useQueryClient();
@@ -22,11 +23,13 @@ export function TaskAttachmentsScreen({ userId, taskId }: { userId: string; task
       return saved;
     },
   });
-  return <TaskAttachments
+  // Ticket 29: documents a Coach draft would attach, dashed until accepted.
+  const pending = usePendingChanges().under.get(taskId) ?? [];
+  return <><TaskAttachments
     state={query}
     onRetry={() => void query.refetch()}
     href={attachments.href}
     onSave={attachments.save && (attachment => save.mutate(attachment))}
     saving={{ pending: save.isPending, saved: save.data ?? null, error: save.error?.message ?? null }}
-  />;
+  /><PendingAttachments items={pending} /></>;
 }

@@ -16,6 +16,7 @@ import { Dropdown, type Option } from "./popover";
 import { ComposerChoices } from "./composer";
 import { MilestoneTasks, TaskGoals, TaskTree, subtasksOf } from "./task-tree";
 import { GoalIcon } from "./goal-views";
+import { PendingAttachments, PendingChip, PendingNewTasks, PendingSubtaskRows, pendingRowClass, usePendingChanges } from "./pending-changes";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -95,6 +96,10 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   const dialog = useContext(TaskDialogs);
   const { labels } = useContext(ComposerChoices);
   const subtasks = subtasksOf(task.id, tree);
+  // Ticket 29: a Coach draft's pending change to this task, and what it would add under it.
+  const pending = usePendingChanges();
+  const change = pending.byTask.get(task.id);
+  const under = pending.under.get(task.id) ?? [];
   const open = dialog ? (event: MouseEvent) => {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -105,8 +110,8 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   const labelNames = task.labelIds.map(id => labels?.find(label => label.id === id)?.name).filter(Boolean);
   const editor = dialog?.editor?.(task);
   if (editor && !hidden) return <>{editor}</>;
-  return <>{dialog?.slot(task.id, "above")}<div className={task.parentId ? "task-row child" : "task-row"} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
-    data-depth={depth || undefined} style={depth ? { "--depth": depth } as CSSProperties : undefined}
+  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} ${pendingRowClass(change)}`} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+    data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && change.op !== "remove" && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
@@ -117,6 +122,8 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
       {dialog?.edit && <button type="button" hidden data-edit onClick={() => dialog.edit!(task.id)}>Edit {task.title}</button>}
       <div className="row-meta">
         {date && <span className={isOverdue(task, now) ? "pill due overdue" : isDueToday(task, now) ? "pill due today" : "pill due"}><CalendarDays />{date}</span>}
+        {change && <PendingChip change={change} />}
+        <PendingAttachments items={under} />
         {task.recurrence && <span className="pill" aria-label={repeatLabel(task.recurrence)}><Repeat /></span>}
         {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}><Flag data-priority={task.priority} />P{task.priority}</span>}
         {task.deadline && <span className="pill"><Goal />Deadline {deadlineLabel(task.deadline)}</span>}
@@ -134,6 +141,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
     {actions && <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => actions.remove(task)}><X /></button>}
   </div>
   {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}
+  {!hidden && <PendingSubtaskRows taskId={task.id} depth={depth} />}
   {dialog?.slot(task.id, "below")}</>;
 }
 
@@ -173,6 +181,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
       <h2 className="section-heading">{todayHeading(now)}</h2>
       {todayEvents.map(event => <EventRow key={event.id} event={event} />)}
       {today.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} inToday {...tree(task)} />)}
+      <PendingNewTasks day={dayKey(now)} />
       {today.length === 0 && overdue.length === 0 && todayEvents.length === 0 && <p className="state">Nothing is due today.</p>}
       {composer ?? <span className="composer" aria-disabled="true"><Plus />Add task</span>}
     </section>

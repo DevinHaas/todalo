@@ -336,7 +336,8 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
             {placed.map((block, index) => <div key={block.itemId} data-draft-block={block.op} data-draft-item={block.itemId} role="img"
               aria-label={`Draft: ${block.op === "add" ? "add" : "move"} ${block.title}, ${labels.time(block.start)}–${labels.time(block.end)}`}
               className="timed-block pointer-events-none z-[1] border border-dashed border-primary"
-              style={{ ...spanFor(block.start, block.end), ...tone(block.color), ...sideBySide(layout[events.length + tasks.length + index]!) }}>
+              // Ticket 29: dashed all round in the goal's colour.
+              style={{ ...spanFor(block.start, block.end), ...tone(block.color), ...(block.color && { borderLeft: undefined, borderColor: block.color }), ...sideBySide(layout[events.length + tasks.length + index]!) }}>
               <span className="timed-title">{block.title}</span><span className="timed-range">{labels.time(block.start)}–{labels.time(block.end)}</span>
             </div>)}
             {shown && sameDay(shown.start, day) && <div aria-hidden="true" data-ghost="" className="timed-block pointer-events-none z-[2] border border-dashed border-primary shadow-popover"
@@ -373,8 +374,9 @@ const tone = (color: string | null): CSSProperties => color ? { borderLeft: `3px
 function BlockView({ item, style, draggable, lifted, draft, onOpen, onDrag }: { item: ScheduleItem; style: CSSProperties; draggable: boolean; lifted: boolean; draft?: "move" | "remove"; onOpen: () => void; onDrag: (mode: "move" | "resize", event: ReactPointerEvent) => void }) {
   // Tailwind's button reset outranks the legacy .timed-block layout and fill, so they are restated here.
   return <button type="button" className={cn("timed-block z-[1] flex flex-col justify-start bg-muted text-left", draggable && "touch-none", (lifted || draft === "move") && "opacity-40",
-    draft === "remove" && "border border-dashed border-destructive opacity-60 [&_.timed-title]:line-through")}
-    data-block="task" data-task-id={item.task.id} data-done={item.done || undefined} data-draft={draft} style={{ ...spanFor(item.start, item.end), ...tone(item.color), ...style }}
+    // Ticket 29: a removed block is grey, dashed, hatched and struck through.
+    draft === "remove" && "border border-dashed border-border-strong bg-hatched opacity-60 [&_.timed-title]:line-through")}
+    data-block="task" data-task-id={item.task.id} data-done={item.done || undefined} data-draft={draft} style={{ ...spanFor(item.start, item.end), ...(draft !== "remove" && tone(item.color)), ...style }}
     onClick={(event) => { event.stopPropagation(); onOpen(); }} onPointerDown={draggable ? (event) => onDrag("move", event) : undefined}>
     <span className="timed-title">{item.title}</span><span className="timed-range">{labels.time(item.start)}–{labels.time(item.end)}</span>
     {draggable && <span aria-hidden="true" data-resize="" className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" onPointerDown={(event) => onDrag("resize", event)} />}

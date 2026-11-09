@@ -113,6 +113,6 @@ describe("accepting a drafted milestone", () => {
     const record: DraftRecord = { id: "d1", kind: "plan", period: "2026-02-09", summary: "", createdAt: now, items: [
       { id: "i1", op: "add", taskId: null, title: "Run 5k", startAt: new Date("2026-02-28T23:00:00Z"), endAt: null, goalId: "fit", reason: "", seenUpdatedAt: null, state: "pending", criteria: ["Under 30 minutes"] },
     ] };
-    expect(planAccept(record, undefined, [])).toEqual([{ itemId: "i1", taskId: null, title: "Run 5k", goalId: "fit", dueDate: new Date("2026-02-28T23:00:00Z"), dueDateEnd: null, criteria: ["Under 30 minutes"] }]);
+    expect(planAccept(record, undefined, [])).toEqual([{ itemId: "i1", op: "add", taskId: null, title: "Run 5k", goalId: "fit", dueDate: new Date("2026-02-28T23:00:00Z"), dueDateEnd: null, criteria: ["Under 30 minutes"] }]);
   });
 });

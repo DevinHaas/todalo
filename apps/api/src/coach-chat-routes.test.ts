@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CoachModelError, type CoachConfig, type CoachMessage } from "@todalo/server/coach";
 import type { ChatMessageRecord, CoachChatDto } from "@todalo/server/coach-chat";
+import type { CoachDocumentRecord, CoachDocumentsDto } from "@todalo/server/coach-documents";
 import type { DraftRecord, DraftTask, NewDraft } from "@todalo/server/drafts";
 import { createCoachChatRoutes } from "./coach-chat-routes";
 
@@ -13,7 +14,8 @@ let tasks: (DraftTask & { userId: string })[];
 let stored: (ChatMessageRecord & { userId: string })[];
 let drafts: (NewDraft & { id: string; userId: string })[];
 let calls: { messages: CoachMessage[]; schema?: string }[];
-type Facts = { goals: { ref: string; title: string; target: string; status: string }[]; scheduled: { ref: string; title: string }[]; toPlan: { ref: string; title: string }[]; days: { day: string }[] };
+let documents: (CoachDocumentRecord & { userId: string })[];
+type Facts = { goals: { ref: string; title: string; target: string; status: string }[]; scheduled: { ref: string; title: string }[]; toPlan: { ref: string; title: string }[]; days: { day: string }[]; tasks: { ref: string; title: string }[]; documents: { ref: string; name: string; text?: string; note?: string }[] };
 /** The fake model's reply; it sees the facts it was sent. */
 let reply: (facts: Facts, messages: CoachMessage[]) => string;
 
@@ -30,6 +32,7 @@ beforeEach(() => {
   stored = [];
   drafts = [];
   calls = [];
+  documents = [];
   task("alice", "run-id", { title: "Run" });
   task("alice", "meeting-id", { title: "Meeting", dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") });
   task("bob", "bobs-id", { title: "Bob's task" });
@@ -63,7 +66,10 @@ const app = createCoachChatRoutes({
   statusInputs: async () => ({ links: { projects: [], tasks: [] }, tasks: [], ratings: [], milestones: [], reviewed: false }),
   messages: async (userId, limit) => stored.filter(row => row.userId === userId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).slice(-limit),
   append: async (userId, rows) => { rows.forEach((row, index) => stored.push({ ...row, userId, id: `m${stored.length + index + 1}` })); },
-  clear: async (userId) => { stored = stored.filter(row => row.userId !== userId); },
+  clear: async (userId) => { stored = stored.filter(row => row.userId !== userId); documents = documents.filter(row => row.userId !== userId); },
+  documents: async (userId) => documents.filter(row => row.userId === userId),
+  addDocuments: async (userId, rows) => { rows.forEach(row => documents.push({ ...row, userId, id: `doc${documents.length + 1}`, createdAt: clock })); },
+  deleteDocument: async (userId, id) => { documents = documents.filter(row => !(row.userId === userId && row.id === id)); },
   saveDraft: async (userId, draft) => {
     const id = `d${drafts.length + 1}`;
     drafts.push({ ...draft, id, userId });
@@ -79,6 +85,12 @@ const call = (method: string, path: string, init: { user?: string; cookie?: stri
   if (init.origin) headers.set("origin", init.origin);
   if (init.body !== undefined) headers.set("content-type", "application/json");
   return app.handle(new Request(`http://localhost/api/v1${path}`, { method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) }));
+};
+/** Ticket 29: a multipart upload, as the browser sends it. */
+const upload = (files: File[], user = "alice") => {
+  const body = new FormData();
+  files.forEach(file => body.append("files", file));
+  return app.handle(new Request("http://localhost/api/v1/coach/documents", { method: "POST", headers: { authorization: `Bearer ${user}` }, body }));
 };
 const send = async (message: string, user = "alice") => await (await call("POST", `/coach/chat?timeZone=${zone}`, { user, body: { message } })).json() as CoachChatDto;
 const history = async (user = "alice") => (await (await call("GET", "/coach/chat", { user })).json() as CoachChatDto).messages;
@@ -165,8 +177,76 @@ describe("chatting with the Coach", () => {
 
   it("clears the conversation", async () => {
     await send("Hello");
-    expect(await (await call("DELETE", "/coach/chat", { user: "alice" })).json()).toEqual({ messages: [] });
+    expect(await (await call("DELETE", "/coach/chat", { user: "alice" })).json()).toEqual({ messages: [], documents: [] });
     expect(await history()).toEqual([]);
+  });
+});
+
+describe("documents in the chat (ticket 29)", () => {
+  const notes = () => new File(["Week 1: essay outline\nWeek 2: midterm"], "syllabus.md", { type: "" });
+  const photo = () => new File([new Uint8Array([137, 80, 78, 71])], "board.png", { type: "image/png" });
+
+  it("keeps uploaded documents with the session, reads their text once, and lists them with the chat", async () => {
+    const response = await upload([notes(), photo()]);
+    expect(response.status).toBe(201);
+    expect((await response.json() as CoachDocumentsDto).documents).toEqual([
+      { id: "doc1", name: "syllabus.md", mediaType: "text/markdown", byteSize: 37, kind: "text" },
+      { id: "doc2", name: "board.png", mediaType: "image/png", byteSize: 4, kind: "image" },
+    ]);
+    expect(documents.map(row => row.text)).toEqual(["Week 1: essay outline\nWeek 2: midterm", null]);
+    expect((await (await call("GET", "/coach/chat", { user: "alice" })).json() as CoachChatDto).documents).toHaveLength(2);
+    expect((await (await call("GET", "/coach/chat", { user: "bob" })).json() as CoachChatDto).documents).toEqual([]);
+  });
+
+  it("refuses other kinds, too much and other origins; deleting and clearing remove documents", async () => {
+    const refused = await upload([new File(["MZ"], "tool.exe", { type: "application/octet-stream" })]);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: "INVALID_INPUT", message: expect.stringMatching(/PDF, Word/) });
+    expect((await upload(Array.from({ length: 6 }, notes))).status).toBe(400);
+    const oversized = new Request("http://localhost/api/v1/coach/documents", { method: "POST", headers: { authorization: "Bearer alice", "content-type": "multipart/form-data; boundary=x", "content-length": String(11 * 1024 * 1024) }, body: "x" });
+    expect(await (await app.handle(oversized)).json()).toEqual({ code: "FILES_TOO_LARGE", message: "A paste batch must be at most 10 MB." });
+    const foreign = new Request("http://localhost/api/v1/coach/documents", { method: "POST", headers: { cookie: "session=alice", origin: "https://evil.example" }, body: new FormData() });
+    expect((await app.handle(foreign)).status).toBe(403);
+    await upload([notes(), photo()]);
+    expect(await (await call("DELETE", "/coach/documents/doc1", { user: "alice" })).json()).toEqual({ documents: [expect.objectContaining({ id: "doc2" })] });
+    await call("DELETE", "/coach/documents/doc2", { user: "bob" });
+    expect(documents).toHaveLength(1);
+    await call("DELETE", "/coach/chat", { user: "alice" });
+    expect(documents).toEqual([]);
+  });
+
+  it("gives the model the documents' text, and images only when its provider reads them", async () => {
+    await upload([notes(), photo()]);
+    await send("What is due?");
+    const facts = JSON.parse(calls[0]!.messages[1]!.content.replace(/^Facts: /, "")) as Facts;
+    expect(facts.documents).toEqual([
+      { ref: "d1", name: "syllabus.md", kind: "text", text: "Week 1: essay outline\nWeek 2: midterm" },
+      { ref: "d2", name: "board.png", kind: "image", note: "an image this model cannot see; only its name is known" },
+    ]);
+    expect(calls[0]!.messages.at(-1)!.images).toBeUndefined();
+    providers.set("alice", { provider: "anthropic", model: "m", baseUrl: null, apiKey: "sk-ant" });
+    await send("And this photo?");
+    expect(calls[1]!.messages.at(-1)!.images).toEqual([{ mediaType: "image/png", data: Buffer.from([137, 80, 78, 71]).toString("base64") }]);
+  });
+
+  it("turns a document into tasks, sub-tasks and an attachment as one chat draft, editing nothing", async () => {
+    task("alice", "essay-id", { title: "Essay" });
+    await upload([notes()]);
+    const before = snapshot();
+    reply = (facts) => answer("I drafted the midterm with a review step and attached the syllabus to your essay.", [
+      item("add", { title: "Midterm", day: "2026-02-16" }),
+      item("subtask", { title: "Review notes", parent: "#1" }),
+      item("attach", { document: facts.documents[0]!.ref, parent: ref(facts.toPlan, "Essay") }),
+    ], "From the syllabus.");
+    const result = await send("Turn this syllabus into tasks");
+    expect(result.draft!.items.map(row => [row.op, row.title, row.parentId ?? null, row.parentItemId ?? null, row.documentId ?? null])).toEqual([
+      ["add", "Midterm", null, null, null],
+      ["subtask", "Review notes", null, null, null],
+      ["attach", "syllabus.md", "essay-id", null, "doc1"],
+    ]);
+    // The fake store keeps the parser's index; the real saveDraft turns it into the parent item's ID.
+    expect(drafts[0]!.items[1]!.parentIndex).toBe(0);
+    expect(snapshot()).toBe(before);
   });
 });
 

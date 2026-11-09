@@ -8,11 +8,16 @@
 // Ticket 20: the week draft (weekPlan, parseWeekDraft) shares the day's parser.
 // Ticket 28: visible calendar events are busy time in every draft kind (all-day
 // ones are context only), and tasks that do not fit come back as overflow.
+// Ticket 29: chat drafts also add sub-tasks ("subtask") and attach the chat's
+// documents to tasks ("attach"), under an existing task or a new one of the draft.
 import { z } from "zod";
 import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
 
-export const draftOps = ["add", "move", "remove"] as const;
+/** What a day or week draft (and the model's schedule items) can do. */
+export const scheduleOps = ["add", "move", "remove"] as const;
+/** Ticket 29: plus a new sub-task and an attached document (chat drafts). */
+export const draftOps = [...scheduleOps, "subtask", "attach"] as const;
 export type DraftOp = typeof draftOps[number];
 export type DraftItemState = "pending" | "accepted" | "declined";
 /**
@@ -32,6 +37,11 @@ export interface DraftItemDto {
   id: string; op: DraftOp; taskId: string | null; title: string; start: string; end: string | null; goalId: string | null; reason: string; state: DraftItemState;
   /** Ticket 23: a new milestone (an "add" due on `start`'s day, no end) with its done criteria. */
   criteria?: string[];
+  /**
+   * Ticket 29, "subtask" and "attach": the task they go under, an existing one (`parentId`) or a new task
+   * of this draft (`parentItemId`); "attach" names the chat document (title: its name). `start` means nothing for them.
+   */
+  parentId?: string; parentItemId?: string; documentId?: string;
 }
 /** Ticket 28: a task that did not fit the open time; not placed until the user schedules the overflow. */
 export interface DraftOverflowDto { title: string; minutes: number; reason: string }
@@ -44,11 +54,16 @@ export interface DraftDayDto {
   next?: DraftDto;
 }
 
-export interface DraftItemRecord { id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState; criteria?: string[] | null }
+export interface DraftItemRecord {
+  id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState; criteria?: string[] | null;
+  /** Ticket 29 (see DraftItemDto). */
+  parentId?: string | null; parentItemId?: string | null; documentId?: string | null;
+}
 /** Ticket 28: an overflow task as stored (jsonb, so seenUpdatedAt is ISO); taskId null for a new task. */
 export interface DraftOverflow { taskId: string | null; title: string; minutes: number; goalId: string | null; reason: string; seenUpdatedAt: string | null }
 export interface DraftRecord { id: string; kind: DraftKind; period: string; summary: string; createdAt: Date; items: DraftItemRecord[]; overflow?: DraftOverflow[] | null }
-export type NewDraftItem = Omit<DraftItemRecord, "id" | "state">;
+/** Ticket 29: a new item names a new parent task by its index in the draft's items (saveDraft turns it into parentItemId). */
+export type NewDraftItem = Omit<DraftItemRecord, "id" | "state" | "parentItemId"> & { parentIndex?: number };
 export interface NewDraft { kind: DraftKind; period: string; summary: string; items: NewDraftItem[]; overflow?: DraftOverflow[] }
 
 export const toDraftDto = (draft: DraftRecord): DraftDto => ({
@@ -56,16 +71,19 @@ export const toDraftDto = (draft: DraftRecord): DraftDto => ({
   items: draft.items.map(item => ({
     id: item.id, op: item.op, taskId: item.taskId, title: item.title, start: item.startAt.toISOString(), end: item.endAt?.toISOString() ?? null,
     goalId: item.goalId, reason: item.reason, state: item.state, ...(item.criteria && { criteria: item.criteria }),
+    ...(item.parentId && { parentId: item.parentId }), ...(item.parentItemId && { parentItemId: item.parentItemId }), ...(item.documentId && { documentId: item.documentId }),
   })),
   ...(draft.overflow?.length ? { overflow: draft.overflow.map(({ title, minutes, reason }) => ({ title, minutes, reason })) } : {}),
 });
 
-const opWords: Record<DraftOp, string> = { add: "added", move: "moved", remove: "removed" };
-/** "4 added, 1 moved, 1 removed" over the items still to decide. */
+const opWords: Record<DraftOp, (count: number) => string> = {
+  add: () => "added", move: () => "moved", remove: () => "removed", subtask: count => count === 1 ? "sub-task" : "sub-tasks", attach: () => "attached",
+};
+/** "4 added, 1 moved, 1 removed" (ticket 29: ", 2 sub-tasks, 1 attached") over the items still to decide. */
 export function draftCounts(items: readonly Pick<DraftItemDto, "op" | "state">[]) {
   return draftOps.flatMap(op => {
     const count = items.filter(item => item.op === op && item.state === "pending").length;
-    return count ? [`${count} ${opWords[op]}`] : [];
+    return count ? [`${count} ${opWords[op](count)}`] : [];
   }).join(", ");
 }
 
@@ -123,6 +141,8 @@ export interface DayPlan {
 export const TO_PLAN_LIMIT = 40;
 /** At most this many operations in one draft. */
 export const DRAFT_ITEM_LIMIT = 20;
+/** Ticket 29: a chat draft may also add sub-tasks and attachments (a syllabus turned into tasks). */
+export const CHAT_DRAFT_ITEM_LIMIT = 40;
 const waitingOrder: Waiting[] = ["overdue", "due today", "due this week", "inbox"];
 
 /**
@@ -253,7 +273,7 @@ const draftSchema = (name: string, week: boolean): CoachSchema => ({
         items: {
           type: "object",
           properties: {
-            op: { type: "string", enum: [...draftOps] }, task: { type: "string" }, title: { type: "string" },
+            op: { type: "string", enum: [...scheduleOps] }, task: { type: "string" }, title: { type: "string" },
             ...(week && { day: { type: "string" } }),
             start: { type: "string" }, minutes: { type: "integer" }, goal: { type: "string" }, reason: { type: "string" },
           },
@@ -355,7 +375,7 @@ export const draftCurrent = (draft: Pick<DraftRecord, "kind" | "period">, today:
 
 const reply = z.object({
   summary: z.string(),
-  items: z.array(z.object({ op: z.enum(draftOps), task: z.string(), title: z.string(), day: z.string().optional(), start: z.string(), minutes: z.number().int(), goal: z.string(), reason: z.string() })),
+  items: z.array(z.object({ op: z.enum(scheduleOps), task: z.string(), title: z.string(), day: z.string().optional(), start: z.string(), minutes: z.number().int(), goal: z.string(), reason: z.string() })),
   overflow: z.array(z.object({ task: z.string(), title: z.string(), minutes: z.number().int(), goal: z.string(), reason: z.string() })).default([]),
 });
 const cap = (text: string, length: number) => { const flat = text.replace(/\s+/g, " ").trim(); return flat.length > length ? `${flat.slice(0, length - 1).trimEnd()}…` : flat; };
@@ -507,40 +527,62 @@ export function overflowDraft({ draft, context, zone, now }: { draft: Pick<Draft
 
 // ---- Accepting ----
 
-/** One accepted item's task write: create (taskId null) or set the task's times. */
-export interface AcceptedWrite { itemId: string; taskId: string | null; title: string; goalId: string | null; dueDate: Date; dueDateEnd: Date | null; criteria?: string[] | null }
+/**
+ * One accepted item's write: create (taskId null) or set the task's times.
+ * Ticket 29: "subtask" creates a task under `parentId` (or the task created for
+ * `parentItemId`); "attach" copies `documentId` onto that task.
+ */
+export interface AcceptedWrite {
+  itemId: string; op: DraftOp; taskId: string | null; title: string; goalId: string | null; dueDate: Date; dueDateEnd: Date | null; criteria?: string[] | null;
+  parentId?: string | null; parentItemId?: string | null; documentId?: string | null;
+}
 
 /**
- * What accepting `itemIds` (every pending item when omitted) writes. "missing":
- * an ID that is not a pending item of this draft. "changed": a task was
- * edited, completed or deleted since the Coach drafted, so nothing is written.
+ * What accepting `itemIds` (every pending item when omitted) writes, in the
+ * draft's order (a new task before what goes under it). "missing": an ID that
+ * is not a pending item of this draft. "changed": a task was edited, completed
+ * or deleted since the Coach drafted, so nothing is written. Ticket 29: a
+ * sub-task or attachment brings its pending new parent task along; under an
+ * existing task it only needs that task open (an edit to it does not matter).
  */
 export function planAccept(draft: DraftRecord, itemIds: readonly string[] | undefined, current: readonly DraftTask[]): AcceptedWrite[] | "missing" | "changed" {
   const pending = draft.items.filter(item => item.state === "pending");
   const chosen = itemIds ? [...new Set(itemIds)].map(id => pending.find(item => item.id === id)) : pending;
   if (chosen.some(item => !item)) return "missing";
-  const writes: AcceptedWrite[] = [];
+  const ids = new Set((chosen as DraftItemRecord[]).map(item => item.id));
   for (const item of chosen as DraftItemRecord[]) {
-    if (item.taskId) {
-      const task = current.find(row => row.id === item.taskId);
-      if (!task || task.status === "done" || task.updatedAt.getTime() !== item.seenUpdatedAt?.getTime()) return "changed";
+    const parent = item.parentItemId ? draft.items.find(other => other.id === item.parentItemId) : undefined;
+    if (item.parentItemId && (!parent || parent.state === "declined")) return "missing";
+    if (parent?.state === "pending") ids.add(parent.id);
+  }
+  const open = (id: string) => current.find(row => row.id === id && row.status !== "done");
+  const writes: AcceptedWrite[] = [];
+  for (const item of draft.items.filter(row => ids.has(row.id))) {
+    if (item.taskId && item.op !== "subtask") {
+      const task = open(item.taskId);
+      if (!task || task.updatedAt.getTime() !== item.seenUpdatedAt?.getTime()) return "changed";
     }
-    writes.push({ itemId: item.id, taskId: item.taskId, title: item.title, goalId: item.goalId, dueDate: item.startAt, dueDateEnd: item.endAt, ...(item.criteria && { criteria: item.criteria }) });
+    if (item.parentId && !open(item.parentId)) return "changed";
+    writes.push({
+      itemId: item.id, op: item.op, taskId: item.taskId, title: item.title, goalId: item.goalId, dueDate: item.startAt, dueDateEnd: item.endAt, ...(item.criteria && { criteria: item.criteria }),
+      ...(item.parentId && { parentId: item.parentId }), ...(item.parentItemId && { parentItemId: item.parentItemId }), ...(item.documentId && { documentId: item.documentId }),
+    });
   }
   return writes;
 }
 
-/** Declining: the pending items among `itemIds` (all when omitted); "missing" as in planAccept. */
+/** Declining: the pending items among `itemIds` (all when omitted); "missing" as in planAccept. Ticket 29: a declined new task takes what goes under it along. */
 export function planDecline(draft: DraftRecord, itemIds: readonly string[] | undefined): string[] | "missing" {
   const pending = new Set(draft.items.filter(item => item.state === "pending").map(item => item.id));
   if (!itemIds) return [...pending];
   const ids = [...new Set(itemIds)];
-  return ids.every(id => pending.has(id)) ? ids : "missing";
+  if (!ids.every(id => pending.has(id))) return "missing";
+  return [...ids, ...draft.items.filter(item => item.parentItemId && ids.includes(item.parentItemId) && pending.has(item.id) && !ids.includes(item.id)).map(item => item.id)];
 }
 
 /**
  * POST /coach/drafts/:id/accept and /decline: the items to decide; omitted means all.
  * Ticket 28: `overflow` answers "Schedule them tomorrow?" instead (accept: draft them onto the next day with room; decline: drop them).
  */
-export const draftDecisionInput = z.strictObject({ itemIds: z.array(z.string().min(1).max(100)).min(1).max(DRAFT_ITEM_LIMIT).optional(), overflow: z.literal(true).optional() })
+export const draftDecisionInput = z.strictObject({ itemIds: z.array(z.string().min(1).max(100)).min(1).max(CHAT_DRAFT_ITEM_LIMIT).optional(), overflow: z.literal(true).optional() })
   .refine(input => !(input.itemIds && input.overflow));

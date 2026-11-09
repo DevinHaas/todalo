@@ -3,18 +3,34 @@
 // on the schedule (schedule-views); nothing changes until accepted.
 // Ticket 20: the same panel drafts the week shown beside the week calendar.
 // Ticket 28: tasks that did not fit (overflow) ask "Schedule them tomorrow?".
-import { ArrowRight, Check, Minus, Plus, Sparkles, X } from "lucide-react";
+// Ticket 29: the Coach bar shows it for chat drafts, with sub-tasks and attachments.
+import { useContext } from "react";
+import { ArrowRight, Check, CornerDownRight, Minus, Paperclip, Plus, Sparkles, X } from "lucide-react";
 import { Button, Hint, List, Spinner } from "./ui";
 import { draftCounts, type DraftDto, type DraftItemDto } from "./coach";
 import { dayKey, labels } from "./schedule";
+import { TaskTree } from "./task-tree";
 
-const opIcons = { add: Plus, move: ArrowRight, remove: Minus } as const;
-const opLabels = { add: "Add", move: "Move", remove: "Remove" } as const;
-/** "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule"; ticket 23's milestone: "Milestone, due Mar 1". */
-export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria">, week = false) =>
+export const opIcons = { add: Plus, move: ArrowRight, remove: Minus, subtask: CornerDownRight, attach: Paperclip } as const;
+export const opLabels = { add: "Add", move: "Move", remove: "Remove", subtask: "Add sub-task", attach: "Attach" } as const;
+/**
+ * "10:00–10:45" ("Tue 10:00–10:45" in a week draft); a removed task: "Off the schedule"; ticket 23's milestone: "Milestone, due Mar 1".
+ * Ticket 29: a new task without a time: "Due Mar 3"; a sub-task: "Under Essay"; an attachment: "On Essay" (`parent`: that task's title).
+ */
+export const draftTime = (item: Pick<DraftItemDto, "op" | "start" | "end" | "criteria">, week = false, parent = "a new task") =>
   item.criteria ? `Milestone, due ${labels.monthDay(new Date(item.start))}`
-  : item.op === "remove" || !item.end ? "Off the schedule"
+  : item.op === "subtask" ? `Under ${parent}`
+  : item.op === "attach" ? `On ${parent}`
+  : item.op === "remove" ? "Off the schedule"
+  : !item.end ? `Due ${labels.monthDay(new Date(item.start))}`
     : `${week ? `${labels.weekday(new Date(item.start))} ` : ""}${labels.time(new Date(item.start))}–${labels.time(new Date(item.end))}`;
+
+/** Ticket 29: the title of the task a sub-task or attachment goes under (an existing task, or a new one of the draft). */
+export function useParentTitle(draft: Pick<DraftDto, "items"> | null) {
+  const tasks = useContext(TaskTree);
+  return (item: Pick<DraftItemDto, "parentId" | "parentItemId">) => item.parentId ? tasks?.find(task => task.id === item.parentId)?.title
+    : draft?.items.find(other => other.id === item.parentItemId)?.title;
+}
 
 const scopeCopy = {
   day: { action: "draft-day", draft: "Draft my day with the Coach", drafting: "Drafting your day…" },
@@ -50,6 +66,7 @@ export function overflowQuestion(draft: Pick<DraftDto, "kind" | "overflow">) {
 /** Only rendered with a Coach provider connected: without one the Plan shows no Coach at all. */
 export function DraftPanel({ scope, week, draft, drafting, deciding, message, onDraft, onDecide, onOverflow }: DraftPanelProps) {
   const pending = draft?.items.filter(item => item.state === "pending") ?? [];
+  const parentTitle = useParentTitle(draft);
   const copy = scopeCopy[scope];
   if (!draft || (!pending.length && !draft.overflow)) return <div className="flex flex-col gap-1.5 pb-1" data-coach-draft="">
     <Button type="button" variant="outline" size="sm" className="self-start" disabled={drafting} onClick={onDraft} data-coach-action={copy.action}>
@@ -71,7 +88,7 @@ export function DraftPanel({ scope, week, draft, drafting, deciding, message, on
         <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className={item.op === "remove" ? "text-sm line-through" : "text-sm"}><span className="sr-only">{opLabels[item.op]}: </span>{item.title}</span>
-          <span className="text-xs text-muted-foreground">{draftTime(item, scope === "week" || dayKey(new Date(item.start)) !== dayKey(new Date()))}</span>
+          <span className="text-xs text-muted-foreground">{draftTime(item, scope === "week" || dayKey(new Date(item.start)) !== dayKey(new Date()), parentTitle(item))}</span>
           {item.criteria && <ul aria-label="Done criteria" className="list-disc pl-4 text-xs text-muted-foreground">{item.criteria.map(text => <li key={text}>{text}</li>)}</ul>}
           {item.reason && <span className="text-xs text-muted-foreground">{item.reason}</span>}
         </div>

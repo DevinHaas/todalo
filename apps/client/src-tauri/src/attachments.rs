@@ -100,6 +100,35 @@ fn upload_body(files: &[FileMeta], bytes: &[u8], boundary: &str) -> Result<Vec<u
     Ok(body)
 }
 
+/// A header of the raw upload request, if it is ASCII.
+pub(crate) fn header<'a>(request: &'a Request<'_>, name: &str) -> Option<&'a str> {
+    request
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+}
+
+/// The raw IPC upload (the files' bytes back to back, `x-todalo-files`: ASCII
+/// JSON `[{ name, type, size }]` in body order) as a validated multipart body
+/// with a random boundary. Also the Coach's documents (coach_chat.rs, ticket 29).
+pub(crate) fn multipart(request: &Request<'_>) -> Result<(String, Vec<u8>), &'static str> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err(INVALID);
+    };
+    if bytes.len() > MAX_PASTE_BYTES {
+        return Err(TOO_LARGE);
+    }
+    let files: Vec<FileMeta> = header(request, "x-todalo-files")
+        .and_then(|value| serde_json::from_str(value).ok())
+        .ok_or(INVALID)?;
+    let mut random = [0u8; 16];
+    getrandom::fill(&mut random).map_err(|_| INVALID)?;
+    let boundary: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let boundary = format!("todalo-{boundary}");
+    let body = upload_body(&files, bytes, &boundary)?;
+    Ok((boundary, body))
+}
+
 /// Raw body: the files' bytes back to back. Headers: `x-todalo-project` (ID)
 /// and `x-todalo-files` (ASCII JSON `[{ name, type, size }]` in body order).
 /// Ok(None) means the project is missing or not the signed-in user's.
@@ -108,30 +137,11 @@ pub async fn upload_files(
     state: tauri::State<'_, NativeAuth>,
     request: Request<'_>,
 ) -> Result<Option<Value>, String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err(INVALID.to_owned());
-    };
-    if bytes.len() > MAX_PASTE_BYTES {
-        return Err(TOO_LARGE.to_owned());
-    }
-    let header = |name: &str| {
-        request
-            .headers()
-            .get(name)
-            .and_then(|value| value.to_str().ok())
-    };
-    let project = header("x-todalo-project").unwrap_or_default();
+    let project = header(&request, "x-todalo-project").unwrap_or_default();
     if !valid_id(project) {
         return Ok(None);
     }
-    let files: Vec<FileMeta> = header("x-todalo-files")
-        .and_then(|value| serde_json::from_str(value).ok())
-        .ok_or(INVALID)?;
-    let mut random = [0u8; 16];
-    getrandom::fill(&mut random).map_err(|_| INVALID)?;
-    let boundary: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-    let boundary = format!("todalo-{boundary}");
-    let body = upload_body(&files, bytes, &boundary)?;
+    let (boundary, body) = multipart(&request)?;
     Ok(state
         .upload(
             &format!("/api/v1/projects/{project}/files"),

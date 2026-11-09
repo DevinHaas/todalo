@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { operationId, treeOrder, type TaskDto } from "./tasks";
 import { Failure, listTree, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
+import { PendingNewTasks } from "./pending-changes";
 import { blankDefinition, type FilterDefinition, type FilterFields, type LabelFields, type MetadataDto } from "./metadata";
 import type { ProjectDto } from "./projects";
 import { releaseFocus } from "./software-keyboard";
@@ -178,5 +179,7 @@ export function TaskCollectionView({ kind, state, onRetry, ...slots }: Collectio
     {manage}
     {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
     <CollectionBody tasks={state.data.tasks} {...slots} />
+    {/* Ticket 29: a Coach draft's new tasks land in the Inbox once accepted. */}
+    {kind === "inbox" && !slots.layout && <PendingNewTasks />}
   </div>;
 }

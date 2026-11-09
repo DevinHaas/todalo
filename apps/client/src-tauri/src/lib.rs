@@ -174,6 +174,8 @@ pub fn run() {
             coach_chat::coach_chat,
             coach_chat::send_coach_chat,
             coach_chat::clear_coach_chat,
+            coach_chat::upload_coach_documents,
+            coach_chat::delete_coach_document,
             coach_patterns::coach_patterns,
             coach_patterns::learn_coach_patterns,
             coach_patterns::update_coach_pattern,

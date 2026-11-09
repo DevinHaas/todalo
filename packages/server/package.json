@@ -31,6 +31,8 @@
     "./coach-recommendations": "./src/coach-recommendations.ts",
     "./coach-chat": "./src/coach-chat.ts",
     "./coach-chat-store": "./src/coach-chat-store.ts",
+    "./coach-documents": "./src/coach-documents.ts",
+    "./coach-documents-text": "./src/coach-documents-text.ts",
     "./coach-planning": "./src/coach-planning.ts",
     "./coach-patterns": "./src/coach-patterns.ts",
     "./coach-patterns-store": "./src/coach-patterns-store.ts",
@@ -74,6 +76,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "googleapis": "^173.0.0",
+    "unpdf": "^2.1.0",
     "zod": "^4.4.3"
   }
 }

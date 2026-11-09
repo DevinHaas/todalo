@@ -312,5 +312,37 @@ describe("accepting and declining", () => {
   it("counts what is still to decide", () => {
     expect(draftCounts(draft.items)).toBe("2 added");
     expect(draftCounts([{ op: "add", state: "pending" }, { op: "move", state: "pending" }, { op: "remove", state: "pending" }, { op: "add", state: "pending" }])).toBe("2 added, 1 moved, 1 removed");
+    expect(draftCounts([{ op: "subtask", state: "pending" }, { op: "subtask", state: "pending" }, { op: "attach", state: "pending" }, { op: "subtask", state: "declined" }])).toBe("2 sub-tasks, 1 attached");
+  });
+});
+
+describe("sub-tasks and attachments (ticket 29)", () => {
+  const base = { startAt: now, endAt: null, goalId: null, reason: "", seenUpdatedAt: null, state: "pending" as const };
+  const draft: DraftRecord = {
+    id: "d2", kind: "chat", period: "2026-02-09", summary: "", createdAt: now,
+    items: [
+      { ...base, id: "new", op: "add", taskId: null, title: "Essay", startAt: at("2026-03-01T23:00:00Z") },
+      { ...base, id: "step", op: "subtask", taskId: null, title: "Outline", parentItemId: "new" },
+      { ...base, id: "file", op: "attach", taskId: null, title: "syllabus.pdf", parentId: "run", documentId: "doc" },
+      { ...base, id: "sub", op: "subtask", taskId: null, title: "Warm up", parentId: "run" },
+    ],
+  };
+  const ids = (writes: ReturnType<typeof planAccept>) => Array.isArray(writes) ? writes.map(write => write.itemId) : writes;
+
+  it("accepts a sub-task with its new parent task first, in the draft's order", () => {
+    expect(ids(planAccept(draft, ["step"], [task("run")]))).toEqual(["new", "step"]);
+    expect(planAccept(draft, ["file"], [task("run")])).toEqual([expect.objectContaining({ itemId: "file", op: "attach", parentId: "run", documentId: "doc" })]);
+  });
+
+  it("only needs an existing parent open: an edit to it does not matter, done or deleted does", () => {
+    expect(ids(planAccept(draft, ["sub"], [task("run", { updatedAt: now })]))).toEqual(["sub"]);
+    expect(planAccept(draft, ["sub"], [task("run", { status: "done" })])).toBe("changed");
+    expect(planAccept(draft, ["file"], [])).toBe("changed");
+  });
+
+  it("declining a new task declines what goes under it; its children cannot be accepted after", () => {
+    expect(planDecline(draft, ["new"])).toEqual(["new", "step"]);
+    const declined = { ...draft, items: draft.items.map(item => item.id === "new" ? { ...item, state: "declined" as const } : item) };
+    expect(planAccept(declined, ["step"], [task("run")])).toBe("missing");
   });
 });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-coach-document"
+description = "Enables the delete_coach_document command without any pre-configured scope."
+commands.allow = ["delete_coach_document"]
+
+[[permission]]
+identifier = "deny-delete-coach-document"
+description = "Denies the delete_coach_document command without any pre-configured scope."
+commands.deny = ["delete_coach_document"]

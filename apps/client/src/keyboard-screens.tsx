@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultPreferences, effectiveBindings, KeyboardDispatcher, safePreferences, type KeyboardPreferences } from "@todalo/ramble/keyboard";
 import { coach, coachReads, reads, ritualReads, shortcutReads, shortcuts } from "./runtime";
 import { coachMutations, coachProviderInfo, nextCoachProvider, usableCoachProviders } from "./coach";
-import { openCoachChat } from "./coach-chat-screens";
+import { toggleCoachSidebar } from "./coach-chat-screens";
+import { focusCoachBar } from "./coach-bar";
 import { openPlanning } from "./planning-screens";
 import { useBulkWrites } from "./bulk-screens";
 import { useOrganizationMutations } from "./organization-screens";
@@ -512,7 +513,9 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "coach.overflow-schedule": () => press(document, '[data-coach-draft] [data-draft-action="overflow-schedule"]'),
       "coach.overflow-drop": () => press(document, '[data-coach-draft] [data-draft-action="overflow-drop"]'),
       // Ticket 22: the toolbar's Coach button exists only with a provider connected.
-      "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; openCoachChat(); },
+      "coach.chat": () => { if (!document.querySelector("[data-coach-chat-toggle]")) return false; toggleCoachSidebar(); },
+      "coach.bar": () => { if (!document.querySelector("[data-coach-bar]")) return false; focusCoachBar(); },
+      "coach.attach": () => press(document.querySelector("[data-coach-bar]"), '[data-coach-bar-action="attach"]'),
       "coach.chat-clear": () => press(document.querySelector("[data-coach-chat]"), '[data-coach-chat-action="clear"]'),
       // Ticket 23: the goal page shown, else the season's first primary goal.
       "coach.planning": () => {

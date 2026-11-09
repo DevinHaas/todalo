@@ -228,6 +228,9 @@ const app = createApi(dependencies)
   clear: coachChat.clearChat,
   saveDraft: drafts.saveDraft,
   patterns: coachPatterns.getPatterns,
+  documents: coachChat.getChatDocuments,
+  addDocuments: coachChat.addChatDocuments,
+  deleteDocument: coachChat.deleteChatDocument,
 })).use(createCoachPlanningRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

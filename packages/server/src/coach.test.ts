@@ -33,6 +33,23 @@ describe("chatRequest", () => {
   });
 });
 
+describe("images (ticket 29)", () => {
+  const messages = [{ role: "system" as const, content: "s" }, { role: "user" as const, content: "what is this?", images: [{ mediaType: "image/png", data: "aGk=" }] }];
+  const body = (request: { init: { body: string } }) => JSON.parse(request.init.body);
+  it("puts them in each provider's own content parts, text-only messages unchanged", () => {
+    expect(body(chatRequest(config("openai"), { messages })).messages).toEqual([
+      { role: "system", content: "s" },
+      { role: "user", content: [{ type: "text", text: "what is this?" }, { type: "image_url", image_url: { url: "data:image/png;base64,aGk=" } }] },
+    ]);
+    expect(body(anthropicRequest(config("anthropic"), { messages })).messages).toEqual([
+      { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "aGk=" } }, { type: "text", text: "what is this?" }] },
+    ]);
+    expect(body(chatgptRequest(config("chatgpt"), { messages })).input[0].content).toEqual([
+      { type: "input_text", text: "what is this?" }, { type: "input_image", image_url: "data:image/png;base64,aGk=" },
+    ]);
+  });
+});
+
 describe("anthropicRequest (ticket 17b)", () => {
   const messages = [{ role: "system" as const, content: "Be brief." }, { role: "user" as const, content: "hi" }];
   it.each([

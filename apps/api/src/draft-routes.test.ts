@@ -19,6 +19,8 @@ let advice: Map<string, string>;
 /** Ticket 28: each user's visible calendar events, and who shares event titles. */
 let events: Map<string, BusyEvent[]>;
 let sharing: Set<string>;
+/** Ticket 29: documents copied onto tasks ("doc>task"). */
+let attachments: string[];
 
 const task = (userId: string, id: string, extra: Partial<DraftTask> = {}) =>
   tasks.set(id, { userId, id, title: id, status: "todo", projectId: null, parentId: null, dueDate: null, dueDateEnd: null, updatedAt: v1, goalIds: [], ...extra });
@@ -35,6 +37,7 @@ beforeEach(() => {
   advice = new Map([["alice:fit", "Run in the mornings — your evening runs were moved twice."]]);
   events = new Map();
   sharing = new Set();
+  attachments = [];
   task("alice", "run", { dueDate: new Date("2026-02-05T23:00:00Z"), goalIds: ["fit"] } as Partial<DraftTask>); // overdue
   task("alice", "meeting", { dueDate: new Date("2026-02-09T09:00:00Z"), dueDateEnd: new Date("2026-02-09T10:00:00Z") }); // 10:00-11:00
   task("alice", "admin", { dueDate: new Date("2026-02-09T14:00:00Z") }); // 15:00-15:30
@@ -85,6 +88,10 @@ const app = createDraftRoutes({
   resolve: async (userId, draft, { accepted, declined }) => {
     const stored = drafts.find(row => row.id === draft.id && row.userId === userId)!;
     for (const write of accepted) {
+      // Ticket 29: a sub-task under its parent (existing, or the new task of its parent item); an attachment copied.
+      const parentId = write.parentId ?? (write.parentItemId ? `new-${write.parentItemId}` : null);
+      if (write.op === "subtask") { task(userId, `new-${write.itemId}`, { title: write.title, parentId }); continue; }
+      if (write.op === "attach") { attachments.push(`${write.documentId}>${parentId}`); continue; }
       const id = write.taskId ?? `new-${write.itemId}`;
       if (write.taskId) Object.assign(tasks.get(id)!, { dueDate: write.dueDate, dueDateEnd: write.dueDateEnd, updatedAt: clock });
       else task(userId, id, { title: write.title, dueDate: write.dueDate, dueDateEnd: write.dueDateEnd, updatedAt: clock, goalIds: write.goalId ? [write.goalId] : [] } as Partial<DraftTask>);
@@ -430,6 +437,38 @@ describe("calendar events and overflow (ticket 28)", () => {
     expect((await call("POST", path, { user: "alice", body: { overflow: true, itemIds: [draft!.items[0]!.id] } })).status).toBe(400);
     expect((await call("POST", path, { user: "alice", body: { overflow: true } })).status).toBe(404);
     expect((await call("POST", path, { user: "bob", body: { overflow: true } })).status).toBe(404);
+  });
+});
+
+describe("sub-tasks and attachments (ticket 29)", () => {
+  const base = { taskId: null, startAt: new Date("2026-02-09T08:10:00Z"), endAt: null, goalId: null, reason: "", seenUpdatedAt: null, state: "pending" as const };
+  beforeEach(() => {
+    drafts.push({ id: "c1", userId: "alice", status: "open", kind: "chat", period: "2026-02-09", summary: "", createdAt: clock, items: [
+      { ...base, id: "c1-new", op: "add", title: "Midterm", startAt: new Date("2026-02-15T23:00:00Z") },
+      { ...base, id: "c1-step", op: "subtask", title: "Review notes", parentItemId: "c1-new" },
+      { ...base, id: "c1-sub", op: "subtask", title: "Agenda", parentId: "meeting" },
+      { ...base, id: "c1-file", op: "attach", title: "syllabus.pdf", parentId: "meeting", documentId: "doc1" },
+    ] });
+  });
+  const decide = (accept: boolean, itemIds: string[]) => call("POST", `/coach/drafts/c1/${accept ? "accept" : "decline"}`, { user: "alice", body: { itemIds } });
+
+  it("accepting a sub-task of a new task creates both; one under an existing task and an attachment need only that task open", async () => {
+    expect((await decide(true, ["c1-step"])).status).toBe(200);
+    expect(tasks.get("new-c1-new")).toMatchObject({ title: "Midterm", dueDate: new Date("2026-02-15T23:00:00Z"), dueDateEnd: null });
+    expect(tasks.get("new-c1-step")).toMatchObject({ title: "Review notes", parentId: "new-c1-new" });
+    tasks.get("meeting")!.updatedAt = clock; // edited since: does not matter for what goes under it
+    expect((await decide(true, ["c1-sub", "c1-file"])).status).toBe(200);
+    expect(tasks.get("new-c1-sub")).toMatchObject({ parentId: "meeting" });
+    expect(attachments).toEqual(["doc1>meeting"]);
+    expect(await open()).toEqual([]);
+  });
+
+  it("refuses when the existing parent was completed (412); declining a new task declines its sub-task", async () => {
+    tasks.get("meeting")!.status = "done";
+    expect((await decide(true, ["c1-file"])).status).toBe(412);
+    expect(attachments).toEqual([]);
+    const after = await (await decide(false, ["c1-new"])).json() as DraftDayDto;
+    expect(after.draft!.items.filter(row => row.state === "declined").map(row => row.id)).toEqual(["c1-new", "c1-step"]);
   });
 });
 

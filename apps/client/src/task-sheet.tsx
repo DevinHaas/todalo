@@ -16,6 +16,7 @@ import { copyText, taskPath } from "./links";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { Composer, ComposerChoices, priorityOptions } from "./composer";
 import { ancestorsOf, subtaskRows, subtasksOf, TaskTree } from "./task-tree";
+import { PendingAttachments, usePendingChanges } from "./pending-changes";
 import { GoalPicker, GoalSuggestion, MilestoneToggle, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { moveCriterion, type CriterionDto } from "./goals";
 import { Button, Checkbox, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, cn } from "./ui";
@@ -80,6 +81,8 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   milestone?: MilestoneSlots;
 }) {
   const tree = useContext(TaskTree);
+  // Ticket 29: what a Coach draft would add under this task (sub-tasks in Subtasks, attachments below it).
+  const pendingUnder = usePendingChanges().under.get(task.id) ?? [];
   const { projects } = useContext(ComposerChoices);
   const routed = useInRouterContext();
   const [base, setBase] = useState(task);
@@ -204,6 +207,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
               <button type="button" className="button" data-save disabled={!draft.title.trim()} onClick={() => void save()}>{pending ? "Saving…" : "Save"}</button>
             </div>
             <Subtasks task={task} tree={tree} onComplete={onComplete} onOpen={openOther} onAdd={ancestors.length < MAX_SUBTASK_DEPTH ? onAddSubtask : undefined} />
+            <PendingAttachments items={pendingUnder} className="py-1" />
             {milestone?.milestone && <DoneCriteria slots={milestone} />}
             {comments && <Comments task={task} slots={comments} />}
           </div>
@@ -330,7 +334,8 @@ function Subtasks({ task, tree, onComplete, onOpen, onAdd }: {
   const [hideDone, setHideDone] = useState(false);
   const [adding, setAdding] = useState(false);
   const direct = subtasksOf(task.id, tree);
-  if (!direct.total && !onAdd) return null;
+  const drafted = (usePendingChanges().under.get(task.id) ?? []).filter(item => item.op === "subtask");
+  if (!direct.total && !onAdd && !drafted.length) return null;
   const rows = subtaskRows(task.id, tree, hideDone);
   // Completed direct sub-tasks (with their own children) go below "Add sub-task".
   const split = rows.findIndex(row => row.depth === 0 && row.task.status === "done");
@@ -351,6 +356,9 @@ function Subtasks({ task, tree, onComplete, onOpen, onAdd }: {
     </SectionHeader>
     {open && <div className="sheet-subtasks">
       {before.map(row)}
+      {drafted.map(item => <div key={item.id} className="sheet-subtask rounded-md outline-1 outline-dashed -outline-offset-1 outline-brand" data-pending-task={item.id}>
+        <span className="sheet-subtask-title text-muted-foreground"><span className="sr-only">Coach draft, new sub-task: </span>{item.title}</span>
+      </div>)}
       {onAdd && (adding ? <div className="dialog quick-add inline-quick-add">
         <Composer startOpen quick parentId={task.id} projectId={task.projectId} sectionId={task.sectionId} dueDate={() => null} onCancel={() => setAdding(false)} onCreate={onAdd} />
       </div>

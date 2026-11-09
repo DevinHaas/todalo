@@ -9,6 +9,8 @@ import { coachProviderKinds as serverProviderKinds } from "../../../packages/ser
 import { localZone } from "./seasons";
 import type { DraftDayDto, DraftDto, DraftItemDto, DraftsDto } from "../../../packages/server/src/drafts";
 import type { ChatMessageDto, CoachChatDto } from "../../../packages/server/src/coach-chat";
+import type { CoachDocumentDto, CoachDocumentsDto } from "../../../packages/server/src/coach-documents";
+import { asciiJson } from "./attachments";
 import type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource } from "../../../packages/server/src/coach-planning";
 export type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource };
 import { taskKeys } from "./tasks";
@@ -17,7 +19,7 @@ export type { CoachModelOption, CoachModelsDto };
 /** The model picker's draft credentials: a key or Ollama address typed but not saved yet. */
 export interface CoachModelsDraft { apiKey?: string; baseUrl?: string }
 
-export type { ChatMessageDto, CoachChatDto };
+export type { ChatMessageDto, CoachChatDto, CoachDocumentDto, CoachDocumentsDto };
 export type { CoachRecommendationsDto, RecommendationDto };
 export type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachModelKind, CoachProviderDto, CoachProviderKind, DraftDayDto, DraftDto, DraftItemDto, DraftsDto };
 export { draftCounts } from "../../../packages/server/src/drafts";
@@ -75,6 +77,9 @@ export interface CoachTransport {
   /** The conversation after the reply, with its draft; `message` (nothing stored) when the Coach could not answer. */
   sendChat(timeZone: string, message: string): Promise<CoachChatDto>;
   clearChat(): Promise<CoachChatDto>;
+  /** Ticket 29: documents for the conversation (the task attachment limits); the session's documents after. */
+  uploadDocuments(files: File[]): Promise<CoachDocumentsDto>;
+  removeDocument(id: string): Promise<CoachDocumentsDto>;
   /** Ticket 23: one planning-session turn: the next question, or the plan draft. */
   planning(timeZone: string, input: PlanningInput): Promise<PlanningDto>;
 }
@@ -126,6 +131,20 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     chat: () => request("GET", "/api/v1/coach/chat"),
     sendChat: (timeZone, message) => request<CoachChatDto | null>("POST", `/api/v1/coach/chat?${new URLSearchParams({ timeZone })}`, { message }).then(result => result ?? noChat),
     clearChat: () => request("DELETE", "/api/v1/coach/chat"),
+    async uploadDocuments(files) {
+      // The browser sets the multipart boundary; the API also checks Origin.
+      const body = new FormData();
+      files.forEach(file => body.append("files", file));
+      let response: Response;
+      try { response = await fetcher("/api/v1/coach/documents", { method: "POST", credentials: "same-origin", cache: "no-store", body }); }
+      catch { throw new AccountTransportError("CONNECTION_FAILED"); }
+      if (response.status === 401) throw new AccountTransportError("UNAUTHENTICATED");
+      if (response.status === 413) throw new AccountTransportError("FILES_TOO_LARGE");
+      if (response.status === 400) throw new AccountTransportError("INVALID_INPUT");
+      if (!response.ok) throw new AccountTransportError("SAVE_FAILED");
+      try { return await response.json() as CoachDocumentsDto; } catch { throw new AccountTransportError("INVALID_RESPONSE"); }
+    },
+    removeDocument: async (id) => (await request<CoachDocumentsDto | null>("DELETE", `/api/v1/coach/documents/${encodeURIComponent(id)}`)) ?? { documents: [] },
     planning: (timeZone, input) => request<PlanningDto | null>("POST", `/api/v1/coach/planning?${new URLSearchParams({ timeZone })}`, input).then(result => result ?? noPlanning),
   };
 }
@@ -162,6 +181,16 @@ export function coachTransport(): CoachTransport {
     chat: () => command("coach_chat"),
     sendChat: async (timeZone, message) => (await command<CoachChatDto | null>("send_coach_chat", { timeZone, message })) ?? noChat,
     clearChat: async () => (await command<CoachChatDto | null>("clear_coach_chat")) ?? { messages: [] },
+    // As upload_files: one raw IPC body plus the files' metadata; Rust re-validates the limits.
+    async uploadDocuments(files) {
+      const bytes = new Uint8Array(files.reduce((total, file) => total + file.size, 0));
+      let offset = 0;
+      for (const file of files) { bytes.set(new Uint8Array(await file.arrayBuffer()), offset); offset += file.size; }
+      const metadata = asciiJson(files.map(file => ({ name: file.name, type: file.type, size: file.size })));
+      try { return (await invoke<CoachDocumentsDto | null>("upload_coach_documents", bytes, { headers: { "x-todalo-files": metadata } })) ?? { documents: [] }; }
+      catch (error) { throw nativeAccountError(error); }
+    },
+    removeDocument: async (id) => (await command<CoachDocumentsDto | null>("delete_coach_document", { id })) ?? { documents: [] },
     planning: async (timeZone, { goalId, source, ramble, turns, finish }) => (await command<PlanningDto | null>("coach_planning", { timeZone, goalId, source, ramble, turns, finish: finish ?? false })) ?? noPlanning,
   };
 }

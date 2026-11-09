@@ -47,7 +47,7 @@ export function browserAttachmentTransport(fetcher: typeof fetch = fetch): Attac
 }
 
 /** Header-safe JSON: non-ASCII characters become \u escapes that serde decodes. */
-const asciiJson = (value: unknown) => JSON.stringify(value).replace(/[\u007f-￿]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+export const asciiJson = (value: unknown) => JSON.stringify(value).replace(/[\u007f-￿]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 
 export function attachmentTransport(): AttachmentTransport {
   if (!isTauri()) return browserAttachmentTransport();

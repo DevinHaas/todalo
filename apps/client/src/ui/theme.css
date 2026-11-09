@@ -200,3 +200,8 @@
   --row-tint: color-mix(in oklch, var(--color-foreground) 8%, transparent);
   font-family: var(--font-sans);
 }
+
+/* Goals ticket 29: a Coach draft's removed item (calendar block, list row): hatched until the draft is decided. */
+@utility bg-hatched {
+  background-image: repeating-linear-gradient(135deg, var(--color-border) 0 1px, transparent 1px 7px);
+}
