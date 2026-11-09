@@ -84,6 +84,7 @@ export function LiquidPanel({ params, onChange, onClose }: { params: LiquidParam
     </div>
     <ControlSection>
       <ControlList>
+        <ControlItem><SliderControl name="Speed" value={params.speed} min={0.25} max={4} step={0.05} unit="×" onValueChange={(value) => set("speed", value)} /></ControlItem>
         <ControlItem><ColorControl name="Blob colour" hex={params.blobColor} onValueChange={(value) => set("blobColor", value.hex)} /></ControlItem>
       </ControlList>
     </ControlSection>

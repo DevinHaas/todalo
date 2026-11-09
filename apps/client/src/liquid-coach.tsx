@@ -96,8 +96,10 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
       const boxes = targets();
       sim.setTargets(boxes);
       sim.setOpen(open);
-      sim.step(dt);
-      time += dt * params.wobbleSpeed;
+      // Speed scales simulated time, so everything stays in proportion (the shine keeps real time).
+      const simulated = dt * Math.max(params.speed, 0.05);
+      sim.step(simulated);
+      time += simulated * params.wobbleSpeed;
       lap = (lap + dt / Math.max(params.shineLap, 0.5)) % 1;
       const arrival = sim.arrival();
       renderer.draw(sim.shapes(), params, colors, time, { bar: boxes.bar, shine: params.shine * arrival, phase: lap });
