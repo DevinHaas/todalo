@@ -190,7 +190,7 @@ function Showcase() {
         <TableBody><TableRow><TableCell>Finish Todalo</TableCell><TableCell>Primary</TableCell></TableRow><TableRow><TableCell>Run a half</TableCell><TableCell>Secondary</TableCell></TableRow></TableBody>
       </Table>
       <div className="flex h-40 justify-end rounded-lg border border-border">
-        <RightSidebar title="Plan" actions={<Button variant="ghost" size="sm">Close</Button>}><Hint>The right sidebar: the Plan (with the Check-in), rituals, Coach chat.</Hint></RightSidebar>
+        <RightSidebar className="h-auto" title="Plan" actions={<Button variant="ghost" size="sm">Close</Button>}><Hint>The right sidebar: the Plan (with the Check-in), rituals, Coach chat.</Hint></RightSidebar>
       </div>
     </Group>
   </>;

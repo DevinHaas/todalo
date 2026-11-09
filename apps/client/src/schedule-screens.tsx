@@ -1,7 +1,8 @@
 // Upcoming and Today's calendar layouts (ticket 16). Both read the Today query:
 // it is the full owned-task collection (getTasksForUser), exactly what the legacy
 // Upcoming page loaded, so every task write already refreshes these views.
-import { useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { coach, coachReads, goalReads, metadataReads, projectReads, reads, seasonReads } from "./runtime";
@@ -66,9 +67,16 @@ const OPEN_PLAN = "todalo:plan";
 /** Opens the Plan sidebar on the schedule shown (the Check-in, the Weekly review's planning). */
 export const openPlan = () => window.dispatchEvent(new Event(OPEN_PLAN));
 
-/** The schedule with the right sidebar beside it (ticket 08). */
-const Planner = ({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) =>
-  <div className="flex flex-row items-start gap-4 md:items-stretch"><div className="min-w-0 flex-1">{children}</div>{sidebar}</div>;
+/**
+ * The schedule with the right sidebar (ticket 08). The sidebar is portalled to the
+ * shell's #plan-slot, beside the page column, so it runs the window's full height.
+ */
+function Planner({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  // The shell's slot is in the DOM by the first layout effect (same commit), before paint.
+  useLayoutEffect(() => setSlot(document.getElementById("plan-slot")), []);
+  return <>{children}{slot && sidebar ? createPortal(sidebar, slot) : null}</>;
+}
 
 /**
  * Goals ticket 07 (reworked): a task with a time is a block, in its goal's
@@ -120,7 +128,6 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
     unschedule: (task) => quietly(write(task, unscheduledDetails(task))),
     incoming: drag.over,
     week: (start) => setWeek(dayKey(start)),
-    toolbar: <Button type="button" variant={sidebarOpen ? "secondary" : "outline"} size="sm" aria-pressed={sidebarOpen} data-schedule-action="plan" onClick={() => setSidebarOpen(open => !open)}>Plan</Button>,
   };
   /** Overdue › Reschedule: every row to today at once (optimistic), undone from the toast with each task's own dates. */
   const reschedule = (ids: string[]) => {
@@ -139,6 +146,12 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   const groups = planGroups(tasks, goalList, goalLinks, { projectId, skip: new Set(ritualItems.keys()), tiers }, now);
   // Ticket 31: what Now needs (30 min without an estimate) against the open time left this week.
   const nowLoad = { minutes: groups.now.reduce((sum, { task }) => sum + durationOf(task), 0), free: freeMinutesLeft(tasks, events, addDays(startOfWeek(now, 1), 7), now) };
+  const count = planGroupOrder.reduce((sum, group) => sum + groups[group].length, 0);
+  const shown = sidebarOpen || Boolean(ritual);
+  slots.toolbar = <Button type="button" variant={shown ? "secondary" : "outline"} size="sm" aria-pressed={shown} aria-expanded={shown}
+    aria-label={`Plan, ${count} task${count === 1 ? "" : "s"}`} data-schedule-action="plan" onClick={() => setSidebarOpen(open => !open)}>
+    Plan: {count}<PanelIcon open={shown} />
+  </Button>;
   const rowOf = ({ task, goal }: (typeof groups)["today"][number]): PlanRowData => {
     const subtasks = subtasksOf(task.id, tasks);
     return {
@@ -177,6 +190,11 @@ function usePlanner(userId: string, tasks: TaskDto[], writes: ReturnType<typeof 
   </div>}</>;
   return { slots, overlay, sidebar: sidebar || null };
 }
+
+/** lucide PanelRight; open, its right pane is filled. */
+const PanelIcon = ({ open }: { open: boolean }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" />{open && <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4z" fill="currentColor" />}
+</svg>;
 
 /**
  * Goals ticket 19: the Coach's open draft of today, for the Plan sidebar and

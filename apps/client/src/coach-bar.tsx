@@ -146,7 +146,7 @@ function Bar({ userId }: { userId: string }) {
   const files = (list: FileList | null | undefined) => [...list ?? []];
 
   // Centred over the main column: a right sidebar inside the page (Plan, rituals; gap-4 beside it) is left out.
-  return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:in-[.content:has([data-ritual-panel])]:pr-[calc(var(--spacing-sidebar)+1rem)] md:in-[.content:has([data-plan],[data-coach-chat])]:pr-[calc(var(--spacing-plan)+1rem)]" data-coach-bar="">
+  return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]" data-coach-bar="">
     <div className="pointer-events-auto relative flex w-full max-w-(--spacing-page) flex-col">
       {/* The reply, review and pill float above the composer, so they never take height from the page (the calendar). */}
       <div className="absolute inset-x-0 bottom-full flex flex-col gap-2 pb-2 empty:hidden">

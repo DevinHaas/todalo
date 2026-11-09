@@ -345,7 +345,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
 type Range = { start: Date; end: Date };
 /** The Plan sidebar's column under the pointer (anywhere below its top, however short its list). */
 const sidebarAt = (x: number, y: number) => {
-  const sidebar = document.querySelector<HTMLElement>("main [data-plan]");
+  const sidebar = document.querySelector<HTMLElement>("[data-plan]");
   const rect = sidebar?.getBoundingClientRect();
   return rect && x >= rect.left && x <= rect.right && y >= rect.top ? sidebar! : null;
 };

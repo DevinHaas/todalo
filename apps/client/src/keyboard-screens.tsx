@@ -45,9 +45,9 @@ export function useCommandBindings(userId: string, id: string) {
 
 // Task rows are found in the page (legacy data-task-id), so every list view
 // (Today, Upcoming, projects, labels, filters, search, board) shares one handler.
-const ROWS = "main [data-task-id], main button.composer";
-const visibleTasks = () => [...document.querySelectorAll<HTMLElement>("main [data-task-id]")].filter(row => row.querySelector(TITLE) && row.getClientRects().length);
-const activeRow = () => document.activeElement?.closest<HTMLElement>("main [data-task-id]") ?? null;
+const ROWS = ":is(main, [data-plan]) [data-task-id], main button.composer";
+const visibleTasks = () => [...document.querySelectorAll<HTMLElement>(":is(main, [data-plan]) [data-task-id]")].filter(row => row.querySelector(TITLE) && row.getClientRects().length);
+const activeRow = () => document.activeElement?.closest<HTMLElement>(":is(main, [data-plan]) [data-task-id]") ?? null;
 // j/k also land on each list's Add task row (legacy tab order), where Enter opens the composer.
 const navigable = () => [...document.querySelectorAll<HTMLElement>(ROWS)].filter(row => row.getClientRects().length && (row.matches("button") || row.querySelector(TITLE)));
 function moveRow(step: number) {
@@ -168,7 +168,7 @@ function refocus(row: HTMLElement, index: number) {
 const bulkButton = (name: string) => document.querySelector<HTMLButtonElement>(`main [role="toolbar"] [data-bulk="${name}"]:not(:disabled)`);
 /** Legacy targets: the selected tasks, else the focused row. */
 const targetIds = () => {
-  const selected = [...document.querySelectorAll<HTMLElement>("main [data-task-id][data-selected]")];
+  const selected = [...document.querySelectorAll<HTMLElement>(":is(main, [data-plan]) [data-task-id][data-selected]")];
   return (selected.length ? selected : [activeRow()].filter((row): row is HTMLElement => Boolean(row))).map(row => row.dataset.taskId!);
 };
 /**
@@ -233,7 +233,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
   // A `#task-<id>` link (shared, or Shift+G) scrolls to and focuses that row once the list renders.
   useEffect(() => {
     if (!hash.startsWith("#task-")) return;
-    const selector = `main [data-task-id="${CSS.escape(hash.slice(6))}"]:not([hidden]) :is(${TITLE})`;
+    const selector = `:is(main, [data-plan]) [data-task-id="${CSS.escape(hash.slice(6))}"]:not([hidden]) :is(${TITLE})`;
     let live = true;
     void waitFor(() => live ? document.querySelector<HTMLElement>(selector) : null, 10_000).then(title => {
       if (!live || !title) return;
@@ -301,7 +301,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     const editAdjacent = (step: number) => press(editorForm(), `[data-navigate="${step}"]`);
     /** Hiding a focused sub-task moves focus to its parent row. */
     const keepFocus = (row: HTMLElement | null) => requestAnimationFrame(() => {
-      if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
+      if (row?.hidden && row.dataset.parentId) document.querySelector<HTMLElement>(`:is(main, [data-plan]) [data-task-id="${CSS.escape(row.dataset.parentId)}"] :is(${TITLE})`)?.focus();
     });
     // Rituals read from the cache; before it has loaded (e.g. goals hidden in the sidebar), fetch it first.
     const withRituals = (run: (state: RitualsDto) => unknown) => {
@@ -323,7 +323,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       "general.command-palette": () => setPalette({
         opener: document.activeElement instanceof HTMLElement ? document.activeElement : null,
         commands: paletteCommands(handlers.current, {
-          global: true, view: true, task: Boolean(activeRow() ?? document.querySelector("main [data-task-id][data-selected]")),
+          global: true, view: true, task: Boolean(activeRow() ?? document.querySelector(":is(main, [data-plan]) [data-task-id][data-selected]")),
           editor: Boolean(editorForm()), "quick-add": Boolean(inComposerTitle()), project: Boolean(document.querySelector("main [data-project-action]")),
           upcoming: Boolean(document.querySelector("main .upcoming")), calendar: Boolean(document.querySelector("main .calendar")),
         }),

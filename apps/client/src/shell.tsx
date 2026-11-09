@@ -79,7 +79,7 @@ function InsertComposer({ edge, task, onCreate, onClose }: { edge: "above" | "be
 function focusRow(id: string, fallback: HTMLElement | null) {
   requestAnimationFrame(() => {
     if (document.activeElement && document.activeElement !== document.body) return;
-    (document.querySelector<HTMLElement>(`main [data-task-id="${CSS.escape(id)}"] .task-title`) ?? (fallback?.isConnected ? fallback : null))?.focus();
+    (document.querySelector<HTMLElement>(`:is(main, [data-plan]) [data-task-id="${CSS.escape(id)}"] .task-title`) ?? (fallback?.isConnected ? fallback : null))?.focus();
   });
 }
 
@@ -205,6 +205,8 @@ export function Shell({ account }: { account: Account }) {
       {/* Ticket 29: the Coach bar floats at the bottom of every main view. */}
       <Content><TaskDialogHost account={account}><Outlet /><CoachBar userId={account.user.id} /></TaskDialogHost></Content>
     </div>
+    {/* The Plan sidebar (schedule-screens Planner) portals here: full height, beside the page column. */}
+    <div id="plan-slot" className="contents" />
     <RitualHost userId={account.user.id} />
     <CoachChatHost userId={account.user.id} />
     <PlanningHost userId={account.user.id} />
