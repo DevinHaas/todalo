@@ -147,7 +147,9 @@ function Bar({ userId }: { userId: string }) {
 
   // Centred over the main column: a right sidebar inside the page (Plan, rituals; gap-4 beside it) is left out.
   return <div className="ui pointer-events-none sticky bottom-0 z-[25] flex justify-center pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:in-[.content:has([data-ritual-panel])]:pr-[calc(var(--spacing-sidebar)+1rem)] md:in-[.content:has([data-plan],[data-coach-chat])]:pr-[calc(var(--spacing-plan)+1rem)]" data-coach-bar="">
-    <div className="pointer-events-auto flex w-full max-w-(--spacing-page) flex-col gap-2">
+    <div className="pointer-events-auto relative flex w-full max-w-(--spacing-page) flex-col">
+      {/* The reply, review and pill float above the composer, so they never take height from the page (the calendar). */}
+      <div className="absolute inset-x-0 bottom-full flex flex-col gap-2 pb-2 empty:hidden">
       {replyOpen && (send.isPending || reply) && <section aria-label="Coach reply" aria-live="polite" data-coach-reply=""
         className="flex items-start gap-2.5 rounded-xl border border-border bg-background p-3 shadow-popover">
         <Sparkles aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-brand" />
@@ -176,6 +178,7 @@ function Bar({ userId }: { userId: string }) {
             onClick={() => onDecide(true)} data-draft-action="accept-all">{decide.isPending ? <Spinner /> : <Check />}</Button>
         </>}
       </div>}
+      </div>
       <form aria-label="Talk to the Coach" data-coach-bar-composer="" data-dragging={dragging || undefined}
         className={cn("flex flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 shadow-popover", dragging && "border-dashed border-brand")}
         onSubmit={(event) => { event.preventDefault(); submit(); }}

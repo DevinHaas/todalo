@@ -379,7 +379,21 @@ input.switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--row-tint
 .calendar-link { display: grid; justify-items: start; gap: .25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 /* The schedule's sticky header (z 20) must stay under the mobile sidebar and its backdrop. */
 .inset { isolation: isolate; }
-.schedule { position: relative; overflow-y: auto; }
+.schedule { position: relative; overflow-x: hidden; overflow-y: auto; height: max(18.75rem, 100svh - 10rem); }
+/* One screen (calendar layouts, md and up): the page never scrolls. The shell is the
+   viewport's height and every box from .content down to the hour grid or month grid
+   is a flex column that may shrink (min-height: 0); the grid alone scrolls (the
+   month grid's weeks share the height instead, a full day clips). The Planner row
+   restates flex-row and stretches the Plan beside it (schedule-screens.tsx). */
+@media (min-width: 768px) {
+  .app-shell:has(.content[data-layout="calendar"] :is(.schedule, .month-grid)) { height: 100svh; overflow: hidden; }
+  .inset:has(.content[data-layout="calendar"] :is(.schedule, .month-grid)) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .content[data-layout="calendar"]:has(:is(.schedule, .month-grid)),
+  .content[data-layout="calendar"] :has(:is(.schedule, .month-grid)) { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+  .content[data-layout="calendar"] .schedule { flex: 1 1 0; height: auto; min-height: 0; }
+  .content[data-layout="calendar"] .month-grid { flex: 1 1 0; min-height: 0; grid-template-rows: auto; grid-auto-rows: minmax(0, 1fr); }
+  .content[data-layout="calendar"] .month-day { min-height: 0; overflow: hidden; }
+}
 .schedule-head { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--border); background: var(--background); }
 .week-days { display: grid; padding-top: .5rem; text-align: center; color: var(--muted-foreground); }
 .week-days > div + div, .all-day:not(.single) > .all-day-cell { border-left: 1px solid var(--border); }
@@ -390,11 +404,11 @@ input.switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--row-tint
 .all-day-label { padding-top: .125rem; font-size: .75rem; color: var(--muted-foreground); }
 .all-day-cell { display: grid; align-content: start; gap: .125rem; min-width: 0; padding: 0 .25rem; }
 .all-day.single .all-day-cell { flex: 1; padding: 0; }
-.all-day-row { display: flex; align-items: center; gap: .375rem; padding: .125rem .375rem; border-radius: .25rem; background: color-mix(in oklch, var(--accent) 50%, transparent); }
+.all-day-row { min-width: 0; display: flex; align-items: center; gap: .375rem; padding: .125rem .375rem; border-radius: .25rem; background: color-mix(in oklch, var(--accent) 50%, transparent); }
 .all-day-row .round-check { position: relative; width: .875rem; height: .875rem; flex-shrink: 0; padding: 0; border: 1px solid var(--input); border-radius: 999px; background: var(--background); cursor: pointer; }
 .all-day-row .round-check[aria-checked="true"] { background: var(--primary); border-color: var(--primary); }
 .all-day-row .round-check::after { content: ""; position: absolute; inset: -8px; }
-.all-day-title { flex: 1; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: .75rem; font-weight: 500; text-align: left; cursor: pointer; }
+.all-day-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: .75rem; font-weight: 500; text-align: left; cursor: pointer; }
 .all-day-title.done { color: var(--muted-foreground); text-decoration: line-through; }
 .all-day-row .row-delete { width: 1.25rem; height: 1.25rem; }
 .all-day-row:hover .row-delete, .all-day-row:focus-within .row-delete { opacity: 1; }

@@ -231,7 +231,7 @@ export function PlanSidebar({ groups, projects, projectId, onProject, slots, rit
   const toggle = <T,>(set: (update: (all: ReadonlySet<T>) => ReadonlySet<T>) => void, value: T) => set(current => { const next = new Set(current); if (!next.delete(value)) next.add(value); return next; });
   const projectItems = [{ value: ALL, label: "All projects" }, { value: INBOX, label: "Inbox" }, ...projects.map(project => ({ value: project.id, label: project.name }))];
   const close = ritual ? ritual.onClose : slots.onClose;
-  return <RightSidebar className="ui w-plan! pr-3 data-[drop-target]:bg-selected [&>*]:shrink-0 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label={ritual ? "Check-in" : "Plan"} data-plan=""
+  return <RightSidebar className="ui w-plan! pr-3 scrollbar-subtle md:self-stretch data-[drop-target]:bg-selected [&>*]:shrink-0 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label={ritual ? "Check-in" : "Plan"} data-plan=""
     data-ritual-panel={ritual ? "checkIn" : undefined}
     title={ritual ? "Check-in" : <>Plan <span className="font-normal text-muted-foreground">{all.length}</span></>}
     actions={<>

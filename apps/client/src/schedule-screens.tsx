@@ -68,7 +68,7 @@ export const openPlan = () => window.dispatchEvent(new Event(OPEN_PLAN));
 
 /** The schedule with the right sidebar beside it (ticket 08). */
 const Planner = ({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) =>
-  <div className="flex items-start gap-4"><div className="min-w-0 flex-1">{children}</div>{sidebar}</div>;
+  <div className="flex flex-row items-start gap-4 md:items-stretch"><div className="min-w-0 flex-1">{children}</div>{sidebar}</div>;
 
 /**
  * Goals ticket 07 (reworked): a task with a time is a block, in its goal's

@@ -2,7 +2,7 @@
 // UpcomingListView, CalendarView, WeekScheduleView, TodayScheduleView and
 // ScheduleGrid. Pure views (no runtime imports): screens pass rows, composers
 // and handlers. Provider events (ticket 20) render first in each day, as legacy.
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, LayoutGrid, List, X } from "lucide-react";
 import { isDueToday, isOverdue, type TaskDto } from "./tasks";
 import {
@@ -198,7 +198,7 @@ function AllDayRow({ task, slots }: { task: TaskDto; slots: ScheduleSlots }) {
   const done = task.status === "done";
   return <div className="all-day-row" data-task-id={task.id}>
     <button type="button" role="checkbox" aria-checked={done} aria-label={`Complete ${task.title}`} className="round-check" onClick={() => slots.complete(task)} />
-    <button type="button" className={done ? "all-day-title done" : "all-day-title"} onClick={() => slots.open(task)}>{task.title}</button>
+    <button type="button" className={done ? "all-day-title done" : "all-day-title"} title={task.title} onClick={() => slots.open(task)}>{task.title}</button>
     <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => slots.remove(task)}><X /></button>
   </div>;
 }
@@ -219,23 +219,12 @@ const gridTemplate = (days: Date[]) => `3rem repeat(${days.length}, minmax(0, 1f
 function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[]; byDay: Map<string, TaskDto[]>; eventDays: Map<string, CalendarEventDto[]>; slots: ScheduleSlots; header: ReactNode }) {
   const scroll = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(600);
   const template = gridTemplate(days);
-  // Fill the viewport below the grid (legacy), at least 300px.
-  useLayoutEffect(() => {
-    const update = () => { if (scroll.current) setHeight(Math.max(window.innerHeight - scroll.current.getBoundingClientRect().top - 24, 300)); };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  // Centre on now once, after the first measured height.
-  const centred = useRef(false);
+  // Centre on now once. The grid's height is CSS: it fills the screen below the page (styles.css, "One screen").
   useEffect(() => {
     const container = scroll.current;
-    if (!container || centred.current) return;
-    centred.current = true;
-    container.scrollTop = Math.max(offsetFor(new Date()) - (container.clientHeight - (head.current?.offsetHeight ?? 0)) / 2, 0);
-  }, [height]);
+    if (container) container.scrollTop = Math.max(offsetFor(new Date()) - (container.clientHeight - (head.current?.offsetHeight ?? 0)) / 2, 0);
+  }, []);
   const planner = slots.planner;
   const columns = useRef<HTMLDivElement>(null);
   // Ranges kept after a drop until the write settles (task writes are not optimistic).
@@ -315,7 +304,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
 
   return <>
     {planner?.toolbar && <div className="ui flex items-start justify-end gap-2 pb-2">{planner.toolbar}</div>}
-    <div ref={scroll} className="schedule" style={{ height }}>
+    <div ref={scroll} className="schedule scrollbar-subtle">
     <div ref={head} className="schedule-head">{header}</div>
     <div className="schedule-body" style={{ height: 24 * HOUR_HEIGHT }}>
       {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="hour-line" style={{ top: hour * HOUR_HEIGHT, gridTemplateColumns: template }}>
