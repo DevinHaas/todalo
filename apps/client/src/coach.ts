@@ -1,7 +1,9 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import type { CoachRecommendationsDto, RecommendationDto } from "../../../packages/server/src/coach-recommendations";
-import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachExplanationsDto, CoachModelKind, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
+import type { ChatgptCompleteDto, ChatgptDto, ChatgptStartDto, CoachDto, CoachErrorDto, CoachExplanationsDto, CoachModelKind, CoachProviderDto, CoachProviderKind } from "../../../packages/server/src/coach";
+import { noticeCoachState, reportCoachError } from "./coach-errors";
+export type { CoachErrorDto };
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { coachProviderKinds as serverProviderKinds } from "../../../packages/server/src/coach";
 import { localZone } from "./seasons";
@@ -10,6 +12,10 @@ import type { ChatMessageDto, CoachChatDto } from "../../../packages/server/src/
 import type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource } from "../../../packages/server/src/coach-planning";
 export type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource };
 import { taskKeys } from "./tasks";
+import type { CoachModelOption, CoachModelsDto } from "../../../packages/server/src/coach-models";
+export type { CoachModelOption, CoachModelsDto };
+/** The model picker's draft credentials: a key or Ollama address typed but not saved yet. */
+export interface CoachModelsDraft { apiKey?: string; baseUrl?: string }
 
 export type { ChatMessageDto, CoachChatDto };
 export type { CoachRecommendationsDto, RecommendationDto };
@@ -18,7 +24,7 @@ export { draftCounts } from "../../../packages/server/src/drafts";
 export { coachProviderInfo, coachProviderKinds, nextCoachProvider, ollamaDefaultUrl, ollamaUrl } from "../../../packages/server/src/coach";
 /** What Connect sends; an omitted apiKey keeps the saved key for the same provider. */
 export interface CoachProviderInput { provider: CoachProviderKind; model: string; baseUrl?: string; apiKey?: string }
-export interface CoachTestResult { ok: boolean; message?: string }
+export interface CoachTestResult { ok: boolean; message?: string; /** Ticket 17d. */ error?: CoachErrorDto }
 const noDraft: DraftDayDto = { draft: null, message: "Connect an AI provider first in Settings › Coach." };
 const noChat: CoachChatDto = { messages: [], draft: null, message: noDraft.message };
 const noPlanning: PlanningDto = { question: null, draft: null, message: "Connect an AI provider first in Settings › Coach, or open a goal that is still there." };
@@ -33,6 +39,8 @@ export interface CoachTransport {
   disconnect(provider?: CoachProviderKind): Promise<CoachDto>;
   /** The active provider, or the named one (its card). */
   test(provider?: CoachModelKind): Promise<CoachTestResult>;
+  /** The provider's models for the picker (its saved credentials, or the typed draft); the curated list when it cannot be asked. */
+  models(provider: CoachModelKind, draft: CoachModelsDraft): Promise<CoachModelsDto>;
   /** Ticket 17c: the provider the Coach uses (a configured one). */
   setActive(provider: CoachModelKind): Promise<CoachDto>;
   explanations(timeZone: string): Promise<CoachExplanationsDto>;
@@ -93,6 +101,7 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     save: (input) => request("PUT", "/api/v1/coach/provider", input),
     disconnect: (provider) => request("DELETE", `/api/v1/coach/provider${named(provider)}`),
     test: (provider) => request<CoachTestResult | null>("POST", `/api/v1/coach/provider/test${named(provider)}`).then(result => result ?? notConnected),
+    models: (provider, draft) => request("POST", `/api/v1/coach/models${named(provider)}`, draft),
     setActive: (provider) => request("PUT", "/api/v1/coach/active", { provider }),
     explanations: (timeZone) => request("GET", `/api/v1/coach/explanations?${new URLSearchParams({ timeZone })}`),
     startChatgpt: () => request("POST", "/api/v1/coach/chatgpt/start"),
@@ -129,6 +138,7 @@ export function coachTransport(): CoachTransport {
     save: (provider) => command("save_coach_provider", { provider }),
     disconnect: (provider) => command("disconnect_coach", { provider: provider ?? null }),
     test: async (provider) => (await command<CoachTestResult | null>("test_coach", { provider: provider ?? null })) ?? notConnected,
+    models: (provider, { apiKey, baseUrl }) => command("coach_models", { provider, apiKey: apiKey ?? null, baseUrl: baseUrl ?? null }),
     setActive: async (provider) => (await command<CoachDto | null>("set_coach_active", { provider })) ?? command("coach"),
     explanations: (timeZone) => command("coach_explanations", { timeZone }),
     startChatgpt: () => command("start_chatgpt_sign_in"),
@@ -173,13 +183,16 @@ export const coachKeys = {
   chat: (userId: string) => ["user", userId, "coach", "chat"] as const,
 };
 
+/** Ticket 17d: a background read toasts only a failure the user must fix (coach-errors.ts). */
+export const coachBackground = <T extends { error?: CoachErrorDto },>(result: T) => { reportCoachError(result.error, { background: true }); return result; };
+
 export function coachQueries(transport: CoachTransport) {
   return {
-    provider: (userId: string) => queryOptions({ queryKey: coachKeys.provider(userId), queryFn: () => transport.get() }),
+    provider: (userId: string) => queryOptions({ queryKey: coachKeys.provider(userId), queryFn: () => transport.get().then(state => { noticeCoachState(state); return state; }) }),
     // A model call per goal at most once a day (the server caches), so a failure is not retried in a loop.
-    explanations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.explanations(userId, stamp), queryFn: () => transport.explanations(localZone()), retry: false, staleTime: 5 * 60_000 }),
+    explanations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.explanations(userId, stamp), queryFn: () => transport.explanations(localZone()).then(coachBackground), retry: false, staleTime: 5 * 60_000 }),
     drafts: (userId: string) => queryOptions({ queryKey: coachKeys.drafts(userId), queryFn: () => transport.drafts(localZone()) }),
-    recommendations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.recommendations(userId, stamp), queryFn: () => transport.recommendations(localZone()), retry: false, staleTime: 5 * 60_000 }),
+    recommendations: (userId: string, stamp: string) => queryOptions({ queryKey: coachKeys.recommendations(userId, stamp), queryFn: () => transport.recommendations(localZone()).then(coachBackground), retry: false, staleTime: 5 * 60_000 }),
     chat: (userId: string) => queryOptions({ queryKey: coachKeys.chat(userId), queryFn: () => transport.chat() }),
   };
 }

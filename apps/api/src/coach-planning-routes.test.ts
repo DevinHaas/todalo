@@ -48,7 +48,7 @@ const app = createCoachPlanningRoutes({
   model: (config) => ({
     complete: async ({ messages, schema }) => {
       calls.push({ messages, schema: schema?.name });
-      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.");
+      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.", "overloaded");
       return replies[schema!.name]!();
     },
   }),
@@ -153,9 +153,9 @@ describe("a planning session", () => {
 
   it("says why when the model fails, and asks for the key again when it no longer decrypts", async () => {
     providers.set("alice", { provider: "openrouter", model: "broken", baseUrl: null, apiKey: "sk-or-test" });
-    expect(await turn(input())).toEqual({ question: null, draft: null, message: "The provider is unavailable. Try again later." });
+    expect(await turn(input())).toEqual({ question: null, draft: null, message: "The provider is unavailable. Try again later.", error: { code: "overloaded", provider: "openrouter", retryable: true, message: "The provider is unavailable. Try again later." } });
     providers.set("alice", { provider: "openrouter", model: "m", baseUrl: null, apiKey: null });
-    expect((await turn(input())).message).toContain("API key");
+    expect(await turn(input())).toMatchObject({ message: expect.stringContaining("API key"), error: { code: "bad_key", provider: "openrouter", retryable: false } });
     expect(calls).toHaveLength(1);
   });
 });

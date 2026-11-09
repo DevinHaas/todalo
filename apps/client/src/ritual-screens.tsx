@@ -18,6 +18,7 @@ import { LoadFailure, Loading } from "./goal-views";
 import { Button, Hint } from "./ui";
 import { openPlanning } from "./planning-screens";
 import { patternMutations } from "./patterns";
+import { reportCoachError } from "./coach-errors";
 
 // Goals ticket 11: ritual settings, the sidebar entry and the step runner in the right sidebar.
 
@@ -224,7 +225,7 @@ export function RitualHost({ userId }: { userId: string }) {
     const recorded = record.mutateAsync({ kind: "weeklyReview", period, ...run });
     close();
     // Goals ticket 24: a finished Weekly review is when the Coach learns patterns (one model call; Settings › Coach shows them).
-    if (connected && run.status === "completed") void recorded.then(() => patternMutations(cache, userId).learn()).catch(() => undefined);
+    if (connected && run.status === "completed") void recorded.then(() => patternMutations(cache, userId).learn()).then(result => { reportCoachError(result.error, { background: true }); }).catch(() => undefined);
   };
   return <RitualPanel key={period} copy={weeklyReviewCopy(period)} goals={goals} status={status} pending={record.isPending} initial={weekly.data?.ratings} voice={voice}
     summary={goalId => {

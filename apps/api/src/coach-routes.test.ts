@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CoachModelError, type CoachConfig, type CoachMessage, type CoachModelKind, type ConfiguredProvider } from "@todalo/server/coach";
+import { chatgptDefaultModel, CoachModelError, type CoachConfig, type CoachMessage, type CoachModelKind, type ConfiguredProvider } from "@todalo/server/coach";
 import { CoachSecretError } from "@todalo/server/coach-secret";
 import { createChatgptAuth, type ChatgptClient, type ChatgptTokens } from "@todalo/server/coach-chatgpt";
 import { fakeOpenaiAuth } from "../../../packages/server/src/coach-chatgpt.fake";
 import type { StatusInputs } from "@todalo/server/goal-status";
 import type { TaskMove } from "@todalo/server/coach-recommendations";
 import type { SeasonGoalRecord } from "@todalo/server/season-dto";
+import type { CoachModelsDto } from "@todalo/server/coach-models";
 import { createCoachRoutes, type CoachStore } from "./coach-routes";
 
 type Saved = CoachConfig & { keyLast4: string | null; configuredAt: Date };
@@ -88,7 +89,7 @@ const store: CoachStore = {
   },
   saveChatgpt: async (userId, saved) => {
     if (!secretReady) throw new CoachSecretError("missing");
-    chatgptRows.set(userId, { model: chatgptRows.get(userId)?.model ?? "gpt-5.5", tokens: saved, at: new Date(++tick) });
+    chatgptRows.set(userId, { model: chatgptRows.get(userId)?.model ?? chatgptDefaultModel, tokens: saved, at: new Date(++tick) });
   },
   setChatgptModel: async (userId, model) => { chatgptRows.set(userId, { ...chatgptRows.get(userId)!, model }); },
   removeChatgpt: async (userId) => { chatgptRows.delete(userId); },
@@ -104,7 +105,7 @@ const store: CoachStore = {
   model: (config) => ({
     complete: async ({ messages, schema }) => {
       calls.push({ config, messages, schema: schema?.name });
-      if (config.model === "broken") throw new CoachModelError("The provider rejected the API key.");
+      if (config.model === "broken") throw new CoachModelError("The provider rejected the API key.", "bad_key");
       if (schema?.name === "ping") return config.model === "no-json" ? "pong" : '{"ok":true}';
       if (schema?.name === "goal_recommendation") return advise(JSON.parse(messages.at(-1)!.content));
       return reply(JSON.parse(messages.at(-1)!.content));
@@ -211,9 +212,9 @@ describe("coach provider settings", () => {
     await connect("alice", { provider: "openai", model: "no-json" });
     const noJson = await call("POST", "/coach/provider/test", { user: "alice" });
     expect(noJson.status).toBe(200);
-    expect(await noJson.json()).toEqual({ ok: false, message: "The model answered, but not with the JSON the Coach needs. Try another model." });
+    expect(await noJson.json()).toEqual({ ok: false, message: "The model answered, but not with the JSON the Coach needs. Try another model.", error: { code: "invalid", provider: "openai", retryable: false, message: "The model answered, but not with the JSON the Coach needs. Try another model." } });
     await connect("alice", { provider: "openai", model: "broken" });
-    expect(await (await call("POST", "/coach/provider/test", { user: "alice" })).json()).toEqual({ ok: false, message: "The provider rejected the API key." });
+    expect(await (await call("POST", "/coach/provider/test", { user: "alice" })).json()).toEqual({ ok: false, message: "The provider rejected the API key.", error: { code: "bad_key", provider: "openai", retryable: false, message: "The provider rejected the API key." } });
   });
 
   it("guards writes: 401 without a session, 403 for cookie writes from another origin", async () => {
@@ -291,14 +292,14 @@ describe("several providers and the active one (ticket 17c)", () => {
     expect(await read()).toMatchObject({ selected: "chatgpt", provider: { provider: "anthropic" } });
     await test();
     expect(calls.at(-1)!.config.provider).toBe("anthropic");
-    expect(await test("?provider=chatgpt")).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again." });
+    expect(await test("?provider=chatgpt")).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again.", error: { code: "auth_expired", provider: "chatgpt", retryable: false, message: "ChatGPT signed you out. Sign in again." } });
     // A key that no longer decrypts cannot run either.
     providers.set("alice anthropic", { ...providers.get("alice anthropic")!, apiKey: "undecryptable" });
     expect((await read()).provider!.provider).toBe("openai");
     // Nothing can run: the Coach is off, and Test connection says why.
     providers.set("alice openai", { ...providers.get("alice openai")!, apiKey: "undecryptable" });
     expect(await read()).toMatchObject({ selected: "chatgpt", provider: null });
-    expect(await test()).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again." });
+    expect(await test()).toEqual({ ok: false, message: "ChatGPT signed you out. Sign in again.", error: { code: "auth_expired", provider: "chatgpt", retryable: false, message: "ChatGPT signed you out. Sign in again." } });
     expect(await (await call("GET", "/coach/explanations?timeZone=UTC", { user: "alice" })).json()).toEqual({ explanations: {} });
   });
 });
@@ -334,7 +335,7 @@ describe("ChatGPT sign-in (ticket 18)", () => {
     const body = await (await call("GET", "/coach", { user: "alice" })).text();
     expect(body).not.toContain("access-for-");
     expect(body).not.toContain("refresh-");
-    expect(JSON.parse(body)).toEqual({ ...off, provider: { provider: "chatgpt", model: "gpt-5.5", baseUrl: null, keyHint: null }, selected: "chatgpt", chatgpt: { status: "signed_in", email: "alice@example.com", model: "gpt-5.5" } });
+    expect(JSON.parse(body)).toEqual({ ...off, provider: { provider: "chatgpt", model: chatgptDefaultModel, baseUrl: null, keyHint: null }, selected: "chatgpt", chatgpt: { status: "signed_in", email: "alice@example.com", model: chatgptDefaultModel } });
     // The callback works once.
     expect(await complete(back)).toEqual({ status: "failed", message: "This sign-in is no longer active. Start again." });
     // Next time, on another port: the same client, no new registration.
@@ -513,7 +514,7 @@ describe("goal status explanations", () => {
     await connect("alice", { provider: "openai", model: "broken" });
     const response = await call("GET", "/coach/explanations", { user: "alice" });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ explanations: {} });
+    expect(await response.json()).toEqual({ explanations: {}, error: { code: "bad_key", provider: "openai", retryable: false, message: "The provider rejected the API key." } });
   });
 });
 
@@ -576,5 +577,102 @@ describe("recommendations (ticket 21)", () => {
     advise = (facts) => facts.goal === "Ship v2" ? JSON.stringify({ recommendation: " " }) : JSON.stringify({ recommendation: "Fine." });
     expect(await recommendations()).toEqual([{ goalId: "fit", text: "Fine." }]);
     expect([...recs.keys()]).toEqual(["alice:fit"]);
+  });
+});
+
+// The model picker: each provider's list through a fake provider (no network), with its own credentials.
+describe("POST /coach/models", () => {
+  let seen: { url: string; headers: Headers }[];
+  let replies: Record<string, () => Response>;
+  beforeEach(() => {
+    seen = [];
+    replies = {
+      // `created` in unix seconds, as OpenAI and OpenRouter send it (the test clock is 18 Feb 2026).
+      "https://api.openai.com/v1/models": () => Response.json({ data: [
+        ...["text-embedding-3-large", "tts-1", "whisper-1", "dall-e-3", "omni-moderation-latest", "gpt-image-1", "gpt-realtime", "gpt-audio"].map(id => ({ id, created: seconds("2026-01-01") })),
+        { id: "gpt-4o", created: seconds("2024-05-13") }, { id: "gpt-5.5", created: seconds("2025-12-01") }, { id: "gpt-6.1-sol", created: seconds("2026-02-01") }, { id: "gpt-6.1-terra", created: seconds("2026-01-15") },
+      ] }),
+      "https://api.anthropic.com/v1/models?limit=1000": () => Response.json({ data: [{ id: "claude-opus-5-5", created_at: "2025-11-01T00:00:00Z" }, { id: "claude-sonnet-5-5", created_at: "2025-11-01T00:00:00Z" }, { id: "claude-fable-5-1", created_at: "2026-02-01T00:00:00Z" }] }),
+      "https://openrouter.ai/api/v1/models": () => Response.json({ data: [{ id: "google/gemini-3.8-flash", supported_parameters: ["response_format"] }, { id: "some/plain-model", supported_parameters: ["temperature"] }] }),
+      "http://127.0.0.1:11434/api/tags": () => Response.json({ models: [{ name: "ministral-3:8b" }, { name: "llama4:8b" }] }),
+    };
+    store.modelsFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, headers: new Headers(init?.headers) });
+      const reply = replies[url];
+      if (!reply) throw new Error(`unexpected ${url}`);
+      return reply();
+    }) as typeof fetch;
+  });
+  const seconds = (day: string) => Date.parse(`${day}T00:00:00Z`) / 1000;
+  const at = (day: string) => seconds(day) * 1000;
+  const models = async (user: string, provider: string, body?: unknown) => {
+    const response = await call("POST", `/coach/models?provider=${provider}`, { user, body });
+    return { status: response.status, body: await response.json() as CoachModelsDto };
+  };
+
+  it("lists OpenAI chat models with the saved key: recommended, then newest first, over a year old last; non-chat models filtered out", async () => {
+    await connect("m1", { provider: "openai", model: "gpt-5.5", apiKey: "sk-saved-openai-key" });
+    const { status, body } = await models("m1", "openai");
+    expect(status).toBe(200);
+    expect(body).toEqual({ fallback: false, models: [
+      { id: "gpt-6.1-terra", tag: "fast", hint: "Fast & cheap", recommended: true, created: at("2026-01-15"), older: false },
+      { id: "gpt-6.1-sol", tag: "balanced", hint: "Balanced", recommended: false, created: at("2026-02-01"), older: false },
+      { id: "gpt-5.5", tag: "hard", hint: "Best for hard tasks", recommended: false, created: at("2025-12-01"), older: false },
+      { id: "gpt-4o", tag: null, hint: null, recommended: false, created: at("2024-05-13"), older: true },
+    ] });
+    expect(seen[0]!.headers.get("authorization")).toBe("Bearer sk-saved-openai-key");
+  });
+
+  it("uses a typed key (never returned) over none saved, and caches the list for 10 minutes", async () => {
+    const first = await models("m2", "anthropic", { apiKey: "sk-ant-typed-key" });
+    expect(first.body.models.map(item => item.id)).toEqual(["claude-sonnet-5-5", "claude-fable-5-1", "claude-opus-5-5"]);
+    expect(seen[0]!.headers.get("x-api-key")).toBe("sk-ant-typed-key");
+    expect(seen[0]!.headers.get("anthropic-version")).toBeTruthy();
+    expect(JSON.stringify(first.body)).not.toContain("sk-ant-typed-key");
+    await models("m2", "anthropic", { apiKey: "sk-ant-typed-key" });
+    expect(seen).toHaveLength(1);
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    await models("m2", "anthropic", { apiKey: "sk-ant-typed-key" });
+    expect(seen).toHaveLength(2);
+  });
+
+  it("asks ChatGPT's list with the signed-in token", async () => {
+    chatgptRows.set("m3", { model: "gpt-5.5", tokens });
+    const { body } = await models("m3", "chatgpt", { apiKey: "ignored-for-chatgpt" });
+    expect(body.fallback).toBe(false);
+    expect(body.models[0]).toMatchObject({ id: "gpt-6.1-sol", hint: "Balanced", recommended: true });
+    expect(seen[0]!.headers.get("authorization")).toBe(`Bearer ${tokens.accessToken}`);
+  });
+
+  it("lists OpenRouter without a key (only models with JSON output) and Ollama on localhost", async () => {
+    expect((await models("m4", "openrouter")).body.models).toEqual([{ id: "google/gemini-3.8-flash", tag: "balanced", hint: "Balanced", recommended: true, created: null, older: false }]);
+    expect(seen[0]!.headers.get("authorization")).toBeNull();
+    expect((await models("m4", "ollama")).body.models).toEqual([
+      { id: "ministral-3:8b", tag: "local", hint: "Local, private", recommended: true, created: null, older: false },
+      { id: "llama4:8b", tag: "local", hint: "Local, private", recommended: false, created: null, older: false },
+    ]);
+  });
+
+  it("falls back to the curated list when the provider fails or no key is there, and does not cache it", async () => {
+    replies["https://api.openai.com/v1/models"] = () => new Response("nope", { status: 401 });
+    const failed = await models("m5", "openai", { apiKey: "sk-bad-openai-key" });
+    expect(failed.body).toMatchObject({ fallback: true, message: "The provider did not list its models (401)." });
+    expect(failed.body.models.map(item => item.id)).toEqual(["gpt-6.1-terra", "gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]);
+    expect(failed.body.models[0]).toMatchObject({ recommended: true });
+    await models("m5", "openai", { apiKey: "sk-bad-openai-key" });
+    expect(seen).toHaveLength(2);
+    const noKey = await models("m6", "anthropic");
+    expect(noKey.body).toMatchObject({ fallback: true, message: "Enter your API key to see every model." });
+    expect(seen).toHaveLength(2);
+    expect((await models("m6", "ollama", { baseUrl: "http://10.0.0.5:11434" })).body).toMatchObject({ fallback: true });
+    expect(seen).toHaveLength(2);
+  });
+
+  it("rejects an unknown provider, a missing one, and calls without a session or from another origin", async () => {
+    expect((await models("m7", "gemini")).status).toBe(400);
+    expect((await call("POST", "/coach/models", { user: "m7" })).status).toBe(400);
+    expect((await call("POST", "/coach/models?provider=openai")).status).toBe(403);
+    expect((await call("POST", "/coach/models?provider=openai", { origin: "https://evil.example", cookie: "m7" })).status).toBe(403);
   });
 });

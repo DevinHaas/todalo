@@ -4,12 +4,14 @@ import { Asterisk, ChevronDown, Cpu, MessageCircle, Route, Sparkles } from "luci
 import { coach, coachReads } from "./runtime";
 import {
   coachCardKinds, coachKeys, coachMutations, coachProviderInfo, ollamaDefaultUrl, ollamaUrl, sortedCoachProviders,
-  type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
+  type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachModelOption, type CoachModelsDraft, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
 } from "./coach";
+import { modelTag, modelTagLabels } from "../../../packages/server/src/coach-models";
 import { FormError, LoadFailure, Loading } from "./goal-views";
 import { CoachPatterns } from "./pattern-screens";
 import {
-  Button, DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input, cn,
+  Button, Combobox, ComboboxCollection, ComboboxContent, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxLabel, ComboboxList, ComboboxTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input, cn,
 } from "./ui";
 
 /**
@@ -115,19 +117,22 @@ function ActivePicker({ userId, state, configured: set }: { userId: string; stat
   return <div className="flex flex-col gap-2" data-coach-active="">
     <div className="flex flex-wrap items-center gap-2">
       <DropdownMenu>
-        <DropdownMenuTrigger disabled={pick.isPending} render={<Button type="button" variant="outline" className="h-auto gap-2.5 rounded-full py-1.5 pr-3 pl-1.5" data-coach-picker="" aria-label="Coach model" />}>
-          {shown && <ProviderMark kind={shown} size="sm" />}
-          <span className="flex flex-col items-start leading-tight">
-            <span className="text-xs font-normal text-muted-foreground">Coach model</span>
-            <span className="text-sm font-semibold" data-coach-running="">{running ? `${cardLabel[running.provider]} · ${running.model}` : "None can run"}</span>
+        <DropdownMenuTrigger disabled={pick.isPending} render={<Button type="button" variant="outline" className="h-auto min-h-13 gap-3 rounded-full py-2 pr-3.5 pl-2" data-coach-picker="" aria-label="Coach model" />}>
+          {shown && <ProviderMark kind={shown} />}
+          <span className="flex flex-col items-start gap-0.5">
+            <span className="text-xs leading-4 font-normal text-muted-foreground">Coach model</span>
+            <span className="text-sm leading-5 font-semibold" data-coach-running="">{running ? `${cardLabel[running.provider]} · ${running.model}` : "None can run"}</span>
           </span>
           <ChevronDown className="ml-1 size-4 text-muted-foreground" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-64">
+        <DropdownMenuContent className="w-max min-w-80 max-w-[min(32rem,var(--available-width))]">
           <DropdownMenuRadioGroup value={state.selected ?? ""} onValueChange={(value) => { if (value && value !== state.selected) pick.mutate(value as CoachModelKind); }}>
             {set.map(item => <DropdownMenuRadioItem key={item.kind} value={item.kind} disabled={!item.usable} data-coach-pick={item.kind}>
               <ProviderMark kind={item.kind} size="sm" />
-              <span>{cardLabel[item.kind]}{item.dto && <span className="text-muted-foreground"> · {item.usable ? item.dto.model : item.kind === "chatgpt" ? "sign-in expired" : "key unreadable"}</span>}</span>
+              <span className="flex min-w-0 flex-1 items-baseline justify-between gap-4">
+                <span>{cardLabel[item.kind]}{item.dto && <span className="text-muted-foreground"> · {item.usable ? item.dto.model : item.kind === "chatgpt" ? "sign-in expired" : "key unreadable"}</span>}</span>
+                {item.dto && item.usable && <ModelHint kind={item.kind} id={item.dto.model} />}
+              </span>
             </DropdownMenuRadioItem>)}
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
@@ -143,6 +148,100 @@ function ActivePicker({ userId, state, configured: set }: { userId: string; stat
         : <FormError>{tested.message ?? "The connection failed."}</FormError>)}
       {(test.error ?? pick.error) && <FormError>{(test.error ?? pick.error)!.message}</FormError>}
     </div>
+  </div>;
+}
+
+/** "Recommended" for the provider's default, else the model's short hint (coach-models.ts); nothing for unknown models. */
+function hintText(kind: CoachModelKind, id: string, recommended = id === coachProviderInfo[kind].model) {
+  const tag = modelTag(kind, id);
+  return [recommended && "Recommended", tag && modelTagLabels[tag]].filter(Boolean).join(" · ") || null;
+}
+function ModelHint({ kind, id }: { kind: CoachModelKind; id: string }) {
+  const text = hintText(kind, id);
+  return text && <span className="shrink-0 text-xs font-normal text-muted-foreground" data-model-hint="">{text}</span>;
+}
+
+const CUSTOM = "\u0000custom";
+/** Above this many models the picker gets a search field; OpenRouter always (it lists hundreds, known before they load). */
+const SEARCH_FROM = 8;
+
+interface ModelGroup { value: "models" | "older" | "custom"; label: string | null; items: CoachModelOption[] }
+
+/**
+ * The model picker: the provider's own list (its saved key or sign-in, or the
+ * key typed above), recommended then newest first with a short hint, models
+ * over a year old under "Older models", and "Custom model…" to type any id.
+ * A configured card asks right away (so it can say a saved model is gone);
+ * with a typed key it asks when opened. The curated list when the provider cannot be asked.
+ */
+function ModelPicker({ id, userId, provider, value, onChange, disabled, draft, saved }: {
+  id: string; userId: string; provider: CoachModelKind; value: string; onChange: (model: string) => void; disabled: boolean; draft: CoachModelsDraft;
+  /** The model saved for this provider, if any (never changed here). */
+  saved?: string;
+}) {
+  const [asked, setAsked] = useState(false);
+  const [custom, setCustom] = useState(false);
+  const list = useQuery({
+    queryKey: [...coachKeys.all(userId), "models", provider, draft.baseUrl ?? "", draft.apiKey ?? ""],
+    // ponytail: an edited Ollama address asks per keystroke (localhost only, cached server-side).
+    queryFn: () => coach.models(provider, draft), enabled: asked || (Boolean(saved) && !draft.apiKey), staleTime: 10 * 60_000, retry: false,
+  });
+  const option = (model: string): CoachModelOption => ({ id: model, tag: modelTag(provider, model), hint: null, recommended: model === coachProviderInfo[provider].model, created: null, older: false });
+  const models = list.data?.models ?? [];
+  const current = value.trim();
+  // The chosen model stays pickable even when the list does not have it.
+  const extra = current && !models.some(item => item.id === current) ? [option(current)] : [];
+  const groups: ModelGroup[] = ([
+    { value: "models", label: null, items: [...extra, ...models.filter(item => !item.older)] },
+    { value: "older", label: "Older models", items: models.filter(item => item.older) },
+    { value: "custom", label: null, items: [option(CUSTOM)] },
+  ] satisfies ModelGroup[]).filter(group => group.items.length > 0);
+  const all = groups.flatMap(group => group.items);
+  const gone = Boolean(saved && list.data && !list.data.fallback && !models.some(item => item.id === saved));
+  const note = gone && <p className="text-xs-plus text-muted-foreground" data-coach-model-gone="">This model is no longer offered — choose another.</p>;
+  if (custom) return <div className="flex flex-col gap-1.5">
+    <div className="flex max-w-sm items-center gap-2">
+      <Input id={id} value={value} disabled={disabled} onChange={event => onChange(event.target.value)} required maxLength={200} autoFocus placeholder={`Model id, e.g. ${coachProviderInfo[provider].model}`} data-coach-model-custom="" />
+      <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setCustom(false)}>Choose from list</Button>
+    </div>
+    {note}
+  </div>;
+  return <div className="flex flex-col gap-1.5">
+    <Combobox<CoachModelOption> items={groups} value={all.find(item => item.id === current) ?? null}
+      itemToStringLabel={item => item.id === CUSTOM ? "Custom model…" : item.id} isItemEqualToValue={(a, b) => a.id === b.id}
+      filter={(item, query) => item.id === CUSTOM || item.id.toLowerCase().includes(query.trim().toLowerCase())}
+      onOpenChange={open => { if (open) setAsked(true); }}
+      onValueChange={item => { if (!item) return; if (item.id === CUSTOM) setCustom(true); else onChange(item.id); }}>
+      <ComboboxTrigger id={id} disabled={disabled} data-coach-model-picker={provider}
+        render={<Button type="button" variant="outline" className="w-full max-w-sm justify-between gap-3 font-normal" />}>
+        <span className="flex min-w-0 flex-1 items-baseline gap-3">
+          <span className="truncate font-medium">{current || "Choose a model"}</span>
+          {current && <ModelHint kind={provider} id={current} />}
+        </span>
+      </ComboboxTrigger>
+      <ComboboxContent className="w-(--anchor-width) max-w-(--available-width) min-w-80" data-coach-model-list={provider}>
+        {(provider === "openrouter" || all.length > SEARCH_FROM) && <ComboboxInput showTrigger={false} placeholder="Search models" aria-label="Search models" autoFocus />}
+        {list.isFetching && <p className="px-2 py-1.5 text-xs text-muted-foreground" role="status">Loading models…</p>}
+        {list.data?.fallback && <p className="px-2 py-1.5 text-xs text-muted-foreground" data-coach-models-fallback="">{list.data.message} Showing common models.</p>}
+        <ComboboxEmpty className="px-2 py-1.5 text-xs text-muted-foreground empty:hidden">No model matches. Use Custom model…</ComboboxEmpty>
+        <ComboboxList>
+          {(group: ModelGroup) => <ComboboxGroup key={group.value} items={group.items} data-coach-model-group={group.value}
+            className={group.value !== "models" ? "mt-1 border-t border-border-subtle pt-1" : undefined}>
+            {group.label && <ComboboxLabel>{group.label}</ComboboxLabel>}
+            <ComboboxCollection>
+              {(item: CoachModelOption) => <ComboboxItem key={item.id} value={item} data-coach-model={item.id === CUSTOM ? "custom" : item.id}>
+                {item.id === CUSTOM ? <span className="text-muted-foreground">Custom model…</span>
+                  : <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+                    <span className="truncate">{item.id}</span>
+                    {hintText(provider, item.id, item.recommended) && <span className="shrink-0 text-xs font-normal text-muted-foreground">{hintText(provider, item.id, item.recommended)}</span>}
+                  </span>}
+              </ComboboxItem>}
+            </ComboboxCollection>
+          </ComboboxGroup>}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+    {note}
   </div>;
 }
 
@@ -187,7 +286,8 @@ function KeyForm({ userId, kind, saved }: { userId: string; kind: CoachProviderK
     </Field>}
     <Field>
       <FieldLabel htmlFor={`coach-${kind}-model`}>Model</FieldLabel>
-      <Input id={`coach-${kind}-model`} className="max-w-sm" value={model} disabled={pending} onChange={event => setModel(event.target.value)} required maxLength={200} />
+      <ModelPicker id={`coach-${kind}-model`} userId={userId} provider={kind} value={model} onChange={setModel} disabled={pending} saved={saved?.model}
+        draft={local ? { baseUrl: baseUrl.trim() } : apiKey.trim().length >= 8 ? { apiKey: apiKey.trim() } : {}} />
     </Field>
     {(check ?? save.error?.message) && <FormError>{check ?? save.error?.message}</FormError>}
     <div className="flex flex-wrap gap-2">
@@ -256,7 +356,7 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
       <form className="flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); saveModel.mutate(model.trim()); }}>
         <Field>
           <FieldLabel htmlFor="coach-chatgpt-model">Model</FieldLabel>
-          <Input id="coach-chatgpt-model" className="max-w-sm" value={model} disabled={pending} onChange={event => setModel(event.target.value)} required maxLength={200} />
+          <ModelPicker id="coach-chatgpt-model" userId={userId} provider="chatgpt" value={model} onChange={setModel} disabled={pending} draft={{}} saved={chatgpt.model} />
         </Field>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={pending || !model.trim() || model.trim() === chatgpt.model}>Save</Button>

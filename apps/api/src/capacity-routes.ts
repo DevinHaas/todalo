@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
-import { CoachModelError, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { CoachModelError, coachErrorDto, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { capacityFacts, capacityInput, capacityMessages, capacitySchema, capacityVerdict, parseCapacity, type CapacityDto, type CapacityGoalDto } from "@todalo/server/coach-suggestions";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
@@ -38,18 +38,20 @@ export function createCapacityRoutes(store: CapacityStore) {
     const primary = current?.goals.filter(goal => goal.tier === "primary" && !goal.archivedAt) ?? [];
     const built = config && current ? capacityFacts(current.season.lengthDays, primary) : null;
     let goals: CapacityGoalDto[] | null = null;
+    let error: CoachErrorDto | undefined;
     if (config && built) {
       const hash = createHash("sha256").update(JSON.stringify({ facts: built.facts, ids: [...built.refs.values()], provider: config.provider, model: config.model, ...patterns.length ? { patterns } : {} })).digest("hex");
       if (saved?.inputsHash === hash && saved.estimate) goals = saved.estimate;
       else try {
         goals = parseCapacity(await store.model(config).complete({ messages: withPatterns(capacityMessages(built.facts), patterns), schema: capacitySchema }, signal), built.refs);
         await store.cache(userId, hash, goals);
-      } catch (error) {
-        // A failure shows no estimate; Test connection says why.
-        if (!(error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError"))) throw error;
+      } catch (failure) {
+        // A failure shows no estimate; `error` says why (ticket 17d).
+        if (failure instanceof CoachModelError) error = coachErrorDto(failure, config.provider);
+        else if (!(failure instanceof Error && failure.name === "AbortError")) throw failure;
       }
     }
-    return { availableMinutes, goals, ...capacityVerdict(goals, availableMinutes) };
+    return { availableMinutes, goals, ...capacityVerdict(goals, availableMinutes), ...error && { error } };
   }
 
   return new Elysia({ prefix: "/api/v1" })

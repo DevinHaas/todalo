@@ -5,6 +5,7 @@ import { goalKeys, type GoalsDto } from "./goals";
 import type { CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier } from "../../../packages/server/src/season-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { CapacityDto } from "../../../packages/server/src/coach-suggestions";
+import { reportCoachError } from "./coach-errors";
 
 export type { CapacityDto, CurrentSeasonDto, EndSeasonDto, PastSeasonsDto, SeasonDto, SeasonGoalDto, SeasonTier };
 export { primaryGuideline, seasonLengths, tooManyPrimary } from "../../../packages/server/src/season-dto";
@@ -103,7 +104,7 @@ export function seasonQueries(transport: SeasonTransport) {
   return {
     current: (userId: string) => queryOptions({ queryKey: seasonKeys.current(userId), queryFn: () => transport.current(localZone()) }),
     past: (userId: string) => queryOptions({ queryKey: seasonKeys.past(userId), queryFn: () => transport.past() }),
-    capacity: (userId: string) => queryOptions({ queryKey: seasonKeys.capacity(userId), queryFn: () => transport.capacity() }),
+    capacity: (userId: string) => queryOptions({ queryKey: seasonKeys.capacity(userId), queryFn: () => transport.capacity().then(result => { reportCoachError(result.error, { background: true }); return result; }) }),
   };
 }
 

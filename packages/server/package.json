@@ -23,6 +23,7 @@
     "./goal-status": "./src/goal-status.ts",
     "./coach": "./src/coach.ts",
     "./coach-chatgpt": "./src/coach-chatgpt.ts",
+    "./coach-models": "./src/coach-models.ts",
     "./coach-secret": "./src/coach-secret.ts",
     "./coach-store": "./src/coach-store.ts",
     "./drafts": "./src/drafts.ts",

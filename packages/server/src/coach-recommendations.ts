@@ -4,13 +4,13 @@
 // the client imports the DTOs from here. "Update schedule" turns it into a
 // week draft (drafts.ts, `focus`), "Chat with coach" opens the chat with it.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema, type ExplanationFacts } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema, type ExplanationFacts } from "./coach";
 import { WEEK_DRAFT_SYSTEM_PROMPT, localParts, plusDays, weekPlanFacts, type WeekPlan } from "./drafts";
 import { bandLabels } from "./goal-status";
 import { hasTimeIn, serves, taskMinutes, type WeekLinks, type WeekTask } from "./weekly-review";
 
 export interface RecommendationDto { goalId: string; text: string }
-export interface CoachRecommendationsDto { recommendations: RecommendationDto[] }
+export interface CoachRecommendationsDto { recommendations: RecommendationDto[]; /** Ticket 17d: the first failed model call. */ error?: CoachErrorDto }
 
 /** One change of an open task's date or time (task_moves); `fromDate` is where it was. */
 export interface TaskMove { taskId: string; projectId: string | null; fromDate: Date; movedAt: Date }

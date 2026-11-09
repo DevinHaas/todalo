@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { STATEMENT_MAX, patternMutations, patternQuery, type PatternDto } from "./patterns";
 import { FormError } from "./goal-views";
 import { Button, Hint, Input } from "./ui";
+import { reportCoachError } from "./coach-errors";
 
 const learnedOn = (iso: string) => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(new Date(iso));
 
@@ -17,7 +18,7 @@ export function CoachPatterns({ userId, connected }: { userId: string; connected
   const query = useQuery(patternQuery(userId));
   const writes = patternMutations(cache, userId);
   const [note, setNote] = useState<string | null>(null);
-  const learn = useMutation({ mutationFn: writes.learn, onMutate: () => setNote(null), onSuccess: result => setNote(result.learned ? `Learned ${result.learned} new pattern${result.learned > 1 ? "s" : ""}.` : result.message ?? null), meta: { action: () => "learn patterns" } });
+  const learn = useMutation({ mutationFn: writes.learn, onMutate: () => setNote(null), onSuccess: result => setNote(result.learned ? `Learned ${result.learned} new pattern${result.learned > 1 ? "s" : ""}.` : reportCoachError(result.error, { retry: () => learn.mutate() }) ? null : result.message ?? null), meta: { action: () => "learn patterns" } });
   const list = query.data?.patterns ?? [];
   if (!connected && !list.length) return null;
   return <section className="flex flex-col gap-2" aria-labelledby="coach-patterns-title" data-coach-patterns="">

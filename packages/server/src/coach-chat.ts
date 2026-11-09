@@ -6,7 +6,7 @@
 // ponytail: the reply arrives whole (no token streaming); the CoachModel seam
 // returns text, so streaming means a second method on every adapter.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { DRAFT_ITEM_LIMIT, weekDraftSchema, weekPlanFacts, parseWeekDraft, type DraftDto, type NewDraft, type WeekPlan } from "./drafts";
 
 export type ChatRole = "user" | "assistant";
@@ -14,7 +14,7 @@ export interface ChatMessageRecord { id: string; role: ChatRole; content: string
 export type NewChatMessage = Omit<ChatMessageRecord, "id">;
 export interface ChatMessageDto { id: string; role: ChatRole; content: string; draftId: string | null; createdAt: string }
 /** GET/DELETE /coach/chat: the conversation, oldest first. POST adds the reply's draft (if any) or why nothing came back. */
-export interface CoachChatDto { messages: ChatMessageDto[]; draft?: DraftDto | null; message?: string }
+export interface CoachChatDto { messages: ChatMessageDto[]; draft?: DraftDto | null; message?: string; /** Ticket 17d: why the Coach could not answer. */ error?: CoachErrorDto }
 
 export const toChatMessageDto = (row: ChatMessageRecord): ChatMessageDto =>
   ({ id: row.id, role: row.role, content: row.content, draftId: row.draftId, createdAt: row.createdAt.toISOString() });

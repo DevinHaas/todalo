@@ -17,7 +17,7 @@ import { ratingLabels } from "./ritual-dto";
  * wire_api "responses"). Not chatgpt.com/backend-api: the token's resource is api.openai.com/v1.
  */
 export const chatgptBaseUrl = "https://api.openai.com/v1";
-export const chatgptDefaultModel = "gpt-5.5";
+export const chatgptDefaultModel = "gpt-6.1-sol";
 
 /** Providers connected with an API key or a local endpoint (Settings › Coach's provider choice). */
 export const coachProviderKinds = ["openai", "anthropic", "openrouter", "ollama"] as const;
@@ -25,10 +25,10 @@ export type CoachProviderKind = typeof coachProviderKinds[number];
 /** Every provider a CoachConfig can name: the keyed ones plus ChatGPT sign-in (ticket 18). */
 export type CoachModelKind = CoachProviderKind | "chatgpt";
 export const coachProviderInfo: Record<CoachModelKind, { label: string; model: string; needsKey: boolean }> = {
-  openai: { label: "OpenAI", model: "gpt-5.4-mini", needsKey: true },
+  openai: { label: "OpenAI", model: "gpt-6.1-terra", needsKey: true },
   anthropic: { label: "Anthropic", model: "claude-sonnet-5-5", needsKey: true },
-  openrouter: { label: "OpenRouter", model: "google/gemini-3.5-flash", needsKey: true },
-  ollama: { label: "Ollama (local)", model: "qwen3.5:4b", needsKey: false },
+  openrouter: { label: "OpenRouter", model: "google/gemini-3.8-flash", needsKey: true },
+  ollama: { label: "Ollama (local)", model: "ministral-3:8b", needsKey: false },
   chatgpt: { label: "ChatGPT", model: chatgptDefaultModel, needsKey: true },
 };
 export const ollamaDefaultUrl = "http://127.0.0.1:11434";
@@ -101,7 +101,8 @@ export function nextCoachProvider(usable: readonly CoachModelKind[], current: Co
   // Not in the list (or null): indexOf is -1, so the first.
   return usable[(usable.indexOf(current!) + 1) % usable.length] ?? null;
 }
-export interface CoachExplanationsDto { explanations: Record<string, string> }
+/** `error`: why some goal's explanation is missing (ticket 17d), the first failure. */
+export interface CoachExplanationsDto { explanations: Record<string, string>; error?: CoachErrorDto }
 
 /**
  * Everything needed to call a model; apiKey (for ChatGPT the access token) is
@@ -114,8 +115,26 @@ export interface CoachSchema { name: string; schema: Record<string, unknown> }
 /** The one inference seam: fakes replace it in tests, tickets 18+ add adapters. Resolves with the reply text. */
 export interface CoachModel { complete(request: { messages: CoachMessage[]; schema?: CoachSchema }, signal?: AbortSignal): Promise<string> }
 
-/** A failure worth showing the user (Test connection shows the message). */
-export class CoachModelError extends Error {}
+/**
+ * Ticket 17d: what kind of failure a Coach model call had, so the client picks
+ * the toast and its action. The first three are transient: createCoachModel
+ * already retried them (coachRetry) before they reach a route.
+ */
+export const coachErrorCodes = ["rate_limited", "overloaded", "network", "auth_expired", "bad_key", "no_credit", "refused", "invalid"] as const;
+export type CoachErrorCode = typeof coachErrorCodes[number];
+const transient: ReadonlySet<CoachErrorCode> = new Set(["rate_limited", "overloaded", "network"]);
+/** A failed Coach call as every Coach route returns it (`error`, next to the existing `message`). */
+export interface CoachErrorDto { code: CoachErrorCode; provider: CoachModelKind | null; retryable: boolean; message: string }
+
+/** A failure worth showing the user (Test connection shows the message). Without a code: the model's answer was unusable. */
+export class CoachModelError extends Error {
+  constructor(message: string, readonly code: CoachErrorCode = "invalid", readonly provider: CoachModelKind | null = null, readonly retryAfterMs?: number) { super(message); }
+  get retryable() { return transient.has(this.code); }
+}
+export const coachErrorDto = (error: CoachModelError, provider?: CoachModelKind | null): CoachErrorDto =>
+  ({ code: error.code, provider: error.provider ?? provider ?? null, retryable: error.retryable, message: error.message });
+/** A saved key that no longer decrypts: the routes' "Enter your API key again". */
+export const keyUnreadable = (provider: CoachModelKind) => coachErrorDto(new CoachModelError("Enter your API key again in Settings › Coach.", "bad_key", provider));
 
 /**
  * Ollama runs on the API's own machine: only a loopback http(s) URL, so a
@@ -224,20 +243,63 @@ export function parseChatgptStream(stream: string): string {
   return checked(text || deltas);
 }
 
-/** An HTTP failure as a message the user can act on. */
-export function failureMessage(status: number, provider?: CoachModelKind) {
-  if (provider === "chatgpt" && status === 401) return "ChatGPT signed you out. Sign in again in Settings › Coach.";
+/**
+ * An HTTP failure as an error the user can act on. `body`: the start of the
+ * error body (a 429 that is really "out of credit" says so there, as OpenAI's insufficient_quota).
+ */
+export function httpFailure(status: number, provider: CoachModelKind | null = null, body = "", retryAfterMs?: number): CoachModelError {
+  const fail = (message: string, code: CoachErrorCode) => new CoachModelError(message, code, provider, retryAfterMs);
+  if (provider === "chatgpt" && status === 401) return fail("ChatGPT signed you out. Sign in again in Settings › Coach.", "auth_expired");
   // T3 Code's docs: some requests are not covered by plan sharing.
-  if (provider === "chatgpt" && status === 403) return "ChatGPT refused this request: your plan's sharing may not cover it. Use an API key instead.";
-  if (provider === "chatgpt" && status === 429) return "You reached your ChatGPT plan's usage limit. Try again later.";
-  if (status === 401 || status === 403) return "The provider rejected the API key.";
-  if (status === 404) return "The provider does not offer this model.";
-  if (status === 400 || status === 422) return "The provider refused the request. Check the model name.";
-  if (status === 402 || status === 429) return "The provider is rate limiting this key or it is out of credit.";
-  return "The provider is unavailable. Try again later.";
+  if (provider === "chatgpt" && status === 403) return fail("ChatGPT refused this request: your plan's sharing may not cover it. Use an API key instead.", "refused");
+  if (provider === "chatgpt" && status === 429) return fail("You reached your ChatGPT plan's usage limit. Try again later.", "rate_limited");
+  if (status === 401 || status === 403) return fail("The provider rejected the API key.", "bad_key");
+  if (status === 404) return fail("The provider does not offer this model.", "invalid");
+  if (status === 400 || status === 422) return fail("The provider refused the request. Check the model name.", "invalid");
+  if (status === 402 || (status === 429 && /insufficient_quota|credit|billing/i.test(body))) return fail("The provider says this key is out of credit.", "no_credit");
+  if (status === 429) return fail("The provider is rate limiting this key. Try again in a minute.", "rate_limited");
+  if (status >= 400 && status < 500 && status !== 408 && status !== 409) return fail("The provider refused the request.", "invalid");
+  // 5xx, Anthropic's 529 overloaded, 408 and 409 (retry later).
+  return fail("The provider is busy or unavailable. Try again later.", "overloaded");
+}
+/** The message alone (Test connection's wording before ticket 17d). */
+export const failureMessage = (status: number, provider?: CoachModelKind) => httpFailure(status, provider).message;
+
+/** Retry-After (seconds or an HTTP date) or OpenAI's retry-after-ms, in ms; undefined when absent. */
+export function retryAfter(headers: Headers, now = Date.now()): number | undefined {
+  const ms = Number(headers.get("retry-after-ms"));
+  if (headers.get("retry-after-ms") && Number.isFinite(ms) && ms >= 0) return ms;
+  const raw = headers.get("retry-after");
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(raw);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
 }
 
+/**
+ * Ticket 17d: transient failures (network, rate limit, overloaded) are retried
+ * here, in the one model seam, so every Coach caller gets it and no client
+ * retries again. Up to `attempts` calls with exponential backoff and jitter (or
+ * the provider's Retry-After); no retry starts when its wait would pass
+ * `budgetMs` since the first call, so a failing provider answers within ~20 s
+ * (plus the one attempt in flight, whose own timeout is 30 s, 90 s for Ollama).
+ */
+export const coachRetry = { attempts: 5, baseMs: 500, maxDelayMs: 4_000, budgetMs: 20_000 };
+/** The wait before retry `attempt` (1-based): full backoff halved plus random jitter of up to the other half. */
+export const retryDelay = (attempt: number, random = Math.random) => {
+  const backoff = Math.min(coachRetry.maxDelayMs, coachRetry.baseMs * 2 ** (attempt - 1));
+  return Math.round(backoff / 2 + random() * backoff / 2);
+};
+export interface CoachRetryOptions { sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; now?: () => number; random?: () => number }
+/** Resolves after `ms`, or at once when the request is cancelled (the loop then gives up). */
+const pause = (ms: number, signal?: AbortSignal) => new Promise<void>(resolve => {
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+});
+
 const incomplete = () => new CoachModelError("The model returned an incomplete answer.");
+const declined = () => new CoachModelError("The model declined to answer.", "refused");
 const checked = (content: unknown) => {
   if (typeof content !== "string" || !content.trim() || content.length > 64_000) throw incomplete();
   return content;
@@ -246,14 +308,15 @@ const checked = (content: unknown) => {
 /** The reply text of a chat completion; anything cut off, refused or malformed throws. */
 export function parseCompletion(body: unknown): string {
   const choice = (body as { choices?: { finish_reason?: string; message?: { content?: unknown; refusal?: unknown } }[] } | null)?.choices?.[0];
-  if (choice?.finish_reason !== "stop" || choice.message?.refusal) throw incomplete();
+  if (choice?.message?.refusal) throw declined();
+  if (choice?.finish_reason !== "stop") throw incomplete();
   return checked(choice.message?.content);
 }
 
 /** The reply text of an Anthropic message (its text blocks; thinking blocks are skipped). */
 export function parseAnthropic(body: unknown): string {
   const message = body as { stop_reason?: string; content?: { type?: string; text?: unknown }[] } | null;
-  if (message?.stop_reason === "refusal") throw new CoachModelError("The model declined to answer.");
+  if (message?.stop_reason === "refusal") throw declined();
   if (message?.stop_reason !== "end_turn" || !Array.isArray(message.content)) throw incomplete();
   return checked(message.content.filter(block => block.type === "text").map(block => block.text).join(""));
 }
@@ -266,17 +329,33 @@ const adapters = {
 const adapterFor = (config: CoachConfig) => config.provider === "anthropic" || config.provider === "chatgpt" ? adapters[config.provider] : adapters.chat;
 
 /** The production adapter for every supported provider. */
-export function createCoachModel(config: CoachConfig, fetcher: typeof fetch = fetch): CoachModel {
+export function createCoachModel(config: CoachConfig, fetcher: typeof fetch = fetch, { sleep = pause, now = Date.now, random = Math.random }: CoachRetryOptions = {}): CoachModel {
   const adapter = adapterFor(config);
+  async function once(request: CoachRequest, signal?: AbortSignal) {
+    const { url, init } = adapter.request(config, request);
+    let response: Response;
+    try {
+      response = await fetcher(url, { ...init, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(local(config) ? 90_000 : 30_000)]) });
+    } catch { throw new CoachModelError(local(config) ? "Could not reach Ollama. Is it running?" : "Could not reach the provider.", "network", config.provider); }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw httpFailure(response.status, config.provider, body.slice(0, 2_000), retryAfter(response.headers, now()));
+    }
+    return adapter.parse(response);
+  }
   return {
     async complete(request, signal) {
-      const { url, init } = adapter.request(config, request);
-      let response: Response;
-      try {
-        response = await fetcher(url, { ...init, signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(local(config) ? 90_000 : 30_000)]) });
-      } catch { throw new CoachModelError(local(config) ? "Could not reach Ollama. Is it running?" : "Could not reach the provider."); }
-      if (!response.ok) { await response.body?.cancel(); throw new CoachModelError(failureMessage(response.status, config.provider)); }
-      return adapter.parse(response);
+      const started = now();
+      for (let attempt = 1; ; attempt++) {
+        try { return await once(request, signal); }
+        catch (error) {
+          if (!(error instanceof CoachModelError) || !error.retryable || attempt >= coachRetry.attempts || signal?.aborted) throw error;
+          const wait = error.retryAfterMs ?? retryDelay(attempt, random);
+          if (now() - started + wait > coachRetry.budgetMs) throw error;
+          await sleep(wait, signal);
+          if (signal?.aborted) throw error;
+        }
+      }
     },
   };
 }

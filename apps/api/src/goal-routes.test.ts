@@ -392,9 +392,9 @@ describe("goal API", () => {
 
       it("a failing or malformed model hides only the Coach's part and is not cached", async () => {
         linkTask("alice-v2", "alice-run-1");
-        replies = [new CoachModelError("down"), "not json", '{"goals":["g1"]}'];
-        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2"], coach: [] });
-        expect(await coachRead("alice-run-2")).toEqual({ goalIds: ["alice-v2"], coach: [] });
+        replies = [new CoachModelError("down", "overloaded"), "not json", '{"goals":["g1"]}'];
+        expect(await coachRead("alice-run-2")).toMatchObject({ goalIds: ["alice-v2"], coach: [], error: { code: "overloaded", retryable: true, message: "down" } });
+        expect(await coachRead("alice-run-2")).toMatchObject({ goalIds: ["alice-v2"], coach: [], error: { code: "invalid", retryable: false } });
         expect((await coachRead("alice-run-2")).coach).toEqual(["alice-fit"]);
       });
 

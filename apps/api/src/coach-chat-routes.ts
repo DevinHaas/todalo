@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { bandLabels, seasonStatuses, type StatusInputs } from "@todalo/server/goal-status";
-import { CoachModelError, coachProviderInfo, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
   CHAT_CONTEXT_TURNS, CHAT_HISTORY_LIMIT, chatFacts, chatInput, chatMessages, chatSchema, parseChatReply, toChatMessageDto,
   type ChatGoalNote, type ChatMessageRecord, type CoachChatDto, type NewChatMessage,
@@ -84,8 +84,8 @@ export function createCoachChatRoutes(store: CoachChatStore) {
       if (!input.success) return status(400, INVALID);
       const saved = await store.provider(userId);
       if (!saved) return status(404, NO_PROVIDER);
-      const failed = async (message: string) => ({ ...await history(userId), draft: null, message }) satisfies CoachChatDto;
-      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return failed("Enter your API key again in Settings › Coach.");
+      const failed = async (message: string, error?: CoachErrorDto) => ({ ...await history(userId), draft: null, message, ...error && { error } }) satisfies CoachChatDto;
+      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return failed("Enter your API key again in Settings › Coach.", keyUnreadable(saved.provider));
       const zone = zoneOrUtc(new URL(request.url).searchParams.get("timeZone"));
       const at = now();
       const today = localParts(at, zone).day;
@@ -97,7 +97,7 @@ export function createCoachChatRoutes(store: CoachChatStore) {
         const content = await store.model(saved).complete({ messages: withPatterns(chatMessages(chatFacts(plan, notes), earlier, input.data.message), patterns), schema: chatSchema }, request.signal);
         answer = parseChatReply(content, plan);
       } catch (error) {
-        if (error instanceof CoachModelError) return failed(error.message);
+        if (error instanceof CoachModelError) return failed(error.message, coachErrorDto(error, saved.provider));
         if (error instanceof Error && error.name === "AbortError") return failed("The Coach took too long. Try again.");
         throw error;
       }

@@ -15,6 +15,7 @@ import { goalOf } from "./schedule";
 import type { TaskDto } from "./tasks";
 import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots, type RecommendationSlot } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
+import { reportCoachError } from "./coach-errors";
 
 function useGoalMutations(userId: string) {
   const cache = useQueryClient();
@@ -51,7 +52,7 @@ function useCoachRecommendations(userId: string, season: { goals: SeasonGoalDto[
   const schedule = useMutation({
     mutationFn: (goalId: string) => drafts.draftRecommendation(goalId),
     onMutate: (goalId) => setMessages(({ [goalId]: _, ...rest }) => rest),
-    onSuccess: (result, goalId) => result.draft ? showWeekPlan(result.draft.period) : setMessages(current => ({ ...current, [goalId]: result.message ?? "The Coach has nothing to change." })),
+    onSuccess: (result, goalId) => result.draft ? showWeekPlan(result.draft.period) : reportCoachError(result.error, { retry: () => schedule.mutate(goalId) }) ? undefined : setMessages(current => ({ ...current, [goalId]: result.message ?? "The Coach has nothing to change." })),
     meta: { action: () => "draft your schedule" },
   });
   const dismiss = useMutation({

@@ -157,6 +157,7 @@ pub fn run() {
             coach::disconnect_coach,
             coach::test_coach,
             coach::set_coach_active,
+            coach::coach_models,
             coach::coach_explanations,
             coach::start_chatgpt_sign_in,
             coach::finish_chatgpt_sign_in,

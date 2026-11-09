@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { CoachModelError, coachProviderInfo, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
   PATTERN_LIMIT, learnFacts, learnMessages, learnSchema, parseLearned, patternInput, patternSource, toPatternDto,
   type CoachPatternsDto, type NewPattern, type PatternRecord,
@@ -59,8 +59,8 @@ export function createCoachPatternRoutes(store: CoachPatternStore) {
       if (!userId) return status(401, UNAUTHENTICATED);
       const saved = await store.provider(userId);
       if (!saved) return status(404, NO_PROVIDER);
-      const nothing = async (message: string) => ({ ...await list(userId), learned: 0, message }) satisfies CoachPatternsDto;
-      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return nothing("Enter your API key again in Settings › Coach.");
+      const nothing = async (message: string, error?: CoachErrorDto) => ({ ...await list(userId), learned: 0, message, ...error && { error } }) satisfies CoachPatternsDto;
+      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return nothing("Enter your API key again in Settings › Coach.", keyUnreadable(saved.provider));
       const known = await store.patterns(userId);
       if (known.length >= PATTERN_LIMIT) return nothing(`You keep ${PATTERN_LIMIT} patterns, the most the Coach learns. Delete some to learn more.`);
       const current = await store.season(userId);
@@ -77,7 +77,7 @@ export function createCoachPatternRoutes(store: CoachPatternStore) {
       try {
         fresh = parseLearned(await store.model(saved).complete({ messages: learnMessages(facts), schema: learnSchema }, request.signal), facts.known, PATTERN_LIMIT - known.length);
       } catch (error) {
-        if (error instanceof CoachModelError) return nothing(error.message);
+        if (error instanceof CoachModelError) return nothing(error.message, coachErrorDto(error, saved.provider));
         if (error instanceof Error && error.name === "AbortError") return nothing("The Coach took too long. Try again.");
         throw error;
       }

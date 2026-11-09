@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-coach-models"
+description = "Enables the coach_models command without any pre-configured scope."
+commands.allow = ["coach_models"]
+
+[[permission]]
+identifier = "deny-coach-models"
+description = "Denies the coach_models command without any pre-configured scope."
+commands.deny = ["coach_models"]

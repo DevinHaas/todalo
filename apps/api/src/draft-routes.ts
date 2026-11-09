@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { CoachModelError, coachProviderInfo, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { CoachModelError, coachErrorDto, coachProviderInfo, keyUnreadable, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import {
   dayDraftMessages, dayDraftSchema, dayPlan, draftCurrent, draftDecisionInput, localParts, parseDayDraft, parseWeekDraft, planAccept, planDecline, toDraftDto,
   weekDraftMessages, weekDraftSchema, weekDraftStart, weekPlan,
@@ -93,7 +93,7 @@ export function createDraftRoutes(store: DraftStore) {
     if (!saved) return status(404, NO_PROVIDER);
     const advice = goalId ? await store.recommendation(userId, goalId) : null;
     if (goalId && !advice) return status(404, NO_RECOMMENDATION);
-    if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return { draft: null, message: "Enter your API key again in Settings › Coach." } satisfies DraftDayDto;
+    if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return { draft: null, message: "Enter your API key again in Settings › Coach.", error: keyUnreadable(saved.provider) } satisfies DraftDayDto;
     const context = await store.dayContext(userId);
     const ask = (() => {
       if (start === null) {
@@ -109,7 +109,7 @@ export function createDraftRoutes(store: DraftStore) {
     const messages = withPatterns(ask.messages, await store.patterns?.(userId) ?? []);
     try { drafted = ask.parse(await store.model(saved).complete({ messages, schema: ask.schema }, request.signal)); }
     catch (error) {
-      if (error instanceof CoachModelError) return { draft: null, message: error.message } satisfies DraftDayDto;
+      if (error instanceof CoachModelError) return { draft: null, message: error.message, error: coachErrorDto(error, saved.provider) } satisfies DraftDayDto;
       if (error instanceof Error && error.name === "AbortError") return { draft: null, message: "The Coach took too long. Try again." } satisfies DraftDayDto;
       throw error;
     }

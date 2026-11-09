@@ -55,7 +55,7 @@ const app = createDraftRoutes({
   model: (config) => ({
     complete: async ({ messages, schema }) => {
       calls.push({ messages, schema: schema?.name });
-      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.");
+      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.", "overloaded");
       return reply(JSON.parse(messages.at(-1)!.content));
     },
   }),
@@ -145,12 +145,12 @@ describe("drafting today's plan", () => {
 
   it("explains provider failures and an empty draft without storing one", async () => {
     providers.set("alice", { provider: "openrouter", model: "broken", baseUrl: null, apiKey: "sk-or-test" });
-    expect(await draftDay()).toEqual({ draft: null, message: "The provider is unavailable. Try again later." });
+    expect(await draftDay()).toEqual({ draft: null, message: "The provider is unavailable. Try again later.", error: { code: "overloaded", provider: "openrouter", retryable: true, message: "The provider is unavailable. Try again later." } });
     providers.set("alice", { provider: "openrouter", model: "m", baseUrl: null, apiKey: "sk-or-test" });
     reply = () => JSON.stringify({ summary: "Your day already works.", items: [] });
     expect(await draftDay()).toEqual({ draft: null, message: "Your day already works." });
     providers.set("alice", { provider: "openrouter", model: "m", baseUrl: null, apiKey: null });
-    expect((await draftDay()).message).toContain("API key");
+    expect(await draftDay()).toMatchObject({ message: expect.stringContaining("API key"), error: { code: "bad_key", provider: "openrouter", retryable: false } });
     expect(drafts).toEqual([]);
   });
 

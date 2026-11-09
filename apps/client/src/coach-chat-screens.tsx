@@ -10,6 +10,7 @@ import { coachKeys, draftMutations, type ChatMessageDto, type CoachChatDto } fro
 import { DraftPanel } from "./draft-views";
 import { localZone } from "./seasons";
 import { Button, Hint, List, RightSidebar, Spinner, Textarea, cn } from "./ui";
+import { reportCoachError } from "./coach-errors";
 
 let state = { open: false, prompt: null as string | null, focus: 0 };
 const watchers = new Set<() => void>();
@@ -62,6 +63,8 @@ function CoachChat({ userId, prompt, focus }: { userId: string; prompt: string |
     mutationFn: (body: string) => coach.sendChat(localZone(), body),
     onMutate: () => setMessage(null),
     onSuccess: (result: CoachChatDto, body) => {
+      // Ticket 17d: a failed model call toasts (Retry sends the same text); the composer keeps it.
+      if (reportCoachError(result.error, { retry: () => send.mutate(body) })) return;
       if (result.message) { setMessage(result.message); return; }
       cache.setQueryData(coachKeys.chat(userId), { messages: result.messages });
       if (result.draft) void cache.invalidateQueries({ queryKey: coachKeys.drafts(userId) });

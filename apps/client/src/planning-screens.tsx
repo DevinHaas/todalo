@@ -14,6 +14,7 @@ import { DraftPanel } from "./draft-views";
 import { GoalIcon } from "./goal-views";
 import { VoiceContext } from "./ritual-screens";
 import { localZone } from "./seasons";
+import { reportCoachError } from "./coach-errors";
 import {
   Button, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Hint, Label, Progress,
   RadioGroup, RadioGroupItem, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Spinner, Textarea,
@@ -72,6 +73,7 @@ function PlanningSession({ userId, initialGoal, source }: { userId: string; init
     mutationFn: (input: PlanningInput) => coach.planning(localZone(), input),
     onMutate: () => setMessage(null),
     onSuccess: (result: PlanningDto, input) => {
+      if (reportCoachError(result.error, { retry: () => turn.mutate(input) })) return;
       if (result.message) { setMessage(result.message); return; }
       setTurns(input.turns);
       setChoice(""); setOther("");

@@ -5,6 +5,7 @@ import { change, optimisticWrite, type Change } from "./optimistic";
 import type { CriterionDto, GoalColor, GoalIcon, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto } from "../../../packages/server/src/goal-dto";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import type { ReorderPosition } from "./bulk";
+import { reportCoachError } from "./coach-errors";
 
 export type { CriterionDto, GoalColor, GoalIcon, GoalDetailDto, GoalDto, GoalLinkKind, GoalLinksDto, GoalMilestoneDto, GoalsDto, GoalSuggestionsDto, MilestoneDto };
 export { goalColorKeys, goalColorValue, goalIcons, nextGoalColor } from "../../../packages/server/src/goal-dto";
@@ -120,7 +121,7 @@ export function goalQueries(transport: GoalTransport) {
     links: (userId: string) => queryOptions({ queryKey: goalKeys.links(userId), queryFn: () => transport.links() }),
     suggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.suggestions(userId, taskId), queryFn: () => transport.suggestions(taskId) }),
     // The server caches the Coach's answer per task text, so a refetch rarely calls the model.
-    coachSuggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.coachSuggestions(userId, taskId), queryFn: () => transport.coachSuggestions(taskId) }),
+    coachSuggestions: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.coachSuggestions(userId, taskId), queryFn: () => transport.coachSuggestions(taskId).then(result => { reportCoachError(result?.error, { background: true }); return result; }) }),
     milestone: (userId: string, taskId: string) => queryOptions({ queryKey: goalKeys.milestone(userId, taskId), queryFn: () => transport.milestone(taskId) }),
   };
 }

@@ -7,7 +7,7 @@
 // the records and the accept/decline flow; each brings its own facts and parser.
 // Ticket 20: the week draft (weekPlan, parseWeekDraft) shares the day's parser.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
 
 export const draftOps = ["add", "move", "remove"] as const;
@@ -34,7 +34,7 @@ export interface DraftItemDto {
 export interface DraftDto { id: string; kind: DraftKind; period: string; summary: string; createdAt: string; items: DraftItemDto[] }
 export interface DraftsDto { drafts: DraftDto[] }
 /** POST /coach/drafts/day and /week: the new draft, or null with the reason the Coach could not draft. */
-export interface DraftDayDto { draft: DraftDto | null; message?: string }
+export interface DraftDayDto { draft: DraftDto | null; message?: string; /** Ticket 17d: why the model call failed. */ error?: CoachErrorDto }
 
 export interface DraftItemRecord { id: string; op: DraftOp; taskId: string | null; title: string; startAt: Date; endAt: Date | null; goalId: string | null; reason: string; seenUpdatedAt: Date | null; state: DraftItemState; criteria?: string[] | null }
 export interface DraftRecord { id: string; kind: DraftKind; period: string; summary: string; createdAt: Date; items: DraftItemRecord[] }

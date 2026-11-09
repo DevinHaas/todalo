@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
 import {
-  CoachModelError, chatgptCompleteInput, chatgptModelInput, chatgptStartInput, coachActiveInput, coachKindParam, coachModelKindParam, coachProviderInput, explanationFacts, explanationMessages, explanationSchema, ollamaUrl, parseExplanation, parsePing, pickCoachProvider, pingRequest,
+  CoachModelError, coachErrorDto, type CoachErrorDto, chatgptCompleteInput, chatgptModelInput, chatgptStartInput, coachActiveInput, coachKindParam, coachModelKindParam, coachProviderInput, explanationFacts, explanationMessages, explanationSchema, ollamaUrl, parseExplanation, parsePing, pickCoachProvider, pingRequest,
   type ChatgptCompleteDto, type ChatgptDto, type ChatgptStartDto, type CoachConfig, type CoachDto, type CoachExplanationsDto, type CoachModel, type CoachModelKind, type CoachProviderDto, type CoachProviderKind, type CoachState, type StoredCoachProvider,
 } from "@todalo/server/coach";
 import {
@@ -9,6 +9,7 @@ import {
   type ChatgptAuth, type ChatgptClient, type ChatgptPending, type ChatgptTokens,
 } from "@todalo/server/coach-chatgpt";
 import { CoachSecretError } from "@todalo/server/coach-secret";
+import { coachModelsInput, fallbackModels, listCoachModels, type CoachModelsDto } from "@todalo/server/coach-models";
 import {
   dismissedThisWeek, parseRecommendation, recommendationFacts, recommendationMessages, recommendationSchema, type CoachRecommendationsDto, type TaskMove,
 } from "@todalo/server/coach-recommendations";
@@ -57,6 +58,8 @@ export interface CoachStore {
   moves(userId: string, since: Date): Promise<TaskMove[]>;
   /** Ticket 24: the user's Patterns, sent with every explanation and recommendation. */
   patterns?(userId: string): Promise<PatternRecord[]>;
+  /** The model picker's calls to each provider's model list (tests: a fake provider). */
+  modelsFetch?: typeof fetch;
   now?: () => Date;
 }
 
@@ -75,6 +78,8 @@ const toDto = (config: StoredCoachProvider): CoachProviderDto =>
 
 /** How long a started sign-in waits for the browser to come back. */
 const SIGN_IN_MS = 10 * 60_000;
+/** How long a provider's model list is reused. */
+const MODELS_MS = 10 * 60_000;
 const NOT_ACTIVE = "This sign-in is no longer active. Start again.";
 
 /** The page the browser shows after OpenAI sent it back to the API (web on localhost). */
@@ -106,6 +111,9 @@ export function createCoachRoutes(store: CoachStore) {
   // Ticket 18: sign-ins in progress by state. The PKCE verifier stays here, never in a client.
   // ponytail: in memory, so a restart or a second API instance drops it (the user starts again).
   const signIns = new Map<string, ChatgptPending & { userId: string; expiresAt: number }>();
+  // Model lists by user, provider and a hash of the credential used.
+  // ponytail: in memory per process, like signIns; a shared cache only if several instances matter.
+  const modelLists = new Map<string, { expiresAt: number; dto: CoachModelsDto }>();
 
   /** OpenAI's redirect back: checks it belongs to this user's sign-in, exchanges the code, saves the tokens. */
   async function complete(userId: string, params: URLSearchParams, returnedTo: URL | null): Promise<ChatgptCompleteDto> {
@@ -256,6 +264,34 @@ export function createCoachRoutes(store: CoachStore) {
       await store.removeChatgpt(userId);
       return dto(userId);
     })
+    // The model picker: that provider's models, asked with its saved key or
+    // sign-in, or a key / Ollama address typed but not saved yet (body). Never
+    // logged or returned. Any failure is a 200 with the curated list, so the
+    // user is never stuck (Custom model… stays in the picker).
+    .post("/coach/models", async ({ request, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const kind = coachModelKindParam.safeParse(new URL(request.url).searchParams.get("provider") ?? undefined);
+      const input = coachModelsInput.safeParse(body ?? {});
+      if (!kind.success || !kind.data || !input.success) return status(400, INVALID);
+      const provider = kind.data;
+      const saved = (await store.state(userId)).configured.find(item => item.provider === provider);
+      const apiKey = (provider === "chatgpt" ? null : input.data.apiKey) ?? saved?.apiKey ?? null;
+      const baseUrl = provider === "ollama" ? input.data.baseUrl || saved?.baseUrl || null : null;
+      // OpenRouter lists its models without a key; the others need one.
+      if (!apiKey && provider !== "ollama" && provider !== "openrouter")
+        return fallbackModels(provider, provider === "chatgpt" ? "Sign in with ChatGPT to see its models." : "Enter your API key to see every model.");
+      const key = `${userId} ${provider} ${createHash("sha256").update(`${apiKey ?? ""} ${baseUrl ?? ""}`).digest("hex")}`;
+      const hit = modelLists.get(key);
+      if (hit && hit.expiresAt > now().getTime()) return hit.dto;
+      const dto = await listCoachModels(provider, apiKey, baseUrl, store.modelsFetch ?? fetch, request.signal, now().getTime());
+      if (!dto.fallback) {
+        for (const [old, entry] of modelLists) if (entry.expiresAt <= now().getTime()) modelLists.delete(old);
+        modelLists.set(key, { expiresAt: now().getTime() + MODELS_MS, dto });
+      }
+      return dto;
+    })
     // Test connection: one tiny structured request with the active provider,
     // or the one named by ?provider= (its card). A provider failure is a 200
     // { ok: false, message } so the reason reaches the native client too (its
@@ -271,9 +307,15 @@ export function createCoachRoutes(store: CoachStore) {
       // Nothing can run: test the pick anyway, so it says why.
       const saved = kind.data ? configured.find(item => item.provider === kind.data) : pick.provider ?? pick.selected;
       if (!saved) return status(404, NO_PROVIDER);
-      if (!saved.usable) return { ok: false, message: saved.provider === "chatgpt" ? "ChatGPT signed you out. Sign in again." : "Enter your API key again." };
+      if (!saved.usable) {
+        const failed = saved.provider === "chatgpt" ? new CoachModelError("ChatGPT signed you out. Sign in again.", "auth_expired", "chatgpt") : new CoachModelError("Enter your API key again.", "bad_key", saved.provider);
+        return { ok: false, message: failed.message, error: coachErrorDto(failed) };
+      }
       try { parsePing(await store.model(saved).complete(pingRequest, request.signal)); }
-      catch (error) { return { ok: false, message: error instanceof CoachModelError ? error.message : "The provider is unavailable. Try again later." }; }
+      catch (error) {
+        const failed = error instanceof CoachModelError ? error : new CoachModelError("The provider is unavailable. Try again later.", "overloaded");
+        return { ok: false, message: failed.message, error: coachErrorDto(failed, saved.provider) };
+      }
       return { ok: true };
     })
     // Each current-season goal's explanation, from its computed status facts only.
@@ -287,7 +329,7 @@ export function createCoachRoutes(store: CoachStore) {
       const entries = await Promise.all(measured.goals.map(({ goal, facts }) => facts && ask(measured, facts, cached.get(goal.goalId), request.signal,
         { messages: explanationMessages(facts), schema: explanationSchema }, parseExplanation, (hash, text) => store.cache(userId, goal.goalId, hash, text))
         .then(text => text === null ? null : [goal.goalId, text] as const)));
-      return { explanations: Object.fromEntries(entries.filter(entry => entry != null)) } satisfies CoachExplanationsDto;
+      return { explanations: Object.fromEntries(entries.filter(entry => entry != null)), ...measured.error && { error: measured.error } } satisfies CoachExplanationsDto;
     })
     // Ticket 21: one recommendation per Adjust or Off track goal, from its status
     // facts plus how its tasks were done, scheduled and moved. Cached like the
@@ -309,7 +351,7 @@ export function createCoachRoutes(store: CoachStore) {
           (hash, value) => store.cacheRecommendation(userId, goal.goalId, hash, value));
         return text === null ? null : { goalId: goal.goalId, text };
       }));
-      return { recommendations: entries.filter(entry => entry !== null) } satisfies CoachRecommendationsDto;
+      return { recommendations: entries.filter(entry => entry !== null), ...measured.error && { error: measured.error } } satisfies CoachRecommendationsDto;
     })
     .post("/coach/recommendations/:goalId/dismiss", async ({ request, params, status }) => {
       const userId = await writer(request);
@@ -335,15 +377,15 @@ export function createCoachRoutes(store: CoachStore) {
       const weeks = perGoal.get(goal.goalId)!;
       return { goal, facts: explanationFacts({ goal, weeks, day, length: season.lengthDays, status: goalStatus({ day, length: season.lengthDays, weeks, reviewed: inputs.reviewed }) }) };
     });
-    return { saved, season, zone, clock, today, inputs, goals, patterns: patterns.map(({ statement }) => ({ statement })) };
+    return { saved, season, zone, clock, today, inputs, goals, patterns: patterns.map(({ statement }) => ({ statement })), error: undefined as CoachErrorDto | undefined };
   }
 
   /**
    * One goal's Coach text: the cached one while its facts, provider, model and
    * day are unchanged, else one model call. A failure hides only that goal's
-   * text (null); Test connection shows why.
+   * text (null); the first failure goes to `measured.error` (ticket 17d) for the reply.
    */
-  async function ask(measured: { saved: CoachConfig; today: string; patterns: { statement: string }[] }, facts: unknown, hit: { inputsHash: string; text: string } | undefined, signal: AbortSignal,
+  async function ask(measured: { saved: CoachConfig; today: string; patterns: { statement: string }[]; error?: CoachErrorDto }, facts: unknown, hit: { inputsHash: string; text: string } | undefined, signal: AbortSignal,
     request: Parameters<CoachModel["complete"]>[0], parse: (content: string) => string, save: (hash: string, text: string) => Promise<void>): Promise<string | null> {
     const { saved, today, patterns } = measured;
     // Ticket 24: an edited or deleted pattern asks again (no patterns: the hash is unchanged).
@@ -354,7 +396,8 @@ export function createCoachRoutes(store: CoachStore) {
       await save(hash, text);
       return text;
     } catch (error) {
-      if (error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError")) return null;
+      if (error instanceof CoachModelError) { measured.error ??= coachErrorDto(error, saved.provider); return null; }
+      if (error instanceof Error && error.name === "AbortError") return null;
       throw error;
     }
   }

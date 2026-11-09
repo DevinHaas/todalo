@@ -24,6 +24,7 @@ import { useRitualTaskIds } from "./ritual-screens";
 import { useCalendarEvents } from "./calendar-screens";
 import { BoardScreen } from "./board-screens";
 import { useBulkSelection } from "./bulk-screens";
+import { reportCoachError } from "./coach-errors";
 
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
 function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection, planner: scope }: { projectId?: string | null; selection?: SelectionSlots; planner?: "day" | "week" } = {}) {
@@ -185,7 +186,7 @@ function useCoachDraft(userId: string, enabled: boolean, scope: { kind: "day" | 
   const [message, setMessage] = useState<string | null>(null);
   const propose = useMutation({
     mutationFn: (target: typeof scope) => target.kind === "week" ? writes.draftWeek(target.period) : writes.draftDay(), onMutate: () => setMessage(null),
-    onSuccess: (result) => setMessage(result.draft ? null : result.message ?? null),
+    onSuccess: (result, target) => setMessage(result.draft || reportCoachError(result.error, { retry: () => propose.mutate(target) }) ? null : result.message ?? null),
     meta: { action: (target: typeof scope) => `draft your ${target.kind}` },
   });
   // Another week shown: its own draft, and no message left from the last one.

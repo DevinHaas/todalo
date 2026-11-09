@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
-import { CoachModelError, type CoachConfig, type CoachModel } from "@todalo/server/coach";
+import { CoachModelError, coachErrorDto, type CoachConfig, type CoachErrorDto, type CoachModel } from "@todalo/server/coach";
 import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import { meaningFacts, meaningMessages, meaningSchema, mergeSuggestions, parseMeaning } from "@todalo/server/coach-suggestions";
 import { createGoalInput, goalLinkKinds, milestoneInput, milestoneReached, type CriterionDto, type GoalMilestoneDto, type MilestoneDto, type MilestoneInput, goalsVisibilityInput, reorderGoalInput, toGoalDto, updateGoalInput, type CreateGoalInput, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalLinksDto, type GoalRecord, type GoalsDto, type GoalSuggestionsDto, type ReorderGoalInput, type UpdateGoalInput } from "@todalo/server/goal-dto";
@@ -82,7 +82,7 @@ export function createGoalRoutes(store: GoalStore) {
   }
 
   /** The Coach's goals for the task's text: cached while the text, candidate goals, provider and model are unchanged; a failure is none. */
-  async function meaning(userId: string, task: { id: string; title: string; description: string | null }, goals: GoalRecord[], config: CoachConfig, hit: { inputsHash: string; goalIds: string[] } | null, signal: AbortSignal) {
+  async function meaning(userId: string, task: { id: string; title: string; description: string | null }, goals: GoalRecord[], config: CoachConfig, hit: { inputsHash: string; goalIds: string[] } | null, signal: AbortSignal, seen: { error?: CoachErrorDto } = {}) {
     const built = meaningFacts(task, goals);
     if (!built || !store.coach) return [];
     const patterns = (await store.coach.patterns?.(userId) ?? []).map(({ statement }) => ({ statement }));
@@ -94,7 +94,8 @@ export function createGoalRoutes(store: GoalStore) {
       await store.coach.cache(userId, task.id, hash, goalIds);
       return goalIds;
     } catch (error) {
-      if (error instanceof CoachModelError || (error instanceof Error && error.name === "AbortError")) return [];
+      if (error instanceof CoachModelError) { seen.error = coachErrorDto(error, config.provider); return []; }
+      if (error instanceof Error && error.name === "AbortError") return [];
       throw error;
     }
   }
@@ -171,8 +172,9 @@ export function createGoalRoutes(store: GoalStore) {
       if (!inputs) return status(404, TASK_NOT_FOUND);
       const { task, goals, dismissed, rules, open } = inputs;
       const config = open ? provider : null;
-      const byMeaning = config ? await meaning(userId, task, goals, config, hit, request.signal) : [];
-      return mergeSuggestions(rules, byMeaning, { active: goals.map(goal => goal.id), dismissed }) satisfies GoalSuggestionsDto;
+      const seen: { error?: CoachErrorDto } = {};
+      const byMeaning = config ? await meaning(userId, task, goals, config, hit, request.signal, seen) : [];
+      return { ...mergeSuggestions(rules, byMeaning, { active: goals.map(goal => goal.id), dismissed }), ...seen.error && { error: seen.error } } satisfies GoalSuggestionsDto;
     })
     .delete("/tasks/:id/goal-suggestions/:goalId", async ({ request, params, status }) => {
       const userId = await writer(request);

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  anthropicRequest, chatgptRequest, chatRequest, CoachModelError, createCoachModel, parseAnthropic, parseChatgptStream, explanationFacts, explanationMessages, explanationSchema, failureMessage, nextCoachProvider, ollamaUrl, parseCompletion, parseExplanation, parsePing, pickCoachProvider,
+  anthropicRequest, chatgptRequest, chatRequest, coachErrorDto, CoachModelError, coachRetry, createCoachModel, httpFailure, retryAfter, retryDelay, parseAnthropic, parseChatgptStream, explanationFacts, explanationMessages, explanationSchema, failureMessage, nextCoachProvider, ollamaUrl, parseCompletion, parseExplanation, parsePing, pickCoachProvider,
   type CoachConfig, type CoachModelKind,
 } from "./coach";
 import { openSecret, sealSecret, CoachSecretError } from "./coach-secret";
@@ -109,11 +109,11 @@ describe("createCoachModel", () => {
     [config("chatgpt"), 401, "ChatGPT signed you out. Sign in again in Settings › Coach."],
     [config("chatgpt"), 429, "You reached your ChatGPT plan's usage limit. Try again later."],
     [config("anthropic"), 401, "The provider rejected the API key."],
-    [config("anthropic"), 402, "The provider is rate limiting this key or it is out of credit."],
-    [config("anthropic"), 529, "The provider is unavailable. Try again later."],
+    [config("anthropic"), 402, "The provider says this key is out of credit."],
+    [config("anthropic"), 529, "The provider is busy or unavailable. Try again later."],
   ])("maps %o %i", async (cfg, status, message) => {
     const { fetcher } = fake(new Response("{}", { status }));
-    await expect(createCoachModel(cfg, fetcher).complete({ messages: [] })).rejects.toThrow(message);
+    await expect(createCoachModel(cfg, fetcher, { sleep: async () => {} }).complete({ messages: [] })).rejects.toThrow(message);
   });
 });
 
@@ -182,12 +182,133 @@ describe("explanationFacts", () => {
 });
 
 describe("createCoachModel", () => {
+  const instant = { sleep: async () => {} };
   it("maps HTTP failures and unreachable hosts to messages the user can act on", async () => {
-    const failing = (status: number) => createCoachModel(config("openai"), async () => new Response("{}", { status }));
+    const failing = (status: number) => createCoachModel(config("openai"), async () => new Response("{}", { status }), instant);
     await expect(failing(401).complete({ messages: [] })).rejects.toThrow("rejected the API key");
     await expect(failing(429).complete({ messages: [] })).rejects.toThrow(failureMessage(429));
-    const offline = createCoachModel(config("ollama"), async () => { throw new TypeError("fetch failed"); });
+    const offline = createCoachModel(config("ollama"), async () => { throw new TypeError("fetch failed"); }, instant);
     await expect(offline.complete({ messages: [] })).rejects.toThrow("Could not reach Ollama");
+  });
+});
+
+// Ticket 17d: the error code each failure gets, and whether it is retried.
+describe("httpFailure", () => {
+  it.each([
+    [401, "chatgpt", "", "auth_expired", false],
+    [403, "chatgpt", "", "refused", false],
+    [429, "chatgpt", "", "rate_limited", true],
+    [401, "openai", "", "bad_key", false],
+    [403, "anthropic", "", "bad_key", false],
+    [402, "openrouter", "", "no_credit", false],
+    [429, "openai", '{"error":{"code":"insufficient_quota"}}', "no_credit", false],
+    [429, "anthropic", '{"error":{"message":"Your credit balance is too low"}}', "no_credit", false],
+    [429, "openai", '{"error":{"code":"rate_limit_exceeded"}}', "rate_limited", true],
+    [404, "openai", "", "invalid", false],
+    [400, "anthropic", "", "invalid", false],
+    [422, "ollama", "", "invalid", false],
+    [418, "openai", "", "invalid", false],
+    [408, "openai", "", "overloaded", true],
+    [500, "openai", "", "overloaded", true],
+    [503, "openrouter", "", "overloaded", true],
+    [529, "anthropic", "", "overloaded", true],
+  ] as const)("%i from %s → %s", (status, provider, body, code, retryable) => {
+    const error = httpFailure(status, provider, body);
+    expect([error.code, error.retryable, error.provider]).toEqual([code, retryable, provider]);
+    expect(coachErrorDto(error)).toEqual({ code, provider, retryable, message: error.message });
+  });
+  it("reads a refusal as refused, a cut-off or malformed reply as invalid", () => {
+    const code = (run: () => unknown) => { try { run(); } catch (error) { return (error as CoachModelError).code; } };
+    expect(code(() => parseCompletion({ choices: [{ finish_reason: "stop", message: { refusal: "no" } }] }))).toBe("refused");
+    expect(code(() => parseAnthropic({ stop_reason: "refusal", content: [] }))).toBe("refused");
+    expect(code(() => parseCompletion({ choices: [{ finish_reason: "length", message: { content: "{" } }] }))).toBe("invalid");
+    expect(code(() => parseExplanation("not json"))).toBe("invalid");
+  });
+  it("reads Retry-After in seconds, as a date, and OpenAI's retry-after-ms", () => {
+    expect(retryAfter(new Headers({ "retry-after": "3" }))).toBe(3_000);
+    expect(retryAfter(new Headers({ "retry-after-ms": "250" }))).toBe(250);
+    expect(retryAfter(new Headers({ "retry-after": new Date(10_000).toUTCString() }), 4_000)).toBe(6_000);
+    expect(retryAfter(new Headers())).toBeUndefined();
+    expect(retryAfter(new Headers({ "retry-after": "soon" }))).toBeUndefined();
+  });
+});
+
+describe("createCoachModel retries", () => {
+  const ok = () => new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "{\"ok\":true}" } }] }), { status: 200 });
+  /** A fake provider answering from a script; each entry a status, "network", or "ok". */
+  function provider(script: (number | "network" | "ok")[], headers: Record<string, string> = {}) {
+    const calls: number[] = [];
+    const fetcher = (async () => {
+      calls.push(Date.now());
+      const next = script[Math.min(calls.length - 1, script.length - 1)];
+      if (next === "network") throw new TypeError("fetch failed");
+      return next === "ok" ? ok() : new Response("{}", { status: next, headers });
+    }) as unknown as typeof fetch;
+    return { fetcher, calls };
+  }
+  // Fake timers: the backoff waits run instantly but Date.now advances, so the budget is real.
+  const run = async (model: ReturnType<typeof createCoachModel>, signal?: AbortSignal) => {
+    const result = model.complete({ messages: [] }, signal).then(value => ({ value }), (error: CoachModelError) => ({ error }));
+    await vi.runAllTimersAsync();
+    return result;
+  };
+  beforeEach(() => { vi.useFakeTimers({ now: 0 }); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it.each([
+    ["503 then success", [503, "ok"], 2, "ok"],
+    ["network, 429, 529, then success", ["network", 429, 529, "ok"], 4, "ok"],
+    ["five 503s: gives up after the fifth", [503], 5, "overloaded"],
+    ["five network failures", ["network"], 5, "network"],
+    ["401: not retried", [401], 1, "bad_key"],
+    ["402 out of credit: not retried", [402], 1, "no_credit"],
+    ["404: not retried", [404], 1, "invalid"],
+  ] as const)("%s", async (_, script, attempts, outcome) => {
+    const fake = provider([...script]);
+    const result = await run(createCoachModel(config("openai"), fake.fetcher, { random: () => 0.5 }));
+    expect(fake.calls).toHaveLength(attempts);
+    if (outcome === "ok") expect(result).toEqual({ value: "{\"ok\":true}" });
+    else expect("error" in result && result.error.code).toBe(outcome);
+  });
+
+  it("backs off exponentially with jitter between attempts", async () => {
+    const fake = provider([503]);
+    await run(createCoachModel(config("openai"), fake.fetcher, { random: () => 1 }));
+    const gaps = fake.calls.slice(1).map((at, index) => at - fake.calls[index]!);
+    expect(gaps).toEqual([500, 1_000, 2_000, 4_000]);
+    expect([retryDelay(1, () => 0), retryDelay(3, () => 0), retryDelay(9, () => 1)]).toEqual([250, 1_000, coachRetry.maxDelayMs]);
+  });
+
+  it("waits as long as Retry-After says, and stops when that would pass the budget", async () => {
+    const polite = provider([429, "ok"], { "retry-after": "2" });
+    await run(createCoachModel(config("openai"), polite.fetcher));
+    expect(polite.calls).toEqual([0, 2_000]);
+    const later = provider([429], { "retry-after": "60" });
+    const result = await run(createCoachModel(config("openai"), later.fetcher));
+    expect(later.calls).toHaveLength(1);
+    expect("error" in result && result.error.code).toBe("rate_limited");
+  });
+
+  it("never retries past the total budget (~20 s)", async () => {
+    const slow = provider([429], { "retry-after": "8" });
+    await run(createCoachModel(config("openai"), slow.fetcher));
+    // 0, 8 s, 16 s; a third wait would end at 24 s.
+    expect(slow.calls).toEqual([0, 8_000, 16_000]);
+  });
+
+  it("stops retrying once the request is cancelled", async () => {
+    const fake = provider([503]);
+    const controller = new AbortController();
+    const result = await run(createCoachModel(config("openai"), fake.fetcher, { sleep: async () => controller.abort() }), controller.signal);
+    expect("error" in result).toBe(true);
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("a ChatGPT 401 is auth_expired and not retried", async () => {
+    const fake = provider([401]);
+    const result = await run(createCoachModel(config("chatgpt"), fake.fetcher));
+    expect(fake.calls).toHaveLength(1);
+    expect("error" in result && coachErrorDto(result.error)).toMatchObject({ code: "auth_expired", provider: "chatgpt", retryable: false });
   });
 });
 

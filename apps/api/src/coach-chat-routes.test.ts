@@ -46,7 +46,7 @@ const app = createCoachChatRoutes({
   model: (config) => ({
     complete: async ({ messages, schema }) => {
       calls.push({ messages, schema: schema?.name });
-      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.");
+      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.", "overloaded");
       return reply(JSON.parse(messages[1]!.content.replace(/^Facts: /, "")), messages);
     },
   }),
@@ -150,7 +150,7 @@ describe("chatting with the Coach", () => {
   it("stores nothing when the model fails, and says why", async () => {
     providers.set("alice", { provider: "openrouter", model: "broken", baseUrl: null, apiKey: "sk-or-test" });
     const result = await send("Hello");
-    expect(result).toMatchObject({ messages: [], draft: null, message: "The provider is unavailable. Try again later." });
+    expect(result).toMatchObject({ messages: [], draft: null, message: "The provider is unavailable. Try again later.", error: { code: "overloaded", provider: "openrouter", retryable: true, message: "The provider is unavailable. Try again later." } });
     reply = () => "not json";
     providers.set("alice", { provider: "openrouter", model: "m", baseUrl: null, apiKey: "sk-or-test" });
     expect((await send("Hello")).message).toContain("not valid JSON");

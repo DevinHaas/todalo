@@ -7,7 +7,7 @@
 // ponytail: the client holds the transcript and sends it whole each turn (no
 // session table); closing the dialog before the draft keeps nothing.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { zonedTaskDate } from "./dates";
 import { DRAFT_ITEM_LIMIT, localParts, parseWeekDraft, plusDays, weekPlanFacts, type DraftDto, type NewDraft, type NewDraftItem, type WeekPlan } from "./drafts";
 
@@ -34,7 +34,7 @@ export type PlanningInput = z.infer<typeof planningInput>;
 
 export interface PlanningQuestionDto { text: string; options: string[]; step: number; total: number }
 /** The next question, or the finished draft (null with `message` when the Coach could not draft). */
-export interface PlanningDto { question: PlanningQuestionDto | null; draft: DraftDto | null; message?: string }
+export interface PlanningDto { question: PlanningQuestionDto | null; draft: DraftDto | null; message?: string; /** Ticket 17d. */ error?: CoachErrorDto }
 
 /** What the Coach knows about the goal beyond the week plan. */
 export interface PlanningGoal {

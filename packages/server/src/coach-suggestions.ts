@@ -5,7 +5,7 @@
 // cached by an inputs hash in the routes, so the model is asked once per task
 // content or per set of primary goals.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 
 // ---- Goal suggestions by meaning ----
 
@@ -63,7 +63,7 @@ export interface CapacityGoalDto { goalId: string; minutesPerWeek: number; reaso
  * estimate per primary goal, null without a provider, season or primary goal,
  * or when the model failed. `over`: the estimate needs more than is available.
  */
-export interface CapacityDto { availableMinutes: number | null; goals: CapacityGoalDto[] | null; neededMinutes: number | null; over: boolean }
+export interface CapacityDto { availableMinutes: number | null; goals: CapacityGoalDto[] | null; neededMinutes: number | null; over: boolean; /** Ticket 17d: why there is no estimate. */ error?: CoachErrorDto }
 /** PUT /api/v1/coach/capacity: hours are entered, minutes are stored; null clears it. */
 export const capacityInput = z.strictObject({ availableMinutes: z.number().int().min(0).max(7 * 24 * 60).nullable() });
 

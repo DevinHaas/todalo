@@ -8,7 +8,7 @@
 // ratings; each pattern keeps that evidence and its source. Every Coach prompt
 // gets the stored patterns through withPatterns, so the user sees all of them.
 import { z } from "zod";
-import { CoachModelError, type CoachMessage, type CoachSchema } from "./coach";
+import { CoachModelError, type CoachErrorDto, type CoachMessage, type CoachSchema } from "./coach";
 import { goalHabits, partOfDay, seasonWeekOf, type TaskMove } from "./coach-recommendations";
 import { localParts } from "./drafts";
 import type { StatusInputs, WeekSignals } from "./goal-status";
@@ -19,7 +19,7 @@ export interface PatternRecord { id: string; statement: string; evidence: string
 export type NewPattern = Pick<PatternRecord, "statement" | "evidence" | "source">;
 export interface PatternDto { id: string; statement: string; evidence: string; source: string; learnedAt: string; editedAt: string | null }
 /** `learned`: how many the last learn added; `message`: why it added none. */
-export interface CoachPatternsDto { patterns: PatternDto[]; learned?: number; message?: string }
+export interface CoachPatternsDto { patterns: PatternDto[]; learned?: number; message?: string; /** Ticket 17d. */ error?: CoachErrorDto }
 
 export const toPatternDto = (row: PatternRecord): PatternDto => ({
   id: row.id, statement: row.statement, evidence: row.evidence, source: row.source,

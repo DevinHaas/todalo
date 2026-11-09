@@ -20,6 +20,7 @@ import { collapsedTasks } from "./views";
 import { MAX_SUBTASK_DEPTH } from "../../../packages/db/src/task-parent-validation";
 import { copyTaskLink } from "./links";
 import { inlineError, toasts } from "./toasts";
+import { connectCoachErrors, reportCoachError } from "./coach-errors";
 import { useTaskWrites } from "./task-writes";
 import { isTimed, unscheduledDetails } from "./schedule";
 import { theme } from "./theme";
@@ -250,6 +251,21 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
   const latest = useRef({ navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize, update });
   latest.current = { navigate, openSettings, onCapture, onSidebar, onFind, onNewGoal, cache, metadata, clearDates, organize, update };
   useEffect(() => { if (!notice) return; const id = setTimeout(() => setNotice(null), 6000); return () => clearTimeout(id); }, [notice]);
+  // Goals ticket 17d: the Coach error toasts' actions open Settings › Coach (a provider's card, or a control in it).
+  useEffect(() => connectCoachErrors({
+    cache, userId, transport: coach,
+    openCard: (kind, action) => {
+      if (!document.querySelector("[data-coach-settings]")) latest.current.openSettings("coach");
+      if (!kind) return;
+      // The dialog renders after navigation: wait for the card (up to 3 s), then open it and press the control.
+      let tries = 0;
+      const find = () => {
+        if (document.querySelector(`[data-coach-settings] [data-coach-card="${kind}"]`)) return void coachCard(kind, action ? `[data-coach-action="${action}"]` : "[data-coach-none]");
+        if (++tries < 30) setTimeout(find, 100);
+      };
+      find();
+    },
+  }), [cache, userId]);
 
   useEffect(() => {
     const go = (path: string) => () => void latest.current.navigate(path);
@@ -457,7 +473,10 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
         if (press(document.querySelector("[data-coach-settings]"), '[data-coach-action="test"]') !== false) return;
         if (modalOpen()) return false;
         const failed = (description?: string) => toasts.add({ title: "Coach connection failed", description: description ?? "Try again, or check Settings › Coach." });
-        void coach.test().then(result => result.ok ? toasts.add({ title: "Coach connected", description: "The model answered." }) : failed(result.message), () => failed());
+        // Ticket 17d: a model failure gets its toast with the step that helps (Retry tests again).
+        const run = () => void coach.test().then(result => result.ok ? toasts.add({ title: "Coach connected", description: "The model answered." })
+          : reportCoachError(result.error, { retry: run }) || failed(result.message), () => failed());
+        run();
       },
       // Goals ticket 18: ChatGPT sign-in on Settings › Coach.
       "coach.chatgpt-sign-in": () => {

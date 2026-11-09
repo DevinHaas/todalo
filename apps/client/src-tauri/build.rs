@@ -100,6 +100,7 @@ fn main() {
             "disconnect_coach",
             "test_coach",
             "set_coach_active",
+            "coach_models",
             "coach_explanations",
             "start_chatgpt_sign_in",
             "finish_chatgpt_sign_in",

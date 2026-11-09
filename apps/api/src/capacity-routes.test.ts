@@ -100,7 +100,8 @@ describe("primary-goal capacity", () => {
 
   it("a failing, incomplete or wild estimate shows none and is not cached", async () => {
     replies = [new CoachModelError("down"), '{"goals":[{"ref":"g1","hoursPerWeek":4,"reason":"x"}]}', estimate(4, 500), estimate(4, 6)];
-    for (let i = 0; i < 3; i++) expect((await read()).goals).toBeNull();
+    expect(await read()).toMatchObject({ goals: null, error: { code: "invalid", message: "down" } });
+    for (let i = 0; i < 2; i++) expect((await read()).goals).toBeNull();
     expect((await read()).neededMinutes).toBe(600);
   });
 

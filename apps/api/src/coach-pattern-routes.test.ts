@@ -37,7 +37,7 @@ const app = createCoachPatternRoutes({
   model: (config) => ({
     complete: async ({ messages, schema }) => {
       calls.push({ messages, schema: schema?.name });
-      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.");
+      if (config.model === "broken") throw new CoachModelError("The provider is unavailable. Try again later.", "overloaded");
       return reply();
     },
   }),
@@ -108,7 +108,7 @@ describe("coach patterns", () => {
 
   it("stores nothing when the model fails or answers malformed", async () => {
     providers.set("alice", { provider: "openrouter", model: "broken", baseUrl: null, apiKey: "sk-or-test" });
-    expect(await learn()).toMatchObject({ patterns: [], learned: 0, message: "The provider is unavailable. Try again later." });
+    expect(await learn()).toMatchObject({ patterns: [], learned: 0, message: "The provider is unavailable. Try again later.", error: { code: "overloaded", provider: "openrouter", retryable: true, message: "The provider is unavailable. Try again later." } });
     providers.set("alice", { provider: "openrouter", model: "m", baseUrl: null, apiKey: "sk-or-test" });
     reply = () => "nope";
     expect(await learn()).toMatchObject({ patterns: [], learned: 0, message: "The Coach's patterns were not valid JSON." });

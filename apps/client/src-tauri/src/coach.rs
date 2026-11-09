@@ -102,6 +102,37 @@ pub async fn test_coach(
         .await?)
 }
 
+/// The model picker: the provider's models, asked with its saved credentials or
+/// a key / Ollama address typed but not saved (passed through, never kept here).
+#[tauri::command]
+pub async fn coach_models(
+    state: tauri::State<'_, NativeAuth>,
+    provider: String,
+    api_key: Option<String>,
+    base_url: Option<String>,
+) -> Result<Value, String> {
+    if api_key.as_ref().is_some_and(|key| key.len() > 500)
+        || base_url.as_ref().is_some_and(|url| url.len() > 500)
+    {
+        return Err(INVALID.to_owned());
+    }
+    let mut body = serde_json::Map::new();
+    if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
+        body.insert("apiKey".to_owned(), Value::String(key));
+    }
+    if let Some(url) = base_url.filter(|url| !url.trim().is_empty()) {
+        body.insert("baseUrl".to_owned(), Value::String(url));
+    }
+    state
+        .write(
+            Method::POST,
+            &named("/api/v1/coach/models", Some(provider), true)?,
+            Some(Value::Object(body)),
+        )
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
 /// Ticket 17c: the provider the Coach uses; null (404) when it is not configured.
 #[tauri::command]
 pub async fn set_coach_active(
