@@ -32,7 +32,26 @@ const boxOf = (element: Element | null, round: boolean): Box => {
 
 const themeColors = (blob: string): LiquidColors => {
   const style = getComputedStyle(document.documentElement);
-  return { blob: cssColor(blob), bar: cssColor(style.getPropertyValue("--color-background")), line: cssColor(style.getPropertyValue("--color-border")) };
+  const bar = cssColor(style.getPropertyValue("--color-background"));
+  // The glint: a cool silver on a light bar (white would vanish), white on a dark one.
+  const light = bar[0] * 0.3 + bar[1] * 0.59 + bar[2] * 0.11 > 0.5;
+  return { blob: cssColor(blob), bar, line: cssColor(style.getPropertyValue("--color-border")), shine: light ? [0.62, 0.68, 0.84] : [1, 1, 1] };
+};
+
+/**
+ * The bar's content lives inside the liquid: clipped to the liquid's current outline
+ * (so it is revealed as the liquid spreads over it, and gathered up as it leaves),
+ * and only visible once the liquid has turned the bar's colour.
+ */
+const clipTo = (element: HTMLElement, sim: LiquidSim, to: Box) => {
+  const { body } = sim;
+  if (!body) { element.style.clipPath = "inset(50%)"; element.style.opacity = "0"; return; }
+  const w = body.w * (1 + body.j), h = body.h * (1 - body.j);
+  const top = body.y - h - (to.y - to.h), bottom = to.y + to.h - (body.y + h);
+  const left = body.x - w - (to.x - to.w), right = to.x + to.w - (body.x + w);
+  const settled = sim.phase === "open" && Math.max(Math.abs(top), Math.abs(bottom), Math.abs(left), Math.abs(right)) < 0.5;
+  element.style.clipPath = settled ? "" : `inset(${top}px ${right}px ${bottom}px ${left}px round ${Math.min(body.r, w, h)}px)`;
+  element.style.opacity = String(Math.max(0, Math.min(1, (body.mix - 0.4) / 0.5)));
 };
 
 export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docked, children }: {
@@ -60,11 +79,12 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
     let renderer: ReturnType<typeof liquidRenderer>;
     try { renderer = liquidRenderer(canvas.current); } catch (error) { console.error(error); renderer = null; }
     if (!renderer) { setFailed(true); return; }
-    const targets = () => ({ blob: boxOf(blob.current, true), bar: boxOf(bar.current?.querySelector("[data-liquid-target]") ?? bar.current, false) });
+    const target = () => bar.current?.querySelector<HTMLElement>("[data-liquid-target]") ?? null;
+    const targets = () => ({ blob: boxOf(blob.current, true), bar: boxOf(target() ?? bar.current, false) });
     const sim = new LiquidSim(live.current.params, targets());
     if (import.meta.env.DEV) Object.assign(window, { liquid: sim });
     let colors = themeColors(live.current.params.blobColor), colorKey = "";
-    let last = performance.now(), time = 0, frame = 0;
+    let last = performance.now(), time = 0, frame = 0, lap = 0;
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 20);
       last = now;
@@ -73,18 +93,27 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
       const key = params.blobColor + document.documentElement.className;
       if (key !== colorKey) { colors = themeColors(params.blobColor); colorKey = key; }
       sim.params = params;
-      sim.setTargets(targets());
+      const boxes = targets();
+      sim.setTargets(boxes);
       sim.setOpen(open);
       sim.step(dt);
       time += dt * params.wobbleSpeed;
-      renderer.draw(sim.shapes(), params, colors, time);
-      root.style.setProperty("--liquid-bar", sim.arrival().toFixed(3));
+      lap = (lap + dt / Math.max(params.shineLap, 0.5)) % 1;
+      const arrival = sim.arrival();
+      renderer.draw(sim.shapes(), params, colors, time, { bar: boxes.bar, shine: params.shine * arrival, phase: lap });
+      root.style.setProperty("--liquid-bar", arrival.toFixed(3));
+      const element = target();
+      if (element) clipTo(element, sim, boxes.bar);
       root.dataset.liquidPhase = sim.phase;
       root.dataset.liquidPinches = String(sim.pinches);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      const element = target();
+      if (element) { element.style.clipPath = ""; element.style.opacity = ""; }
+    };
   }, [active]);
 
   // Closing from inside the bar hands the focus back to the button.
@@ -107,7 +136,8 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
       <div ref={bar} inert={!open} data-liquid-bar="" style={{ width: `min(var(--spacing-page), calc(100% - ${room}px))` }}
         className={cn("relative flex flex-col", open && "pointer-events-auto",
           !active && "origin-bottom-right transition-[opacity,scale] duration-200 ease-out", !active && !open && "scale-90")}>
-        <div className="flex flex-col" style={{ opacity: "var(--liquid-bar)" }}>{children}</div>
+        {/* The composer moves with the liquid (clipTo); what floats above it (reply, review) fades in once it has arrived. */}
+        <div className={cn("flex flex-col", active && "[&>:not([data-liquid-target])]:opacity-(--liquid-bar)")} style={active ? undefined : { opacity: "var(--liquid-bar)" }}>{children}</div>
       </div>
       {/* The button stays in the corner: the Coach while closed, the × while open. */}
       <div className="absolute right-4 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3">

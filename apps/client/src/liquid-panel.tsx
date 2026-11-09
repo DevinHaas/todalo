@@ -37,6 +37,8 @@ const groups: { title: string; sliders: Slider[] }[] = [
     { key: "goo", name: "Gooeyness", min: 0, max: 48, step: 1, unit: "px" },
     { key: "gloss", name: "Gloss", min: 0, max: 1, step: 0.05 },
     { key: "shadow", name: "Shadow", min: 0, max: 2, step: 0.05 },
+    { key: "shine", name: "Rim shine", min: 0, max: 1.5, step: 0.05 },
+    { key: "shineLap", name: "Shine lap", min: 1, max: 20, step: 0.5, unit: "s" },
   ] },
   { title: "Physics", sliders: [
     { key: "duration", name: "Morph duration", min: 0.2, max: 2.5, step: 0.05, unit: "s" },
@@ -47,7 +49,7 @@ const groups: { title: string; sliders: Slider[] }[] = [
     { key: "stretch", name: "Squash & stretch", min: 0, max: 3, step: 0.05 },
   ] },
   { title: "Pinch-off", sliders: [
-    { key: "neck", name: "Neck length", min: 5, max: 200, step: 1, unit: "px" },
+    { key: "neck", name: "Neck length", min: 1, max: 200, step: 1, unit: "px" },
     { key: "pinch", name: "Pinch threshold", min: 0.25, max: 10, step: 0.25, unit: "px" },
     { key: "satellites", name: "Satellite beads", min: 0, max: 5, step: 1 },
   ] },

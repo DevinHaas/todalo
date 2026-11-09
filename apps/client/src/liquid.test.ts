@@ -38,7 +38,8 @@ describe("the liquid Coach button", () => {
   });
 
   it("moves like a thick liquid: liquid flowing back carries on through the button, bulging it away from the bar, then creeps back", () => {
-    const sim = new LiquidSim(liquidDefaults, { blob, bar });
+    // A long neck leaves a long thread to retract, so the push is clear to measure.
+    const sim = new LiquidSim({ ...liquidDefaults, neck: 140 }, { blob, bar });
     // How far the liquid around the button reaches past its right edge.
     const bulge = () => Math.max(...sim.shapes().filter(shape => !shape.segment && Math.abs(shape.x - blob.x) < 60).map(shape => shape.x + shape.w)) - (blob.x + blob.w);
     sim.setOpen(true);

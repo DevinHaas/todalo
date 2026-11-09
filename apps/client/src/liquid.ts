@@ -57,14 +57,17 @@ export type LiquidParams = {
   settle: number;
   gloss: number;
   shadow: number;
+  /** A glint travelling around the open bar's rim (as on macOS notifications): strength, and seconds per lap. */
+  shine: number;
+  shineLap: number;
   blobColor: string;
 };
 
 export const liquidDefaults: LiquidParams = {
   size: 24, duration: 0.45, tension: 1, viscosity: 1.4, lag: 0.8, spreadAt: 0.35, flow: 1,
   wobbleSpeed: 0.45, wobbleAmp: 1.8, barWobble: 0.15, stretch: 1,
-  goo: 20, neck: 140, pinch: 1.2, satellites: 0, recoil: 1.5, settle: 1.2,
-  gloss: 0.55, shadow: 1,
+  goo: 20, neck: 7, pinch: 1.2, satellites: 0, recoil: 1.5, settle: 1.2,
+  gloss: 0.55, shadow: 0.45, shine: 0.7, shineLap: 6,
   blobColor: "#dc4c3e",
 };
 
@@ -400,7 +403,9 @@ void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Positio
 const fragment = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
-uniform float uDpr, uTime, uGoo, uGloss, uShadow;
+uniform float uDpr, uTime, uGoo, uGloss, uShadow, uShine, uShinePhase;
+uniform vec4 uBarBox;
+uniform vec3 uShineColor;
 uniform vec3 uBlob, uBar, uLine;
 uniform int uCount;
 uniform vec4 uBox[${MAX}];
@@ -459,12 +464,24 @@ void main() {
   color += vec3(1.0) * pow(max(dot(n, normalize(vec2(-0.55, -0.85))), 0.0), 3.0) * rim * gloss * 0.55;
   color *= 1.0 - max(dot(n, normalize(vec2(0.55, 0.85))), 0.0) * rim * gloss * 0.22;
   // The bar's 1px border.
-  color = mix(color, uLine, m * (1.0 - smoothstep(0.0, 1.0, abs(d + 0.5))));
+  float rimLine = 1.0 - smoothstep(0.0, 1.0, abs(d + 0.5));
+  color = mix(color, uLine, m * rimLine);
+  // The shine: a soft glint running around the bar's rim. Position along the rim: x
+  // along the top edge, then back along the bottom (continuous around the ends).
+  if (uShine > 0.0) {
+    vec2 q = p - uBarBox.xy;
+    float lap = 4.0 * uBarBox.z;
+    float along = q.y < 0.0 ? q.x + uBarBox.z : lap * 0.5 + uBarBox.z - q.x;
+    float gap = abs(mod(along - uShinePhase * lap + lap * 0.5, lap) - lap * 0.5);
+    float glint = exp(-pow(gap / (lap * 0.07), 2.0));
+    float rim = 1.0 - smoothstep(0.0, 2.2, abs(d + 0.9));
+    color = mix(color, uShineColor, m * uShine * rim * (0.18 + 0.82 * glint));
+  }
   float shadow = uShadow * (1.0 - alpha) * exp(-max(d - 1.0, 0.0) / 5.0) * mix(0.12, 0.12, m);
   outColor = vec4(color * alpha, alpha + shadow * (1.0 - alpha));
 }`;
 
-export type LiquidColors = { blob: [number, number, number]; bar: [number, number, number]; line: [number, number, number] };
+export type LiquidColors = { blob: [number, number, number]; bar: [number, number, number]; line: [number, number, number]; shine: [number, number, number] };
 
 /** Draws a sim's shapes on a full-viewport canvas; work is scissored to the shapes' bounds. */
 export function liquidRenderer(canvas: HTMLCanvasElement) {
@@ -484,13 +501,14 @@ export function liquidRenderer(canvas: HTMLCanvasElement) {
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? "liquid program");
   gl.useProgram(program);
   const at = (name: string) => gl.getUniformLocation(program, name);
-  const u = { res: at("uRes"), dpr: at("uDpr"), time: at("uTime"), goo: at("uGoo"), gloss: at("uGloss"), shadow: at("uShadow"), blob: at("uBlob"), bar: at("uBar"), line: at("uLine"), count: at("uCount"), box: at("uBox"), meta: at("uMeta"), dir: at("uDir") };
+  const u = { res: at("uRes"), dpr: at("uDpr"), time: at("uTime"), goo: at("uGoo"), gloss: at("uGloss"), shadow: at("uShadow"), shine: at("uShine"), shinePhase: at("uShinePhase"), barBox: at("uBarBox"), shineColor: at("uShineColor"), blob: at("uBlob"), bar: at("uBar"), line: at("uLine"), count: at("uCount"), box: at("uBox"), meta: at("uMeta"), dir: at("uDir") };
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   const box = new Float32Array(MAX * 4), meta = new Float32Array(MAX * 4), dir = new Float32Array(MAX * 4);
 
   return {
-    draw(shapes: Shape[], params: LiquidParams, colors: LiquidColors, time: number) {
+    /** `shine`: the glint around `bar` (0 hides it), at `phase` (0–1) of its lap. */
+    draw(shapes: Shape[], params: LiquidParams, colors: LiquidColors, time: number, glint: { bar: Box; shine: number; phase: number }) {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const width = innerWidth, height = innerHeight;
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
@@ -528,6 +546,10 @@ export function liquidRenderer(canvas: HTMLCanvasElement) {
       gl.uniform3fv(u.blob, colors.blob);
       gl.uniform3fv(u.bar, colors.bar);
       gl.uniform3fv(u.line, colors.line);
+      gl.uniform1f(u.shine, glint.shine);
+      gl.uniform1f(u.shinePhase, glint.phase);
+      gl.uniform4f(u.barBox, glint.bar.x, glint.bar.y, glint.bar.w, glint.bar.h);
+      gl.uniform3fv(u.shineColor, colors.shine);
       gl.uniform1i(u.count, shapes.length);
       gl.uniform4fv(u.box, box);
       gl.uniform4fv(u.meta, meta);
