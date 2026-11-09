@@ -4,23 +4,27 @@
 // the changes it drafts ("4 added, 1 moved, 1 removed", × declines, ✓ accepts;
 // Review lists them one by one). The changes show dashed in place meanwhile
 // (pending-changes.tsx, the calendar); nothing is written until accepted. The
+// review groups them by kind (Added, Moved…); a group opens to its changes, and
+// ✓/× decide a group or a single change. The
 // right sidebar (coach-chat-screens.tsx) is the read-only record.
 // Ticket 30: accepting a change that deletes tasks asks once more ("Delete 3
 // tasks? This can't be undone."); a change whose task changed since is left out.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Check, ChevronDown, FileText, Image, Paperclip, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, Image, Paperclip, Sparkles, X } from "lucide-react";
 import { coach, coachReads, goalReads } from "./runtime";
-import { coachKeys, draftCounts, draftMutations, type CoachChatDto, type CoachDocumentDto } from "./coach";
+import { coachKeys, draftCounts, draftMutations, type CoachChatDto, type CoachDocumentDto, type DraftDto } from "./coach";
+import { draftOps, type DraftOp } from "../../../packages/server/src/drafts";
 import { documentProblem } from "../../../packages/server/src/coach-documents";
-import { DraftPanel } from "./draft-views";
+import { draftTime, opIcons, opLabels, overflowQuestion, useParentTitle } from "./draft-views";
+import { dayKey } from "./schedule";
 import { goalColorValue } from "./goals";
 import { localZone } from "./seasons";
 import { modalOpen } from "./keyboard";
 import { reportCoachError } from "./coach-errors";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  Button, Hint, Spinner, Textarea, cn,
+  Button, Hint, List, Spinner, Textarea, cn,
 } from "./ui";
 
 /** Accepted in the picker (the server checks again, by kind). */
@@ -139,7 +143,7 @@ function Bar({ userId }: { userId: string }) {
         <Button type="button" variant="ghost" size="icon-xs" aria-label="Close reply" title="Close (Esc)" onClick={() => setReplyOpen(false)}><X /></Button>
       </section>}
       {draft && reviewing && <div className="max-h-[50vh] overflow-y-auto rounded-xl border border-border bg-background p-1 shadow-popover" data-coach-review="">
-        <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null}
+        <ChangeGroups draft={draft} deciding={decide.isPending || overflow.isPending}
           onDecide={onDecide} onOverflow={(schedule) => overflow.mutate({ draftId: draft.id, schedule })} />
       </div>}
       {draft && <div role="group" aria-label="Coach changes" data-coach-draft={draft.id}
@@ -201,6 +205,62 @@ function Bar({ userId }: { userId: string }) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>}
+  </div>;
+}
+
+/** One group per kind of change, in the draft's order ("Added 4", "Moved 1"…). */
+const groupLabels: Record<DraftOp, string> = { add: "Added", move: "Moved", remove: "Removed", subtask: "Sub-tasks", attach: "Attached", complete: "Completed", delete: "Deleted" };
+
+/**
+ * The review under the pill: the pending changes grouped by kind. A group opens to its changes;
+ * ✓ and × decide a whole group or one change. Tasks that didn't fit ask Yes or No below.
+ */
+function ChangeGroups({ draft, deciding, onDecide, onOverflow }: { draft: DraftDto; deciding: boolean; onDecide(accept: boolean, itemIds?: string[]): void; onOverflow(schedule: boolean): void }) {
+  const [open, setOpen] = useState<Set<DraftOp>>(new Set());
+  const parentTitle = useParentTitle(draft);
+  const pending = draft.items.filter(item => item.state === "pending");
+  const groups = draftOps.flatMap(op => { const items = pending.filter(item => item.op === op); return items.length ? [{ op, items }] : []; });
+  const toggle = (op: DraftOp) => setOpen(current => { const next = new Set(current); if (!next.delete(op)) next.add(op); return next; });
+  return <div className="flex flex-col" data-coach-changes="">
+    {draft.summary && <Hint className="px-2 pt-1.5 pb-1 text-xs">{draft.summary}</Hint>}
+    {groups.map(({ op, items }) => {
+      const Icon = opIcons[op];
+      const expanded = open.has(op);
+      const ids = items.map(item => item.id);
+      return <section key={op} aria-label={groupLabels[op]} data-change-group={op} className="border-b border-border-subtle last:border-0">
+        <div className="flex items-center gap-1 py-0.5 pr-1">
+          <button type="button" aria-expanded={expanded} onClick={() => toggle(op)} data-change-group-toggle=""
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted">
+            <ChevronRight aria-hidden="true" className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+            <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", op === "delete" ? "text-destructive" : "text-muted-foreground")} />
+            <span className="font-medium">{groupLabels[op]}</span>
+            <span className="text-muted-foreground">{items.length}</span>
+          </button>
+          <Button type="button" variant="ghost" size="icon-xs" disabled={deciding} aria-label={`Decline all ${groupLabels[op].toLowerCase()}`} title="Decline these"
+            onClick={() => onDecide(false, ids)} data-draft-action="decline-group"><X /></Button>
+          <Button type="button" variant="ghost" size="icon-xs" disabled={deciding} aria-label={`Accept all ${groupLabels[op].toLowerCase()}`} title="Accept these"
+            onClick={() => onDecide(true, ids)} data-draft-action="accept-group"><Check /></Button>
+        </div>
+        {expanded && <List aria-label={`${groupLabels[op]} changes`} className="pb-1 pl-7">{items.map(item =>
+          <li key={item.id} data-draft-item={item.id} data-draft-op={item.op} className="flex items-start gap-2 py-1 pr-1">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className={cn("truncate text-sm", item.op === "delete" && "text-destructive line-through", (item.op === "remove" || item.op === "complete") && "line-through")}>
+                <span className="sr-only">{opLabels[item.op]}: </span>{item.title}</span>
+              <span className="text-xs text-muted-foreground">{draftTime(item, dayKey(new Date(item.start)) !== dayKey(new Date()), parentTitle(item))}</span>
+              {item.reason && <span className="text-xs text-muted-foreground">{item.reason}</span>}
+            </div>
+            <Button type="button" variant="ghost" size="icon-xs" disabled={deciding} aria-label={`Decline: ${opLabels[item.op].toLowerCase()} ${item.title}`} title="Decline"
+              onClick={() => onDecide(false, [item.id])} data-draft-action="decline"><X /></Button>
+            <Button type="button" variant="ghost" size="icon-xs" disabled={deciding} aria-label={`Accept: ${opLabels[item.op].toLowerCase()} ${item.title}`} title="Accept"
+              onClick={() => onDecide(true, [item.id])} data-draft-action="accept"><Check /></Button>
+          </li>)}</List>}
+      </section>;
+    })}
+    {draft.overflow && <div data-draft-overflow="" className="flex items-center gap-2 border-t border-border-subtle px-2 py-1.5">
+      <span className="flex-1 text-sm" aria-live="polite">{overflowQuestion(draft)} <span className="text-muted-foreground">{draft.overflow.map(item => item.title).join(", ")}</span></span>
+      <Button type="button" variant="outline" size="sm" disabled={deciding} onClick={() => onOverflow(false)} data-draft-action="overflow-drop">No</Button>
+      <Button type="button" size="sm" disabled={deciding} onClick={() => onOverflow(true)} data-draft-action="overflow-schedule">Yes</Button>
+    </div>}
   </div>;
 }
 
