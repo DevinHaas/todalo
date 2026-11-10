@@ -113,7 +113,7 @@ export function Features() {
 
   return (
     <section id="features" aria-labelledby="features-title" className="relative mx-auto w-full max-w-6xl scroll-mt-6 px-6 pb-24 pt-28 md:pb-40 md:pt-40">
-      <div className="max-w-xl">
+      <div className="landing-reveal max-w-xl">
         <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-foreground/45">How it works</p>
         {/* line-height 0.77 as in the hero: no descenders in line one, so the lines can nearly touch */}
         <h2 id="features-title" className="mt-4 font-display text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.77] tracking-[-0.01em]">
@@ -137,7 +137,7 @@ export function Features() {
               >
                 <div
                   className={
-                    "border-l pl-5 transition-colors duration-500 md:pl-7 " +
+                    "landing-reveal border-l pl-5 transition-colors duration-500 md:pl-7 " +
                     (on ? "md:border-brand" : "md:border-black/10") +
                     " border-black/10"
                   }

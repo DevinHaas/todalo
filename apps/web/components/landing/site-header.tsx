@@ -41,7 +41,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         {signedIn ? (
           <Link
             href="/today"
-            className="inline-flex items-center gap-1.5 rounded-full bg-brand-strong px-4 py-2 font-medium text-white transition-opacity hover:opacity-90"
+            className="landing-cta inline-flex items-center gap-1.5 rounded-full bg-brand-strong px-4 py-2 font-medium text-white transition-opacity hover:opacity-90"
           >
             Open Todalo <ArrowUpRight className="size-3.5" />
           </Link>
@@ -52,7 +52,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
             </Link>
             <Link
               href="/login?mode=signup"
-              className="inline-flex items-center gap-1.5 rounded-full bg-brand-strong px-4 py-2 font-medium text-white transition-opacity hover:opacity-90"
+              className="landing-cta inline-flex items-center gap-1.5 rounded-full bg-brand-strong px-4 py-2 font-medium text-white transition-opacity hover:opacity-90"
             >
               Get started <ArrowUpRight className="size-3.5" />
             </Link>

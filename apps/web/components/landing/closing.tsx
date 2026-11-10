@@ -10,17 +10,17 @@ export function Closing({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <section aria-labelledby="closing-title" className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-24 text-center md:pb-28 md:pt-32">
-        <h2 id="closing-title" className="font-display text-[clamp(2.6rem,6vw,5.25rem)] leading-[0.77] tracking-[-0.01em]">
+        <h2 id="closing-title" className="landing-reveal font-display text-[clamp(2.6rem,6vw,5.25rem)] leading-[0.77] tracking-[-0.01em]">
           <span className="block font-black">Your next season</span>
           <span className="block font-thin">starts today.</span>
         </h2>
-        <p className="mx-auto mt-6 max-w-md text-[15px] leading-relaxed text-foreground/55 md:text-base">
+        <p className="landing-reveal mx-auto mt-6 max-w-md text-[15px] leading-relaxed text-foreground/55 md:text-base">
           Twelve weeks, a few goals that matter, and time set aside for them. Free to start.
         </p>
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+        <div className="landing-reveal mt-7 flex flex-wrap items-center justify-center gap-3">
           <Link
             href={signedIn ? "/today" : "/login?mode=signup"}
-            className="inline-flex items-center gap-2 rounded-full bg-brand-strong px-6 py-3 text-[14px] font-medium text-white shadow-[0_8px_20px_-8px_var(--brand-strong)] transition-opacity hover:opacity-90"
+            className="landing-cta inline-flex items-center gap-2 rounded-full bg-brand-strong px-6 py-3 text-[14px] font-medium text-white shadow-[0_8px_20px_-8px_var(--brand-strong)] transition-opacity hover:opacity-90"
           >
             {signedIn ? (
               <>

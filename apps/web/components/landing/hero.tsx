@@ -19,12 +19,20 @@ import {
 /* Card building blocks, modelled on the Mindly reference.             */
 /* ------------------------------------------------------------------ */
 
-function Chip({ children, accent = false }: { children: ReactNode; accent?: boolean }) {
+function Chip({
+  children,
+  accent = false,
+}: {
+  children: ReactNode;
+  accent?: boolean;
+}) {
   return (
     <span
       className={
         "grid size-7 shrink-0 place-items-center rounded-[9px] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] " +
-        (accent ? "bg-brand/12 text-brand-strong" : "bg-black/[0.05] text-foreground/80")
+        (accent
+          ? "bg-brand/12 text-brand-strong"
+          : "bg-black/[0.05] text-foreground/80")
       }
     >
       {children}
@@ -32,7 +40,17 @@ function Chip({ children, accent = false }: { children: ReactNode; accent?: bool
   );
 }
 
-function CardHead({ icon, title, sub, accent }: { icon: ReactNode; title: string; sub: string; accent?: boolean }) {
+function CardHead({
+  icon,
+  title,
+  sub,
+  accent,
+}: {
+  icon: ReactNode;
+  title: string;
+  sub: string;
+  accent?: boolean;
+}) {
   return (
     <div className="flex items-center gap-2.5">
       <Chip accent={accent}>{icon}</Chip>
@@ -54,7 +72,11 @@ function SeasonViz() {
           key={i}
           className={
             "h-1.5 flex-1 rounded-full " +
-            (i < 5 ? "bg-foreground/75" : i === 5 ? "bg-brand" : "bg-foreground/10")
+            (i < 5
+              ? "bg-foreground/75"
+              : i === 5
+                ? "bg-brand"
+                : "bg-foreground/10")
           }
         />
       ))}
@@ -80,7 +102,13 @@ function GoalsViz() {
           >
             {g.done && <span className="block size-1 rounded-full bg-white" />}
           </span>
-          <span className={"h-1.5 rounded-full " + g.w + (g.done ? " bg-foreground/20" : " bg-foreground/10")} />
+          <span
+            className={
+              "h-1.5 rounded-full " +
+              g.w +
+              (g.done ? " bg-foreground/20" : " bg-foreground/10")
+            }
+          />
         </div>
       ))}
     </div>
@@ -89,7 +117,10 @@ function GoalsViz() {
 
 function BlocksViz() {
   return (
-    <div className="mt-3 grid grid-cols-[14px_1fr] gap-x-2 gap-y-1 text-[8.5px] text-foreground/40" aria-hidden>
+    <div
+      className="mt-3 grid grid-cols-[14px_1fr] gap-x-2 gap-y-1 text-[8.5px] text-foreground/40"
+      aria-hidden
+    >
       <span>9</span>
       <span className="rounded-[5px] border-l-2 border-brand bg-brand/10 px-1.5 py-1 text-[9px] font-medium text-foreground/70">
         Deep work
@@ -110,7 +141,15 @@ function ReviewViz() {
   return (
     <div className="mt-3 flex items-end justify-between" aria-hidden>
       <svg viewBox="0 0 36 36" className="size-9 -rotate-90">
-        <circle cx="18" cy="18" r={r} fill="none" stroke="currentColor" strokeOpacity="0.1" strokeWidth="4" />
+        <circle
+          cx="18"
+          cy="18"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.1"
+          strokeWidth="4"
+        />
         <circle
           cx="18"
           cy="18"
@@ -124,7 +163,11 @@ function ReviewViz() {
       </svg>
       <div className="flex h-8 items-end gap-1">
         {[30, 45, 38, 60, 52, 75, 68].map((h, i) => (
-          <span key={i} className="w-1.5 rounded-full bg-foreground/20 last:bg-foreground/70" style={{ height: `${h}%` }} />
+          <span
+            key={i}
+            className="w-1.5 rounded-full bg-foreground/20 last:bg-foreground/70"
+            style={{ height: `${h}%` }}
+          />
         ))}
       </div>
     </div>
@@ -146,8 +189,12 @@ function ReviewViz() {
 
 function InsightViz() {
   return (
-    <div className="mt-2.5 rounded-lg bg-foreground/[0.05] px-2 py-1.5 text-[9.5px] leading-snug text-foreground/70" aria-hidden>
-      You finish most on <span className="font-medium text-foreground">Tue mornings</span>.
+    <div
+      className="mt-2.5 rounded-lg bg-foreground/[0.05] px-2 py-1.5 text-[9.5px] leading-snug text-foreground/70"
+      aria-hidden
+    >
+      You finish most on{" "}
+      <span className="font-medium text-foreground">Tue mornings</span>.
     </div>
   );
 }
@@ -156,12 +203,18 @@ function StatsViz() {
   return (
     <div className="mt-2.5 grid grid-cols-2 gap-2" aria-hidden>
       <div>
-        <div className="text-[15px] font-medium leading-none tracking-tight">42</div>
+        <div className="text-[15px] font-medium leading-none tracking-tight">
+          42
+        </div>
         <div className="mt-0.5 text-[8.5px] text-foreground/50">tasks done</div>
       </div>
       <div>
-        <div className="text-[15px] font-medium leading-none tracking-tight">86%</div>
-        <div className="mt-0.5 text-[8.5px] text-foreground/50">goals on track</div>
+        <div className="text-[15px] font-medium leading-none tracking-tight">
+          86%
+        </div>
+        <div className="mt-0.5 text-[8.5px] text-foreground/50">
+          goals on track
+        </div>
       </div>
     </div>
   );
@@ -170,9 +223,18 @@ function StatsViz() {
 function ProductivityViz() {
   return (
     <div className="mt-2 flex items-end justify-between" aria-hidden>
-      <span className="text-[17px] font-medium leading-none tracking-tight text-brand-strong">+23%</span>
+      <span className="text-[17px] font-medium leading-none tracking-tight text-brand-strong">
+        +23%
+      </span>
       <svg viewBox="0 0 60 24" className="h-6 w-14" fill="none">
-        <path d="M1 20 L12 16 L22 18 L33 10 L44 12 L59 3" stroke="currentColor" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M1 20 L12 16 L22 18 L33 10 L44 12 L59 3"
+          stroke="currentColor"
+          strokeOpacity="0.55"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </div>
   );
@@ -182,7 +244,15 @@ function PillsViz() {
   return (
     <div className="mt-2.5 flex flex-wrap gap-1" aria-hidden>
       {["deep", "home", "health"].map((l, i) => (
-        <span key={l} className={"rounded-full px-1.5 py-0.5 text-[8.5px] " + (i === 0 ? "bg-brand/12 text-brand-strong" : "bg-foreground/[0.06] text-foreground/60")}>
+        <span
+          key={l}
+          className={
+            "rounded-full px-1.5 py-0.5 text-[8.5px] " +
+            (i === 0
+              ? "bg-brand/12 text-brand-strong"
+              : "bg-foreground/[0.06] text-foreground/60")
+          }
+        >
           {l}
         </span>
       ))}
@@ -194,7 +264,14 @@ function WeekViz() {
   return (
     <div className="mt-2.5 flex h-7 items-end gap-1.5" aria-hidden>
       {[40, 75, 55, 90, 65, 30, 20].map((h, i) => (
-        <span key={i} className={"flex-1 rounded-[3px] " + (i === 3 ? "bg-brand" : "bg-foreground/15")} style={{ height: `${h}%` }} />
+        <span
+          key={i}
+          className={
+            "flex-1 rounded-[3px] " +
+            (i === 3 ? "bg-brand" : "bg-foreground/15")
+          }
+          style={{ height: `${h}%` }}
+        />
       ))}
     </div>
   );
@@ -202,8 +279,13 @@ function WeekViz() {
 
 function InboxViz() {
   return (
-    <div className="mt-3 flex items-center gap-2 text-[10px] text-foreground/50" aria-hidden>
-      <span className="grid size-4 place-items-center rounded-full bg-foreground/80 text-[8px] text-white">✓</span>
+    <div
+      className="mt-3 flex items-center gap-2 text-[10px] text-foreground/50"
+      aria-hidden
+    >
+      <span className="grid size-4 place-items-center rounded-full bg-foreground/80 text-[8px] text-white">
+        ✓
+      </span>
       All clear for today
     </div>
   );
@@ -231,10 +313,13 @@ const RING = {
 };
 
 // dy: a few px of vertical jitter so the band doesn't read as a rigid grid
-type RingCardItem = { angle: number; row: 0 | 1; width: number; delay: number; dy?: number } & (
-  | { kind: "feature"; node: ReactNode }
-  | { kind: "image"; src: string }
-);
+type RingCardItem = {
+  angle: number;
+  row: 0 | 1;
+  width: number;
+  delay: number;
+  dy?: number;
+} & ({ kind: "feature"; node: ReactNode } | { kind: "image"; src: string });
 
 const tile = (name: string) => `/landing/tiles/${name}.webp`;
 
@@ -249,7 +334,12 @@ const ITEMS: RingCardItem[] = [
     delay: 0,
     node: (
       <>
-        <CardHead accent icon={<CalendarRange className="size-3.5" />} title="Season" sub="Week 6 of 12" />
+        <CardHead
+          accent
+          icon={<CalendarRange className="size-3.5" />}
+          title="Season"
+          sub="Week 6 of 12"
+        />
         <SeasonViz />
       </>
     ),
@@ -263,7 +353,11 @@ const ITEMS: RingCardItem[] = [
     delay: 1.2,
     node: (
       <>
-        <CardHead icon={<Target className="size-3.5" />} title="Goals" sub="3 for this season" />
+        <CardHead
+          icon={<Target className="size-3.5" />}
+          title="Goals"
+          sub="3 for this season"
+        />
         <GoalsViz />
       </>
     ),
@@ -277,7 +371,11 @@ const ITEMS: RingCardItem[] = [
     delay: 2.1,
     node: (
       <>
-        <CardHead icon={<Clock className="size-3.5" />} title="Time blocks" sub="Today" />
+        <CardHead
+          icon={<Clock className="size-3.5" />}
+          title="Time blocks"
+          sub="Today"
+        />
         <BlocksViz />
       </>
     ),
@@ -291,44 +389,179 @@ const ITEMS: RingCardItem[] = [
     delay: 0.6,
     node: (
       <>
-        <CardHead icon={<TrendingUp className="size-3.5" />} title="Review" sub="Season progress" />
+        <CardHead
+          icon={<TrendingUp className="size-3.5" />}
+          title="Review"
+          sub="Season progress"
+        />
         <ReviewViz />
       </>
     ),
   },
   // images and decorative cards spread around both rows, alternating
-  { kind: "image", row: 0, src: tile("moon"), angle: 48, width: 120, delay: 1.6, dy: -4 },
-  { kind: "image", row: 0, src: tile("lake"), angle: 84, width: 150, delay: 0.4, dy: 6 },
-  { kind: "feature", row: 0, angle: 128, width: 140, delay: 2.4, node: fake(<Lightbulb className="size-3.5" />, "Insights", "From your season", <InsightViz />) },
-  { kind: "feature", row: 0, angle: 168, width: 150, delay: 1.3, dy: -5, node: fake(<ChartPie className="size-3.5" />, "Stats", "This season", <StatsViz />) },
-  { kind: "image", row: 0, src: tile("dunes"), angle: -70, width: 140, delay: 1.1, dy: 5 },
-  { kind: "feature", row: 0, angle: -138, width: 140, delay: 0.7, node: fake(<Tag className="size-3.5" />, "Labels", "3 active", <PillsViz />) },
-  { kind: "image", row: 1, src: tile("stones"), angle: 52, width: 140, delay: 0.9, dy: 6 },
-  { kind: "feature", row: 1, angle: 92, width: 140, delay: 1.9, dy: -4, node: fake(<Gauge className="size-3.5" />, "Productivity", "vs. last season", <ProductivityViz />) },
-  { kind: "image", row: 1, src: tile("ripple"), angle: 140, width: 150, delay: 2.2 },
-  { kind: "feature", row: 1, angle: -172, width: 140, delay: 0.5, dy: 4, node: fake(<Inbox className="size-3.5" />, "Inbox", "Zero", <InboxViz />) },
-  { kind: "image", row: 1, src: tile("pine"), angle: -60, width: 120, delay: 0.2, dy: -6 },
-  { kind: "feature", row: 1, angle: -112, width: 150, delay: 1.5, dy: 3, node: fake(<ChartColumn className="size-3.5" />, "This week", "Planned hours", <WeekViz />) },
+  {
+    kind: "image",
+    row: 0,
+    src: tile("moon"),
+    angle: 48,
+    width: 120,
+    delay: 1.6,
+    dy: -4,
+  },
+  {
+    kind: "image",
+    row: 0,
+    src: tile("lake"),
+    angle: 84,
+    width: 150,
+    delay: 0.4,
+    dy: 6,
+  },
+  {
+    kind: "feature",
+    row: 0,
+    angle: 128,
+    width: 140,
+    delay: 2.4,
+    node: fake(
+      <Lightbulb className="size-3.5" />,
+      "Insights",
+      "From your season",
+      <InsightViz />,
+    ),
+  },
+  {
+    kind: "feature",
+    row: 0,
+    angle: 168,
+    width: 150,
+    delay: 1.3,
+    dy: -5,
+    node: fake(
+      <ChartPie className="size-3.5" />,
+      "Stats",
+      "This season",
+      <StatsViz />,
+    ),
+  },
+  {
+    kind: "image",
+    row: 0,
+    src: tile("dunes"),
+    angle: -70,
+    width: 140,
+    delay: 1.1,
+    dy: 5,
+  },
+  {
+    kind: "feature",
+    row: 0,
+    angle: -138,
+    width: 140,
+    delay: 0.7,
+    node: fake(
+      <Tag className="size-3.5" />,
+      "Labels",
+      "3 active",
+      <PillsViz />,
+    ),
+  },
+  {
+    kind: "image",
+    row: 1,
+    src: tile("stones"),
+    angle: 52,
+    width: 140,
+    delay: 0.9,
+    dy: 6,
+  },
+  {
+    kind: "feature",
+    row: 1,
+    angle: 92,
+    width: 140,
+    delay: 1.9,
+    dy: -4,
+    node: fake(
+      <Gauge className="size-3.5" />,
+      "Productivity",
+      "vs. last season",
+      <ProductivityViz />,
+    ),
+  },
+  {
+    kind: "image",
+    row: 1,
+    src: tile("ripple"),
+    angle: 140,
+    width: 150,
+    delay: 2.2,
+  },
+  {
+    kind: "feature",
+    row: 1,
+    angle: -172,
+    width: 140,
+    delay: 0.5,
+    dy: 4,
+    node: fake(<Inbox className="size-3.5" />, "Inbox", "Zero", <InboxViz />),
+  },
+  {
+    kind: "image",
+    row: 1,
+    src: tile("pine"),
+    angle: -60,
+    width: 120,
+    delay: 0.2,
+    dy: -6,
+  },
+  {
+    kind: "feature",
+    row: 1,
+    angle: -112,
+    width: 150,
+    delay: 1.5,
+    dy: 3,
+    node: fake(
+      <ChartColumn className="size-3.5" />,
+      "This week",
+      "Planned hours",
+      <WeekViz />,
+    ),
+  },
 ];
 
 // no backdrop-blur: per-slice blur shows seams; a denser white reads the same
-const GLASS_FACE = "rounded-[18px] border border-white/90 bg-gradient-to-b from-white/95 to-white/75 p-3.5";
-const IMAGE_FACE = "overflow-hidden rounded-[18px] border border-white/70 bg-neutral-300";
+const GLASS_FACE =
+  "rounded-[18px] border border-white/90 bg-gradient-to-b from-white/95 to-white/75 p-3.5";
+const IMAGE_FACE =
+  "overflow-hidden rounded-[18px] border border-white/70 bg-neutral-300";
 
 function CurvedCard({ item }: { item: RingCardItem }) {
   const { radius, rowHeight, rowGap } = RING;
   const sliceW = item.width / SLICES;
-  const y = ((item.row === 0 ? -1 : 1) * (rowHeight + rowGap)) / 2 + (item.dy ?? 0);
+  const y =
+    ((item.row === 0 ? -1 : 1) * (rowHeight + rowGap)) / 2 + (item.dy ?? 0);
   // Cards on the far side are seen from inside the ring; mirror them so they read the right way round.
   const back = Math.cos((item.angle * Math.PI) / 180) < 0;
   const face = (
     <div
       className={item.kind === "image" ? IMAGE_FACE : GLASS_FACE}
-      style={{ width: item.width, height: rowHeight, transform: back ? "scaleX(-1)" : undefined }}
+      style={{
+        width: item.width,
+        height: rowHeight,
+        transform: back ? "scaleX(-1)" : undefined,
+      }}
     >
       {item.kind === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element -- tiny decorative tile, repeated per slice inside a 3D scene
-        <img src={item.src} alt="" className="size-full object-cover grayscale" loading="lazy" decoding="async" />
+        <img
+          src={item.src}
+          alt=""
+          className="size-full object-cover grayscale"
+          loading="lazy"
+          decoding="async"
+        />
       ) : (
         item.node
       )}
@@ -372,7 +605,7 @@ function Portrait() {
           width={1600}
           height={1506}
           fetchPriority="high"
-          className="absolute bottom-0 left-0 w-full [transform:translateZ(0)]"
+          className="absolute bottom-0 left-0 w-full [transform:translateZ(0)] max-md:[mask-image:linear-gradient(to_bottom,#000_72%,transparent)] max-md:[-webkit-mask-image:linear-gradient(to_bottom,#000_72%,transparent)]"
         />
         <div
           className="absolute [transform-style:preserve-3d]"
@@ -392,20 +625,21 @@ function Portrait() {
 
 export function Hero() {
   return (
-    <section className="relative mx-auto w-full max-w-6xl px-6 md:flex md:flex-1 md:flex-col">
-      <div className="relative z-20 mx-auto max-w-5xl pt-6 text-center md:pt-8">
+    <section className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-6">
+      <div className="relative z-20 mx-auto max-w-5xl pt-24 text-center md:pt-8">
         {/* line-height 0.77: the tightest value where no letters collide (measured) */}
         <h1 className="font-display text-[clamp(2.6rem,6.6vw,5.75rem)] leading-[0.77] [&>span]:whitespace-nowrap tracking-[-0.01em]">
-          <span className="block font-black">Plan your season.</span>
-          <span className="block font-thin">Let the rest flow.</span>
+          <span className="landing-enter block font-black">Plan your season.</span>
+          <span className="landing-enter block font-thin [--enter-delay:90ms]">Let the rest flow.</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-md text-[15px] leading-relaxed text-foreground/55 md:text-base">
-          Split your year into seasons. Each one gets a handful of goals and your full focus, until the next one begins.
+        <p className="landing-enter mx-auto mt-6 max-w-md text-[15px] [--enter-delay:200ms] leading-relaxed text-foreground/55 md:text-base">
+          Split your year into seasons. Each one gets a handful of goals and
+          your full focus, until the next one begins.
         </p>
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+        <div className="landing-enter mt-7 flex flex-wrap items-center justify-center gap-3 [--enter-delay:300ms]">
           <Link
             href="/login?mode=signup"
-            className="inline-flex items-center gap-2 rounded-full bg-brand-strong px-6 py-3 text-[14px] font-medium text-white shadow-[0_8px_20px_-8px_var(--brand-strong)] transition-opacity hover:opacity-90"
+            className="landing-cta inline-flex items-center gap-2 rounded-full bg-brand-strong px-6 py-3 text-[14px] font-medium text-white shadow-[0_8px_20px_-8px_var(--brand-strong)] transition-opacity hover:opacity-90"
           >
             Get started <ArrowRight className="size-4" />
           </Link>
@@ -423,8 +657,12 @@ export function Hero() {
 
       {/* From md the portrait shrinks with short viewports so its base stays on the fold. */}
       <div
-        className="relative mt-10 h-[330px] md:mt-12 md:h-auto md:min-h-[calc(490px*var(--portrait))] md:flex-1"
-        style={{ "--portrait": "clamp(0.6, calc((100svh - 420px) / 490), 1)" } as React.CSSProperties}
+        className="landing-enter-soft relative mt-12 min-h-[310px] flex-1 [--enter-delay:380ms] md:mt-12 md:min-h-[calc(490px*var(--portrait))]"
+        style={
+          {
+            "--portrait": "clamp(0.6, calc((100svh - 420px) / 490), 1)",
+          } as React.CSSProperties
+        }
       >
         <Portrait />
       </div>

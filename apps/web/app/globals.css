@@ -156,3 +156,44 @@
     @apply font-sans;
   }
 }
+
+/* Landing motion. The hero rises in on load (staggered with --enter-delay); sections
+   reveal as they scroll into view (scroll-driven, no JS). Browsers without scroll
+   timelines show everything at once; reduced motion turns it all off. "soft" skips the
+   blur for the 3D scenes (portrait, globe), where a filter would be costly. */
+@keyframes landing-rise {
+  from { opacity: 0; translate: 0 16px; filter: blur(6px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
+}
+@keyframes landing-rise-soft {
+  from { opacity: 0; translate: 0 24px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .landing-enter {
+    animation: landing-rise 1000ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--enter-delay, 0ms) both;
+  }
+  .landing-enter-soft {
+    animation: landing-rise-soft 1200ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--enter-delay, 0ms) both;
+  }
+  @supports (animation-timeline: view()) {
+    .landing-reveal,
+    .landing-reveal-soft {
+      animation: landing-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 80%;
+    }
+    .landing-reveal-soft { animation-name: landing-rise-soft; }
+  }
+}
+
+/* Brand buttons: a hairline lift, the arrow nudges the way it points. */
+.landing-cta,
+.landing-cta svg {
+  transition: translate 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms, background-color 200ms;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .landing-cta:hover { translate: 0 -1px; }
+  .landing-cta:hover svg { translate: 2px 0; }
+  .landing-cta:hover svg.lucide-arrow-up-right { translate: 1.5px -1.5px; }
+}

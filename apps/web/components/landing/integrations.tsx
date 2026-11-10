@@ -42,7 +42,7 @@ const SPIN = 6; // deg per second while drifting
 const DRIFT_MS = 2600; // spin between two auto focuses
 const HOLD_MS = 3200; // how long a focused tile stays at the front
 const TURN_MS = 1600; // the eased turn that brings a tile to the front
-const IDLE_MS = 3500; // after the user lets go, auto-play resumes after this
+const SNAP_MS = 750; // letting go of a drag settles on the tile nearest the front
 
 // Fibonacci sphere: even spacing for any count, over (almost) the whole sphere so the
 // silhouette stays round; only the very poles are left out.
@@ -66,6 +66,7 @@ function depth({ lat, lon }: { lat: number; lon: number }, rx: number, ry: numbe
 /** The shortest signed turn from `from` to `to`, in degrees. */
 const turn = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180;
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const smooth = (a: number, b: number, v: number) => {
   const t = clamp((v - a) / (b - a), 0, 1);
@@ -77,8 +78,8 @@ function Face({ item, focused }: { item: Integration; focused: boolean }) {
   return (
     <div
       className={
-        "relative grid place-items-center rounded-[18px] border bg-gradient-to-b from-white to-[#fbfaf8] transition-[border-color,box-shadow] duration-700 " +
-        (focused ? "border-brand/45 shadow-[0_0_0_4px_color-mix(in_oklab,var(--brand)_13%,transparent)]" : "border-white/90")
+        "relative grid place-items-center rounded-[18px] border bg-gradient-to-b from-white to-[#fbfaf8] transition-[border-color] duration-700 " +
+        (focused ? "border-black/[0.08]" : "border-white/90")
       }
       style={{ width: TILE, height: TILE }}
     >
@@ -151,11 +152,10 @@ export function Integrations() {
     const rot = { x: -POINTS[0].lat, y: -POINTS[0].lon };
     // One state machine: an eased turn to a tile, holding it, drifting, or the user's hand.
     type Mode =
-      | { kind: "turn"; from: { x: number; y: number }; to: { x: number; y: number }; start: number; tile: number }
+      | { kind: "turn"; from: { x: number; y: number }; to: { x: number; y: number }; start: number; tile: number; ms: number; snap: boolean }
       | { kind: "hold"; until: number; tile: number }
       | { kind: "drift"; since: number; until: number }
-      | { kind: "drag"; lastX: number; lastY: number; vx: number; vy: number }
-      | { kind: "coast"; vx: number; vy: number; idleUntil: number };
+      | { kind: "drag"; lastX: number; lastY: number; vx: number; vy: number };
     let mode: Mode = { kind: "hold", until: performance.now() + HOLD_MS, tile: 0 };
     let last = performance.now();
     let frame = 0;
@@ -167,10 +167,30 @@ export function Integrations() {
     const focusTile = (tile: number | null) => {
       if (tile !== shown) setFocus((shown = tile));
     };
-    const turnTo = (tile: number, now: number) => {
+    const turnTo = (tile: number, now: number, snap = false) => {
       const to = { x: clamp(-POINTS[tile].lat, -55, 55), y: rot.y + turn(rot.y, -POINTS[tile].lon) };
-      mode = { kind: "turn", from: { ...rot }, to, start: now, tile };
+      if (reduce) {
+        // no animation loop: jump straight to the tile
+        Object.assign(rot, to);
+        paint();
+        focusTile(tile);
+        mode = { kind: "hold", until: now + HOLD_MS, tile };
+        return;
+      }
+      mode = { kind: "turn", from: { ...rot }, to, start: now, tile, ms: snap ? SNAP_MS : TURN_MS, snap };
       focusTile(null);
+    };
+    /** The tile nearest the front if the globe kept turning a moment longer at (vx, vy) deg/s. */
+    const frontTile = (vx: number, vy: number) => {
+      const x = clamp(rot.x + vy * 0.25, -60, 60);
+      const y = rot.y + vx * 0.25;
+      let best = 0;
+      let bestDepth = -Infinity;
+      POINTS.forEach((p, i) => {
+        const d = depth(p, x, y);
+        if (d > bestDepth) [best, bestDepth] = [i, d];
+      });
+      return best;
     };
     /** The next tile coming round the front, near the equator so the globe doesn't nod. */
     const nextTile = () => {
@@ -196,8 +216,9 @@ export function Integrations() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (mode.kind === "turn") {
-        const t = clamp((now - mode.start) / TURN_MS, 0, 1);
-        const k = ease(t);
+        const t = clamp((now - mode.start) / mode.ms, 0, 1);
+        // a snap starts at the hand's speed and settles; an auto turn eases in and out
+        const k = mode.snap ? easeOut(t) : ease(t);
         rot.x = mode.from.x + (mode.to.x - mode.from.x) * k;
         rot.y = mode.from.y + (mode.to.y - mode.from.y) * k;
         // the tile straightens and lifts as the turn settles, not after it
@@ -217,14 +238,6 @@ export function Integrations() {
           if (tile >= 0) turnTo(tile, now);
           else mode.until = now + DRIFT_MS;
         }
-      } else if (mode.kind === "coast") {
-        // inertia after a fling, then back to the calm drift
-        const decay = Math.exp(-dt * 3);
-        mode.vx *= decay;
-        mode.vy *= decay;
-        rot.y += mode.vx * dt;
-        rot.x = clamp(rot.x + mode.vy * dt, -60, 60);
-        if (now > mode.idleUntil) mode = { kind: "drift", since: now, until: now + DRIFT_MS };
       }
       paint();
       frame = requestAnimationFrame(tick);
@@ -266,7 +279,8 @@ export function Integrations() {
       const now = performance.now();
       // a click on a tile brings it to the front
       if (!downAt.moved && downAt.tile >= 0) return turnTo(downAt.tile, now);
-      mode = { kind: "coast", vx: clamp(mode.vx, -400, 400), vy: clamp(mode.vy, -300, 300), idleUntil: now + IDLE_MS };
+      // letting go snaps to the tile nearest the front, carrying a little of the fling
+      turnTo(frontTile(clamp(mode.vx, -400, 400), clamp(mode.vy, -300, 300)), now, true);
     };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
@@ -288,7 +302,7 @@ export function Integrations() {
 
   return (
     <section id="integrations" aria-labelledby="integrations-title" className="relative mx-auto w-full max-w-6xl px-6 py-24 md:py-36">
-      <div className="mx-auto max-w-2xl text-center">
+      <div className="landing-reveal mx-auto max-w-2xl text-center">
         <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-foreground/45">Integrations</p>
         <h2 id="integrations-title" className="mt-4 font-display text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.77] tracking-[-0.01em]">
           <span className="block font-black">Fits the tools</span>
@@ -299,7 +313,7 @@ export function Integrations() {
         </p>
       </div>
 
-      <div className="relative mx-auto mt-6 h-[400px] max-w-4xl md:mt-8 md:h-[620px]">
+      <div className="landing-reveal-soft relative mx-auto mt-6 h-[400px] max-w-4xl md:mt-8 md:h-[620px]">
         <div
           ref={stage}
           className={"absolute inset-0 touch-pan-y select-none [perspective:1500px] max-md:scale-[0.62] " + (dragging ? "cursor-grabbing" : "cursor-grab")}

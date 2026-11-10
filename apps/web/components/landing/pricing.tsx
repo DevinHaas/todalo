@@ -99,7 +99,7 @@ export function Pricing({ foundersLeft }: { foundersLeft: number | null }) {
 
   return (
     <section id="pricing" aria-labelledby="pricing-title" className="relative mx-auto w-full max-w-6xl scroll-mt-6 px-6 py-24 md:py-36">
-      <div className="mx-auto max-w-2xl text-center">
+      <div className="landing-reveal mx-auto max-w-2xl text-center">
         <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-foreground/45">Pricing</p>
         <h2 id="pricing-title" className="mt-4 font-display text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.77] tracking-[-0.01em]">
           <span className="block font-black">Start free.</span>
@@ -164,7 +164,7 @@ export function Pricing({ foundersLeft }: { foundersLeft: number | null }) {
             <div
               key={plan.name}
               className={
-                "relative flex flex-col rounded-[18px] border p-6 md:p-7 " +
+                "landing-reveal-soft relative flex flex-col rounded-[18px] border p-6 md:p-7 " +
                 (pro
                   ? "border-white/90 bg-gradient-to-b from-white/95 to-white/75 shadow-[0_24px_60px_-28px_rgba(0,0,0,0.3),0_0_0_1px_color-mix(in_oklab,var(--brand)_35%,transparent)]"
                   : "border-white/70 bg-white/45 shadow-[0_1px_2px_rgba(0,0,0,0.04)]")
@@ -187,7 +187,7 @@ export function Pricing({ foundersLeft }: { foundersLeft: number | null }) {
               <Link
                 href={SIGNUP}
                 className={
-                  "mt-7 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[14px] font-medium transition-[opacity,background-color] " +
+                  "landing-cta mt-7 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[14px] font-medium " +
                   (pro
                     ? "bg-brand-strong text-white shadow-[0_8px_20px_-8px_var(--brand-strong)] hover:opacity-90"
                     : "border border-black/[0.08] bg-white/70 backdrop-blur hover:bg-white")
