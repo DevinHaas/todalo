@@ -363,7 +363,7 @@ function CurvedCard({ item }: { item: RingCardItem }) {
 
 function Portrait() {
   return (
-    <div className="pointer-events-none absolute bottom-0 left-1/2 h-[500px] w-[530px] -translate-x-1/2 origin-bottom [perspective:1900px] max-md:scale-[0.62] md:max-lg:scale-[0.85]">
+    <div className="pointer-events-none absolute bottom-0 left-1/2 h-[500px] w-[530px] -translate-x-1/2 origin-bottom [perspective:1900px] max-md:scale-[0.62] md:max-lg:[scale:calc(0.85*var(--portrait))] lg:[scale:var(--portrait)]">
       <div className="relative size-full [transform-style:preserve-3d]">
         {/* eslint-disable-next-line @next/next/no-img-element -- static cutout; next/image can't sit inside a 3D scene's depth sort */}
         <img
@@ -392,7 +392,7 @@ function Portrait() {
 
 export function Hero() {
   return (
-    <section className="relative mx-auto w-full max-w-6xl px-6">
+    <section className="relative mx-auto w-full max-w-6xl px-6 md:flex md:flex-1 md:flex-col">
       <div className="relative z-20 mx-auto max-w-5xl pt-6 text-center md:pt-8">
         {/* line-height 0.77: the tightest value where no letters collide (measured) */}
         <h1 className="font-display text-[clamp(2.6rem,6.6vw,5.75rem)] leading-[0.77] [&>span]:whitespace-nowrap tracking-[-0.01em]">
@@ -421,7 +421,11 @@ export function Hero() {
         </div>
       </div>
 
-      <div className="relative mt-10 h-[330px] md:mt-12 md:h-[490px]">
+      {/* From md the portrait shrinks with short viewports so its base stays on the fold. */}
+      <div
+        className="relative mt-10 h-[330px] md:mt-12 md:h-auto md:min-h-[calc(490px*var(--portrait))] md:flex-1"
+        style={{ "--portrait": "clamp(0.6, calc((100svh - 420px) / 490), 1)" } as React.CSSProperties}
+      >
         <Portrait />
       </div>
     </section>

@@ -9,7 +9,7 @@ const NAV = [
 /** The Todalo bonsai mark (public/todalo-logo.svg, black lines) and the wordmark. `inverted` turns it white for the dark footer. */
 export function Logo({ inverted = false }: { inverted?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+    <Link href="/" className="flex items-center gap-2 font-display text-[24px] font-thin leading-none tracking-[-0.005em]">
       {/* eslint-disable-next-line @next/next/no-img-element -- small static SVG mark */}
       <img src="/todalo-logo.svg" alt="" width={893} height={772} className={"h-7 w-auto " + (inverted ? "invert" : "")} />
       todalo

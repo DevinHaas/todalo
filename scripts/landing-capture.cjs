@@ -38,9 +38,11 @@ addEventListener("DOMContentLoaded", () => {
 });`;
 
 async function open({ viewport = VIEWPORT } = {}) {
-  const browser = await chromium.launch({ executablePath: CHROME });
+  // Fake camera and microphone: the ramble clip listens on a silent device, its speech is mocked.
+  const browser = await chromium.launch({ executablePath: CHROME, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
   const context = await browser.newContext({ viewport, deviceScaleFactor: SCALE, timezoneId: "Europe/Zurich", locale: "en-GB", colorScheme: "light" });
   await context.addInitScript(CURSOR);
+  await context.grantPermissions(["microphone"], { origin: BASE });
   const page = await context.newPage();
   await page.clock.setSystemTime(NOW);
   const res = await page.request.post(`${BASE}/api/auth/sign-in/email`, { data: LOGIN, headers: { Origin: BASE } });

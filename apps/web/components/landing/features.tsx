@@ -10,9 +10,9 @@ const STEPS = [
     copy: "Say what the season is about and how long it runs. The Coach turns it into a few measurable goals, then asks where you're starting from, so progress is measured from there.",
   },
   {
-    clip: "assign-goals",
-    title: "Rank your goals.",
-    copy: "Primary goals get your best hours. Secondary ones give way first when a week runs short, and Todalo tells you when too many claim the top.",
+    clip: "ramble",
+    title: "Say it, then add it.",
+    copy: "Talk through everything on your mind. Todalo turns each thing into a task with its date and time, and nothing is saved until you tap Add.",
   },
   {
     clip: "coach-plan",

@@ -200,4 +200,47 @@ module.exports = {
       });
     },
   },
+  ramble: {
+    state: "day1",
+    // Ramble's voice socket is mocked: each staged task arrives as the speech produces it, and the save is stubbed.
+    viewport: { width: 900, height: 820 },
+    async run(page) {
+      const todo = (id, title, dueDate, startTime, endTime, priority = 4) => ({
+        id, title, parentId: null, dueDate, startTime, endTime, recurrence: null, projectId: null,
+        description: null, priority, deadline: null, labelIds: [],
+      });
+      const spoken = [
+        todo("t1", "Outline the essay", "2026-11-12", "10:30", "12:00", 2),
+        todo("t2", "Prototype the onboarding", "2026-11-13", "09:00", "11:00"),
+        todo("t3", "Tempo run", "2026-11-14", "08:00", "08:50"),
+        todo("t4", "Book the physio", "2026-11-16", null, null),
+      ];
+      const session = (todos) => ({
+        type: "state",
+        provisionalIds: [],
+        state: { mode: "top-level", parentId: null, todos, undoStack: [], readyToCommit: false, nextId: todos.length + 1,
+          referenceDate: "2026-11-09T08:40:00", projectId: null, defaultDueDate: null, smartRecognition: true },
+      });
+      await page.routeWebSocket(/\/api\/ramble\/ws/, ws => {
+        ws.onMessage(() => {});
+        setTimeout(() => ws.send(JSON.stringify({ type: "ready" })), 300);
+        spoken.forEach((_, index) => setTimeout(() => ws.send(JSON.stringify(session(spoken.slice(0, index + 1)))), 1500 + index * 1000));
+      });
+      await page.route(/\/api\/v1\/ramble\/commit/, route => route.fulfill({ json: { count: spoken.length } }));
+      await goto(page, "/ramble");
+      await page.getByText("Listening", { exact: true }).first().waitFor();
+      const sidebar = page.getByRole("button", { name: "Toggle sidebar" }).first();
+      if (await sidebar.count()) await sidebar.click();
+      // The device picker names the headless fake microphone; hide it, the layout stays.
+      await page.addStyleTag({ content: "select[aria-label=\"Choose microphone\"] { visibility: hidden; }" });
+      await page.mouse.move(430, 560);
+      await wait(page, 900);
+      await record(page, "ramble", { x: 0, y: 56, w: 900, h: 750 }, async () => {
+        await wait(page, 4800);
+        // Ends on the staged cards with the pointer on Add: the save is not shown (the socket mock replays on reconnect).
+        await glide(page, page.locator(".ramble-add"), { steps: 22 });
+        await wait(page, 1500);
+      });
+    },
+  },
 };

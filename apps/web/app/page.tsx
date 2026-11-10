@@ -21,9 +21,12 @@ export default async function LandingPage() {
 
   return (
     <div className={`${sanela.variable} min-h-screen overflow-x-clip bg-[#f5f4f1] text-foreground`}>
-      <SiteHeader signedIn={Boolean(session)} />
       <main>
-        <Hero />
+        {/* On desktop the header and hero fill one viewport, so the portrait stands on the fold. */}
+        <div className="md:flex md:min-h-svh md:flex-col">
+          <SiteHeader signedIn={Boolean(session)} />
+          <Hero />
+        </div>
         <Features />
         <Integrations />
         <Pricing foundersLeft={left} />
