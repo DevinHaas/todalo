@@ -4,12 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
 import { coach, coachReads, goalReads, goals, ritualReads, seasonReads, seasons } from "./runtime";
 import { openRitual, showWeekPlan } from "./ritual-screens";
-import { seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
+import { seasonKeys, seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import { draftMutations } from "./coach";
 import { openCoachChat } from "./coach-chat-screens";
+import { HideCoachBar } from "./coach-bar";
 import { openPlanning, useCoachConnected } from "./planning-screens";
 import { PastSeasonView, SeasonsNav, SeasonView, type CapacitySlot } from "./season-views";
-import { goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
+import type { SeasonPlan } from "./season-setup";
+import { goalKeys, goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { goalOf } from "./schedule";
 import type { TaskDto } from "./tasks";
@@ -245,8 +247,20 @@ export function SeasonScreen({ account }: { account: Account }) {
   const capacity = useCapacity(userId, query.data?.season?.goals.filter(goal => goal.tier === "primary").length ?? 0);
   const writes = useMemo(() => seasonMutations(seasons, cache, userId), [cache, userId]);
   const seasonId = query.data?.season?.id ?? "";
-  const start = useMutation({ mutationFn: ({ startDate, lengthDays }: { startDate: string; lengthDays: number }) => writes.start(startDate, lengthDays), meta: { action: () => "start the season" } });
   const goalWrites = useGoalMutations(userId);
+  // The season setup: the season first, then each goal is created and joins it with its starting point.
+  // ponytail: one call after another, not one transaction; a failure part-way leaves the season with the goals saved so far (all editable there).
+  // The page switches to the season once, after everything is saved.
+  const setup = useMutation({ mutationFn: async (plan: SeasonPlan) => {
+    try {
+      const season = await seasons.start(plan.startDate, plan.lengthDays, plan.intention || undefined);
+      for (const goal of plan.goals) {
+        const goalId = goal.goalId ?? (await goals.create({ title: goal.title, color: goal.color, icon: goal.icon })).id;
+        await seasons.addGoal(season.id, goalId, goal.tier, goal.target, { baseline: goal.baseline });
+      }
+      return season;
+    } finally { await Promise.all([cache.invalidateQueries({ queryKey: seasonKeys.all(userId) }), cache.invalidateQueries({ queryKey: goalKeys.all(userId) })]); }
+  }, meta: { action: () => "start the season" } });
   // A goal made on the season page joins this season at once.
   const create = useMutation({ mutationFn: async ({ goal, tier, target }: { goal: NewGoal; tier: SeasonTier; target: string }) => {
     const created = await goalWrites.create(goal);
@@ -255,18 +269,20 @@ export function SeasonScreen({ account }: { account: Account }) {
   const update = useMutation({ mutationFn: ({ goalId, patch }: { goalId: string; patch: SeasonGoalPatch }) => writes.updateGoal(seasonId, goalId, patch), meta: { action: ({ patch }: { patch: SeasonGoalPatch }) => patch.tier ? `move the goal to ${patch.tier}` : "save the target" } });
   const remove = useMutation({ mutationFn: (goalId: string) => writes.removeGoal(seasonId, goalId), meta: { action: () => "remove the goal from the season" } });
   const end = useMutation({ mutationFn: (next: NextSeason | null) => writes.end(seasonId, next), meta: { action: () => "end the season" } });
-  const writing = [start, create, update, remove, end];
+  const writing = [setup, create, update, remove, end];
   const ritualState = useQuery(ritualReads.state(userId)).data;
   const coachConnected = useCoachConnected(userId);
   const review = ritualState?.settings.seasonReview.enabled
     ? { due: ritualState.seasonReview.due, done: ritualState.seasonReview.status !== null, onStart: () => openRitual("seasonReview") } : undefined;
-  return <SeasonView key={seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} recommendations={recommendations} capacity={capacity} onRetry={() => void query.refetch()}
-    onStart={(startDate, lengthDays) => start.mutateAsync({ startDate, lengthDays })}
+  // The season setup is a focused flow: no Coach bar over it.
+  const settingUp = query.status === "success" && (!query.data.season || setup.isPending);
+  return <>{settingUp && <HideCoachBar />}<SeasonView key={setup.isPending ? "" : seasonId} state={query} goals={list.data?.goals ?? []} past={past.data ?? []} explanations={explanations} recommendations={recommendations} capacity={capacity} onRetry={() => void query.refetch()}
+    onSetup={(plan) => setup.mutateAsync(plan)} settingUp={setup.isPending} suggest={coachConnected ? (input) => coach.seasonSetup(input) : undefined}
     onCreate={(goal, tier, target) => create.mutateAsync({ goal, tier, target })}
     onUpdate={(goalId, patch) => update.mutateAsync({ goalId, patch })}
     onRemove={(goalId) => remove.mutateAsync(goalId)} onEnd={(next) => end.mutateAsync(next)} review={review}
     onPlan={coachConnected ? () => openPlanning({ source: "season" }) : undefined}
-    write={{ pending: writing.some(write => write.isPending), error: writing.find(write => write.error)?.error?.message ?? null }} />;
+    write={{ pending: writing.some(write => write.isPending), error: writing.find(write => write.error)?.error?.message ?? null }} /></>;
 }
 
 /** Goals ticket 05: one past season, read-only. */

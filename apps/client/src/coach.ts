@@ -12,7 +12,9 @@ import type { ChatMessageDto, CoachChatDto } from "../../../packages/server/src/
 import type { CoachDocumentDto, CoachDocumentsDto } from "../../../packages/server/src/coach-documents";
 import { asciiJson } from "./attachments";
 import type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource } from "../../../packages/server/src/coach-planning";
+import type { SeasonSetupDto, SeasonSetupInput, SuggestedGoalDto } from "../../../packages/server/src/coach-season-setup";
 export type { PlanningDto, PlanningInput, PlanningQuestionDto, PlanningSource };
+export type { SeasonSetupDto, SeasonSetupInput, SuggestedGoalDto };
 import { taskKeys } from "./tasks";
 import type { CoachModelOption, CoachModelsDto } from "../../../packages/server/src/coach-models";
 export type { CoachModelOption, CoachModelsDto };
@@ -29,6 +31,7 @@ export interface CoachProviderInput { provider: CoachProviderKind; model: string
 export interface CoachTestResult { ok: boolean; message?: string; /** Ticket 17d. */ error?: CoachErrorDto }
 const noDraft: DraftDayDto = { draft: null, message: "Connect an AI provider first in Settings › Coach." };
 const noChat: CoachChatDto = { messages: [], draft: null, message: noDraft.message };
+const noSuggestions: SeasonSetupDto = { goals: [], message: "Connect an AI provider first in Settings › Coach." };
 const noPlanning: PlanningDto = { question: null, draft: null, message: "Connect an AI provider first in Settings › Coach, or open a goal that is still there." };
 const noRecommendation: DraftDayDto = { draft: null, message: "This recommendation is no longer there." };
 const notConnected: CoachTestResult = { ok: false, message: "Connect an AI provider first in Settings › Coach." };
@@ -82,6 +85,8 @@ export interface CoachTransport {
   removeDocument(id: string): Promise<CoachDocumentsDto>;
   /** Ticket 23: one planning-session turn: the next question, or the plan draft. */
   planning(timeZone: string, input: PlanningInput): Promise<PlanningDto>;
+  /** The season setup: goals suggested from what the season is about, each with a starting-point question. */
+  seasonSetup(input: SeasonSetupInput): Promise<SeasonSetupDto>;
 }
 
 const named = (provider?: string) => provider ? `?${new URLSearchParams({ provider })}` : "";
@@ -146,6 +151,7 @@ export function browserCoachTransport(fetcher: typeof fetch = fetch): CoachTrans
     },
     removeDocument: async (id) => (await request<CoachDocumentsDto | null>("DELETE", `/api/v1/coach/documents/${encodeURIComponent(id)}`)) ?? { documents: [] },
     planning: (timeZone, input) => request<PlanningDto | null>("POST", `/api/v1/coach/planning?${new URLSearchParams({ timeZone })}`, input).then(result => result ?? noPlanning),
+    seasonSetup: (input) => request<SeasonSetupDto | null>("POST", "/api/v1/coach/season-setup", input).then(result => result ?? noSuggestions),
   };
 }
 
@@ -192,6 +198,7 @@ export function coachTransport(): CoachTransport {
     },
     removeDocument: async (id) => (await command<CoachDocumentsDto | null>("delete_coach_document", { id })) ?? { documents: [] },
     planning: async (timeZone, { goalId, source, ramble, turns, finish }) => (await command<PlanningDto | null>("coach_planning", { timeZone, goalId, source, ramble, turns, finish: finish ?? false })) ?? noPlanning,
+    seasonSetup: async ({ intention, lengthDays }) => (await command<SeasonSetupDto | null>("coach_season_setup", { intention, lengthDays })) ?? noSuggestions,
   };
 }
 

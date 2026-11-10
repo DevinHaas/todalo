@@ -40,7 +40,7 @@ import {
 /** Accepted in the picker (the server checks again, by kind). */
 const ACCEPT = ".pdf,.docx,.txt,.md,.markdown,.csv,.png,.jpg,.jpeg,.gif,.webp,application/pdf,text/*,image/png,image/jpeg,image/gif,image/webp";
 
-let state = { focus: 0, prompt: null as string | null, send: false, open: false };
+let state = { focus: 0, prompt: null as string | null, send: false, open: false, hidden: 0 };
 const watchers = new Set<() => void>();
 const barState = { get: () => state, subscribe: (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; } };
 const update = (next: Partial<typeof state>) => { state = { ...state, ...next }; watchers.forEach(watcher => watcher()); };
@@ -48,6 +48,12 @@ const update = (next: Partial<typeof state>) => { state = { ...state, ...next };
 export const focusCoachBar = (prompt?: string) => update({ focus: state.focus + 1, prompt: prompt ?? null, send: false, open: true });
 /** Ticket 32: opens the bar and sends `prompt` as if typed (the Weekly review's "Tidy up"). */
 export const askCoach = (prompt: string) => update({ focus: state.focus + 1, prompt, send: true, open: true });
+/** While a screen that calls this is shown (the season setup), the bar and its button are gone. */
+export function useHiddenCoachBar() {
+  useEffect(() => { update({ hidden: state.hidden + 1, open: false }); return () => update({ hidden: state.hidden - 1 }); }, []);
+}
+/** Renders nothing; the Coach bar is hidden while it is mounted. */
+export function HideCoachBar() { useHiddenCoachBar(); return null; }
 /** Back to the button in the corner. */
 const closeCoachBar = () => update({ open: false });
 
@@ -57,7 +63,8 @@ export function CoachBar({ userId }: { userId: string }) {
   // Dev builds: ?liquid or Alt+Shift+L shows the liquid's parameter panel.
   const [params, setParams] = useLiquidParams();
   const [panel, setPanel] = useLiquidPanelToggle();
-  if (!connected) return null;
+  const { hidden } = useSyncExternalStore(barState.subscribe, barState.get);
+  if (!connected || hidden) return null;
   return <>
     <Bar userId={userId} params={params} />
     {import.meta.env.DEV && panel && <LiquidPanel params={params} onChange={setParams} onClose={() => setPanel(false)} />}

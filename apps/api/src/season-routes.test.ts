@@ -4,7 +4,7 @@ import type { StatusInputs } from "@todalo/server/goal-status";
 import { createSeasonRoutes } from "./season-routes";
 
 type Season = SeasonRecord & { userId: string };
-type Row = { id: string; userId: string; seasonId: string; goalId: string; tier: SeasonTier; target: string; carriedFromId: string | null };
+type Row = { id: string; userId: string; seasonId: string; goalId: string; tier: SeasonTier; target: string; baseline?: string; carriedFromId: string | null };
 const goals = [
   { id: "alice-fit", userId: "alice", title: "Become fit", archivedAt: null },
   { id: "alice-v2", userId: "alice", title: "Ship v2", archivedAt: null },
@@ -32,7 +32,7 @@ beforeEach(() => {
 const current = (userId: string, id?: string) => seasons.find(season => season.userId === userId && !season.endedAt && (id === undefined || season.id === id)) ?? null;
 const record = (row: Row): SeasonGoalRecord => {
   const goal = goals.find(item => item.id === row.goalId)!;
-  return { id: row.id, goalId: row.goalId, title: goal.title, color: "green", archivedAt: goal.archivedAt, tier: row.tier, target: row.target, carriedFromId: row.carriedFromId };
+  return { id: row.id, goalId: row.goalId, title: goal.title, color: "green", archivedAt: goal.archivedAt, tier: row.tier, target: row.target, baseline: row.baseline, carriedFromId: row.carriedFromId };
 };
 const app = createSeasonRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
@@ -123,7 +123,7 @@ describe("season API", () => {
   it.each([["12 weeks", 84], ["4 weeks", 28], ["a custom 45 days", 45]])("starts a season of %s and shows Day X of Y with days left", async (_name, lengthDays) => {
     const created = await start("alice", { startDate: "2026-02-12", lengthDays });
     expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ season: { id: "season-1", startDate: "2026-02-12", lengthDays, endedAt: null, goals: [] } });
+    expect(await created.json()).toEqual({ season: { id: "season-1", startDate: "2026-02-12", lengthDays, intention: null, endedAt: null, goals: [] } });
     expect((await page()).season).toMatchObject({ id: "season-1", startDate: "2026-02-12", lengthDays, progress: { phase: "running", day: 10, length: lengthDays, daysLeft: lengthDays - 10 }, goals: [] });
   });
 
@@ -156,11 +156,21 @@ describe("season API", () => {
     expect(seasons.filter(season => season.userId === "alice")).toEqual([]);
   });
 
+  it("keeps the season setup's intention and each goal's starting point, trimmed and bounded", async () => {
+    const created = await start("alice", { startDate: "2026-02-12", lengthDays: 84, intention: "  Get fit and finish the essays " });
+    expect(await created.json()).toMatchObject({ season: { intention: "Get fit and finish the essays" } });
+    const added = await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-fit", tier: "primary", target: "Half marathon", baseline: "  Running 5 km twice a week, knee is fine again " } });
+    expect(await added.json()).toMatchObject({ goal: { baseline: "Running 5 km twice a week, knee is fine again" } });
+    for (const body of [{ goalId: "alice-v2", tier: "primary", target: "x", baseline: "x".repeat(2_001) }, { goalId: "alice-v2", tier: "primary", target: "x", baseline: " " }, { goalId: "alice-v2", tier: "primary", target: "x", minutesPerWeek: 60 }]) {
+      expect((await call("POST", "/seasons/season-1/goals", { user: "alice", body })).status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
   it("adds goals as primary or secondary with a trimmed target in words", async () => {
     await start();
     const added = await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-fit", tier: "primary", target: "  Run a half marathon " } });
     expect(added.status).toBe(201);
-    expect(await added.json()).toEqual({ goal: { id: "sg-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", icon: "target", archived: false, tier: "primary", target: "Run a half marathon", carriedFromId: null } });
+    expect(await added.json()).toEqual({ goal: { id: "sg-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", icon: "target", archived: false, tier: "primary", target: "Run a half marathon", carriedFromId: null, baseline: null } });
     await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-v2", tier: "secondary", target: "Beta to 10 users" } });
     expect((await page()).season?.goals.map(goal => [goal.goalId, goal.tier, goal.target])).toEqual([["alice-fit", "primary", "Run a half marathon"], ["alice-v2", "secondary", "Beta to 10 users"]]);
     const twice = await call("POST", "/seasons/season-1/goals", { user: "alice", body: { goalId: "alice-fit", tier: "secondary", target: "Again" } });
@@ -248,8 +258,8 @@ describe("season API", () => {
     expect(body.next).toMatchObject({ id: "season-2", startDate: "2026-03-26", lengthDays: 28, endedAt: null });
     // The new season is current, holding only the carried goals, linked back to last season's rows.
     expect((await page()).season?.goals).toEqual([
-      { id: "sg-season-2-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", icon: "target", archived: false, tier: "secondary", target: "Run a half marathon", carriedFromId: "sg-alice-fit" },
-      { id: "sg-season-2-alice-sleep", goalId: "alice-sleep", title: "Sleep 8h", color: "green", icon: "target", archived: false, tier: "primary", target: "Sleep 8h", carriedFromId: "sg-alice-sleep" },
+      { id: "sg-season-2-alice-fit", goalId: "alice-fit", title: "Become fit", color: "green", icon: "target", archived: false, tier: "secondary", target: "Run a half marathon", carriedFromId: "sg-alice-fit", baseline: null },
+      { id: "sg-season-2-alice-sleep", goalId: "alice-sleep", title: "Sleep 8h", color: "green", icon: "target", archived: false, tier: "primary", target: "Sleep 8h", carriedFromId: "sg-alice-sleep", baseline: null },
     ]);
     // The ended season keeps every goal, tier and target as they were.
     expect((await past()).seasons).toEqual([expect.objectContaining({ id: "season-1", endedAt: "2026-03-26T08:00:00.000Z", goals: [

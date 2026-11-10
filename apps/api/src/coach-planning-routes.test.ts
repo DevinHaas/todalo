@@ -175,3 +175,26 @@ describe("planning access", () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe("the season setup's suggestions", () => {
+  const suggest = (body: unknown, user = "alice") => app.handle(new Request("http://localhost/api/v1/coach/season-setup", {
+    method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${user}` }, body: JSON.stringify(body),
+  }));
+  const goal = { title: "Run a half marathon", tier: "primary", target: "21 km under 2 hours", color: "green", icon: "footprints", question: "How much are you running at the moment?" };
+
+  it("suggests goals with a starting-point question from what the season is about, writing nothing", async () => {
+    replies.season_setup = () => JSON.stringify({ goals: [goal] });
+    const result = await (await suggest({ intention: "Get fit for a half marathon", lengthDays: 84 })).json();
+    expect(result).toEqual({ goals: [{ title: "Run a half marathon", tier: "primary", target: "21 km under 2 hours", color: "green", icon: "footprints", question: "How much are you running at the moment?" }] });
+    expect(calls.map(row => row.schema)).toEqual(["season_setup"]);
+    expect(calls[0]!.messages.at(-1)).toEqual({ role: "user", content: "Get fit for a half marathon" });
+    expect(drafts).toEqual([]);
+  });
+
+  it("answers a failed model call with a message, and refuses without a provider or with bad input", async () => {
+    providers.set("alice", { provider: "openrouter", model: "broken", baseUrl: null, apiKey: "sk-or-test" });
+    expect(await (await suggest({ intention: "Get fit", lengthDays: 84 })).json()).toMatchObject({ goals: [], error: { code: "overloaded" } });
+    expect((await suggest({ intention: "Get fit", lengthDays: 84 }, "bob")).status).toBe(404);
+    expect((await suggest({ intention: " ", lengthDays: 84 })).status).toBe(400);
+  });
+});

@@ -15,13 +15,16 @@ export interface SeasonGoalPatch { tier?: SeasonTier; target?: string }
 /** The season started when the current one ends, with the goals carried into it. */
 export interface NextSeason { startDate: string; lengthDays: number; goals: { goalId: string; tier: SeasonTier; target: string }[] }
 
+/** The season setup's starting point of one goal: where it stands today, in the user's words. */
+export interface StartingPoint { baseline?: string }
+
 export interface SeasonTransport {
   /** The current season with its day count in the given timezone; season is null before the first. */
   current(timeZone: string): Promise<CurrentSeasonDto>;
   /** Starts a season; refused (SAVE_FAILED) while another is current. */
-  start(startDate: string, lengthDays: number): Promise<SeasonDto>;
+  start(startDate: string, lengthDays: number, intention?: string): Promise<SeasonDto>;
   /** null when the season or goal is missing, foreign, ended or archived. */
-  addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string): Promise<SeasonGoalDto | null>;
+  addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string, start?: StartingPoint): Promise<SeasonGoalDto | null>;
   /** Changes the tier or moves the target; null when the goal is not in the current season. */
   updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch): Promise<SeasonGoalDto | null>;
   /** Removes the goal from the current season only; false when it is not in it. */
@@ -57,8 +60,8 @@ export function browserSeasonTransport(fetcher: typeof fetch = fetch): SeasonTra
   const required = <T,>(value: T | null, code: "TASKS_UNAVAILABLE" | "SAVE_FAILED") => { if (!value) throw new AccountTransportError(code); return value; };
   return {
     current: async (timeZone) => required(await request<CurrentSeasonDto>("GET", `/api/v1/seasons/current?${new URLSearchParams({ timeZone })}`), "TASKS_UNAVAILABLE"),
-    start: async (startDate, lengthDays) => required(await request<{ season: SeasonDto }>("POST", "/api/v1/seasons", { startDate, lengthDays }), "SAVE_FAILED").season,
-    addGoal: async (seasonId, goalId, tier, target) => (await request<{ goal: SeasonGoalDto }>("POST", goals(seasonId), { goalId, tier, target }))?.goal ?? null,
+    start: async (startDate, lengthDays, intention) => required(await request<{ season: SeasonDto }>("POST", "/api/v1/seasons", { startDate, lengthDays, intention }), "SAVE_FAILED").season,
+    addGoal: async (seasonId, goalId, tier, target, start) => (await request<{ goal: SeasonGoalDto }>("POST", goals(seasonId), { goalId, tier, target, ...start }))?.goal ?? null,
     updateGoal: async (seasonId, goalId, patch) => (await request<{ goal: SeasonGoalDto }>("PATCH", `${goals(seasonId)}/${encodeURIComponent(goalId)}`, patch))?.goal ?? null,
     removeGoal: async (seasonId, goalId) => Boolean(await request("DELETE", `${goals(seasonId)}/${encodeURIComponent(goalId)}`)),
     past: async () => required(await request<PastSeasonsDto>("GET", "/api/v1/seasons/past"), "TASKS_UNAVAILABLE").seasons,
@@ -77,8 +80,8 @@ export function seasonTransport(): SeasonTransport {
   // One fixed native command per operation; Rust attaches the Keychain bearer.
   return {
     current: (timeZone) => command<CurrentSeasonDto>("current_season", { timeZone }),
-    start: async (startDate, lengthDays) => (await command<{ season: SeasonDto }>("start_season", { startDate, lengthDays })).season,
-    addGoal: async (seasonId, goalId, tier, target) => (await command<{ goal: SeasonGoalDto } | null>("add_season_goal", { seasonId, goalId, tier, target }))?.goal ?? null,
+    start: async (startDate, lengthDays, intention) => (await command<{ season: SeasonDto }>("start_season", { startDate, lengthDays, intention })).season,
+    addGoal: async (seasonId, goalId, tier, target, start) => (await command<{ goal: SeasonGoalDto } | null>("add_season_goal", { seasonId, goalId, tier, target, ...start }))?.goal ?? null,
     updateGoal: async (seasonId, goalId, patch) => (await command<{ goal: SeasonGoalDto } | null>("update_season_goal", { seasonId, goalId, patch }))?.goal ?? null,
     removeGoal: async (seasonId, goalId) => Boolean(await command<unknown>("remove_season_goal", { seasonId, goalId })),
     past: async () => (await command<PastSeasonsDto>("past_seasons")).seasons,
@@ -122,11 +125,11 @@ export function seasonMutations(transport: SeasonTransport, cache: QueryClient, 
     data => data?.season?.id === seasonId ? { ...data, season: { ...data.season, goals: edit(data.season.goals) } } : data);
   const settled = async <T,>(run: () => Promise<T>) => { try { return await run(); } finally { await cache.invalidateQueries({ queryKey: seasonKeys.all(userId) }); } };
   return {
-    start: (startDate: string, lengthDays: number) => settled(() => transport.start(startDate, lengthDays)),
-    addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string) {
+    start: (startDate: string, lengthDays: number, intention?: string) => settled(() => transport.start(startDate, lengthDays, intention)),
+    addGoal(seasonId: string, goalId: string, tier: SeasonTier, target: string, start?: StartingPoint) {
       const goal = cache.getQueryData<GoalsDto>(goalKeys.list(userId))?.goals.find(item => item.id === goalId);
-      const draft: SeasonGoalDto = { id: `draft-${goalId}`, goalId, title: goal?.title ?? "", color: goal?.color ?? "blue", icon: goal?.icon ?? "target", archived: false, tier, target, carriedFromId: null };
-      return optimisticWrite(cache, [rows(seasonId, goals => [...goals.filter(item => item.goalId !== goalId), draft])], async () => done(await transport.addGoal(seasonId, goalId, tier, target)), refresh,
+      const draft: SeasonGoalDto = { id: `draft-${goalId}`, goalId, title: goal?.title ?? "", color: goal?.color ?? "blue", icon: goal?.icon ?? "target", archived: false, tier, target, carriedFromId: null, baseline: start?.baseline ?? null };
+      return optimisticWrite(cache, [rows(seasonId, goals => [...goals.filter(item => item.goalId !== goalId), draft])], async () => done(await transport.addGoal(seasonId, goalId, tier, target, start)), refresh,
         added => [rows(seasonId, goals => goals.map(item => item.goalId === goalId ? added : item))]);
     },
     updateGoal(seasonId: string, goalId: string, patch: SeasonGoalPatch) {

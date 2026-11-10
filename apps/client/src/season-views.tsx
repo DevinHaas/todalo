@@ -4,6 +4,8 @@ import { CalendarRange, History, Pencil, Plus, Sparkles } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
 import { CoachExplanation, CoachRecommendation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
 import { TrajectoryChart } from "./trajectory-chart";
+import { SeasonSetup, type SeasonPlan } from "./season-setup";
+import type { SeasonSetupDto, SeasonSetupInput } from "./coach";
 import type { RecommendationSlot } from "./goal-views";
 import { primaryGuideline, seasonLengths, tooManyPrimary, type CapacityDto, type CurrentSeasonDto, type GoalStatusDto, type NextSeason, type SeasonDto, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import type { ReadState } from "./views";
@@ -64,12 +66,17 @@ export function seasonDayLabel({ phase, day, length, daysLeft, startsIn }: Seaso
   return `Day ${day} of ${length} · ${daysLeft ? `${plural(daysLeft, "day")} left` : "last day"}`;
 }
 
-export function SeasonView({ state, goals, past, explanations, recommendations, capacity, onRetry, onStart, onCreate, onUpdate, onRemove, onEnd, review, onPlan, write }: {
+export function SeasonView({ state, goals, past, explanations, recommendations, capacity, onRetry, onSetup, suggest, settingUp, onCreate, onUpdate, onRemove, onEnd, review, onPlan, write }: {
   state: ReadState<CurrentSeasonDto>; goals: GoalDto[]; past: SeasonDto[]; onRetry: () => void;
   /** Ticket 17: the Coach's status explanations by goal ID (empty without a provider). */ explanations?: Record<string, string>;
   /** Ticket 21: the Coach's recommendations by goal ID (none without a provider). */ recommendations?: Record<string, RecommendationSlot>;
   /** Ticket 25: the Coach's capacity estimate (undefined without a provider). */ capacity?: CapacitySlot;
-  onStart: (startDate: string, lengthDays: number) => Promise<unknown>;
+  /** Before the first season (or after one ended): the season setup saves the season, its goals and their starting points. */
+  onSetup: (plan: SeasonPlan) => Promise<unknown>;
+  /** The Coach's goal suggestions for the setup (undefined without a provider). */
+  suggest?: (input: SeasonSetupInput) => Promise<SeasonSetupDto>;
+  /** While the setup saves: it stays on screen until its goals are in, even once the season itself is. */
+  settingUp?: boolean;
   /** Creates a goal and adds it to this season. */
   onCreate: (goal: NewGoal, tier: SeasonTier, target: string) => Promise<unknown>;
   onUpdate: (goalId: string, patch: SeasonGoalPatch) => Promise<unknown>;
@@ -85,10 +92,9 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
   if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
   if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   const season = state.data?.season;
-  if (!season) return <div className="ui max-w-page">
-    <PageHeader title="Season" />
-    <Hint className="text-sm">A season is the time box your goals are planned against. Start one, then choose which goals it commits to.</Hint>
-    <StartSeason onStart={onStart} write={write} />
+  if (!season || settingUp) return <div className="ui max-w-page">
+    <PageHeader title="New season" />
+    <SeasonSetup existing={goals.filter(goal => !goal.archived)} suggest={suggest} onStart={onSetup} write={write} />
     <PastSeasons seasons={past} />
   </div>;
   const primary = season.goals.filter(goal => goal.tier === "primary");
@@ -101,6 +107,7 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
     </>} />
     <p className="text-muted-foreground" data-season-phase={phase}><strong className="font-semibold text-foreground">{seasonDayLabel(season.progress)}</strong> · {seasonRange(season)}</p>
     <Progress aria-hidden="true" className="mt-2 mb-4" value={phase === "upcoming" ? 0 : Math.round(day / length * 100)} />
+    {season.intention && <p className="mb-4 border-l-2 border-brand pl-3 text-sm text-muted-foreground" data-season-intention="">{season.intention}</p>}
     {review?.due && !review.done && <div role="status" className="mb-4" data-season-review-due=""><Alert><AlertDescription>
       {phase === "over" ? "This season's last day has passed." : "Today is this season's last day."} Look back on it and choose what continues.
     </AlertDescription><AlertAction><Button size="sm" onClick={review.onStart}>Start Season review</Button></AlertAction></Alert></div>}
@@ -299,19 +306,6 @@ export function EndSeasonStep({ season, onEnd, write, back }: { season: SeasonDt
   </form>;
 }
 
-function StartSeason({ onStart, write }: { onStart: (startDate: string, lengthDays: number) => Promise<unknown>; write: Write }) {
-  const { startDate, lengthDays, valid, fields } = useSeasonDates(localToday());
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    try { await onStart(startDate, lengthDays); } catch { /* shown through write.error */ }
-  }
-  return <form className="my-5 flex flex-col gap-4 rounded-xl border border-border p-4" onSubmit={submit}>
-    {fields}
-    {write.error && <FormError>{write.error}</FormError>}
-    <div><Button type="submit" data-season-action="start" disabled={write.pending || !valid}>Start season</Button></div>
-  </form>;
-}
-
 const escape = (close: () => void) => (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); close(); } };
 
 /** A goal not in the season: switching it on asks for its tier and target, then adds it. */
@@ -363,6 +357,7 @@ function SeasonGoalRow({ goal, status, explanation, recommendation, onUpdate, on
         <Input aria-label={`Target for ${goal.title}`} autoFocus value={target} onChange={event => setTarget(event.target.value)} required maxLength={1_000} />
         <Button type="submit" disabled={write.pending || !target.trim()}>Save</Button>
       </form> : <SeasonTarget text={goal.target} />}
+      {goal.baseline && <span className="text-xs text-muted-foreground" data-season-goal-start="">Started from: {goal.baseline}</span>}
       <CoachExplanation text={explanation} />
       <CoachRecommendation goalId={goal.goalId} title={goal.title} slot={recommendation} />
     </div>

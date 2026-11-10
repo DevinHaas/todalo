@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
-export default function LoginPage() {
+export default function LoginPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
+  // The landing page's "Get started" links here with ?mode=signup.
+  const { mode: initialMode } = use(searchParams);
+  const [mode, setMode] = useState<"signIn" | "signUp">(initialMode === "signup" ? "signUp" : "signIn");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

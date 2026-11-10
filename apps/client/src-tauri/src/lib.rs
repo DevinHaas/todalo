@@ -183,6 +183,7 @@ pub fn run() {
             coach_patterns::update_coach_pattern,
             coach_patterns::delete_coach_pattern,
             coach_planning::coach_planning,
+            coach_planning::coach_season_setup,
             organization::destinations,
             organization::create_section,
             organization::rename_section,

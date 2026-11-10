@@ -36,6 +36,26 @@ pub async fn coach_planning(
         .await?)
 }
 
+/// The season setup's suggestions: `{ goals, message? }`; null (404) without a provider.
+#[tauri::command]
+pub async fn coach_season_setup(
+    state: tauri::State<'_, NativeAuth>,
+    intention: String,
+    length_days: u16,
+) -> Result<Option<Value>, String> {
+    let body = season_setup_body(intention, length_days)?;
+    Ok(state
+        .write(Method::POST, "/api/v1/coach/season-setup", Some(body))
+        .await?)
+}
+
+fn season_setup_body(intention: String, length_days: u16) -> Result<Value, &'static str> {
+    if intention.trim().is_empty() || !(1..=366).contains(&length_days) {
+        return Err(INVALID);
+    }
+    Ok(serde_json::json!({ "intention": intention, "lengthDays": length_days }))
+}
+
 fn planning_body(
     goal_id: String,
     source: String,
@@ -77,5 +97,15 @@ mod tests {
             planning_body("".into(), "goal".into(), "Fit".into(), vec![], true),
             Err(INVALID)
         );
+    }
+
+    #[test]
+    fn season_setup_bodies_carry_only_the_intention_and_length() {
+        assert_eq!(
+            season_setup_body("Get fit".into(), 84).unwrap(),
+            serde_json::json!({ "intention": "Get fit", "lengthDays": 84 })
+        );
+        assert_eq!(season_setup_body(" ".into(), 84), Err(INVALID));
+        assert_eq!(season_setup_body("Get fit".into(), 0), Err(INVALID));
     }
 }

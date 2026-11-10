@@ -4,6 +4,7 @@ import {
   PLANNING_DRAFT_PROMPT, PLANNING_QUESTION_LIMIT, PLANNING_QUESTION_PROMPT, milestoneLastDay, parsePlanningDraft, parsePlanningQuestion, planningDraftSchema,
   planningFacts, planningInput, planningMessages, planningQuestionSchema, type PlanningDto,
 } from "@todalo/server/coach-planning";
+import { parseSeasonSetup, seasonSetupInput, seasonSetupMessages, seasonSetupSchema, type SeasonSetupDto } from "@todalo/server/coach-season-setup";
 import { localParts, toDraftDto, weekPlan, type DayContext, type DraftRecord, type NewDraft } from "@todalo/server/drafts";
 import { withPatterns, type PatternRecord } from "@todalo/server/coach-patterns";
 import type { SeasonGoalRecord, SeasonRecord } from "@todalo/server/season-dto";
@@ -85,6 +86,27 @@ export function createCoachPlanningRoutes(store: CoachPlanningStore) {
         const drafted = parsePlanningDraft(await model.complete({ messages: withPatterns(planningMessages(PLANNING_DRAFT_PROMPT, facts, input.data), patterns), schema: planningDraftSchema }, request.signal), plan, goalId, lastDay);
         if (!drafted.items.length && !drafted.overflow) return failed(drafted.summary || "The Coach found nothing to add. Say a little more and try again.");
         return { question: null, draft: toDraftDto(await store.saveDraft(userId, { kind: "plan", period: today, ...drafted })) } satisfies PlanningDto;
+      } catch (error) {
+        if (error instanceof CoachModelError) return failed(error.message, coachErrorDto(error, saved.provider));
+        if (error instanceof Error && error.name === "AbortError") return failed("The Coach took too long. Try again.");
+        throw error;
+      }
+    })
+    // The season setup: goals suggested from what the season is about, each with a starting-point question. Writes nothing.
+    .post("/coach/season-setup", async ({ request, body, status }) => {
+      const userId = await writeUser(store, request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = seasonSetupInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const saved = await store.provider(userId);
+      if (!saved) return status(404, NO_PROVIDER);
+      const failed = (message: string, error?: CoachErrorDto) => ({ goals: [], message, ...error && { error } }) satisfies SeasonSetupDto;
+      if (coachProviderInfo[saved.provider].needsKey && !saved.apiKey) return failed("Enter your API key again in Settings › Coach.", keyUnreadable(saved.provider));
+      const patterns = await store.patterns?.(userId) ?? [];
+      try {
+        const content = await store.model(saved).complete({ messages: withPatterns(seasonSetupMessages(input.data), patterns), schema: seasonSetupSchema }, request.signal);
+        return { goals: parseSeasonSetup(content) } satisfies SeasonSetupDto;
       } catch (error) {
         if (error instanceof CoachModelError) return failed(error.message, coachErrorDto(error, saved.provider));
         if (error instanceof Error && error.name === "AbortError") return failed("The Coach took too long. Try again.");

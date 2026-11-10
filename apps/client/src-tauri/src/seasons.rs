@@ -42,18 +42,29 @@ pub async fn start_season(
     state: tauri::State<'_, NativeAuth>,
     start_date: String,
     length_days: u16,
+    intention: Option<String>,
 ) -> Result<Value, String> {
-    if !valid_date(&start_date) || !(1..=366).contains(&length_days) {
-        return Err(INVALID.to_owned());
-    }
+    let body = start_body(&start_date, length_days, intention)?;
     state
-        .write(
-            Method::POST,
-            "/api/v1/seasons",
-            Some(json!({ "startDate": start_date, "lengthDays": length_days })),
-        )
+        .write(Method::POST, "/api/v1/seasons", Some(body))
         .await?
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
+/// The season setup adds what the season is about (trimmed, 1–1,000 characters) when given.
+fn start_body(
+    start_date: &str,
+    length_days: u16,
+    intention: Option<String>,
+) -> Result<Value, &'static str> {
+    if !valid_date(start_date) || !(1..=366).contains(&length_days) {
+        return Err(INVALID);
+    }
+    let mut body = json!({ "startDate": start_date, "lengthDays": length_days });
+    if let Some(intention) = intention {
+        body["intention"] = json!(bounded(&intention, 1_000)?);
+    }
+    Ok(body)
 }
 
 #[tauri::command]
@@ -63,11 +74,16 @@ pub async fn add_season_goal(
     goal_id: String,
     tier: String,
     target: String,
+    baseline: Option<String>,
 ) -> Result<Option<Value>, String> {
     let mut body = patch_body(SeasonGoalPatch {
         tier: Some(tier),
         target: Some(target),
     })?;
+    if let Some(baseline) = baseline {
+        // The season setup's starting point: where the goal stands today, in the user's words.
+        body["baseline"] = json!(bounded(&baseline, 2_000)?);
+    }
     if !valid_id(&season_id) || !valid_id(&goal_id) {
         return Ok(None);
     }
@@ -79,6 +95,14 @@ pub async fn add_season_goal(
             Some(body),
         )
         .await?)
+}
+
+fn bounded(text: &str, limit: usize) -> Result<String, &'static str> {
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > limit {
+        return Err(INVALID);
+    }
+    Ok(text.to_owned())
 }
 
 /// Changes a goal's tier or moves its target (the text is replaced).
@@ -237,8 +261,28 @@ fn patch_body(mut patch: SeasonGoalPatch) -> Result<Value, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{NextSeason, SeasonGoalPatch, end_body, patch_body, valid_date};
+    use super::{
+        NextSeason, SeasonGoalPatch, bounded, end_body, patch_body, start_body, valid_date,
+    };
     use serde_json::json;
+
+    #[test]
+    fn setup_fields_are_trimmed_and_bounded() {
+        assert_eq!(
+            start_body("2026-11-16", 84, Some("  Get fit ".into())).unwrap(),
+            json!({ "startDate": "2026-11-16", "lengthDays": 84, "intention": "Get fit" })
+        );
+        assert_eq!(
+            start_body("2026-11-16", 28, None).unwrap(),
+            json!({ "startDate": "2026-11-16", "lengthDays": 28 })
+        );
+        assert!(start_body("2026-11-16", 84, Some(" ".into())).is_err());
+        assert_eq!(
+            bounded("  Running 5 km twice a week ", 2_000).unwrap(),
+            "Running 5 km twice a week"
+        );
+        assert!(bounded(&"x".repeat(2_001), 2_000).is_err());
+    }
 
     #[test]
     fn season_goal_bodies_carry_only_typed_validated_fields() {

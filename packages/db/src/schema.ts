@@ -279,6 +279,8 @@ export const seasons = pgTable("seasons", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   startDate: date("start_date", { mode: "string" }).notNull(),
   lengthDays: integer("length_days").notNull(),
+  // The season setup's first answer: what the season is about, in the user's words.
+  intention: text("intention"),
   endedAt: timestamp("ended_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -295,6 +297,8 @@ export const seasonGoals = pgTable("season_goals", {
   goalId: text("goal_id").notNull().references(() => goals.id, { onDelete: "cascade" }),
   tier: seasonGoalTier("tier").notNull(),
   target: text("target").notNull(),
+  // The season setup's starting point: where the goal stands today, in the user's words.
+  baseline: text("baseline"),
   carriedFromId: text("carried_from_id").references((): AnyPgColumn => seasonGoals.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),

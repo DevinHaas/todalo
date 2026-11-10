@@ -6,10 +6,10 @@ import { db } from "@todalo/db";
 import { goals, seasonGoals, seasons } from "@todalo/db/schema";
 import type { AddSeasonGoalInput, EndSeasonInput, SeasonGoalRecord, SeasonRecord, StartSeasonInput, UpdateSeasonGoalInput } from "./season-dto";
 
-const seasonColumns = { id: seasons.id, startDate: seasons.startDate, lengthDays: seasons.lengthDays, endedAt: seasons.endedAt };
+const seasonColumns = { id: seasons.id, startDate: seasons.startDate, lengthDays: seasons.lengthDays, intention: seasons.intention, endedAt: seasons.endedAt };
 const goalColumns = {
   id: seasonGoals.id, goalId: seasonGoals.goalId, title: goals.title, color: goals.color, icon: goals.icon, archivedAt: goals.archivedAt,
-  tier: seasonGoals.tier, target: seasonGoals.target, carriedFromId: seasonGoals.carriedFromId,
+  tier: seasonGoals.tier, target: seasonGoals.target, baseline: seasonGoals.baseline, carriedFromId: seasonGoals.carriedFromId,
 };
 
 const currentSeason = async (userId: string, id?: string) => {

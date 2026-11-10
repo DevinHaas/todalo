@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { chartPoints, TrajectoryChart } from "./trajectory-chart";
 import type { GoalStatusDto, SeasonGoalDto } from "./seasons";
 
-const goal = (goalId: string, title: string): SeasonGoalDto => ({ id: `sg-${goalId}`, goalId, title, color: "teal", icon: "rocket", archived: false, tier: "primary", target: "x", carriedFromId: null });
+const goal = (goalId: string, title: string): SeasonGoalDto => ({ id: `sg-${goalId}`, goalId, title, color: "teal", icon: "rocket", archived: false, tier: "primary", target: "x", carriedFromId: null, baseline: null });
 const status = (patch: Partial<GoalStatusDto> = {}): GoalStatusDto => ({ band: "on_track", score: 0.8, weeks: [0.6, 0.8, 0.9], projection: 1, ...patch });
 const render = (statuses: Record<string, GoalStatusDto>, day = 17) => renderToStaticMarkup(createElement(MemoryRouter, null,
   createElement(TrajectoryChart, { goals: [goal("v2", "Ship v2"), goal("fit", "Become fit")], statuses, day, length: 84 })));
