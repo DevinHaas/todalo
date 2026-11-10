@@ -187,6 +187,19 @@
   }
 }
 
+/* The portrait's base: a progressive blur that dissolves into the page. It stays hidden at the
+   top of the page, so the first screen is sharp, and fades in over the first stretch of scroll.
+   Not motion (nothing moves), so reduced motion keeps it; no scroll timeline = no blur. */
+@keyframes hero-soften { from { opacity: 0; } to { opacity: 1; } }
+.hero-soften { opacity: 0; }
+@supports (animation-timeline: scroll()) {
+  .hero-soften {
+    animation: hero-soften linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 25svh;
+  }
+}
+
 /* Brand buttons: a hairline lift, the arrow nudges the way it points, and a glow that
    leans away from the cursor while a soft light follows it (--mx/--my from cta-glow.tsx).
    Both ease, so they trail the pointer a little. */

@@ -605,8 +605,9 @@ function Portrait() {
           width={1600}
           height={1506}
           fetchPriority="high"
-          className="absolute bottom-0 left-0 w-full [transform:translateZ(0)] max-md:[mask-image:linear-gradient(to_bottom,#000_72%,transparent)] max-md:[-webkit-mask-image:linear-gradient(to_bottom,#000_72%,transparent)]"
+          className="absolute bottom-0 left-0 w-full [transform:translateZ(0)] [mask-image:linear-gradient(to_left,transparent,#000_7%)] [-webkit-mask-image:linear-gradient(to_left,transparent,#000_7%)]"
         />
+        {/* the mask: the cutout's right shoulder runs into the image's edge; feathering it tapers like the left one */}
         <div
           className="absolute [transform-style:preserve-3d]"
           style={{ left: RING.left, top: RING.top, transform: RING.tilt }}
@@ -617,6 +618,13 @@ function Portrait() {
           ))}
         </div>
       </div>
+      {/* Outside the 3D scene (backdrop blur is unreliable inside preserve-3d): blurs the base more
+          the lower it goes and ends in the page colour, so the cut edge dissolves. See .hero-soften.
+          It overhangs the image so its own edges sit on plain page colour (a backdrop blur clamps at its box). */}
+      <div
+        className="hero-soften absolute -inset-x-10 -bottom-6 h-[calc(34%+1.5rem)] bg-[linear-gradient(to_bottom,transparent_30%,#f5f4f1_calc(100%-1.5rem))] backdrop-blur-[14px] [mask-image:linear-gradient(to_bottom,transparent,#000_65%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent,#000_65%)]"
+        aria-hidden
+      />
     </div>
   );
 }
