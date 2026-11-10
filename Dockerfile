@@ -6,6 +6,7 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/ramble/package.json ./packages/ramble/package.json
+COPY packages/server/package.json ./packages/server/package.json
 RUN bun install --frozen-lockfile
 
 FROM oven/bun:1 AS builder
