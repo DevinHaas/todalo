@@ -254,6 +254,9 @@ export function mountBadgeScene(
     const size = parseFloat(css.fontSize) * dpr;
     const font = `${css.fontWeight} ${size}px ${css.fontFamily}`;
     await document.fonts.load(font).catch(() => []);
+    // unmounted meanwhile (React StrictMode remounts at once): a late draw from this instance would
+    // rebind the shared GL context behind the next renderer's state cache, freezing its tree
+    if (disposed) return;
     // layout offsets ignore the card's tilt transform, unlike getBoundingClientRect
     let x = 0, y = 0;
     for (let n: HTMLElement | null = el; n && n !== canvas.offsetParent; n = n.offsetParent as HTMLElement | null) { x += n.offsetLeft; y += n.offsetTop; }
@@ -298,8 +301,9 @@ export function mountBadgeScene(
     return { x: 0.5 + (r() < 0.5 ? -1 : 1) * (0.12 + r() * 0.36), y: 0.15 + r() * 0.65, size: dash ? 0.9 : 0.55 + r() * 0.9, dash: dash ? 3 + r() * 5 : 0, phase: r() * 6.28, speed: 0.5 + r() };
   });
 
-  let width = 0, height = 0, dpr = 1, raf = 0, visible = true, time = 0, last = performance.now();
-  let yaw = 0, pitch = 0, pointer = 0, pointerY = 0;
+  let width = 0, height = 0, dpr = 1, raf = 0, visible = true, disposed = false, time = 0, last = performance.now();
+  // aim is where the pointer is (0 when it's off the card); pointer eases toward it
+  let yaw = 0, pitch = 0, pointer = 0, pointerY = 0, aim = 0, aimY = 0, over = false;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const resize = () => {
@@ -374,10 +378,13 @@ export function mountBadgeScene(
     if (!visible) return;
     const p = opts.params();
     time += dt * p.speed;
+    // follows the pointer briskly, but drifts back slowly (~3s) once it leaves the card
+    const follow = Math.min(1, dt * (over ? 4 : 0.8));
+    pointer += (aim - pointer) * follow; pointerY += (aimY - pointerY) * follow;
     // the tree turns with the pointer's x and leans with its y, eased, so the 3D reads as you move
-    const goal = Math.sin(time * 0.12) * p.sway + pointer * 0.45;
+    const goal = Math.sin(time * 0.12) * p.sway + pointer * 0.28;
     yaw += (goal - yaw) * Math.min(1, dt * 3);
-    pitch += (pointerY * 0.12 - pitch) * Math.min(1, dt * 3);
+    pitch += (pointerY * 0.08 - pitch) * Math.min(1, dt * 3);
     draw();
   };
 
@@ -385,10 +392,11 @@ export function mountBadgeScene(
   const onPointer = (e: Event) => {
     const { clientX, clientY } = e as PointerEvent;
     const rect = canvas.getBoundingClientRect();
-    pointer = clamp(((clientX - rect.left) / rect.width - 0.5) * 2);
-    pointerY = clamp(((clientY - rect.top) / rect.height - 0.5) * 2);
+    aim = clamp(((clientX - rect.left) / rect.width - 0.5) * 2);
+    aimY = clamp(((clientY - rect.top) / rect.height - 0.5) * 2);
+    over = true;
   };
-  const onLeave = () => { pointer = 0; pointerY = 0; };
+  const onLeave = () => { aim = 0; aimY = 0; over = false; };
   const host: HTMLElement | Window = opts.follow ?? canvas.parentElement ?? canvas;
   host.addEventListener("pointermove", onPointer);
   host.addEventListener("pointerleave", onLeave);
@@ -398,6 +406,7 @@ export function mountBadgeScene(
   if (!reduced) raf = requestAnimationFrame(frame);
 
   return () => {
+    disposed = true;
     cancelAnimationFrame(raf); ro.disconnect(); io.disconnect();
     host.removeEventListener("pointermove", onPointer); host.removeEventListener("pointerleave", onLeave);
     [geo.bark, geo.dead, geo.pot, tuft, quad.geometry].forEach(g => g?.dispose());
