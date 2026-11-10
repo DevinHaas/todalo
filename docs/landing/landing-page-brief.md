@@ -76,7 +76,7 @@ Current state: `/` is the landing page (`apps/web/app/page.tsx`); signed-in visi
 - **Layout:** the left column holds the steps (title, short copy) and scrolls normally. The right column is sticky and shows a video that changes to match the step in view.
 - **The story, in order (changed 2026-11-10: four steps):**
   1. **Set up your season:** the guided season setup (focus in your own words → length and start → switch on the goals to focus on, Primary or Secondary, from the Coach's suggestions and your own → where each goal starts from, in your own words → review; the Coach bar is hidden during it). Clip `season-setup`, seed state `setup`.
-  2. **Focus on what matters most:** primary and secondary goals.
+  2. **Rank your goals:** primary and secondary goals.
   3. **Plan the week with the Coach:** ask in the command bar (the Coach bar); the Coach drafts the week around the goals, the user keeps what fits, declines the rest and drags blocks to adjust. Clip `coach-plan`, seed state `coach`.
   4. **Review:** see progress and give the agent feedback, which shapes the next season.
 - **Mobile (decided):** the sticky column stacks as step, then video, then the next step.

@@ -11,7 +11,7 @@ const STEPS = [
   },
   {
     clip: "assign-goals",
-    title: "Focus on what matters most.",
+    title: "Rank your goals.",
     copy: "Primary goals get your best hours. Secondary ones give way first when a week runs short, and Todalo tells you when too many claim the top.",
   },
   {
