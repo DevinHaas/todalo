@@ -49,3 +49,7 @@ next-env.d.ts
 
 # afk-ralph loop transcripts
 .scratch/*/.ralph-logs/
+
+# local Claude Code state
+.claude/worktrees/
+.claude/scheduled_tasks.lock
