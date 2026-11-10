@@ -1,0 +1,13 @@
+{
+  "name": "@todalo/badge",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./bonsai": "./src/bonsai.ts"
+  },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": { "three": "^0.187.0" },
+  "devDependencies": { "@types/three": "^0.187.0" },
+  "peerDependencies": { "react": "*" }
+}

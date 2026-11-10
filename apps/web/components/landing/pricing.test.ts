@@ -7,15 +7,15 @@ const html = (foundersLeft: number | null) => renderToString(createElement(Prici
 
 describe("Pricing founder offer", () => {
   it("shows the live seats left from Stripe", () => {
-    expect(html(13)).toContain("13 of 20 left");
+    expect(html(13)).toContain("13 of 100 left");
   });
   it("falls back to the full Lifetime price once sold out", () => {
     const out = html(0);
-    expect(out).not.toContain("of 20 left");
+    expect(out).not.toContain("of 100 left");
     expect(out).toContain("One payment, yours for good");
     expect(out).toContain(">149<");
   });
   it("shows the offer without a count before Stripe is connected", () => {
-    expect(html(null)).toContain("−50% for the first 20");
+    expect(html(null)).toContain("−50% for the first 100");
   });
 });

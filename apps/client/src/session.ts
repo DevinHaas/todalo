@@ -3,6 +3,8 @@ import { AccountTransportError } from "./errors";
 export interface Account {
   user: { id: string; name: string; email: string; image: string | null; emailVerified: boolean };
   expiresAt: string;
+  /** The member badge: place in sign-up order, join date (ISO), founding member. */
+  member?: { number: number; since: string; founding: boolean };
 }
 
 export interface Credentials { email: string; password: string }

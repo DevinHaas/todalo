@@ -7,6 +7,7 @@ import * as organization from "@todalo/server/organization";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
 import * as bulk from "@todalo/server/bulk";
 import { createAuthRoutes } from "./auth-routes";
+import { membership } from "@todalo/server/members";
 import { createTaskRoutes } from "./task-routes";
 import { taskOperations } from "./task-operations";
 import { createBulkRoutes } from "./bulk-routes";
@@ -72,7 +73,7 @@ const app = createApi(dependencies)
     if (userId) live.publish(userId, "sync");
   })
   .use(createSyncRoutes({ verify, delta: getSyncDelta }))
-  .use(createAuthRoutes(auth)).use(createTaskRoutes({
+  .use(createAuthRoutes(auth, membership)).use(createTaskRoutes({
   verify,
   today: (userId) => getTodayTasksForUser(userId),
   task: getOwnedTask,

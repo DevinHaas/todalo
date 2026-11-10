@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Clock } from "lucide-react";
+import { ArrowUpRight, Clock } from "lucide-react";
+import { IntegrationRequest } from "./integration-request";
 
 // logo: a file in public/landing/logos (brand SVGs from the CC0 "logos" and MIT "theSVG"
 // sets; the Apple apps' icons taken from macOS). Marks stay their owners' trademarks.
@@ -33,6 +34,9 @@ const INTEGRATIONS: Integration[] = [
   { name: "Shortcuts", logo: "apple-shortcuts.webp" },
   { name: "Telegram", logo: "telegram.svg" },
 ];
+
+// The "Coming soon" ones are what visitors can vote for.
+const REQUESTABLE = INTEGRATIONS.filter((item) => !item.live);
 
 const RADIUS = 220;
 const TILE = 80;
@@ -146,6 +150,11 @@ export function Integrations() {
   const tiles = useRef<(HTMLDivElement | null)[]>([]);
   const [focus, setFocus] = useState<number | null>(0);
   const [dragging, setDragging] = useState(false);
+  // the integration whose request dialog is open
+  const [requesting, setRequesting] = useState<string | null>(null);
+  // hovering the focus card or an open dialog keeps the tile at the front
+  const pause = useRef({ hover: false, dialog: false });
+  pause.current.dialog = requesting !== null;
 
   useEffect(() => {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -225,7 +234,8 @@ export function Integrations() {
         if (t > 0.55) focusTile(mode.tile);
         if (t >= 1) mode = { kind: "hold", until: now + HOLD_MS, tile: mode.tile };
       } else if (mode.kind === "hold") {
-        if (now > mode.until) {
+        if (pause.current.hover || pause.current.dialog) mode.until = now + HOLD_MS;
+        else if (now > mode.until) {
           focusTile(null);
           mode = { kind: "drift", since: now, until: now + DRIFT_MS };
         }
@@ -338,9 +348,12 @@ export function Integrations() {
         {/* The line beside the tile in focus (it always sits at the globe's front centre). */}
         <div
           aria-live="polite"
+          onPointerEnter={() => (pause.current.hover = true)}
+          onPointerLeave={() => (pause.current.hover = false)}
           className={
-            "pointer-events-none absolute left-1/2 top-1/2 ml-20 w-60 -translate-y-1/2 rounded-[18px] border border-white/90 bg-gradient-to-b from-white/95 to-white/75 px-4 py-3 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.3)] backdrop-blur transition-[opacity,translate] duration-700 ease-out max-md:left-1/2 max-md:top-auto max-md:bottom-0 max-md:ml-0 max-md:-translate-x-1/2 max-md:translate-y-0 md:ml-24 " +
-            (current ? "opacity-100" : "opacity-0 md:translate-x-2")
+            "absolute left-1/2 top-1/2 ml-20 w-max max-w-60 -translate-y-1/2 rounded-[18px] border border-white/90 bg-gradient-to-b from-white/95 to-white/75 px-4 py-3 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.3)] backdrop-blur transition-[opacity,translate] duration-700 ease-out max-md:left-1/2 max-md:top-auto max-md:bottom-0 max-md:ml-0 max-md:-translate-x-1/2 max-md:translate-y-0 md:ml-24 " +
+            (current ? "opacity-100" : "opacity-0 md:translate-x-2") +
+            (current && !current.live ? "" : " pointer-events-none")
           }
         >
           {current && (
@@ -349,17 +362,23 @@ export function Integrations() {
               <p className={"mt-0.5 text-[12px] leading-snug " + (current.live ? "text-foreground/60" : "text-foreground/45")}>
                 {current.live ?? "Coming soon"}
               </p>
+              {!current.live && (
+                <button
+                  type="button"
+                  onClick={() => setRequesting(current.name)}
+                  className="landing-cta mt-2.5 inline-flex h-7 items-center gap-1 rounded-full bg-brand-strong px-3 text-[12px] font-medium text-white"
+                >
+                  Request it
+                  <ArrowUpRight className="size-3.5" />
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
-      <p className="mt-6 flex items-center justify-center gap-1.5 text-[12px] text-foreground/45">
-        <span className="grid size-4 place-items-center rounded-full border border-black/[0.08] bg-white">
-          <Clock className="size-2.5" strokeWidth={2.2} />
-        </span>
-        = coming soon · drag to turn the globe
-      </p>
+
+      {requesting && <IntegrationRequest items={REQUESTABLE} picked={requesting} onClose={() => setRequesting(null)} />}
 
       {/* The globe is decorative; this is the same list for screen readers. */}
       <ul className="sr-only">

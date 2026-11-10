@@ -112,17 +112,8 @@ export function Features() {
   }, []);
 
   return (
-    <section id="features" aria-labelledby="features-title" className="relative mx-auto w-full max-w-6xl scroll-mt-6 px-6 pb-24 pt-28 md:pb-40 md:pt-40">
-      <div className="landing-reveal max-w-xl">
-        <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-foreground/45">How it works</p>
-        {/* line-height 0.77 as in the hero: no descenders in line one, so the lines can nearly touch */}
-        <h2 id="features-title" className="mt-4 font-display text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.77] tracking-[-0.01em]">
-          <span className="block font-black">One season.</span>
-          <span className="block font-thin">Four calm steps.</span>
-        </h2>
-      </div>
-
-      <div className="mt-14 md:mt-20 md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-16 lg:gap-24">
+    <section id="features" aria-label="How it works" className="relative mx-auto w-full max-w-6xl scroll-mt-6 px-6 pb-24 pt-28 md:pb-40 md:pt-40">
+      <div className="md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-16 lg:gap-24">
         <ol>
           {STEPS.map((step, i) => {
             const on = active === i;
@@ -172,9 +163,12 @@ export function Features() {
           })}
         </ol>
 
-        {/* Desktop: one sticky card; the clip crossfades to the step in view. */}
+        {/* Desktop: one sticky card; the clip crossfades to the step in view. The sticky box is as tall as
+            a step (72vh) with the card centred in it, so the card lines up with step one on the way in and
+            sits at mid-screen, beside the active step, once it sticks. */}
         <div className="hidden md:block">
-          <div className="sticky top-[max(6rem,calc(50vh-16rem))]">
+          <div className="sticky top-[14vh] flex h-[72vh] flex-col justify-center">
+            <div className="relative">
             <Card>
               <div className="relative">
                 {STEPS.map((step, i) => (
@@ -189,13 +183,15 @@ export function Features() {
                 ))}
               </div>
             </Card>
-            <div className="mt-4 flex items-center justify-center gap-1.5" aria-hidden>
+            {/* below the card, outside the centring */}
+            <div className="absolute inset-x-0 top-full mt-4 flex items-center justify-center gap-1.5" aria-hidden>
               {STEPS.map((step, i) => (
                 <span
                   key={step.clip}
                   className={"h-1 rounded-full transition-all duration-500 " + (active === i ? "w-6 bg-brand" : "w-1.5 bg-black/15")}
                 />
               ))}
+            </div>
             </div>
           </div>
         </div>

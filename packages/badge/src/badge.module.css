@@ -1,0 +1,49 @@
+/* The display face is the host's Sanela: the app registers "Sanela"; the landing page sets --badge-display to its next/font family. */
+.stage { perspective: 1200px; }
+.card {
+  /* hosts can match their own corner radius, e.g. the landing page's 18px cards */
+  position: relative; aspect-ratio: 0.69; border-radius: var(--badge-radius, 4.5cqw); overflow: hidden; container-type: inline-size;
+  border: 1px solid rgb(0 0 0 / 0.08);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 24px 48px -24px rgb(0 0 0 / 0.18);
+  transform: rotateX(var(--ty, 0deg)) rotateY(var(--tx, 0deg));
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+  text-align: left;
+}
+.card[data-dark] { border-color: rgb(255 255 255 / 0.08); }
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* a faint light that follows the pointer, like glass over a print */
+.sheen {
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light;
+  background: radial-gradient(60% 45% at var(--mx, 30%) var(--my, 20%), rgb(255 255 255 / 0.55), transparent 70%);
+}
+
+/* founding members: a quiet pill, top left, like a membership tier on a card */
+.founding {
+  position: absolute; top: 6.5cqw; left: 7cqw; padding: 1.5cqw 3cqw; border-radius: 99px;
+  font-size: 2.7cqw; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1;
+  /* no backdrop-filter: inside the tilted card it can flatten the 3D in some browsers */
+  border: 1px solid rgb(0 0 0 / 0.1); background: rgb(255 255 255 / 0.55);
+  color: rgb(0 0 0 / 0.62);
+}
+.card[data-dark] .founding { border-color: rgb(255 255 255 / 0.12); background: rgb(255 255 255 / 0.06); color: rgb(255 255 255 / 0.7); }
+
+.meta { position: absolute; inset: auto 0 0 0; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 7cqw 7cqw; }
+.number { font-family: var(--badge-display, "Sanela"), ui-serif, Georgia, serif; font-weight: 900; font-size: 15cqw; line-height: 0.85; letter-spacing: -0.02em; }
+/* drawn by the shader (badge-scene.ts); the text stays for selection and screen readers */
+.card:is([data-number="sliced"], [data-number="stamped"], [data-number="letterpress"], [data-number="engraved"]) .number { color: transparent; }
+/* blind deboss: no ink, only the pressed edge */
+.card[data-number="blind"] .number { color: rgb(0 0 0 / 0.085); text-shadow: 0 -1px 0 rgb(0 0 0 / 0.2), 0 1px 0 rgb(255 255 255 / 0.65); }
+.card[data-dark][data-number="blind"] .number { color: rgb(255 255 255 / 0.03); text-shadow: 0 1px 0 rgb(255 255 255 / 0.12), 0 -1px 0 rgb(0 0 0 / 0.9); }
+.name { margin-top: 2.6cqw; font-size: 4.2cqw; opacity: 0.62; }
+.since { margin-top: 1cqw; font-size: 3.1cqw; opacity: 0.42; }
+
+/* the landing page's wordmark (lowercase Sanela Thin) with the seal tight beside it */
+.mark { display: flex; align-items: center; gap: 1.2cqw; }
+.wordmark {
+  font-family: var(--badge-display, "Sanela"), ui-serif, Georgia, serif; font-weight: 100; font-size: 6cqw; letter-spacing: -0.005em; line-height: 1;
+  /* trim the line box to ascender…baseline ("todalo" has no descenders) so the box centres on the ink */
+  text-box: trim-both cap alphabetic;
+}
+/* a printmaker's seal: the bonsai mark knocked out of a small red square */
+.seal { width: 5.2cqw; aspect-ratio: 1; border-radius: 0.5cqw; display: grid; place-items: center; flex: none; }
+.seal::after { content: ""; width: 74%; aspect-ratio: 893 / 771; background: var(--paper); mask: var(--logo) center / contain no-repeat; }

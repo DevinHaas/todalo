@@ -1,3 +1,5 @@
+import { FOUNDING_MEMBERS } from "@todalo/server/founders";
+
 /** Founder offer seats left (brief §3), from the Stripe coupon's redemptions. Null until Stripe is set up. */
 export async function foundersLeft(env: Record<string, string | undefined> = process.env, request: typeof fetch = fetch): Promise<number | null> {
   const key = env.STRIPE_SECRET_KEY;
@@ -10,7 +12,7 @@ export async function foundersLeft(env: Record<string, string | undefined> = pro
     } as RequestInit);
     if (!res.ok) return null;
     const { max_redemptions, times_redeemed } = (await res.json()) as { max_redemptions: number | null; times_redeemed: number };
-    return Math.max(0, (max_redemptions ?? 20) - times_redeemed);
+    return Math.max(0, (max_redemptions ?? FOUNDING_MEMBERS) - times_redeemed);
   } catch {
     return null;
   }

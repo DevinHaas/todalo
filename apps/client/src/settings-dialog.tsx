@@ -14,6 +14,8 @@ import { ShortcutSettingsScreen } from "./keyboard-screens";
 import { ImportSettingsScreen } from "./import-screen";
 import { RitualSettingsScreen } from "./ritual-screens";
 import { CoachSettingsScreen } from "./coach-screens";
+import { BadgeCard, badgeSceneDefaults } from "@todalo/badge";
+import "./badge-fonts";
 
 const icons: Record<SettingsSection, ReactNode> = {
   account: <UserRound />, general: <Settings />, theme: <Palette />, "keyboard-shortcuts": <Keyboard />, rituals: <Sunrise />, coach: <Sparkles />, calendars: <CalendarDays />, integrations: <Blocks />,
@@ -22,7 +24,12 @@ const icons: Record<SettingsSection, ReactNode> = {
 function AccountSection({ account }: { account: Account }) {
   const [pending, setPending] = useState(false);
   const { name, email, image } = account.user;
+  const dark = useSyncExternalStore(theme.subscribe, theme.dark);
   return <div className="settings-fields">
+    {account.member && <div className="settings-badge">
+      <BadgeCard member={account.member.number} name={name} since={account.member.since} founding={account.member.founding}
+        logo="/todalo-logo.svg" params={{ ...badgeSceneDefaults, dark }} width="min(100%, 300px)" />
+    </div>}
     <div className="settings-field"><span className="settings-label">Photo</span>
       {image ? <img className="settings-photo" src={image} alt="" /> : <span className="settings-photo avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}</div>
     <div className="settings-field"><span className="settings-label">Name</span><span>{name}</span></div>

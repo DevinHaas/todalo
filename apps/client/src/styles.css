@@ -822,6 +822,7 @@ button.property-value:hover { background: var(--accent); }
 /* The pane header names the page; the screens' own headings stay for assistive tech. */
 .settings-body :is(#keyboard-shortcuts-title, #calendars-title) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; padding: 0; border: 0; }
 .settings-fields { display: grid; gap: 1.25rem; }
+.settings-badge { display: flex; justify-content: center; padding: 0.5rem 0 0.75rem; }
 .settings-field { display: grid; gap: .375rem; }
 .settings-label { font-weight: 600; }
 .settings-photo { width: 4.5rem; height: 4.5rem; border-radius: .5rem; object-fit: cover; font-size: 1.75rem; }

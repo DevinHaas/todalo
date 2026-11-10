@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { FOUNDING_MEMBERS } from "@todalo/server/founders";
 
 type Currency = "CHF" | "EUR" | "USD";
 const CURRENCIES: Currency[] = ["CHF", "EUR", "USD"];
@@ -46,7 +47,7 @@ const PLANS = [
   {
     name: "Lifetime",
     blurb: "Everything in Pro, paid once.",
-    features: ["Everything in Pro, for good", "Pro's monthly hosted AI allowance", "Founders' price for the first 20 buyers"],
+    features: ["Everything in Pro, for good", "Pro's monthly hosted AI allowance", `Founders' price for the first ${FOUNDING_MEMBERS} buyers`],
     cta: "Get lifetime",
   },
 ] as const;
@@ -92,7 +93,7 @@ export function Pricing({ foundersLeft }: { foundersLeft: number | null }) {
         amount={life.founders}
         strike={life.full}
         unit="once"
-        note={foundersLeft === null ? "Founders' price, −50% for the first 20" : `Founders' price, ${foundersLeft} of 20 left`}
+        note={foundersLeft === null ? `Founders' price, −50% for the first ${FOUNDING_MEMBERS}` : `Founders' price, ${foundersLeft} of ${FOUNDING_MEMBERS} left`}
       />
     ),
   ];

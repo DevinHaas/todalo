@@ -3,7 +3,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "./auth-routes";
 
-function fixture(expiresIn = 3600) {
+function fixture(expiresIn = 3600, membership?: Parameters<typeof createAuthRoutes>[1]) {
   const auth = createSessionAuth({
     database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
     baseURL: "http://localhost:3000",
@@ -12,7 +12,7 @@ function fixture(expiresIn = 3600) {
     session: { expiresIn },
     logger: { disabled: true },
   });
-  const app = createAuthRoutes(auth);
+  const app = createAuthRoutes(auth, membership);
   const request = (path: string, init?: RequestInit) => app.handle(new Request(`http://localhost:3000${path}`, init));
   return { auth, request };
 }
@@ -28,6 +28,13 @@ async function signIn(request: ReturnType<typeof fixture>["request"]) {
 afterEach(() => vi.useRealTimers());
 
 describe("shared account authentication", () => {
+  it("adds the member badge to the account when membership is known", async () => {
+    const { request } = fixture(3600, async () => ({ number: 42, since: "2026-06-14T00:00:00.000Z", founding: true }));
+    const cookie = (await signIn(request)).headers.get("set-cookie")!.split(";")[0];
+    const body = await (await request("/api/v1/account", { headers: { cookie } })).json() as { member?: unknown };
+    expect(body.member).toEqual({ number: 42, since: "2026-06-14T00:00:00.000Z", founding: true });
+  });
+
   it("preserves browser cookies and returns only safe account identity", async () => {
     const { request } = fixture();
     const login = await request("/api/auth/sign-up/email", {

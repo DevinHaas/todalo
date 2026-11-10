@@ -4,7 +4,7 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
-  transpilePackages: ["@todalo/db", "@todalo/auth", "@todalo/ramble"],
+  transpilePackages: ["@todalo/db", "@todalo/auth", "@todalo/ramble", "@todalo/badge"],
 };
 
 export default nextConfig;

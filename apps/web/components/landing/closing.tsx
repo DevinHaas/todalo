@@ -32,12 +32,6 @@ export function Closing({ signedIn }: { signedIn: boolean }) {
               </>
             )}
           </Link>
-          <a
-            href="#pricing"
-            className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/70 px-5 py-3 text-[14px] font-medium backdrop-blur transition-colors hover:bg-white"
-          >
-            See pricing
-          </a>
         </div>
       </section>
 

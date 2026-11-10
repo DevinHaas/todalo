@@ -626,7 +626,7 @@ function Portrait() {
 export function Hero() {
   return (
     <section className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-6">
-      <div className="relative z-20 mx-auto max-w-5xl pt-24 text-center md:pt-8">
+      <div className="relative z-20 mx-auto max-w-5xl pt-24 text-center md:pt-26">
         {/* line-height 0.77: the tightest value where no letters collide (measured) */}
         <h1 className="font-display text-[clamp(2.6rem,6.6vw,5.75rem)] leading-[0.77] [&>span]:whitespace-nowrap tracking-[-0.01em]">
           <span className="landing-enter block font-black">Plan your season.</span>
@@ -657,7 +657,7 @@ export function Hero() {
 
       {/* From md the portrait shrinks with short viewports so its base stays on the fold. */}
       <div
-        className="landing-enter-soft relative mt-12 min-h-[310px] flex-1 [--enter-delay:380ms] md:mt-12 md:min-h-[calc(490px*var(--portrait))]"
+        className="landing-enter-soft relative mt-12 min-h-[310px] flex-1 [--enter-delay:380ms] md:-mt-6 md:min-h-[calc(490px*var(--portrait))]"
         style={
           {
             "--portrait": "clamp(0.6, calc((100svh - 420px) / 490), 1)",

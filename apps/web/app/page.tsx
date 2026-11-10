@@ -4,9 +4,13 @@ import { auth } from "@/lib/auth";
 import { sanela } from "@/components/landing/fonts";
 import { SiteHeader } from "@/components/landing/site-header";
 import { Hero } from "@/components/landing/hero";
+import { CtaGlow } from "@/components/landing/cta-glow";
 import { Features } from "@/components/landing/features";
 import { Integrations } from "@/components/landing/integrations";
 import { Pricing } from "@/components/landing/pricing";
+import { Books } from "@/components/landing/books";
+import { Membership } from "@/components/landing/membership";
+import { nextMemberNumber } from "@todalo/server/members";
 import { Closing } from "@/components/landing/closing";
 import { foundersLeft } from "@/lib/founders";
 
@@ -17,7 +21,7 @@ export const metadata: Metadata = {
 
 export default async function LandingPage() {
   // Signed-in visitors still see the landing page; the header swaps to "Open Todalo".
-  const [session, left] = await Promise.all([auth.api.getSession({ headers: await headers() }), foundersLeft()]);
+  const [session, left, next] = await Promise.all([auth.api.getSession({ headers: await headers() }), foundersLeft(), nextMemberNumber().catch(() => null)]);
 
   return (
     <div className={`${sanela.variable} min-h-screen overflow-x-clip bg-[#f5f4f1] text-foreground`}>
@@ -30,8 +34,11 @@ export default async function LandingPage() {
         <Features />
         <Integrations />
         <Pricing foundersLeft={left} />
+        {next !== null && <Membership next={next} />}
+        <Books />
       </main>
       <Closing signedIn={Boolean(session)} />
+      <CtaGlow />
     </div>
   );
 }
