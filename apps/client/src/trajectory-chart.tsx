@@ -10,6 +10,13 @@ import { Button, Hint } from "./ui";
 // non-scaling strokes), labels and dots are HTML so they never distort.
 
 const pct = (value: number) => `${Math.round(value * 1000) / 10}%`;
+// The plot keeps a margin top and bottom: a point at 100% sits on the edge and the
+// container (overflow-hidden) would cut it in half. Points and band boundaries use
+// the same mapping, so a line on a boundary still sits on it; the bands' outer
+// edges stay at 0 and 1 (see edge).
+const PLOT_INSET = 0.06;
+const plot = (value: number) => PLOT_INSET + value * (1 - 2 * PLOT_INSET);
+const edge = (value: number) => (value <= 0 || value >= 1 ? value : plot(value));
 const goalPath = (goalId: string) => `/goals/${encodeURIComponent(goalId)}`;
 const percent = (score: number) => `${Math.round(score * 100)}%`;
 
@@ -42,12 +49,12 @@ export function TrajectoryChart({ goals, statuses, day, length }: { goals: Seaso
   return <figure className="flex flex-col gap-3" aria-label="Trajectory">
     {day === 0 ? <Hint>Lines start when the season does.</Hint> : null}
     <div className="relative h-52 overflow-hidden rounded-lg border border-border">
-      {bands.map(({ band, top, bottom, fill }) => <div key={band} aria-hidden="true" className={`absolute inset-x-0 ${fill}`} style={{ top: pct(top), height: pct(bottom - top) }} />)}
+      {bands.map(({ band, top, bottom, fill }) => <div key={band} aria-hidden="true" className={`absolute inset-x-0 ${fill}`} style={{ top: pct(edge(top)), height: pct(edge(bottom) - edge(top)) }} />)}
       <svg className="absolute inset-0 size-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-labelledby="trajectory-title trajectory-desc">
         <title id="trajectory-title">{`Goal trajectory across the season's ${weeks} weeks`}</title>
         <desc id="trajectory-desc">{`${summary}.`}</desc>
         {lines.map(({ goal, points, projection }) => {
-          const path = (list: { x: number; y: number }[]) => list.map(({ x, y }, index) => `${index ? "L" : "M"}${x * 100} ${y * 100}`).join(" ");
+          const path = (list: { x: number; y: number }[]) => list.map(({ x, y }, index) => `${index ? "L" : "M"}${x * 100} ${plot(y) * 100}`).join(" ");
           const color = goalColorValue(goal.color);
           return <g key={goal.goalId} className="cursor-pointer" onClick={() => open(goal.goalId)} data-chart-line={goal.goalId}>
             {points.length > 1 && <path d={path(points)} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
@@ -58,11 +65,11 @@ export function TrajectoryChart({ goals, statuses, day, length }: { goals: Seaso
         })}
       </svg>
       {lines.flatMap(({ goal, points }) => points.map((point, index) => <span key={`${goal.goalId}-${index}`} aria-hidden="true"
-        className="pointer-events-none absolute size-2 -translate-1/2 rounded-full ring-2 ring-background" style={{ left: pct(point.x), top: pct(point.y), background: goalColorValue(goal.color) }} />))}
+        className="pointer-events-none absolute size-2 -translate-1/2 rounded-full ring-2 ring-background" style={{ left: pct(point.x), top: pct(plot(point.y)), background: goalColorValue(goal.color) }} />))}
       {day > 0 && day < length && <span aria-hidden="true" className="absolute inset-y-0 border-l border-dashed border-border-strong" style={{ left: pct(day / length) }} />}
       {/* Band names above the lines, on a backdrop so a line never hides them. */}
       {bands.map(({ band, top, text }) => <span key={band} aria-hidden="true" className={`pointer-events-none absolute left-1 mt-1 rounded-sm bg-background/80 px-1 text-2xs font-medium ${text}`}
-        style={{ top: pct(top) }}>{bandLabels[band]}</span>)}
+        style={{ top: pct(edge(top)) }}>{bandLabels[band]}</span>)}
     </div>
     <div aria-hidden="true" className="relative -mt-2 h-4 text-2xs text-subtle-foreground tabular-nums">
       {Array.from({ length: weeks }, (_, index) => index + 1).filter(week => weeks <= 8 || week === 1 || week % 2 === 0).map(week =>
