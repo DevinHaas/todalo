@@ -1,6 +1,7 @@
 {
   "bundle": {
     "macOS": {
+      "bundleVersion": "2",
       "signingIdentity": "3rd Party Mac Developer Application: Devin Hasler (BS65XAQ9NH)",
       "entitlements": "./Entitlements.plist",
       "files": {
