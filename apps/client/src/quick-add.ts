@@ -115,3 +115,24 @@ export function repeatPresetsFor(anchor: Date): { label: string; recurrence: Rec
     { label: `Every month on the ${ordinal(anchor.getDate())}`, recurrence: { n: 1, unit: "month", basedOn: "scheduled" } },
   ];
 }
+
+/** The `@label` being typed at the caret: `@` at the start or after a space, then no spaces. */
+export function labelMention(title: string, caret: number): { start: number; query: string } | null {
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(title.slice(0, caret));
+  return match ? { start: caret - match[1]!.length - 1, query: match[1]! } : null;
+}
+
+/** The title once a picked mention is removed: the text either side, without a doubled space. */
+export function withoutMention(title: string, mention: { start: number }, caret: number) {
+  const before = title.slice(0, mention.start);
+  return { title: before + title.slice(caret).replace(/^\s+/, ""), caret: before.length };
+}
+
+/** How close (px) a dragged box's center must come to the viewport's center line to snap onto it. */
+export const SNAP_PX = 8;
+/** Snaps a dragged box's center onto the viewport's center lines (Raycast-style) and says which guides to draw. */
+export function snapToCenter(center: { x: number; y: number }, viewport: { width: number; height: number }) {
+  const x = Math.min(Math.max(center.x, 0), viewport.width), y = Math.min(Math.max(center.y, 0), viewport.height);
+  const vertical = Math.abs(x - viewport.width / 2) <= SNAP_PX, horizontal = Math.abs(y - viewport.height / 2) <= SNAP_PX;
+  return { x: vertical ? viewport.width / 2 : x, y: horizontal ? viewport.height / 2 : y, vertical, horizontal };
+}

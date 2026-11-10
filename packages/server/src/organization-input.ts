@@ -7,6 +7,8 @@ const isoDate = z.iso.datetime({ offset: true });
 /** Legacy createSection rule: trimmed, 1–200 characters. */
 export const sectionInput = z.object({ projectId: id, name: z.string().trim().min(1).max(200) });
 export const sectionNameInput = sectionInput.pick({ name: true }).strict();
+/** Create: `after` a section, or first (null); absent keeps the legacy placement. */
+export const sectionCreateInput = sectionInput.pick({ name: true }).extend({ after: id.nullable().optional() }).strict();
 
 /** A destination for one or more tasks: Inbox is `projectId: null`. */
 export const taskDestination = z.object({ ids: z.array(id).min(1).max(200), projectId: id.nullable(), sectionId: id.nullable() });

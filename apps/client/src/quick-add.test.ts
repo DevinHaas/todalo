@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialSyncState, syncQuickAddFields } from "@todalo/ramble/quick-add-sync";
-import { composerFields, dueDateLabel, fromDateValue, parseTitle, quickAddTask, quickDateOptions, quickDates, repeatPresetsFor } from "./quick-add";
+import { composerFields, dueDateLabel, fromDateValue, labelMention, parseTitle, quickAddTask, quickDateOptions, quickDates, repeatPresetsFor, snapToCenter, withoutMention } from "./quick-add";
 
 const now = new Date(2026, 9, 15, 10); // Thursday 15 Oct 2026
 const local = (day: number, hours = 0, minutes = 0) => new Date(2026, 9, day, hours, minutes).toISOString();
@@ -86,5 +86,32 @@ describe("date popover quick dates", () => {
     expect(end("x for 1 hour")).toBe("18:15");
     expect(parseTitle("x for 1h 3 people", true, none, now).matches.map(match => match.text)).toEqual([]);
     expect(parseTitle("x 17:00 for 1h 30min", true, none, now)).toMatchObject({ startTime: "17:00", endTime: "18:30" });
+  });
+});
+
+describe("@label mentions", () => {
+  it("finds the @word at the caret only at a word start", () => {
+    expect(labelMention("@", 1)).toEqual({ start: 0, query: "" });
+    expect(labelMention("Buy milk @Gr", 12)).toEqual({ start: 9, query: "Gr" });
+    expect(labelMention("Buy @Gr milk", 7)).toEqual({ start: 4, query: "Gr" });
+    expect(labelMention("mail me@work", 12)).toBeNull();
+    expect(labelMention("@Gym done", 9)).toBeNull();
+  });
+  it("removes a picked mention without doubling spaces", () => {
+    expect(withoutMention("Buy @Gr milk", { start: 4 }, 7)).toEqual({ title: "Buy milk", caret: 4 });
+    expect(withoutMention("Buy milk @Gr", { start: 9 }, 12)).toEqual({ title: "Buy milk ", caret: 9 });
+    expect(withoutMention("@", { start: 0 }, 1)).toEqual({ title: "", caret: 0 });
+  });
+});
+
+describe("drag snapping", () => {
+  const viewport = { width: 1000, height: 800 };
+  it("snaps to each center line within 8px and reports the guides", () => {
+    expect(snapToCenter({ x: 506, y: 300 }, viewport)).toEqual({ x: 500, y: 300, vertical: true, horizontal: false });
+    expect(snapToCenter({ x: 200, y: 395 }, viewport)).toEqual({ x: 200, y: 400, vertical: false, horizontal: true });
+    expect(snapToCenter({ x: 520, y: 380 }, viewport)).toEqual({ x: 520, y: 380, vertical: false, horizontal: false });
+  });
+  it("keeps the center on screen", () => {
+    expect(snapToCenter({ x: -50, y: 900 }, viewport)).toMatchObject({ x: 0, y: 800 });
   });
 });

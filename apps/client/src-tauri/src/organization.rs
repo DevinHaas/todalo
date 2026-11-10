@@ -17,13 +17,27 @@ pub async fn destinations(state: tauri::State<'_, NativeAuth>) -> Result<Value, 
         .ok_or_else(|| UNAVAILABLE.to_owned())
 }
 
+/// Where "Add section" puts it: after a section, or first (`after: null`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Position {
+    after: Option<String>,
+}
+
 #[tauri::command]
 pub async fn create_section(
     state: tauri::State<'_, NativeAuth>,
     project_id: String,
     name: String,
+    position: Option<Position>,
 ) -> Result<Option<Value>, String> {
-    let body = section_body(&name)?;
+    let mut body = section_body(&name)?;
+    if let Some(Position { after }) = position {
+        if !after.as_deref().is_none_or(valid_id) {
+            return Err(INVALID.to_owned());
+        }
+        body["after"] = json!(after);
+    }
     if !valid_id(&project_id) {
         return Ok(None);
     }
@@ -33,6 +47,21 @@ pub async fn create_section(
             &format!("/api/v1/projects/{project_id}/sections"),
             Some(body),
         )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn rename_section(
+    state: tauri::State<'_, NativeAuth>,
+    id: String,
+    name: String,
+) -> Result<Option<Value>, String> {
+    let body = section_body(&name)?;
+    if !valid_id(&id) {
+        return Ok(None);
+    }
+    Ok(state
+        .write(Method::PATCH, &format!("/api/v1/sections/{id}"), Some(body))
         .await?)
 }
 

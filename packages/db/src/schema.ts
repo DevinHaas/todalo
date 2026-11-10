@@ -117,6 +117,12 @@ export const projects = pgTable("projects", {
     .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   color: text("color"),
+  // Todoist-style projects (0045): description, sidebar favorite, soft archive
+  // (archivedAt set: out of the sidebar, data kept) and the Display settings.
+  description: text("description"),
+  favorite: boolean("favorite").default(false).notNull(),
+  archivedAt: timestamp("archived_at"),
+  viewSettings: jsonb("view_settings"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -222,6 +228,9 @@ export const labels = pgTable("labels", {
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   color: text("color"),
+  // Todoist-style Filters & Labels: shown under Favorites in the sidebar; order is reserved for reordering.
+  favorite: boolean("favorite").default(false).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [index("labels_userId_idx").on(table.userId)]);
 
@@ -554,7 +563,14 @@ export const savedFilters = pgTable("saved_filters", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  definition: jsonb("definition").notNull(),
+  // Ticket 14's structured definition. Rows saved since carry a Todoist-style
+  // `query` instead (packages/server/src/filter-query.ts) and a null definition.
+  definition: jsonb("definition"),
+  query: text("query"),
+  description: text("description"),
+  color: text("color"),
+  favorite: boolean("favorite").default(false).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => [index("saved_filters_userId_idx").on(table.userId)]);
 

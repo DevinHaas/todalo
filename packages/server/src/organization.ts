@@ -22,15 +22,41 @@ export async function getSectionsForUser(userId: string, projectId?: string) {
 /** Every place a task can be moved to (Inbox is `projectId: null`). */
 export async function getOrganizationDestinations(userId: string) {
   const [projects, owned] = await Promise.all([getProjectsForUser(userId), getSectionsForUser(userId)]);
-  return { projects: projects.map(({ id, name }) => ({ id, name })), sections: owned.map(({ id, projectId, name }) => ({ id, projectId, name })) };
+  // Archived projects (and their sections) are not destinations.
+  const active = projects.filter(project => !project.archivedAt);
+  const ids = new Set(active.map(project => project.id));
+  return { projects: active.map(({ id, name }) => ({ id, name })), sections: owned.filter(section => ids.has(section.projectId)).map(({ id, projectId, name }) => ({ id, projectId, name })) };
 }
 
-/** Throws TaskOrganizationError("missing") for another user's or a missing project. */
-export async function createSection(userId: string, projectId: string, name: string) {
+/**
+ * Throws TaskOrganizationError("missing") for another user's or a missing project.
+ * `after` places it (Todoist's "Add section" between sections): after that section,
+ * or first for null; the project's sections are then renumbered. Without it the
+ * legacy rule stands (sortOrder 0, so name order among unplaced sections).
+ */
+export async function createSection(userId: string, projectId: string, name: string, after?: string | null) {
   const parsed = sectionInput.parse({ projectId, name });
   await assertTaskOrganization({ userId, projectId: parsed.projectId, sectionId: null });
-  const [section] = await db.insert(sections).values({ userId, ...parsed }).returning();
-  return { id: section.id, projectId: section.projectId, name: section.name };
+  if (after === undefined) {
+    const [section] = await db.insert(sections).values({ userId, ...parsed }).returning();
+    return { id: section.id, projectId: section.projectId, name: section.name };
+  }
+  // Sorted here too (legacy order: sortOrder, then name) so the renumbering never depends on the driver.
+  const order = (await getSectionsForUser(userId, parsed.projectId)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)).map(section => section.id);
+  const id = crypto.randomUUID();
+  // An unknown `after` (deleted meanwhile) appends.
+  order.splice(after === null ? 0 : order.includes(after) ? order.indexOf(after) + 1 : order.length, 0, id);
+  await atomically([
+    db.insert(sections).values({ id, userId, ...parsed, sortOrder: order.indexOf(id) }),
+    ...order.filter(other => other !== id).map(other => db.update(sections).set({ sortOrder: order.indexOf(other) }).where(and(eq(sections.id, other), eq(sections.userId, userId)))),
+  ]);
+  return { id, projectId: parsed.projectId, name: parsed.name };
+}
+
+/** Section `•••` Edit: null for another user's or a missing section. */
+export async function renameSection(userId: string, id: string, name: string) {
+  const [section] = await db.update(sections).set({ name: sectionInput.shape.name.parse(name) }).where(and(eq(sections.id, id), eq(sections.userId, userId))).returning();
+  return section ? { id: section.id, projectId: section.projectId, name: section.name } : null;
 }
 
 /** Member tasks stay in the project without a section (schema SET NULL). */

@@ -47,6 +47,8 @@
     "./task-labels": "./src/task-labels.ts",
     "./metadata": "./src/metadata.ts",
     "./metadata-input": "./src/metadata-input.ts",
+    "./filter-query": "./src/filter-query.ts",
+    "./filter-assist": "./src/filter-assist.ts",
     "./organization": "./src/organization.ts",
     "./organization-input": "./src/organization-input.ts",
     "./bulk": "./src/bulk.ts",

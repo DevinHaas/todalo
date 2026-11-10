@@ -58,3 +58,11 @@ export async function followNativeLinks(next: () => Promise<string> = () => invo
     open(route);
   }
 }
+
+/** "Copy link to project": the web address of the project page. */
+export async function copyProjectLink(id: string, clipboard: Pick<Clipboard, "writeText"> | undefined = navigator.clipboard) {
+  const path = `/projects/${encodeURIComponent(id)}`;
+  // ponytail: native reuses task_link's origin (same ID rules); app deep links open tasks only, so this opens the web app.
+  const url = isTauri() ? (await taskUrl(id)).replace(/\/tasks\/[^/]+$/, path) : `${window.location.origin}${path}`;
+  return copyText(url, clipboard);
+}

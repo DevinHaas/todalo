@@ -1,23 +1,30 @@
 import { Elysia } from "elysia";
 import { toTaskDto, type TaskRecord } from "@todalo/server/task-dto";
-import { parseProjectName, toProjectDto, toSectionDto, type DestinationsDto, type ProjectDetailDto, type ProjectDto, type ProjectRecord, type ProjectsDto, type SectionDto } from "@todalo/server/project-dto";
-import { sectionNameInput } from "@todalo/server/organization-input";
+import {
+  projectCreateInput, projectUpdateInput, toProjectDto, toProjectSummaryDto, toSectionDto,
+  type DestinationsDto, type ProjectCreateInput, type ProjectDetailDto, type ProjectDto, type ProjectRecord, type ProjectsDto, type ProjectUpdateInput, type SectionDto,
+} from "@todalo/server/project-dto";
+import { sectionCreateInput, sectionNameInput } from "@todalo/server/organization-input";
 
 export interface ProjectStore {
   /** Resolves the session user from cookies (browser) or bearer token (native). */
   verify(headers: Headers): Promise<string | null>;
   /** Browser origins allowed to write with an ambient cookie session. */
   allowedOrigins: Set<string>;
+  /** Every project, archived included, with completedCount and openCount. */
   list(userId: string): Promise<ProjectRecord[]>;
   get(userId: string, id: string): Promise<ProjectRecord | null>;
   tasks(userId: string, projectId: string): Promise<TaskRecord[]>;
-  create(userId: string, name: string): Promise<ProjectRecord>;
-  rename(userId: string, id: string, name: string): Promise<ProjectRecord | null>;
+  create(userId: string, input: ProjectCreateInput): Promise<ProjectRecord>;
+  /** Only the fields sent change; null when the project is missing or another user's. */
+  update(userId: string, id: string, input: ProjectUpdateInput): Promise<ProjectRecord | null>;
   remove(userId: string, id: string): Promise<boolean>;
   /** The owner's sections of an owned project, in legacy order (sortOrder, name). */
   sections(userId: string, projectId: string): Promise<SectionDto[]>;
   /** null when the project is missing or another user's. */
-  createSection(userId: string, projectId: string, name: string): Promise<SectionDto | null>;
+  createSection(userId: string, projectId: string, name: string, after?: string | null): Promise<SectionDto | null>;
+  /** null when the section is missing or another user's. */
+  renameSection(userId: string, id: string, name: string): Promise<SectionDto | null>;
   removeSection(userId: string, id: string): Promise<boolean>;
   destinations(userId: string): Promise<DestinationsDto>;
 }
@@ -48,7 +55,7 @@ export function createProjectRoutes(store: ProjectStore) {
     .get("/projects", async ({ request, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      return { projects: (await store.list(userId)).map(toProjectDto) } satisfies ProjectsDto;
+      return { projects: (await store.list(userId)).map(toProjectSummaryDto) } satisfies ProjectsDto;
     })
     .get("/projects/:id", async ({ request, params, status }) => {
       const userId = await store.verify(request.headers);
@@ -68,10 +75,19 @@ export function createProjectRoutes(store: ProjectStore) {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
+      const input = sectionCreateInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const section = await store.createSection(userId, params.id, input.data.name, input.data.after);
+      return section ? status(201, { section: toSectionDto(section) satisfies SectionDto }) : status(404, NOT_FOUND);
+    })
+    .patch("/sections/:id", async ({ request, params, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
       const input = sectionNameInput.safeParse(body);
       if (!input.success) return status(400, INVALID);
-      const section = await store.createSection(userId, params.id, input.data.name);
-      return section ? status(201, { section: toSectionDto(section) satisfies SectionDto }) : status(404, NOT_FOUND);
+      const section = await store.renameSection(userId, params.id, input.data.name);
+      return section ? { section: toSectionDto(section) satisfies SectionDto } : status(404, SECTION_NOT_FOUND);
     })
     // Member tasks stay in the project without a section (schema SET NULL).
     .delete("/sections/:id", async ({ request, params, status }) => {
@@ -84,17 +100,18 @@ export function createProjectRoutes(store: ProjectStore) {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const name = parseProjectName(body);
-      if (!name) return status(400, INVALID);
-      return status(201, { project: toProjectDto(await store.create(userId, name)) satisfies ProjectDto });
+      const input = projectCreateInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      return status(201, { project: toProjectDto(await store.create(userId, input.data)) satisfies ProjectDto });
     })
     .patch("/projects/:id", async ({ request, params, body, status }) => {
       const userId = await writer(request);
       if (userId === "forbidden") return status(403, FORBIDDEN);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const name = parseProjectName(body);
-      if (!name) return status(400, INVALID);
-      const project = await store.rename(userId, params.id, name);
+      // Edit, favorite, archive/unarchive, description and Display settings.
+      const input = projectUpdateInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const project = await store.update(userId, params.id, input.data);
       return project ? { project: toProjectDto(project) satisfies ProjectDto } : status(404, NOT_FOUND);
     })
     .delete("/projects/:id", async ({ request, params, status }) => {

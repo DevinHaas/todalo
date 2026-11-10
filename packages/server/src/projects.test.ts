@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProject, deleteProject, getOwnedProject, getProjectsForUser, updateProject } from "./projects";
-import { parseProjectName, toProjectDto } from "./project-dto";
+import { defaultProjectDisplay, parseProjectName, toProjectDto } from "./project-dto";
 
 const boundary = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]> }));
 vi.mock("@todalo/db", async () => {
@@ -28,6 +28,15 @@ describe("shared project operations", () => {
     expect(await updateProject("alice", "alice-work", { name: "Job" })).toMatchObject({ name: "Job", color: "blue" });
   });
 
+  it("edits only the fields sent: favorite, description, archive and Display", async () => {
+    const display = { ...defaultProjectDisplay, layout: "table" as const };
+    expect(await updateProject("alice", "alice-work", { favorite: true, description: "Day job", display })).toMatchObject({ name: "Work", color: "blue", favorite: true, description: "Day job", viewSettings: display });
+    expect((await updateProject("alice", "alice-work", { archived: true }))?.archivedAt).toBeInstanceOf(Date);
+    expect(await updateProject("alice", "alice-work", { archived: false })).toMatchObject({ archivedAt: null, favorite: true });
+    expect(await updateProject("alice", "bob-home", { archived: true })).toBeNull();
+    expect(boundary.rows.projects.find(project => project.id === "bob-home")?.archivedAt).toBeUndefined();
+  });
+
   it("refuses to rename or delete another user's project", async () => {
     expect(await updateProject("alice", "bob-home", { name: "Taken" })).toBeNull();
     expect(await deleteProject("alice", "bob-home")).toBe(false);
@@ -39,7 +48,7 @@ describe("shared project operations", () => {
 
 describe("project DTO", () => {
   it("allow-lists fields and validates names like the legacy action", () => {
-    expect(toProjectDto({ id: "p", name: "Work", color: null, userId: "alice", createdAt: new Date() } as never)).toEqual({ id: "p", name: "Work", color: null });
+    expect(toProjectDto({ id: "p", name: "Work", color: null, userId: "alice", createdAt: new Date() } as never)).toEqual({ id: "p", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay });
     expect(parseProjectName({ name: "  Work  " })).toBe("Work");
     for (const body of [{ name: "   " }, { name: "x".repeat(201) }, { name: 3 }, {}, null, "Work"]) expect(parseProjectName(body)).toBeNull();
     expect(parseProjectName({ name: "x".repeat(200) })).toHaveLength(200);

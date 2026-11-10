@@ -336,6 +336,8 @@ const detailsOf = (task: TaskDto): TaskDetails => ({
 export const scheduledDetails = (task: TaskDto, start: Date, end: Date): TaskDetails => ({ ...detailsOf(task), dueDate: start.toISOString(), dueDateEnd: end.toISOString() });
 /** Ticket 14b: gives a task a due date (all day, local midnight of the YYYY-MM-DD `day`). */
 export const dueDetails = (task: TaskDto, day: string): TaskDetails => ({ ...detailsOf(task), dueDate: parseDayKey(day).toISOString(), dueDateEnd: null });
+/** The project table's deadline edit: a YYYY-MM-DD day (local midnight), or null to clear. */
+export const deadlineDetails = (task: TaskDto, day: string | null): TaskDetails => ({ ...detailsOf(task), deadline: day ? parseDayKey(day).toISOString() : null });
 /** Unschedule: clears the time and duration; the task keeps its day (all day). */
 export const unscheduledDetails = (task: TaskDto): TaskDetails =>
   ({ ...detailsOf(task), dueDate: task.dueDate && startOfDay(new Date(task.dueDate)).toISOString(), dueDateEnd: null });

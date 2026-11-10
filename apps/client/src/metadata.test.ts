@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { browserMetadataTransport, metadataKeys, metadataMutations, type MetadataTransport } from "./metadata";
-import { listBuckets, MetadataDirectory, TaskCollectionView, type MetadataActions } from "./metadata-views";
+import { FavoritesNav, listBuckets, MetadataDirectory, TaskCollectionView, type MetadataActions } from "./metadata-views";
 import { taskKeys, taskMutations, type TaskDto, type TaskTransport } from "./tasks";
 import { TaskEditor } from "./views";
 
@@ -13,12 +13,16 @@ const task = (id: string, extra: Partial<TaskDto> = {}) => ({
   id, title: id, description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: null, ...extra,
 }) as TaskDto;
-const urgent = { id: "urgent", name: "Urgent", color: "#ff0000" };
-const filter = { id: "f/1", name: "Urgent open", definition: { labelId: "urgent", priority: null, status: "open" as const, due: "any" as const } };
+const urgent = { id: "urgent", name: "Urgent", color: "#ff0000", favorite: false };
+const definition = { labelId: "urgent", priority: null, status: "open" as const, due: "any" as const };
+const filter = { id: "f/1", name: "Urgent open", query: null, definition, description: null, color: null, favorite: false };
+const queryFilter = { id: "q", name: "Today's work", query: "today & #Work", definition: null, description: "Mine", color: "#4073ff", favorite: true };
+const legacyFields = { name: filter.name, definition, description: null, color: null, favorite: false };
+const queryFields = { name: "Today's work", query: "today & #Work", description: "Mine", color: "#4073ff", favorite: true };
 const render = (node: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(MemoryRouter, null, node));
 const noop = () => {};
 const success = <T,>(data: T) => ({ status: "success" as const, data, error: null });
-const actions: MetadataActions = { saveLabel: async () => {}, deleteLabel: async () => {}, saveFilter: async () => {}, deleteFilter: async () => {} };
+const actions: MetadataActions = { saveLabel: async () => {}, deleteLabel: async () => {}, saveFilter: async () => {}, deleteFilter: async () => {}, assistFilter: async () => ({ query: "today" }) };
 const OPERATION = "6f1c1b7e-3a52-4c55-9b2a-3f4f3e8f0a11";
 
 describe("browser metadata transport", () => {
@@ -30,30 +34,32 @@ describe("browser metadata transport", () => {
 
   it("sends fixed same-origin JSON requests with encoded IDs and the create operation ID", async () => {
     calls.length = 0;
-    expect(await browserMetadataTransport(respond(201, { label: urgent })).createLabel(OPERATION, { name: "Urgent", color: "#ff0000" })).toEqual(urgent);
-    await browserMetadataTransport(respond(200, { label: urgent })).updateLabel("a/b", { name: "Urgent", color: null });
+    expect(await browserMetadataTransport(respond(201, { label: urgent })).createLabel(OPERATION, { name: "Urgent", color: "#ff0000", favorite: false })).toEqual(urgent);
+    await browserMetadataTransport(respond(200, { label: urgent })).updateLabel("a/b", { name: "Urgent", color: null, favorite: true });
     await browserMetadataTransport(respond(200, { id: "a/b" })).removeLabel("a/b");
-    await browserMetadataTransport(respond(201, { filter })).createFilter(OPERATION, { name: filter.name, definition: filter.definition });
-    await browserMetadataTransport(respond(200, { filter })).updateFilter("f/1", { name: filter.name, definition: filter.definition });
+    await browserMetadataTransport(respond(201, { filter: queryFilter })).createFilter(OPERATION, queryFields);
+    await browserMetadataTransport(respond(200, { filter })).updateFilter("f/1", legacyFields);
     await browserMetadataTransport(respond(200, { filter, tasks: [] })).filter("f/1");
+    expect(await browserMetadataTransport(respond(200, { query: null, message: "Connect the Coach" })).assistFilter("work due today")).toEqual({ query: null, message: "Connect the Coach" });
     expect(calls.map(call => [call.init?.method, call.path, call.init?.body])).toEqual([
-      ["POST", "/api/v1/labels", JSON.stringify({ id: OPERATION, name: "Urgent", color: "#ff0000" })],
-      ["PATCH", "/api/v1/labels/a%2Fb", JSON.stringify({ name: "Urgent", color: null })],
+      ["POST", "/api/v1/labels", JSON.stringify({ id: OPERATION, name: "Urgent", color: "#ff0000", favorite: false })],
+      ["PATCH", "/api/v1/labels/a%2Fb", JSON.stringify({ name: "Urgent", color: null, favorite: true })],
       ["DELETE", "/api/v1/labels/a%2Fb", undefined],
-      ["POST", "/api/v1/filters", JSON.stringify({ id: OPERATION, name: filter.name, definition: filter.definition })],
-      ["PATCH", "/api/v1/filters/f%2F1", JSON.stringify({ name: filter.name, definition: filter.definition })],
+      ["POST", "/api/v1/filters", JSON.stringify({ id: OPERATION, ...queryFields })],
+      ["PATCH", "/api/v1/filters/f%2F1", JSON.stringify(legacyFields)],
       ["GET", "/api/v1/filters/f%2F1", undefined],
+      ["POST", "/api/v1/filters/assist", JSON.stringify({ description: "work due today" })],
     ]);
   });
 
   it("maps deleted and foreign IDs to null/false and failures to safe errors", async () => {
     expect(await browserMetadataTransport(respond(404)).label("deleted")).toBeNull();
     expect(await browserMetadataTransport(respond(404)).filter("foreign")).toBeNull();
-    expect(await browserMetadataTransport(respond(404)).updateLabel("deleted", { name: "x", color: null })).toBeNull();
+    expect(await browserMetadataTransport(respond(404)).updateLabel("deleted", { name: "x", color: null, favorite: false })).toBeNull();
     expect(await browserMetadataTransport(respond(404)).removeFilter("deleted")).toBe(false);
     await expect(browserMetadataTransport(respond(401)).metadata()).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
-    await expect(browserMetadataTransport(respond(400)).createFilter(OPERATION, { name: "x", definition: filter.definition })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(browserMetadataTransport(respond(409)).createLabel(OPERATION, { name: "x", color: null })).rejects.toMatchObject({ code: "SAVE_FAILED" });
+    await expect(browserMetadataTransport(respond(400)).createFilter(OPERATION, { ...queryFields, query: "(" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(browserMetadataTransport(respond(409)).createLabel(OPERATION, { name: "x", color: null, favorite: false })).rejects.toMatchObject({ code: "SAVE_FAILED" });
     await expect(browserMetadataTransport(respond(500)).metadata()).rejects.toMatchObject({ code: "TASKS_UNAVAILABLE" });
   });
 });
@@ -73,7 +79,7 @@ describe("metadata cache", () => {
     const cache = new QueryClient();
     const writes = metadataMutations(transport, cache, "alice");
     const metadata = ["user/alice/metadata/filter/f", "user/alice/metadata/label/urgent", "user/alice/metadata/list"];
-    seed(cache); await writes.updateLabel("urgent", { name: "Now", color: null });
+    seed(cache); await writes.updateLabel("urgent", { name: "Now", color: null, favorite: false });
     expect(stale(cache)).toEqual(metadata);
     cache.clear(); seed(cache); await writes.removeFilter("f");
     expect(cache.getQueryData(metadataKeys.filter("alice", "f"))).toBeUndefined();
@@ -96,26 +102,40 @@ describe("metadata cache", () => {
 });
 
 describe("label and filter screens", () => {
-  const directory = (mode: "labels" | "filters", state: Parameters<typeof MetadataDirectory>[0]["state"], error: string | null = null) =>
-    render(createElement(MetadataDirectory, { mode, state, onRetry: noop, projects: [{ id: "work", name: "Work", color: null }], actions, write: { pending: false, error } }));
+  const preview = () => ({ groups: [] });
+  const directory = (state: Parameters<typeof MetadataDirectory>[0]["state"], error: string | null = null) =>
+    render(createElement(MetadataDirectory, { state, onRetry: noop, projects: [{ id: "work", name: "Work" }], actions, write: { pending: false, error }, preview }));
 
-  it("renders the legacy directory: labels everywhere, saved filters on /filters", () => {
-    const data = { labels: [urgent], filters: [filter] };
-    const labels = directory("labels", success(data));
-    expect(labels).toContain("<h1 class=\"page-title\">Labels</h1>");
-    expect(labels).toContain('href="/labels/urgent"');
-    expect(labels).toContain("background-color:#ff0000");
-    expect(labels).toContain("Create label");
-    expect(labels).not.toContain("Saved filters");
-    const filters = directory("filters", success(data));
-    expect(filters).toContain("Filters &amp; Labels</h1>");
-    expect(filters).toContain('href="/filters/f%2F1"');
-    expect(filters).toContain("All chosen conditions must match.");
-    for (const name of ["Filter priority", "Filter label", "Filter project", "Filter status", "Filter due date"]) expect(filters).toContain(`aria-label="${name}"`);
-    expect(directory("labels", success({ labels: [], filters: [] }))).toContain("No labels yet.");
-    expect(directory("labels", { status: "pending", error: null })).toContain("Loading labels…");
-    expect(directory("labels", { status: "error", error: new Error("Your tasks could not be loaded. Try again.") })).toContain("Try again");
-    expect(directory("filters", success(data), "Check your entry and try again.")).toContain('role="alert"');
+  it("renders Filters & Labels: My Filters and Labels with tinted icons, + buttons, hover tools and empty states", () => {
+    const html = directory(success({ labels: [urgent], filters: [filter, queryFilter] }));
+    expect(html).toContain("Filters &amp; Labels</h1>");
+    expect(html).toContain('href="/labels/urgent"');
+    expect(html).toContain('href="/filters/f%2F1"');
+    expect(html).toContain("color:#ff0000");
+    // A filter without a colour (every legacy row) is Charcoal.
+    expect(html).toContain("color:#808080");
+    for (const name of ["Add filter", "Add label", "Edit Urgent", "Delete Urgent", "Add Urgent to favorites", "Remove Today&#x27;s work from favorites"]) expect(html).toContain(`aria-label="${name}"`);
+    const empty = directory(success({ labels: [], filters: [] }));
+    expect(empty).toContain("Your list of filters will show up here.");
+    expect(empty).toContain("Your list of labels will show up here.");
+    expect(directory({ status: "pending", error: null })).toContain("Loading filters and labels…");
+    expect(directory({ status: "error", error: new Error("Your tasks could not be loaded. Try again.") })).toContain("Try again");
+    expect(directory(success({ labels: [], filters: [] }), "Check your entry and try again.")).toContain('role="alert"');
+  });
+
+  it("shows favorite filters and labels in the sidebar only when there are some", () => {
+    expect(render(createElement(FavoritesNav, { metadata: { labels: [urgent], filters: [filter] } }))).toBe("");
+    const html = render(createElement(FavoritesNav, { metadata: { labels: [{ ...urgent, favorite: true }], filters: [queryFilter] } }));
+    expect(html).toContain("Favorites");
+    expect(html.indexOf('href="/filters/q"')).toBeLessThan(html.indexOf('href="/labels/urgent"'));
+  });
+
+  it("renders a query filter's comma-separated lists under their own headings", () => {
+    const html = render(createElement(TaskCollectionView, { kind: "filter", state: success({ name: "Two lists", description: "Mine", tasks: [task("a"), task("b")], groups: [{ title: "p1 & overdue", tasks: [task("a")] }, { title: "today", tasks: [] }] }), onRetry: noop }));
+    expect(html).toContain(">p1 &amp; overdue</h2>");
+    expect(html).toContain(">today</h2>");
+    expect(html).toContain("No tasks.");
+    expect(html).toContain("Mine");
   });
 
   it("lists matching tasks in the legacy buckets, completed included, with deleted/foreign states", () => {

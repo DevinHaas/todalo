@@ -17,7 +17,9 @@ export type OrganizationChange = { projectId: string | null; sectionId: string |
 export interface OrganizationTransport {
   destinations(): Promise<DestinationsDto>;
   /** null when the project is missing or not the signed-in user's. */
-  createSection(projectId: string, name: string): Promise<SectionDto | null>;
+  createSection(projectId: string, name: string, after?: string | null): Promise<SectionDto | null>;
+  /** null when the section is missing or not the signed-in user's. */
+  renameSection(id: string, name: string): Promise<SectionDto | null>;
   /** false when the section is missing or not the signed-in user's (already gone). */
   removeSection(id: string): Promise<boolean>;
   /** null when the task, destination or parent is missing or not the user's; TASK_CHANGED when edited elsewhere. */
@@ -48,7 +50,8 @@ export function browserOrganizationTransport(fetcher: typeof fetch = fetch): Org
       if (!destinations) throw new AccountTransportError("TASKS_UNAVAILABLE");
       return destinations;
     },
-    createSection: async (projectId, name) => (await request<{ section: SectionDto }>("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/sections`, { name }))?.section ?? null,
+    createSection: async (projectId, name, after) => (await request<{ section: SectionDto }>("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/sections`, after === undefined ? { name } : { name, after }))?.section ?? null,
+    renameSection: async (id, name) => (await request<{ section: SectionDto }>("PATCH", `/api/v1/sections/${encodeURIComponent(id)}`, { name }))?.section ?? null,
     removeSection: async (id) => (await request<{ id: string }>("DELETE", `/api/v1/sections/${encodeURIComponent(id)}`)) !== null,
     organize: async (id, change) => (await request<{ task: TaskDto }>("PATCH", `/api/v1/tasks/${encodeURIComponent(id)}`, change))?.task ?? null,
   };
@@ -63,13 +66,16 @@ export function organizationTransport(): OrganizationTransport {
   // One fixed native command per operation; Rust attaches the Keychain bearer.
   return {
     destinations: () => command<DestinationsDto>("destinations"),
-    createSection: async (projectId, name) => (await command<{ section: SectionDto } | null>("create_section", { projectId, name }))?.section ?? null,
+    createSection: async (projectId, name, after) => (await command<{ section: SectionDto } | null>("create_section", after === undefined ? { projectId, name } : { projectId, name, position: { after } }))?.section ?? null,
+    renameSection: async (id, name) => (await command<{ section: SectionDto } | null>("rename_section", { id, name }))?.section ?? null,
     removeSection: async (id) => (await command<{ id: string } | null>("delete_section", { id })) !== null,
     organize: async (id, change) => (await command<{ task: TaskDto } | null>("organize_task", { id, change }))?.task ?? null,
   };
 }
 
 export interface Organize { task: TaskDto; change: OrganizationChange }
+/** A new section; `after` places it after that section (null: first), absent appends. */
+export interface NewSection { projectId: string; name: string; after?: string | null }
 
 /** Same convention as taskKeys: every key starts with ["user", userId]. */
 export const organizationKeys = {
@@ -104,21 +110,39 @@ export function organizationMutations(transport: OrganizationTransport, cache: Q
     reconcile: (moved) => taskChanges(userId, tasks => tasks.map(item => item.id === moved.id ? moved : item)),
     refresh: () => tasksChanged,
   });
-  const draft = ({ projectId, name }: { projectId: string; name: string }): SectionDto => ({ id: `draft-section-${projectId}-${name}`, projectId, name });
+  const draft = ({ projectId, name }: NewSection): SectionDto => ({ id: `draft-section-${projectId}-${name}`, projectId, name });
+  // `after` places it (after that section, first for null); absent appends, as legacy shows it until the refresh.
+  const placed = (list: SectionDto[], input: NewSection) => {
+    const at = input.after === undefined ? list.length : input.after === null ? 0 : list.findIndex(item => item.id === input.after) + 1 || list.length;
+    return [...list.slice(0, at), draft(input), ...list.slice(at)];
+  };
   return {
     createSection: {
-      mutationFn: async ({ projectId, name }: { projectId: string; name: string }) => {
-        const section = await transport.createSection(projectId, name);
+      mutationFn: async ({ projectId, name, after }: NewSection) => {
+        const section = await transport.createSection(projectId, name, after);
         if (!section) throw new AccountTransportError("PROJECT_NOT_FOUND");
         return section;
       },
-      ...optimistic<{ projectId: string; name: string }, SectionDto>(cache, {
-        apply: (input) => sections(input.projectId, list => [...list, draft(input)]),
+      ...optimistic<NewSection, SectionDto>(cache, {
+        apply: (input) => sections(input.projectId, list => placed(list, input)),
         reconcile: (section, input) => sections(input.projectId, list => list.map(item => item.id === draft(input).id ? section : item)),
         refresh: ({ projectId }) => sectionsChanged(projectId),
       }),
       meta: { action: ({ name }: { name: string }) => `add the section "${name}"` },
-    } satisfies MutationOptions<SectionDto, Error, { projectId: string; name: string }, Write>,
+    } satisfies MutationOptions<SectionDto, Error, NewSection, Write>,
+    renameSection: {
+      mutationFn: async ({ section, name }: { section: SectionDto; name: string }) => {
+        const renamed = await transport.renameSection(section.id, name);
+        if (!renamed) throw new AccountTransportError("PROJECT_NOT_FOUND");
+        return renamed;
+      },
+      retry, retryDelay,
+      ...optimistic<{ section: SectionDto; name: string }, SectionDto>(cache, {
+        apply: ({ section, name }) => sections(section.projectId, list => list.map(item => item.id === section.id ? { ...item, name } : item)),
+        refresh: ({ section }) => sectionsChanged(section.projectId),
+      }),
+      meta: { action: ({ section }: { section: SectionDto }) => `rename the section "${section.name}"` },
+    } satisfies MutationOptions<SectionDto, Error, { section: SectionDto; name: string }, Write>,
     removeSection: {
       mutationFn: (section: SectionDto) => transport.removeSection(section.id),
       retry, retryDelay,

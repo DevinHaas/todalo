@@ -36,6 +36,10 @@ export function DisplayProvider({ children }: { children: ReactNode }) {
   return <DisplayContext.Provider value={{ ...defaultDisplay, ...pages[pathname], set }}>{children}</DisplayContext.Provider>;
 }
 export const useDisplay = () => useContext(DisplayContext);
+/** A page with its own Display (a project's, saved on the project) hands the shared calendar its settings. */
+export function DisplayOverride({ value, children }: { value: Display; children: ReactNode }) {
+  return <DisplayContext.Provider value={value}>{children}</DisplayContext.Provider>;
+}
 
 const layoutNames = { list: "List", board: "Board", calendar: "Calendar" } as const;
 /** Toolbar arrows and label (legacy LayoutSwitcher). */

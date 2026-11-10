@@ -69,7 +69,11 @@ pub async fn delete_coach_document(
         return Ok(None);
     }
     Ok(state
-        .write(Method::DELETE, &format!("/api/v1/coach/documents/{id}"), None)
+        .write(
+            Method::DELETE,
+            &format!("/api/v1/coach/documents/{id}"),
+            None,
+        )
         .await?)
 }
 

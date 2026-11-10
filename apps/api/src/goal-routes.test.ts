@@ -230,7 +230,7 @@ describe("goal API", () => {
         const response = await call("PUT", `/goals/${goal}/projects/${project}`, { user: "alice" });
         expect(await response.json()).toEqual({ goalId: goal, kind: "projects", targetId: project });
       }
-      expect((await linked("alice-fit")).projects).toEqual([{ id: "alice-run", name: "Run marathon", color: null }, { id: "alice-meals", name: "Meal prep", color: null }]);
+      expect((await linked("alice-fit")).projects).toMatchObject([{ id: "alice-run", name: "Run marathon", color: null }, { id: "alice-meals", name: "Meal prep", color: null }]);
       expect((await linked("alice-v2")).projects.map(project => project.id)).toEqual(["alice-run"]);
     });
 

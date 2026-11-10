@@ -1,4 +1,5 @@
 // Ticket 17: legacy status board rules, its cache writes and its markup.
+import { defaultProjectDisplay } from "../../../packages/server/src/project-dto";
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -54,7 +55,7 @@ describe("board cache", () => {
     const cache = new QueryClient();
     const today: TodayDto = { tasks: [task("a"), task("b"), task("c")], openCount: 3 };
     cache.setQueryData(taskKeys.today("alice"), today);
-    cache.setQueryData(projectKeys.detail("alice", "work"), { project: { id: "work", name: "Work", color: null }, sections: [], tasks: today.tasks });
+    cache.setQueryData(projectKeys.detail("alice", "work"), { project: { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks: today.tasks });
     const transport: BulkTransport = {
       complete: async () => ({ completed: [], changed: [] }), remove: async () => true, clearDates: async () => true, metadata: async () => true, move: async () => true, reorder,
     };
@@ -102,12 +103,15 @@ describe("board view", () => {
   });
 
   it("replaces a project's section list when Display chooses another layout", () => {
-    const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks }, error: null };
-    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false } };
-    const board = render(createElement(ProjectView, { ...props, layout: (shown: TaskDto[]) => createElement(StatusBoard, { tasks: shown, onOpen() {} }) }));
+    const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks }, error: null };
+    const props = { state, onRetry() {}, write: { pending: false } };
+    const board = render(createElement(ProjectView, { ...props, display: { ...defaultProjectDisplay, layout: "board" } }));
     expect(board).toContain('aria-label="Board view"');
     expect(board).not.toContain('class="sections"');
-    expect(board).toContain(">Plan</button>");
+    // Section columns of the open tasks (Display hides completed ones); sub-tasks open inside their card.
+    expect(board).toContain(">Ship</button>");
+    expect(board).not.toContain(">Plan</button>");
+    expect(board).toContain("Sub-tasks 0 of 1 done");
     expect(render(createElement(ProjectView, props))).toContain('class="sections"');
   });
 });

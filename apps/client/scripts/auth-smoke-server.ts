@@ -87,6 +87,8 @@ const filters = [
   { id: "qa-work-bare", userId: user.id, name: "Work (old row)", definition: { projectId: "qa-work" } },
   { id: "qa-stale-label", userId: user.id, name: "Old design label", definition: { labelId: "qa-deleted-label", status: "open", due: "any" } },
   { id: "qa-other-filter", userId: other.id, name: "Other user's filter", definition: { status: "any", due: "any" } },
+  // A Todoist-style query filter (two lists), shown under Favorites.
+  { id: "qa-query", userId: user.id, name: "Urgent, then today", definition: null, query: "@Urgent, today & !@Urgent", description: "Urgent work first, then the rest of today.", color: "#db4035", favorite: true },
 ];
 
 const verifySession = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
@@ -114,7 +116,7 @@ const app = createAuthRoutes(auth).use(qaCalendarRoutes({ verify: verifySession,
   sections,
   tasks,
 })).use(qaBulkRoutes({ verify: verifySession, allowedOrigins: new Set([clientOrigin]), projects, sections, labels, tasks })).use(createMetadataRoutes(memoryMetadataStore({
-  verify: verifySession, allowedOrigins: new Set([clientOrigin]), labels, filters, projects, tasks,
+  verify: verifySession, allowedOrigins: new Set([clientOrigin]), labels, filters, projects, sections, tasks,
 }))).use(createSearchRoutes({
   // Ticket 18: the same shared search rules over this user's memory rows.
   verify: verifySession,

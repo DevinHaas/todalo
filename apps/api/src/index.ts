@@ -92,16 +92,17 @@ const app = createApi(dependencies)
 })).use(createProjectRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,
-  list: projects.getProjectsForUser,
+  list: projects.getProjectSummaries,
   get: projects.getOwnedProject,
   tasks: getTasksForUser,
-  create: (userId, name) => projects.createProject(userId, { name }),
-  rename: (userId, id, name) => projects.updateProject(userId, id, { name }),
+  create: projects.createProject,
+  update: projects.updateProject,
   remove: projects.deleteProject,
   sections: organization.getSectionsForUser,
   // A missing or foreign project is a TaskOrganizationError: the route's 404.
-  createSection: (userId, projectId, name) => organization.createSection(userId, projectId, name)
+  createSection: (userId, projectId, name, after) => organization.createSection(userId, projectId, name, after)
     .catch((error: unknown) => { if (error instanceof TaskOrganizationError) return null; throw error; }),
+  renameSection: organization.renameSection,
   removeSection: organization.deleteSection,
   destinations: organization.getOrganizationDestinations,
 })).use(createGoalRoutes({
@@ -277,6 +278,9 @@ const app = createApi(dependencies)
   createFilter: (userId, input) => metadata.createFilter(userId, input).catch(idConflict),
   updateFilter: metadata.updateFilter,
   removeFilter: metadata.deleteFilter,
+  projects: projects.getProjectsForUser,
+  sections: (userId) => organization.getSectionsForUser(userId),
+  coach: { provider: coach.getCoachProvider, model: (config) => createCoachModel(config) },
 })).use(createSearchRoutes({
   verify,
   tasks: (userId) => getTasksForUser(userId),

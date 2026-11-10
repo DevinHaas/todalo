@@ -852,3 +852,10 @@ button.property-value:hover { background: var(--accent); }
 .milestone-mark { display: inline-flex; vertical-align: -.125rem; margin-left: .375rem; color: var(--brand); }
 .milestone-mark svg { width: .875rem; height: .875rem; }
 
+
+/* Quick add: `@` label suggestions under the title, and the ⌘-drag center guides (quick-add-drag.tsx). */
+.mention-menu { left: -1rem; right: -1rem; max-height: 15rem; }
+.mention-menu .popover-item[aria-selected="true"] { background: var(--accent); }
+.snap-guide { position: fixed; z-index: 31; pointer-events: none; border: 0 dashed var(--brand); }
+.snap-guide.vertical { top: 0; bottom: 0; left: 50%; border-left-width: 1px; }
+.snap-guide.horizontal { left: 0; right: 0; top: 50%; border-top-width: 1px; }

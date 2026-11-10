@@ -510,7 +510,11 @@ pub async fn dismiss_recommendation(
     goal_id: String,
 ) -> Result<Option<Value>, String> {
     Ok(state
-        .write(Method::POST, &recommendation_path(&goal_id, "dismiss")?, None)
+        .write(
+            Method::POST,
+            &recommendation_path(&goal_id, "dismiss")?,
+            None,
+        )
         .await?)
 }
 
@@ -616,7 +620,16 @@ mod tests {
                 "/api/v1/coach/drafts/d-1/accept?timeZone=Europe%2FZurich".to_owned()
             )
         );
-        assert!(decision("d-1", true, Some(vec!["i-1".into()]), Some(true), Some("UTC".into())).is_err());
+        assert!(
+            decision(
+                "d-1",
+                true,
+                Some(vec!["i-1".into()]),
+                Some(true),
+                Some("UTC".into())
+            )
+            .is_err()
+        );
         assert!(decision("d-1", false, None, Some(true), None).is_err());
         assert_eq!(
             decision("d-1", false, None, None, None).unwrap().1,

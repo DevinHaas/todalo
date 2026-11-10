@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { defaultProjectDisplay } from "../../../packages/server/src/project-dto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
@@ -87,7 +88,7 @@ describe("bulk cache", () => {
     const cache = new QueryClient();
     const today: TodayDto = { tasks: [task("a", { dueDate: VERSION }), task("b"), task("c")], openCount: 1 };
     cache.setQueryData(taskKeys.today("alice"), today);
-    cache.setQueryData(projectKeys.detail("alice", "work"), { project: { id: "work", name: "Work", color: null }, sections: [], tasks: today.tasks });
+    cache.setQueryData(projectKeys.detail("alice", "work"), { project: { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks: today.tasks });
     cache.setQueryData(taskKeys.task("alice", "a"), task("a"));
     cache.setQueryData(["user", "alice", "metadata", "labels"], {});
     cache.setQueryData(taskKeys.today("bob"), { tasks: [], openCount: 0 });
@@ -157,8 +158,8 @@ describe("selection views", () => {
     expect(today).toContain('aria-label="Select a" checked=""');
     expect(today).toContain("data-selected");
     const project = render(createElement(ProjectView, {
-      state: { status: "success", data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks: [task("a"), task("b")] }, error: null },
-      onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false }, reorder() {},
+      state: { status: "success", data: { project: { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks: [task("a"), task("b")] }, error: null },
+      onRetry() {}, write: { pending: false }, reorder() {},
     }));
     expect(project).toContain('aria-label="Reorder a"');
     expect(project).toContain('aria-roledescription="sortable"');
@@ -183,12 +184,12 @@ describe("selection views", () => {
   });
 
   it("lets project rows complete and delete, and shows completed tasks when Display does", () => {
-    const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null }, sections: [], tasks: [task("open"), task("done", { status: "done" })] }, error: null };
-    const props = { state, onRetry() {}, onRename: async () => {}, onDelete() {}, write: { pending: false }, actions: { complete() {}, remove() {} } };
+    const state = { status: "success" as const, data: { project: { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks: [task("open"), task("done", { status: "done" })] }, error: null };
+    const props = { state, onRetry() {}, write: { pending: false }, actions: { complete() {}, remove() {} } };
     const html = render(createElement(ProjectView, props));
     expect(html).toContain('aria-label="Complete open"');
     expect(html).toContain('aria-label="Delete open"');
     expect(html).not.toContain('aria-label="Complete done"');
-    expect(render(createElement(ProjectView, { ...props, showCompleted: true }))).toContain('aria-label="Complete done"');
+    expect(render(createElement(ProjectView, { ...props, display: { ...defaultProjectDisplay, showCompleted: true } }))).toContain('aria-label="Complete done"');
   });
 });

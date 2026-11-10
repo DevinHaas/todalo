@@ -309,6 +309,20 @@
       "when": 1794240493657,
       "tag": "0043_task_reviewed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794259441537,
+      "tag": "0044_filter_queries",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794261948322,
+      "tag": "0045_project_details",
+      "breakpoints": true
     }
   ]
 }

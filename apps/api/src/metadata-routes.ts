@@ -1,12 +1,16 @@
 import { Elysia } from "elysia";
 import { toTaskDto, type TaskRecord } from "@todalo/server/task-dto";
 import {
-  filterCreateRequest, filterInput, labelCreateRequest, labelInput, matchesSavedFilter, MissingReferenceError, toLabelDto,
-  type FilterDetailDto, type FilterInput, type LabelDetailDto, type LabelDto, type LabelInput, type MetadataDto, type SavedFilterDto,
+  filterAssistInput, filterCreateRequest, filterInput, labelCreateRequest, labelInput, matchesSavedFilter, MissingReferenceError, toLabelDto,
+  type FilterAssistDto, type FilterDetailDto, type FilterInput, type LabelDetailDto, type LabelDto, type LabelInput, type MetadataDto, type SavedFilterDto,
 } from "@todalo/server/metadata-input";
+import { runFilterQuery } from "@todalo/server/filter-query";
+import { filterAssistMessages, filterAssistSchema, parseFilterAssist } from "@todalo/server/filter-assist";
+import { CoachModelError, type CoachConfig, type CoachModel } from "@todalo/server/coach";
 import { writeUser } from "./project-routes";
 
-type LabelRecord = { id: string; name: string; color: string | null };
+type LabelRecord = { id: string; name: string; color: string | null; favorite?: boolean };
+type Named = { id: string; name: string };
 
 /** Shared @todalo/server/metadata operations; null/false means missing or another user's. */
 export interface MetadataStore {
@@ -25,6 +29,11 @@ export interface MetadataStore {
   createFilter(userId: string, input: FilterInput & { id: string }): Promise<{ filter: SavedFilterDto; created: boolean } | null>;
   updateFilter(userId: string, id: string, input: FilterInput): Promise<SavedFilterDto | null>;
   removeFilter(userId: string, id: string): Promise<boolean>;
+  /** Names a query can refer to (#project, /section); labels come from metadata(). */
+  projects(userId: string): Promise<Named[]>;
+  sections(userId: string): Promise<Named[]>;
+  /** Filter Assist reuses the Coach's provider; without one the card explains how to connect it. */
+  coach?: { provider(userId: string): Promise<CoachConfig | null>; model(config: CoachConfig): CoachModel };
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -89,8 +98,34 @@ export function createMetadataRoutes(store: MetadataStore) {
       if (!filter) return status(404, FILTER_NOT_FOUND);
       // Evaluated here, in the server's zone, exactly as the legacy filter page.
       const now = new Date();
-      const tasks = (await store.tasks(userId)).filter(task => matchesSavedFilter(task, filter.definition, now));
-      return { filter, tasks: tasks.map(toTaskDto) } satisfies FilterDetailDto;
+      const all = await store.tasks(userId);
+      if (!filter.query) {
+        const tasks = filter.definition ? all.filter(task => matchesSavedFilter(task, filter.definition!, now)) : [];
+        return { filter, tasks: tasks.map(toTaskDto) } satisfies FilterDetailDto;
+      }
+      const [{ labels }, projects, sections] = await Promise.all([store.metadata(userId), store.projects(userId), store.sections(userId)]);
+      const groups = runFilterQuery(filter.query, all, { now, labels, projects, sections }).map(group => ({ title: group.title, tasks: group.tasks.map(toTaskDto) }));
+      const union = new Set(groups.flatMap(group => group.tasks.map(task => task.id)));
+      return { filter, tasks: all.filter(task => union.has(task.id)).map(toTaskDto), groups } satisfies FilterDetailDto;
+    })
+    // Filter Assist: one model call; the reply is offered only if the parser accepts it.
+    .post("/filters/assist", async ({ request, body, status }) => {
+      const userId = await writer(request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const input = filterAssistInput.safeParse(body);
+      if (!input.success) return status(400, INVALID);
+      const config = await store.coach?.provider(userId) ?? null;
+      if (!config || !store.coach) return { query: null, message: "Connect the Coach in Settings › Coach to use Filter Assist." } satisfies FilterAssistDto;
+      const [{ labels }, projects, sections] = await Promise.all([store.metadata(userId), store.projects(userId), store.sections(userId)]);
+      const names = { labels: labels.map(item => item.name), projects: projects.map(item => item.name), sections: [...new Set(sections.map(item => item.name))] };
+      try {
+        const reply = await store.coach.model(config).complete({ messages: filterAssistMessages(input.data.description, names), schema: filterAssistSchema }, request.signal);
+        return parseFilterAssist(reply) satisfies FilterAssistDto;
+      } catch (error) {
+        if (error instanceof CoachModelError) return { query: null, message: error.message } satisfies FilterAssistDto;
+        throw error;
+      }
     })
     .post("/filters", async ({ request, body, status }) => {
       const userId = await writer(request);

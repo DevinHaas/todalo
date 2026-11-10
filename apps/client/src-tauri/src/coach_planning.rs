@@ -50,7 +50,9 @@ fn planning_body(
         .into_iter()
         .map(|turn| serde_json::json!({ "question": turn.question, "answer": turn.answer }))
         .collect();
-    Ok(serde_json::json!({ "goalId": goal_id, "source": source, "ramble": ramble, "turns": turns, "finish": finish }))
+    Ok(
+        serde_json::json!({ "goalId": goal_id, "source": source, "ramble": ramble, "turns": turns, "finish": finish }),
+    )
 }
 
 #[cfg(test)]
@@ -59,12 +61,21 @@ mod tests {
 
     #[test]
     fn planning_bodies_carry_only_the_transcript() {
-        let turn = PlanningTurn { question: "When?".into(), answer: "Mornings".into() };
+        let turn = PlanningTurn {
+            question: "When?".into(),
+            answer: "Mornings".into(),
+        };
         assert_eq!(
             planning_body("g1".into(), "goal".into(), "Fit".into(), vec![turn], false).unwrap(),
             serde_json::json!({ "goalId": "g1", "source": "goal", "ramble": "Fit", "turns": [{ "question": "When?", "answer": "Mornings" }], "finish": false })
         );
-        assert_eq!(planning_body("g1".into(), "goal".into(), " ".into(), vec![], true), Err(INVALID));
-        assert_eq!(planning_body("".into(), "goal".into(), "Fit".into(), vec![], true), Err(INVALID));
+        assert_eq!(
+            planning_body("g1".into(), "goal".into(), " ".into(), vec![], true),
+            Err(INVALID)
+        );
+        assert_eq!(
+            planning_body("".into(), "goal".into(), "Fit".into(), vec![], true),
+            Err(INVALID)
+        );
     }
 }

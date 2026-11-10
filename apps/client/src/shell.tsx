@@ -31,9 +31,13 @@ import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMi
 import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 import { CoachChatButton, CoachChatHost } from "./coach-chat-screens";
+import { FavoritesSidebar } from "./metadata-screens";
+import { ProjectsSidebar } from "./project-screens";
 import { CoachBar } from "./coach-bar";
 import { PendingChangesContext, pendingChanges } from "./pending-changes";
 import { PlanningHost } from "./planning-screens";
+import { useCommandDrag } from "./quick-add-drag";
+import { cn } from "./ui";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -47,8 +51,12 @@ const startOfToday = () => { const day = new Date(); day.setHours(0, 0, 0, 0); r
 function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) {
   const { create } = useTaskWrites(userId);
   const [added, setAdded] = useState<TaskDto | null>(null);
+  const drag = useCommandDrag();
   return <div className="dialog-backdrop pt-0" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label="Add task" className="dialog quick-add mt-[60vh] -translate-y-1/2">
+    {drag.guides}
+    {/* 40% from the top by default; ⌘-drag moves it (quick-add-drag.tsx). */}
+    <div role="dialog" aria-modal="true" aria-label="Add task" className={cn("dialog quick-add mt-[40vh]", drag.dragging && "cursor-grabbing select-none")}
+      style={drag.style} onPointerDown={drag.onPointerDown}>
       <Composer startOpen quick dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
       {added && <p role="status" className="state">Added “{added.title}”{added.projectId ? "" : " to Inbox"}. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
     </div>
@@ -171,6 +179,7 @@ export function Shell({ account }: { account: Account }) {
   }, [mobileOpen]);
   const count = today.data?.openCount ?? 0;
   const { pathname } = useLocation();
+  const projectPage = pathname.startsWith("/projects");
 
   return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
@@ -183,7 +192,7 @@ export function Shell({ account }: { account: Account }) {
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
-      <nav><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><RitualsSidebar userId={account.user.id} /><ul className="nav">
+      <nav><FavoritesSidebar userId={account.user.id} /><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><RitualsSidebar userId={account.user.id} /><ProjectsSidebar userId={account.user.id} /><ul className="nav">
         <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
         <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
         <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
@@ -199,9 +208,10 @@ export function Shell({ account }: { account: Account }) {
       <div className="toolbar" data-tauri-drag-region>
         <div className="toolbar-start" data-tauri-drag-region>
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
-          <LayoutSwitcher />
+          {/* A project page has its own Display (project-views DisplayPopover). */}
+          {!projectPage && <LayoutSwitcher />}
         </div>
-        <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><CoachChatButton userId={account.user.id} /><DisplayMenu /></div>
+        <div className="toolbar-start" data-tauri-drag-region><SyncStatus userId={account.user.id} /><CoachChatButton userId={account.user.id} />{!projectPage && <DisplayMenu />}</div>
       </div>
       <ConnectionStatus />
       {/* Ticket 29: the Coach bar floats at the bottom of every main view. */}

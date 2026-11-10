@@ -31,14 +31,20 @@ const projectApp = createProjectRoutes({
   get: async (userId, id) => ownedProject(userId, id),
   tasks: async (userId, projectId) => userId === task.userId && projectId === task.projectId ? [task] : [],
   create: async () => { throw new Error("unused"); },
-  rename: async () => null,
+  update: async () => null,
   remove: async () => false,
   sections: async (userId, projectId) => sections.filter(section => section.userId === userId && section.projectId === projectId),
-  createSection: async (userId, projectId, name) => {
+  createSection: async (userId, projectId, name, after) => {
     if (!ownedProject(userId, projectId)) return null;
     const section = { id: `new-${name}`, userId, projectId, name };
-    sections.push(section);
+    // `after`: placed after that section, or first for null.
+    sections.splice(after === undefined ? sections.length : after === null ? 0 : sections.findIndex(item => item.id === after) + 1, 0, section);
     return section;
+  },
+  renameSection: async (userId, id, name) => {
+    const section = sections.find(item => item.userId === userId && item.id === id);
+    if (section) section.name = name;
+    return section ?? null;
   },
   removeSection: async (userId, id) => {
     const before = sections.length;
@@ -96,6 +102,21 @@ describe("sections and destinations", () => {
       expect((await call(projectApp, "POST", "/projects/work/sections", { user: "alice", body })).status).toBe(400);
     }
     expect(sections.filter(section => section.projectId === "bob-project")).toHaveLength(1);
+  });
+
+  it("places a new section after another, or first", async () => {
+    await call(projectApp, "POST", "/projects/work/sections", { user: "alice", body: { name: "Next", after: "doing" } });
+    await call(projectApp, "POST", "/projects/work/sections", { user: "alice", body: { name: "First", after: null } });
+    expect(sections.filter(section => section.projectId === "work").map(section => section.name)).toEqual(["First", "Doing", "Next"]);
+  });
+
+  it("renames only the owner's section with a validated name", async () => {
+    const renamed = await call(projectApp, "PATCH", "/sections/doing", { user: "alice", body: { name: " Done " } });
+    expect(await renamed.json()).toEqual({ section: { id: "doing", projectId: "work", name: "Done" } });
+    expect((await call(projectApp, "PATCH", "/sections/bob-section", { user: "alice", body: { name: "Mine" } })).status).toBe(404);
+    expect((await call(projectApp, "PATCH", "/sections/doing", { user: "alice", body: { name: " " } })).status).toBe(400);
+    expect((await call(projectApp, "PATCH", "/sections/doing", { cookie: "alice", origin: "https://evil.example", body: { name: "X" } })).status).toBe(403);
+    expect(sections.find(section => section.id === "bob-section")?.name).toBe("Private");
   });
 
   it("deletes only the owner's section and guards cookie writes", async () => {

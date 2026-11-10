@@ -26,12 +26,13 @@ beforeEach(() => {
     task("labeled-done", "alice", { labelIds: ["urgent"], status: "done" }),
     task("plain", "alice"),
     task("bob-labeled", "bob", { labelIds: ["urgent"] }),
+    task("work", "alice", { projectId: "work" }),
   ];
   app = createMetadataRoutes(memoryMetadataStore({
     verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? headers.get("cookie")?.replace("session=", "") ?? null,
     allowedOrigins: new Set([ORIGIN]),
     labels, filters, tasks,
-    projects: [{ id: "work", userId: "alice" }, { id: "bob-project", userId: "bob" }],
+    projects: [{ id: "work", userId: "alice", name: "Work" }, { id: "bob-project", userId: "bob", name: "Work" }],
   }));
 });
 const call = (method: string, path: string, init: { user?: string; cookie?: string; origin?: string; body?: unknown } = {}) => {
@@ -57,10 +58,10 @@ describe("label and saved filter API", () => {
     const response = await call("GET", "/metadata?userId=bob", { user: "alice" });
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({
-      labels: [{ id: "urgent", name: "Urgent", color: "#ff0000" }],
+      labels: [{ id: "urgent", name: "Urgent", color: "#ff0000", favorite: false }],
       filters: [
-        { id: "done", name: "Done", definition: { status: "done", due: "any" } },
-        { id: "urgent-open", name: "Urgent open", definition: { labelId: "urgent", priority: null, status: "open", due: "any" } },
+        { id: "done", name: "Done", definition: { status: "done", due: "any" }, query: null, description: null, color: null, favorite: false },
+        { id: "urgent-open", name: "Urgent open", definition: { labelId: "urgent", priority: null, status: "open", due: "any" }, query: null, description: null, color: null, favorite: false },
       ],
     });
   });
@@ -80,11 +81,11 @@ describe("label and saved filter API", () => {
     const body = { id: OPERATION, name: "  Home ", color: "#00ff00" };
     const created = await call("POST", "/labels", { user: "alice", body });
     expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ label: { id: OPERATION, name: "Home", color: "#00ff00" } });
+    expect(await created.json()).toEqual({ label: { id: OPERATION, name: "Home", color: "#00ff00", favorite: false } });
     expect((await call("POST", "/labels", { user: "alice", body })).status).toBe(200);
     expect(labels.filter(item => item.id === OPERATION)).toHaveLength(1);
     expect((await call("POST", "/labels", { user: "bob", body })).status).toBe(409);
-    expect(await (await call("PATCH", "/labels/urgent", { user: "alice", body: { name: "Now", color: "#123456" } })).json()).toEqual({ label: { id: "urgent", name: "Now", color: "#123456" } });
+    expect(await (await call("PATCH", "/labels/urgent", { user: "alice", body: { name: "Now", color: "#123456" } })).json()).toEqual({ label: { id: "urgent", name: "Now", color: "#123456", favorite: false } });
     expect((await call("PATCH", "/labels/bob-label", { user: "alice", body: { name: "Mine" } })).status).toBe(404);
     expect((await call("DELETE", "/labels/bob-label", { user: "alice" })).status).toBe(404);
     for (const invalid of [{ id: OPERATION, name: " " }, { id: "not-a-uuid", name: "A" }, { id: OPERATION, name: "A", color: "red" }, { id: OPERATION, name: "A", userId: "bob" }]) {
@@ -109,7 +110,7 @@ describe("label and saved filter API", () => {
     const body = { id: OPERATION, name: "Work today", definition: { projectId: "work", due: "today" } };
     const created = await call("POST", "/filters", { user: "alice", body });
     expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ filter: { id: OPERATION, name: "Work today", definition: { projectId: "work", status: "open", due: "today" } } });
+    expect(await created.json()).toEqual({ filter: { id: OPERATION, name: "Work today", definition: { projectId: "work", status: "open", due: "today" }, query: null, description: null, color: null, favorite: false } });
     expect((await call("POST", "/filters", { user: "alice", body })).status).toBe(200);
     for (const definition of [{ labelId: "bob-label" }, { projectId: "bob-project" }, { sql: "drop table tasks" }, { status: "later" }]) {
       expect((await call("POST", "/filters", { user: "alice", body: { id: crypto.randomUUID(), name: "X", definition } })).status, JSON.stringify(definition)).toBe(400);
@@ -119,6 +120,46 @@ describe("label and saved filter API", () => {
     expect((await call("DELETE", "/filters/bob-filter", { user: "alice" })).status).toBe(404);
     expect(await (await call("DELETE", `/filters/${OPERATION}`, { user: "alice" })).json()).toEqual({ id: OPERATION });
     expect(filters.map(item => item.id)).toEqual(["urgent-open", "done", "bob-filter"]);
+  });
+
+  it("saves query filters and opens them as their comma-separated lists of open tasks", async () => {
+    const body = { id: OPERATION, name: "Urgent, then work", query: "@urgent, #Work & !@urgent", description: "Two lists", color: "#4073ff", favorite: true };
+    const created = await call("POST", "/filters", { user: "alice", body });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toEqual({ filter: { id: OPERATION, name: "Urgent, then work", query: "@urgent, #Work & !@urgent", definition: null, description: "Two lists", color: "#4073ff", favorite: true } });
+    const detail = await (await call("GET", `/filters/${OPERATION}`, { user: "alice" })).json() as { tasks: { id: string }[]; groups: { title: string; tasks: { id: string }[] }[] };
+    // Completed tasks are never listed; bob's task with a same-named label is not alice's.
+    expect(detail.groups.map(group => [group.title, group.tasks.map(item => item.id)])).toEqual([["@urgent", ["labeled"]], ["#Work & !@urgent", ["work"]]]);
+    expect(detail.tasks.map(item => item.id)).toEqual(["labeled", "work"]);
+    for (const query of ["today &", "assigned to: me", "x".repeat(1025)]) {
+      expect((await call("POST", "/filters", { user: "alice", body: { id: crypto.randomUUID(), name: "X", query } })).status, query).toBe(400);
+    }
+    expect((await call("POST", "/filters", { user: "alice", body: { id: crypto.randomUUID(), name: "X", query: "today", definition: { status: "open", due: "any" } } })).status).toBe(400);
+    // Saving a query over a legacy filter replaces its definition.
+    expect(await (await call("PATCH", "/filters/done", { user: "alice", body: { name: "Done", query: "p1" } })).json()).toMatchObject({ filter: { query: "p1", definition: null } });
+  });
+
+  it("Filter Assist asks the Coach's model and offers only queries the parser accepts", async () => {
+    const asked: string[] = [];
+    let reply = JSON.stringify({ query: "@urgent & today" });
+    app = createMetadataRoutes(memoryMetadataStore({
+      verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? null,
+      allowedOrigins: new Set([ORIGIN]), labels, filters, tasks, projects: [{ id: "work", userId: "alice", name: "Work" }],
+      coach: {
+        provider: async (userId) => userId === "alice" ? { provider: "openai", model: "m", baseUrl: null, apiKey: "k" } : null,
+        model: () => ({ complete: async ({ messages }) => { asked.push(messages.at(-1)!.content); return reply; } }),
+      },
+    }));
+    const assist = async (user: string, description: unknown) => { const response = await call("POST", "/filters/assist", { user, body: { description } }); return [response.status, await response.json()]; };
+    expect(await assist("alice", "urgent things due today")).toEqual([200, { query: "@urgent & today" }]);
+    expect(asked[0]).toContain("Labels: @Urgent");
+    expect(asked[0]).toContain("Projects: #Work");
+    expect(asked[0]).toContain("urgent things due today");
+    reply = JSON.stringify({ query: "assigned to: me" });
+    expect(await assist("alice", "mine")).toEqual([200, { query: null, message: "The Coach suggested “assigned to: me”, which todalo can't use: Assignees aren't supported: todalo has no shared projects (“assigned to: me”)." }]);
+    expect(await assist("bob", "anything")).toEqual([200, { query: null, message: "Connect the Coach in Settings › Coach to use Filter Assist." }]);
+    expect((await assist("alice", " "))[0]).toBe(400);
+    expect((await call("POST", "/filters/assist", { origin: ORIGIN, body: { description: "x" } })).status).toBe(401);
   });
 
   it("requires an allowed Origin for cookie-authenticated writes but not for bearer writes", async () => {

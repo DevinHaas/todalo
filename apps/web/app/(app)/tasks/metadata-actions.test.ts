@@ -29,8 +29,8 @@ describe("authenticated metadata persistence", () => {
   it("returns only directory fields needed by the UI", async () => {
     await saveFilter({ name: "Open tasks", definition: { status: "open", due: "any" } });
     const data = await getMetadata();
-    expect(Object.keys(data.labels[0]).sort()).toEqual(["color", "id", "name"]);
-    expect(Object.keys(data.filters[0]).sort()).toEqual(["definition", "id", "name"]);
+    expect(Object.keys(data.labels[0]).sort()).toEqual(["color", "favorite", "id", "name"]);
+    expect(Object.keys(data.filters[0]).sort()).toEqual(["color", "definition", "description", "favorite", "id", "name", "query"]);
   });
   it("creates labeled tasks and retrieves edited description, deadline and priority through task reads", async () => {
     const id = await createTask({ title: "Plan", priority: 1, labelIds: ["urgent"] });

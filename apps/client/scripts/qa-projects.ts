@@ -15,7 +15,7 @@ import { planCompletion, type CompletionTarget } from "../../../packages/server/
 import { MissingReferenceError } from "../../../packages/server/src/metadata-input";
 
 type OwnedTask = TaskRecord & { userId: string };
-type Project = { id: string; userId: string; name: string; color: string | null };
+type Project = { id: string; userId: string; name: string; color: string | null; description?: string | null; favorite?: boolean; archivedAt?: Date | null; viewSettings?: unknown };
 export type QaSection = { id: string; userId: string; projectId: string; name: string; sortOrder: number };
 
 export function qaProjectRoutes(options: {
@@ -32,11 +32,19 @@ export function qaProjectRoutes(options: {
   return createProjectRoutes({
     verify: options.verify,
     allowedOrigins: options.allowedOrigins,
-    list: async (userId) => projects.filter(project => project.userId === userId).sort((a, b) => a.name.localeCompare(b.name)),
+    // My Projects' counts, as getProjectSummaries.
+    list: async (userId) => projects.filter(project => project.userId === userId).sort((a, b) => a.name.localeCompare(b.name)).map(project => {
+      const own = tasks.filter(task => task.userId === userId && task.projectId === project.id);
+      return { ...project, completedCount: own.filter(task => task.status === "done").length, openCount: own.filter(task => task.status !== "done").length };
+    }),
     get: async (userId, id) => owned(userId, id),
     tasks: async (userId, projectId) => tasks.filter(task => task.userId === userId && task.projectId === projectId),
-    create: async (userId, name) => { const project = { id: crypto.randomUUID(), userId, name, color: null }; projects.push(project); return project; },
-    rename: async (userId, id, name) => { const project = owned(userId, id); if (project) project.name = name; return project; },
+    create: async (userId, input) => { const project = { id: crypto.randomUUID(), userId, color: null, ...input }; projects.push(project); return project; },
+    update: async (userId, id, { archived, display, ...input }) => {
+      const project = owned(userId, id);
+      if (project) Object.assign(project, input, archived === undefined ? {} : { archivedAt: archived ? new Date() : null }, display ? { viewSettings: display } : {});
+      return project;
+    },
     remove: async (userId, id) => {
       const project = owned(userId, id);
       if (!project) return false;
@@ -46,11 +54,22 @@ export function qaProjectRoutes(options: {
       return true;
     },
     sections: async (userId, projectId) => ownedSections(userId).filter(section => section.projectId === projectId),
-    createSection: async (userId, projectId, name) => {
+    createSection: async (userId, projectId, name, after) => {
       if (!owned(userId, projectId)) return null;
       const section = { id: crypto.randomUUID(), userId, projectId, name, sortOrder: 0 };
       sections.push(section);
+      // As createSection: a placed section renumbers the project's sections.
+      if (after !== undefined) {
+        const order = ownedSections(userId).filter(item => item.projectId === projectId && item !== section);
+        order.splice(after === null ? 0 : order.findIndex(item => item.id === after) + 1 || order.length, 0, section);
+        order.forEach((item, index) => { item.sortOrder = index; });
+      }
       return section;
+    },
+    renameSection: async (userId, id, name) => {
+      const section = sections.find(item => item.userId === userId && item.id === id);
+      if (section) section.name = name;
+      return section ?? null;
     },
     removeSection: async (userId, id) => {
       const index = sections.findIndex(section => section.userId === userId && section.id === id);
@@ -59,7 +78,10 @@ export function qaProjectRoutes(options: {
       for (const task of tasks) if (task.sectionId === id) task.sectionId = null;
       return true;
     },
-    destinations: async (userId) => ({ projects: projects.filter(project => project.userId === userId).sort((a, b) => a.name.localeCompare(b.name)), sections: ownedSections(userId) }),
+    destinations: async (userId) => {
+      const active = projects.filter(project => project.userId === userId && !project.archivedAt).sort((a, b) => a.name.localeCompare(b.name));
+      return { projects: active, sections: ownedSections(userId).filter(section => active.some(project => project.id === section.projectId)) };
+    },
   });
 }
 

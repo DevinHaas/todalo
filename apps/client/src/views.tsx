@@ -76,8 +76,10 @@ function hiddenBy(task: TaskDto, tasks: readonly TaskDto[] | null, closed: Reado
   return false;
 }
 
-export function TaskRow({ task, now, projectName, actions, selection, depth = 0, nested = false, inToday = false }: {
+export function TaskRow({ task, now, projectName, actions, selection, depth = 0, nested = false, inToday = false, tools }: {
   task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection;
+  /** Hover tools before the delete button (the project page's edit, date, comment and menu). */
+  tools?: ReactNode;
   /** Indent level in its list (listTree). */
   depth?: number;
   /** Its sub-tasks are rows of the same list: the chevron collapses them instead of expanding them inline. */
@@ -112,7 +114,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   if (editor && !hidden) return <>{editor}</>;
   // Goals ticket 31: a Later task stays listed, muted, with a "Later" chip.
   const later = task.horizon === "later" && task.status !== "done";
-  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} group/task ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
     data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && !ownLook(change) && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
     data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
@@ -141,6 +143,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
         <span className="pill project">{projectName ?? "Inbox"}{projectName ? <Hash /> : <Inbox />}</span>
       </div>
     </div>
+    {tools}
     {actions && <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => actions.remove(task)}><X /></button>}
   </div>
   {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}

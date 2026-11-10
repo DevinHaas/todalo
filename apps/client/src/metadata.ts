@@ -2,16 +2,28 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient, type QueryFilters } from "@tanstack/react-query";
 import { change, optimisticWrite } from "./optimistic";
 import type {
-  FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto,
+  FilterAssistDto, FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto,
 } from "../../../packages/server/src/metadata-input";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { taskChanges, taskKeys } from "./tasks";
 
-export type { FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto };
-export interface LabelFields { name: string; color: string | null }
-export interface FilterFields { name: string; definition: FilterDefinition }
-/** The legacy blank filter form (filterDefinitionSchema.parse({})). */
-export const blankDefinition = (): FilterDefinition => ({ status: "open", due: "any" });
+export type { FilterAssistDto, FilterDefinition, FilterDetailDto, LabelDetailDto, LabelDto, MetadataDto, SavedFilterDto };
+export interface LabelFields { name: string; color: string | null; favorite: boolean }
+/**
+ * A filter write: a query (the dialog always saves one, converting a legacy
+ * definition), or a legacy definition kept as it is (e.g. toggling favorite).
+ */
+export interface FilterFields { name: string; query?: string; definition?: FilterDefinition; description: string | null; color: string | null; favorite: boolean }
+
+/** Todoist's named palette (label and filter colours are stored as hex). */
+export const namedColors = [
+  ["Berry Red", "#b8256f"], ["Red", "#db4035"], ["Orange", "#ff9933"], ["Yellow", "#fad000"], ["Olive Green", "#afb83b"],
+  ["Lime Green", "#7ecc49"], ["Green", "#299438"], ["Mint Green", "#6accbc"], ["Teal", "#158fad"], ["Sky Blue", "#14aaf5"],
+  ["Light Blue", "#96c3eb"], ["Blue", "#4073ff"], ["Grape", "#884dff"], ["Violet", "#af38eb"], ["Lavender", "#eb96eb"],
+  ["Magenta", "#e05194"], ["Salmon", "#ff8d85"], ["Charcoal", "#808080"], ["Grey", "#b8b8b8"], ["Taupe", "#ccac93"],
+] as const;
+/** The default colour, and how a label or filter without one is drawn. */
+export const CHARCOAL = "#808080";
 
 export interface MetadataTransport {
   metadata(): Promise<MetadataDto>;
@@ -25,6 +37,8 @@ export interface MetadataTransport {
   createFilter(id: string, filter: FilterFields): Promise<SavedFilterDto>;
   updateFilter(id: string, filter: FilterFields): Promise<SavedFilterDto | null>;
   removeFilter(id: string): Promise<boolean>;
+  /** Filter Assist: a description to a query the parser accepts, or the reason there is none. */
+  assistFilter(description: string): Promise<FilterAssistDto>;
 }
 
 export function browserMetadataTransport(fetcher: typeof fetch = fetch): MetadataTransport {
@@ -61,6 +75,7 @@ export function browserMetadataTransport(fetcher: typeof fetch = fetch): Metadat
     createFilter: async (id, filter) => created(await request<{ filter: SavedFilterDto }>("POST", "/api/v1/filters", { id, ...filter })).filter,
     updateFilter: async (id, filter) => (await request<{ filter: SavedFilterDto }>("PATCH", filterPath(id), filter))?.filter ?? null,
     removeFilter: async (id) => (await request<{ id: string }>("DELETE", filterPath(id))) !== null,
+    assistFilter: async (description) => created(await request<FilterAssistDto>("POST", "/api/v1/filters/assist", { description })),
   };
 }
 
@@ -81,6 +96,7 @@ export function metadataTransport(): MetadataTransport {
     createFilter: async (id, filter) => (await command<{ filter: SavedFilterDto }>("create_filter", { id, filter })).filter,
     updateFilter: async (id, filter) => (await command<{ filter: SavedFilterDto } | null>("update_filter", { id, filter }))?.filter ?? null,
     removeFilter: async (id) => (await command<{ id: string } | null>("delete_filter", { id })) !== null,
+    assistFilter: (description) => command<FilterAssistDto>("assist_filter", { description }),
   };
 }
 
@@ -109,6 +125,8 @@ export function metadataQueries(transport: MetadataTransport) {
 export function metadataMutations(transport: MetadataTransport, cache: QueryClient, userId: string) {
   const refresh: QueryFilters[] = [{ queryKey: metadataKeys.all(userId) }];
   const byName = <T extends { name: string }>(items: T[]) => [...items].sort((a, b) => a.name.localeCompare(b.name));
+  // A saved query replaces a legacy definition.
+  const asFilter = (filter: FilterFields) => ({ ...filter, query: filter.query ?? null, definition: filter.query ? null : filter.definition ?? null });
   const directory = (edit: (data: MetadataDto) => MetadataDto) => change<MetadataDto | undefined>(metadataKeys.list(userId), data => data && edit(data));
   const found = <T,>(value: T | null) => { if (!value) throw new AccountTransportError("SAVE_FAILED"); return value; };
   return {
@@ -130,12 +148,12 @@ export function metadataMutations(transport: MetadataTransport, cache: QueryClie
       return removed;
     },
     createFilter(id: string, filter: FilterFields) {
-      return optimisticWrite(cache, [directory(data => ({ ...data, filters: byName([...data.filters.filter(item => item.id !== id), { id, ...filter }]) }))], () => transport.createFilter(id, filter), refresh);
+      return optimisticWrite(cache, [directory(data => ({ ...data, filters: byName([...data.filters.filter(item => item.id !== id), { id, ...asFilter(filter) }]) }))], () => transport.createFilter(id, filter), refresh);
     },
     updateFilter(id: string, filter: FilterFields) {
       return optimisticWrite(cache, [
-        directory(data => ({ ...data, filters: byName(data.filters.map(item => item.id === id ? { ...item, ...filter } : item)) })),
-        change<FilterDetailDto | null | undefined>(metadataKeys.filter(userId, id), data => data && { ...data, filter: { ...data.filter, ...filter } }),
+        directory(data => ({ ...data, filters: byName(data.filters.map(item => item.id === id ? { ...item, ...asFilter(filter) } : item)) })),
+        change<FilterDetailDto | null | undefined>(metadataKeys.filter(userId, id), data => data && { ...data, filter: { ...data.filter, ...asFilter(filter) } }),
       ], async () => found(await transport.updateFilter(id, filter)), refresh);
     },
     async removeFilter(id: string) {

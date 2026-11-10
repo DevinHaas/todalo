@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { toProjectDto } from "@todalo/server/project-dto";
 import { buildDelta, MAX_DELTA, type SyncDelta, type SyncSource } from "@todalo/server/sync-delta";
 import type { TaskDto } from "@todalo/server/task-dto";
 import { createSyncRoutes } from "./sync-routes";
@@ -18,7 +19,7 @@ const source: SyncSource = {
   cursor: async () => state.xmin,
   changes: async (userId, since, limit) => state.log.filter(row => row.userId === userId && row.xid >= since).slice(0, limit),
   tasks: async (userId, ids) => owned(state.tasks, userId, ids).map(({ userId: _owner, ...dto }) => dto),
-  projects: async (userId, ids) => owned(state.projects, userId, ids).map(({ id, name, color }) => ({ id, name, color })),
+  projects: async (userId, ids) => owned(state.projects, userId, ids).map(toProjectDto),
   labels: async () => [], filters: async () => [], comments: async () => [],
 };
 
@@ -59,7 +60,7 @@ describe("GET /api/v1/sync", () => {
     expect(body.tasks.map((row: TaskDto) => row.id)).toEqual(["new"]);
     expect(body.tasks[0]).not.toHaveProperty("userId");
     expect(body.deleted.task).toEqual(["old"]);
-    expect(body.projects).toEqual([{ id: "p", name: "Home", color: null }]);
+    expect(body.projects).toMatchObject([{ id: "p", name: "Home", color: null, archived: false }]);
     expect(body.changed).toEqual(["goal", "season"]);
     expect(Number(body.cursor)).toBeGreaterThan(Number(cursor));
   });

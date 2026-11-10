@@ -92,7 +92,9 @@ pub async fn import_disconnect(state: tauri::State<'_, NativeAuth>) -> Result<()
 
 #[tauri::command]
 pub async fn import_prompt_seen(state: tauri::State<'_, NativeAuth>) -> Result<(), String> {
-    state.write(Method::POST, "/api/v1/imports/todoist/prompt", None).await?;
+    state
+        .write(Method::POST, "/api/v1/imports/todoist/prompt", None)
+        .await?;
     Ok(())
 }
 

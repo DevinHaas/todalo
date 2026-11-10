@@ -57,7 +57,7 @@ describe("legacy saved filters", () => {
 
 describe("labels", () => {
   it("are owner-scoped: foreign IDs behave like missing ones", async () => {
-    expect((await getMetadataForUser("alice")).labels).toEqual([{ id: "urgent", name: "Urgent", color: "#ff0000" }]);
+    expect((await getMetadataForUser("alice")).labels).toEqual([{ id: "urgent", name: "Urgent", color: "#ff0000", favorite: false }]);
     expect(await getOwnedLabel("alice", "bob-label")).toBeNull();
     expect(await updateLabel("alice", "bob-label", { name: "Taken" })).toBeNull();
     expect(await deleteLabel("alice", "bob-label")).toBe(false);
@@ -76,9 +76,9 @@ describe("labels", () => {
   it("deleting one keeps filters that named it; they then match nothing and cannot be resaved with it", async () => {
     expect(await deleteLabel("alice", "urgent")).toBe(true);
     const filter = await getOwnedFilter("alice", "urgent-open");
-    expect(filter?.definition.labelId).toBe("urgent");
-    expect(matchesSavedFilter({ priority: 1, labelIds: [], projectId: null, status: "todo", dueDate: null }, filter!.definition)).toBe(false);
-    await expect(updateFilter("alice", "urgent-open", { name: "Urgent open", definition: filter!.definition })).rejects.toThrow(MissingReferenceError);
+    expect(filter?.definition?.labelId).toBe("urgent");
+    expect(matchesSavedFilter({ priority: 1, labelIds: [], projectId: null, status: "todo", dueDate: null }, filter!.definition!)).toBe(false);
+    await expect(updateFilter("alice", "urgent-open", { name: "Urgent open", definition: filter!.definition! })).rejects.toThrow(MissingReferenceError);
   });
 });
 
@@ -99,5 +99,26 @@ describe("saved filters", () => {
     expect(await updateFilter("alice", OPERATION, { name: "Work today", definition: { projectId: "work", status: "open", due: "today" } })).toMatchObject({ name: "Work today", definition: { projectId: "work" } });
     expect(await deleteFilter("alice", OPERATION)).toBe(true);
     expect(await getOwnedFilter("alice", OPERATION)).toBeNull();
+  });
+
+  it("save Todoist queries (invalid ones refused); saving a query replaces a legacy definition", async () => {
+    const input = { id: OPERATION, name: "Work", query: " (today | overdue) & #Work ", description: "Mine", color: "#4073ff", favorite: true };
+    expect((await createFilter("alice", input)).filter).toEqual({ id: OPERATION, name: "Work", query: "(today | overdue) & #Work", definition: null, description: "Mine", color: "#4073ff", favorite: true });
+    await expect(createFilter("alice", { name: "Bad", query: "today &" })).rejects.toThrow();
+    await expect(createFilter("alice", { name: "Both", query: "today", definition: { status: "open", due: "any" } })).rejects.toThrow();
+    await expect(createFilter("alice", { name: "Neither" } as never)).rejects.toThrow();
+    // Names in a query are not references: an unknown one just matches nothing.
+    expect((await createFilter("alice", { name: "Bob's", query: "@Private" })).filter.query).toBe("@Private");
+    expect(await updateFilter("alice", "bare", { name: "Bare row", query: "#Work" })).toMatchObject({ query: "#Work", definition: null });
+    expect(boundary.rows.saved_filters.find(row => row.id === "bare")).toMatchObject({ query: "#Work", definition: null });
+    // A legacy write (the old web form) keeps working and clears any query.
+    expect(await updateFilter("alice", "bare", { name: "Bare row", definition: { projectId: "work", status: "open", due: "any" } })).toMatchObject({ query: null, definition: { projectId: "work" } });
+  });
+});
+
+describe("favorites", () => {
+  it("label favorite is saved and an omitted one is kept", async () => {
+    expect(await updateLabel("alice", "urgent", { name: "Urgent", favorite: true })).toEqual({ id: "urgent", name: "Urgent", color: "#ff0000", favorite: true });
+    expect(await updateLabel("alice", "urgent", { name: "Now" })).toMatchObject({ favorite: true });
   });
 });

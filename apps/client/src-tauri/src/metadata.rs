@@ -10,12 +10,14 @@ const INVALID: &str = "Check your entry and try again.";
 const UNAVAILABLE: &str = "Your tasks could not be loaded. Try again.";
 const INVALID_RESPONSE: &str = "The server returned an invalid response.";
 
-/// Legacy labelInput: trimmed name of 1–100 characters, optional `#rrggbb`.
+/// labelInput: trimmed name of 1–100 characters, optional `#rrggbb`, optional favorite.
 #[derive(Deserialize, Serialize)]
 pub struct LabelFields {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    favorite: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -49,23 +51,41 @@ struct Definition {
     due: Due,
 }
 
+/// A query filter (`query`) or a legacy one (`definition`): exactly one is sent.
 #[derive(Deserialize, Serialize)]
 pub struct FilterFields {
     name: String,
-    definition: Definition,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    definition: Option<Definition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    query: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    favorite: Option<bool>,
 }
+
+const QUERY_MAX: usize = 1024;
+const DESCRIPTION_MAX: usize = 1000;
+const ASSIST_MAX: usize = 500;
 
 fn valid_name(name: &str) -> bool {
     let name = name.trim();
     !name.is_empty() && name.chars().count() <= 100
 }
 
-fn label_body(id: Option<&str>, label: &LabelFields) -> Result<Value, &'static str> {
-    let color_ok = label.color.as_deref().is_none_or(|color| {
+fn valid_color(color: Option<&str>) -> bool {
+    color.is_none_or(|color| {
         color.len() == 7
             && color.starts_with('#')
             && color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
-    });
+    })
+}
+
+fn label_body(id: Option<&str>, label: &LabelFields) -> Result<Value, &'static str> {
+    let color_ok = valid_color(label.color.as_deref());
     if !valid_name(&label.name) || !color_ok || id.is_some_and(|id| !valid_operation_id(id)) {
         return Err(INVALID);
     }
@@ -78,19 +98,27 @@ fn label_body(id: Option<&str>, label: &LabelFields) -> Result<Value, &'static s
 }
 
 fn filter_body(id: Option<&str>, filter: &FilterFields) -> Result<Value, &'static str> {
-    let definition = &filter.definition;
-    if !valid_name(&filter.name)
-        || definition
+    // The server parses the query; here only its size is bounded.
+    let query_ok = filter
+        .query
+        .as_deref()
+        .is_none_or(|query| !query.trim().is_empty() && query.chars().count() <= QUERY_MAX);
+    let definition_ok = filter.definition.as_ref().is_none_or(|definition| {
+        definition
             .priority
-            .is_some_and(|priority| !(1..=4).contains(&priority))
-        || definition
-            .label_id
+            .is_none_or(|priority| (1..=4).contains(&priority))
+            && definition.label_id.as_deref().is_none_or(valid_id)
+            && definition.project_id.as_deref().is_none_or(valid_id)
+    });
+    if !valid_name(&filter.name)
+        || filter.definition.is_some() == filter.query.is_some()
+        || !query_ok
+        || !definition_ok
+        || !valid_color(filter.color.as_deref())
+        || filter
+            .description
             .as_deref()
-            .is_some_and(|id| !valid_id(id))
-        || definition
-            .project_id
-            .as_deref()
-            .is_some_and(|id| !valid_id(id))
+            .is_some_and(|text| text.chars().count() > DESCRIPTION_MAX)
         || id.is_some_and(|id| !valid_operation_id(id))
     {
         return Err(INVALID);
@@ -216,6 +244,26 @@ pub async fn delete_filter(
         .await?)
 }
 
+/// Filter Assist: the server asks the Coach's model and checks its query.
+#[tauri::command]
+pub async fn assist_filter(
+    state: tauri::State<'_, NativeAuth>,
+    description: String,
+) -> Result<Value, String> {
+    let description = description.trim();
+    if description.is_empty() || description.chars().count() > ASSIST_MAX {
+        return Err(INVALID.to_owned());
+    }
+    state
+        .write(
+            Method::POST,
+            "/api/v1/filters/assist",
+            Some(serde_json::json!({ "description": description })),
+        )
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{FilterFields, LabelFields, filter_body, label_body};
@@ -236,6 +284,12 @@ mod tests {
         assert_eq!(
             label_body(None, &label).unwrap(),
             json!({ "name": "Home", "color": "#00ff00" })
+        );
+        let label: LabelFields =
+            serde_json::from_value(json!({ "name": "Home", "favorite": true })).unwrap();
+        assert_eq!(
+            label_body(None, &label).unwrap(),
+            json!({ "name": "Home", "favorite": true })
         );
         for input in [
             json!({ "name": "  " }),
@@ -288,5 +342,32 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn query_filter_bodies_are_bounded_and_carry_one_kind() {
+        let filter: FilterFields = serde_json::from_value(json!({
+            "name": " Work ", "query": "(today | overdue) & #Work", "description": "Mine",
+            "color": "#808080", "favorite": true, "userId": "bob"
+        }))
+        .unwrap();
+        assert_eq!(
+            filter_body(None, &filter).unwrap(),
+            json!({ "name": "Work", "query": "(today | overdue) & #Work", "description": "Mine", "color": "#808080", "favorite": true })
+        );
+        for input in [
+            json!({ "name": "A" }),
+            json!({ "name": "A", "query": "  " }),
+            json!({ "name": "A", "query": "x".repeat(1025) }),
+            json!({ "name": "A", "query": "today", "color": "red" }),
+            json!({ "name": "A", "query": "today", "description": "x".repeat(1001) }),
+            json!({ "name": "A", "query": "today", "definition": { "status": "open", "due": "any" } }),
+        ] {
+            let filter: FilterFields = serde_json::from_value(input).unwrap();
+            assert_eq!(
+                filter_body(None, &filter),
+                Err("Check your entry and try again.")
+            );
+        }
     }
 }

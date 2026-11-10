@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
-import { createSection, deleteSection, getOrganizationDestinations, getSectionsForUser, moveTasks } from "./organization";
+import { createSection, deleteSection, getOrganizationDestinations, getSectionsForUser, moveTasks, renameSection } from "./organization";
 import { updateTask } from "./tasks";
 
 const boundary = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]> }));
@@ -32,6 +32,27 @@ beforeEach(() => {
 });
 
 describe("sections", () => {
+  it("places a section after another (or first) and renumbers the project's sections", async () => {
+    const next = await createSection("alice", "work", "Next", "doing");
+    const first = await createSection("alice", "work", "First", null);
+    const order = (id: string) => boundary.rows.sections.find(section => section.id === id)?.sortOrder;
+    expect([first.id, "doing", next.id, "later"].map(order)).toEqual([0, 1, 2, 3]);
+    expect(order("garden")).toBe(0);
+  });
+
+  it("renames only the owner's section", async () => {
+    expect(await renameSection("alice", "doing", " Now ")).toEqual({ id: "doing", projectId: "work", name: "Now" });
+    expect(await renameSection("alice", "bob-section", "Mine")).toBeNull();
+    expect(boundary.rows.sections.find(section => section.id === "bob-section")?.name).toBe("Private");
+  });
+
+  it("leaves archived projects and their sections out of the destinations", async () => {
+    boundary.rows.projects.find(project => project.id === "home")!.archivedAt = new Date();
+    const destinations = await getOrganizationDestinations("alice");
+    expect(destinations.projects.map(project => project.id)).toEqual(["work"]);
+    expect(destinations.sections.some(section => section.projectId === "home")).toBe(false);
+  });
+
   // The boundary ignores ORDER BY (sortOrder, name), so membership is what is checked here.
   it("lists only the owner's sections of a project and exposes minimal destinations", async () => {
     expect((await getSectionsForUser("alice", "work")).map(section => section.id).sort()).toEqual(["doing", "later"]);

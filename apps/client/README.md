@@ -175,6 +175,14 @@ removed after an account response returns 401.
 
 ## Projects and writes (ticket 8 conventions)
 
+- **Todoist projects (migration 0045):** projects have `description`, `favorite`,
+  `archived_at` and `view_settings` (the Display popover: layout, completed tasks,
+  grouping, sorting and filters, saved per project via `PATCH /projects/:id`).
+  `GET /projects` returns Completed/Open counts for My Projects; archived projects
+  leave the sidebar and Move destinations. `PATCH /sections/:id` renames a section;
+  `POST /projects/:id/sections` takes `after` to place it. Views: `project-views.tsx`
+  (My Projects, list, board, table, Display); sub-projects are not built.
+
 - **API:** `apps/api/src/project-routes.ts` — `GET /api/v1/projects` →
   `{ projects: ProjectDto[] }`; `GET /api/v1/projects/:id` →
   `{ project, tasks: TaskDto[] }` (all member tasks; the client hides completed);
@@ -390,6 +398,25 @@ removed after an account response returns 401.
 - **QA fixtures:** labels `Design`/`Urgent`, legacy-shaped filters (including one
   naming a deleted label) and another user's label/filter
   (`/labels/qa-other-label`, `/filters/qa-other-filter`).
+
+## Filters & Labels (Todoist model)
+
+- **Queries:** `packages/server/src/filter-query.ts` parses and evaluates
+  Todoist filter queries (operator list: `docs/filter-queries.md`). A
+  `saved_filters` row has a `query` *or* a ticket-14 `definition` (migration
+  `0044_filter_queries`: `query`, `description`, `color`, `favorite`,
+  `sort_order`; `definition` nullable; labels gain `favorite`, `sort_order`).
+  Legacy rows keep evaluating with `matchesSavedFilter`; the dialog pre-fills
+  `definitionToQuery` and saving converts the row to a query. A legacy write
+  (old web form) clears any query. `GET /filters/:id` adds `groups` (one per
+  comma-separated list) for query filters; queries never list completed tasks.
+- **Filter Assist:** `POST /api/v1/filters/assist` `{ description }` (native
+  `assist_filter`) uses the Coach's provider (`filter-assist.ts`) and returns
+  `{ query }` only when the parser accepts it, else `{ query: null, message }`.
+- **UI:** `/filters` and `/labels` show the Filters & Labels page; Add/Edit label
+  and filter dialogs (60-char names, Todoist's named colours, favorites, live
+  preview over the cached tasks); favorites appear in the sidebar's Favorites.
+  Evidence: `docs/qa/filters-labels.md`.
 
 ## Search and task links (ticket 18 conventions)
 

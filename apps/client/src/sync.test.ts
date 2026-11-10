@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { defaultProjectDisplay } from "../../../packages/server/src/project-dto";
 import { QueryClient } from "@tanstack/react-query";
 import { begin, commit, settle } from "./optimistic";
 import { createSync, deltaChanges, mergeById, type SyncDelta, type SyncTransport } from "./sync";
@@ -34,7 +35,7 @@ describe("delta merge into the cache", () => {
   const seeded = () => {
     const cache = new QueryClient();
     cache.setQueryData(taskKeys.today("u"), { tasks: [task("keep"), task("edit"), task("drop")], openCount: 0 });
-    cache.setQueryData(["user", "u", "project", "p1"], { project: { id: "p1", name: "P", color: null }, sections: [], tasks: [task("edit", { projectId: "p1" })] });
+    cache.setQueryData(["user", "u", "project", "p1"], { project: { id: "p1", name: "P", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }, sections: [], tasks: [task("edit", { projectId: "p1" })] });
     cache.setQueryData(["user", "u", "projects"], [{ id: "p1", name: "Work", color: null }, { id: "p2", name: "Old", color: null }]);
     cache.setQueryData(commentKeys.task("u", "keep"), [{ id: "c1", taskId: "keep", body: "hi", createdAt: "2026-11-07T09:00:00.000Z", author: { name: "A", image: null } }]);
     return cache;
@@ -57,7 +58,7 @@ describe("delta merge into the cache", () => {
     const comment = { id: "c2", taskId: "keep", body: "later", createdAt: "2026-11-07T10:00:00.000Z", author: { name: "A", image: null } };
     const other = { ...comment, id: "c3", taskId: "edit" };
     const { changes, refresh } = deltaChanges("u", delta({
-      projects: [{ id: "p3", name: "Alpha", color: null }], comments: [comment, other],
+      projects: [{ id: "p3", name: "Alpha", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay }], comments: [comment, other],
       deleted: { project: ["p2"] }, changed: ["goal", "section"],
     }));
     apply(cache, changes);

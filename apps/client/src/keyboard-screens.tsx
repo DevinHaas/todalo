@@ -295,9 +295,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     const sortable = () => (document.querySelector<HTMLSelectElement>('main [aria-label="Project sort"]')?.value ?? "manual") === "manual";
     const focusedTask = async (row: HTMLElement) => { const tasks = await all(); return { tasks, task: tasks.find(task => task.id === row.dataset.taskId) }; };
     const sort = (value: string, yieldToRow = false) => {
-      const select = document.querySelector<HTMLSelectElement>('main [aria-label="Project sort"]');
-      if (!select || (yieldToRow && activeRow())) return false;
-      choose(select, value);
+      if (yieldToRow && activeRow()) return false;
+      return press(document.querySelector("main"), `[data-project-sort="${value}"]`);
     };
     const week = (scope: string, action: string) => press(document.querySelector(`main ${scope}`), `[data-view-nav="${action}"]`);
     /** The editor's Previous/Next (save, then the adjacent task of the list it was opened from). */
@@ -446,7 +445,8 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
       // The clipboard write starts inside the key press (WebKit needs the gesture).
       "task.copy-url": () => {
         const row = activeRow();
-        if (!row) return false;
+        // On a project page with no task focused: Copy link to project.
+        if (!row) return press(document.querySelector("main"), '[data-project-action="copy-link"]');
         setNotice(null);
         copyTaskLink(row.dataset.taskId!).then(() => setStatus("Task link copied."), (reason: unknown) => setNotice(reason instanceof Error ? reason.message : "Could not copy task link"));
       },

@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
-import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Check, Flag, Goal, Hash, Inbox, Paperclip, Plus, X } from "lucide-react";
+import { createContext, useContext, useEffect, useId, useMemo, useReducer, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Check, Flag, Goal, Hash, Inbox, Paperclip, Plus, Tag, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
 import {
@@ -9,8 +9,9 @@ import {
 import type { Recurrence } from "@todalo/ramble/recurrence";
 import { dateInputValue, localInstant, operationId, timeInputValue, type NewTask, type Placement, type TaskDetails, type TaskDto } from "./tasks";
 import {
-  composerFields, dateValue, dueDateLabel, fromDateValue, fromRecurrenceDto, parseTitle, quickAddTask, quickDates, repeatPresetsFor, scheduleOf,
+  composerFields, dateValue, dueDateLabel, fromDateValue, fromRecurrenceDto, labelMention, parseTitle, quickAddTask, quickDates, repeatPresetsFor, scheduleOf, withoutMention,
 } from "./quick-add";
+import { CHARCOAL } from "./metadata";
 import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
 import { inlineError } from "./toasts";
@@ -31,7 +32,7 @@ export const SmartDates = createContext(false);
  * Additional actions (ComposerChoicesProvider). Until they load the picker
  * offers Inbox and the composer's own project, and labels show as loading.
  */
-export interface Choice { id: string; name: string }
+export interface Choice { id: string; name: string; color?: string | null }
 export const ComposerChoices = createContext<{ projects?: Choice[]; labels?: Choice[] }>({});
 
 function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddSyncState {
@@ -114,6 +115,11 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
+  // `@` label autocomplete: the caret, the active suggestion, and a mention dismissed with Escape.
+  const [caret, setCaret] = useState(0);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const menuId = useId();
 
   useEffect(() => { const timer = setTimeout(() => setParsedTitle(title), PARSE_DEBOUNCE_MS); return () => clearTimeout(timer); }, [title]);
   // Debounced, so field sync does not refire on every keystroke…
@@ -122,6 +128,10 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   // …while the highlight offsets always follow the title as typed.
   const live = useMemo(() => parseTitle(title, smartDates, rejected, undefined, base), [title, smartDates, rejected, base]);
   const segments = highlightSegments(title, live.matches);
+  const mention = labelMention(title, caret);
+  const suggestions = mention && mention.start !== dismissed && choices.labels
+    ? choices.labels.filter(label => !metadata.labelIds.includes(label.id) && label.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
+  const highlighted = Math.min(active, suggestions.length - 1);
   const schedule = scheduleOf(sync);
 
   const reset = () => {
@@ -153,6 +163,20 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   function changeEnd(time: string) { dispatch({ type: "manualEndTime", time, matchText: quickAddTimeMatchText(live.matches) }); }
   function changeRepeat(recurrence: Recurrence | undefined) {
     dispatch({ type: "manualRecurrence", recurrence, matchText: manualPhrase("recurrence", recurrence ? canonicalRecurrenceText(recurrence) : null) });
+  }
+  function pickLabel(label: Choice) {
+    if (!mention) return;
+    const next = withoutMention(title, mention, caret);
+    setTitle(next.title); setCaret(next.caret); setActive(0);
+    setMetadata(current => ({ ...current, labelIds: [...current.labelIds, label.id] }));
+    requestAnimationFrame(() => input.current?.setSelectionRange(next.caret, next.caret));
+  }
+  function mentionKeys(event: KeyboardEvent<HTMLInputElement>) {
+    if (!suggestions.length || !mention) return;
+    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (step) { event.preventDefault(); setActive((highlighted + step + suggestions.length) % suggestions.length); }
+    else if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); pickLabel(suggestions[highlighted]!); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setDismissed(mention.start); }
   }
   const syncScroll = () => { if (backdrop.current && input.current) backdrop.current.scrollLeft = input.current.scrollLeft; };
 
@@ -218,6 +242,11 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         </label>) : <p className="state">Create labels in Labels.</p>}
       </>}
     </Popover>
+    {metadata.labelIds.map(id => choices.labels?.find(label => label.id === id)).filter(label => label !== undefined).map(label =>
+      <button key={label.id} type="button" className="chip set" aria-label={`Remove label ${label.name}`}
+        onClick={() => setMetadata(current => ({ ...current, labelIds: current.labelIds.filter(id => id !== label.id) }))}>
+        <Tag style={{ color: label.color ?? CHARCOAL }} />{label.name}<X />
+      </button>)}
     <Popover className={schedule.date ? "chip-group set" : "chip-group"} label={`Date: ${label}${time ? ` ${time}` : ""}`} data={{ "data-tone": today ? "today" : "date" }}
       trigger={<>{today ? <Calendar1 /> : <CalendarIcon />}{label}{time && ` ${time}`}</>}
       after={schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}>
@@ -260,7 +289,16 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
           })}
         </div>
         <input ref={input} autoFocus aria-label="Task name" placeholder="Task name" enterKeyHint="done" autoComplete="off" value={title}
-          onChange={(event) => setTitle(event.target.value)} onScroll={syncScroll} onSelect={syncScroll} />
+          role="combobox" aria-autocomplete="list" aria-expanded={suggestions.length > 0} aria-controls={menuId}
+          aria-activedescendant={suggestions.length ? `${menuId}-${highlighted}` : undefined} onKeyDown={mentionKeys}
+          onChange={(event) => { setTitle(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); setActive(0); }}
+          onScroll={syncScroll} onSelect={(event) => { syncScroll(); setCaret(event.currentTarget.selectionStart ?? 0); }} />
+        {suggestions.length > 0 && <div id={menuId} role="listbox" aria-label="Labels" className="popover mention-menu">
+          {suggestions.map((label, index) => <div key={label.id} id={`${menuId}-${index}`} role="option" aria-selected={index === highlighted} className="popover-item"
+            onPointerDown={(event) => { event.preventDefault(); pickLabel(label); }} onPointerEnter={() => setActive(index)}>
+            <Tag style={{ color: label.color ?? CHARCOAL }} />{label.name}
+          </div>)}
+        </div>}
       </div>
       {describing ? <input autoFocus aria-label="Description" placeholder="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
         : !quick && <button type="button" className="text-action add-description" onClick={() => setDescribing(true)}>Add description</button>}

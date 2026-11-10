@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultProjectDisplay } from "../../../packages/server/src/project-dto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
@@ -15,7 +16,7 @@ const task = (id: string, extra: Partial<TaskDto> = {}): TaskDto => ({
   id, title: id, description: null, status: "todo", priority: 4, projectId: "work", sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: VERSION, ...extra,
 });
-const work = { id: "work", name: "Work", color: null };
+const work = { id: "work", name: "Work", color: null, description: null, favorite: false, archived: false, display: defaultProjectDisplay };
 const doing = { id: "doing", projectId: "work", name: "Doing" };
 const render = (node: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(MemoryRouter, null, node));
 const success = <T,>(data: T) => ({ status: "success" as const, data, error: null });
@@ -57,6 +58,7 @@ describe("organization cache", () => {
   const transport: OrganizationTransport = {
     destinations: async () => ({ projects: [], sections: [] }),
     createSection: async (projectId, name) => projectId === "foreign" ? null : { id: "new", projectId, name },
+    renameSection: async (id, name) => ({ id, projectId: "work", name }),
     removeSection: async () => true,
     organize: async (id, change) => { sent.push(change); return id === "gone" ? null : task(id, { parentId: "p" }); },
   };
@@ -106,16 +108,16 @@ describe("organization views", () => {
   it("activates Add section and groups tasks: unsectioned first, then sections, sub-tasks after parents", () => {
     const tasks = [task("loose"), task("child", { sectionId: "doing", parentId: "parent" }), task("parent", { sectionId: "doing" }), task("lost", { sectionId: "deleted" })];
     const html = render(createElement(ProjectView, {
-      state: success({ project: work, sections: [doing], tasks }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false },
-      sections: { create: async () => {}, remove: noop },
+      state: success({ project: work, sections: [doing], tasks }), onRetry: noop, write: { pending: false },
+      sections: { create: async () => {}, rename: async () => {}, remove: noop },
     }));
-    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Add section<\/button>/);
-    expect(html).toContain("Delete section");
+    expect(html).toContain('data-project-action="section"');
+    expect(html).toContain('aria-label="More actions for section Doing"');
     const order = ["loose", "lost", "Doing", "parent", "child"].map(text => html.indexOf(`>${text}<`));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(order.every(index => index >= 0)).toBe(true);
-    expect(render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks: [] }), onRetry: noop, onRename: async () => {}, onDelete: noop, write: { pending: false } })))
-      .toContain('<span class="button outline" aria-disabled="true">Add section</span>');
+    expect(render(createElement(ProjectView, { state: success({ project: work, sections: [], tasks: [] }), onRetry: noop, write: { pending: false } })))
+      .not.toContain('data-project-action="section"');
   });
 
   it("offers Move and Nest for every task and Unnest for a sub-task", () => {

@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { metadata, metadataReads, projectReads, reads } from "./runtime";
+import { metadata, metadataReads, organizationReads, projectReads, reads } from "./runtime";
 import { metadataMutations } from "./metadata";
-import { listBuckets, MetadataDirectory, TaskCollectionView, type CollectionSlots, type MetadataActions } from "./metadata-views";
+import { evaluateFilter, parseFilterQuery } from "../../../packages/server/src/filter-query";
+import { FavoritesNav, listBuckets, MetadataDirectory, TaskCollectionView, type CollectionSlots, type FilterPreview, type MetadataActions } from "./metadata-views";
 import { useTaskWrites } from "./task-writes";
 import type { TaskDto } from "./tasks";
 import { useBulkSelection } from "./bulk-screens";
@@ -17,12 +18,21 @@ function useProjectNames(userId: string) {
   return { projects: projects.data ?? [], names: Object.fromEntries((projects.data ?? []).map(project => [project.id, project.name])) };
 }
 
-/** /labels and /filters (legacy MetadataDirectory). */
-export function MetadataScreen({ account, mode }: { account: Account; mode: "labels" | "filters" }) {
+/** /filters and /labels: the Filters & Labels page. */
+export function MetadataScreen({ account }: { account: Account }) {
   const userId = account.user.id;
   const cache = useQueryClient();
   const query = useQuery(metadataReads.list(userId));
   const { projects } = useProjectNames(userId);
+  // The dialog's preview runs the query here, over the cached tasks, in the viewer's zone.
+  const all = useQuery(reads.today(userId)).data?.tasks;
+  const sections = useQuery(organizationReads.destinations(userId)).data?.sections;
+  const labels = query.data?.labels;
+  const preview = useCallback<FilterPreview>((text) => {
+    const parsed = parseFilterQuery(text);
+    if (!parsed.ok) return { error: parsed.error };
+    return { groups: evaluateFilter(parsed.groups, all ?? [], { now: new Date(), labels: labels ?? [], projects, sections: sections ?? [] }) };
+  }, [all, labels, projects, sections]);
   const writes = useMemo(() => metadataMutations(metadata, cache, userId), [cache, userId]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +48,14 @@ export function MetadataScreen({ account, mode }: { account: Account; mode: "lab
     deleteLabel: (id) => run(() => writes.removeLabel(id)),
     saveFilter: (id, filter, operation) => run(() => id ? writes.updateFilter(id, filter) : writes.createFilter(operation, filter)),
     deleteFilter: (id) => run(() => writes.removeFilter(id)),
+    assistFilter: (description) => metadata.assistFilter(description),
   };
-  return <MetadataDirectory key={mode} mode={mode} state={query} onRetry={() => void query.refetch()} projects={projects} actions={actions} write={{ pending, error }} />;
+  return <MetadataDirectory state={query} onRetry={() => void query.refetch()} projects={projects} actions={actions} write={{ pending, error }} preview={preview} />;
+}
+
+/** The sidebar's Favorites section (favorite projects, filters and labels). */
+export function FavoritesSidebar({ userId }: { userId: string }) {
+  return <FavoritesNav metadata={useQuery(metadataReads.list(userId)).data} projects={useQuery(projectReads.list(userId)).data} />;
 }
 
 /**
@@ -72,7 +88,7 @@ export function FilterScreen({ account }: { account: Account }) {
   const { id = "" } = useParams();
   const query = useQuery(metadataReads.filter(account.user.id, id));
   const { slots } = useCollection(account, query.data?.tasks ?? []);
-  const data = query.data && { name: query.data.filter.name, tasks: query.data.tasks };
+  const data = query.data && { name: query.data.filter.name, description: query.data.filter.description, tasks: query.data.tasks, groups: query.data.groups };
   return <TaskCollectionView kind="filter" state={{ ...query, data }} onRetry={() => void query.refetch()} {...slots} />;
 }
 
