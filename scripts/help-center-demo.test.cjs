@@ -3,6 +3,9 @@ const assert = require("node:assert/strict");
 const { ACCOUNT, PROJECTS, GOALS, TASKS, localOrigin, assertFixtures, seedDemo } = require("./help-center-demo.cjs");
 const { options, apiClient, authenticate } = require("./docs-capture.cjs");
 
+// Playwright's APIResponse exposes ok() and status() as methods, unlike fetch's Response.
+const apiResponse = (status, body = null) => ({ ok: () => status >= 200 && status < 300, status: () => status, json: async () => JSON.parse(body), text: async () => body });
+
 function snapshot() {
   const projects = PROJECTS.map((fixture, index) => ({ ...fixture, id: `project-${index}`, description: null, archived: false }));
   return {
@@ -130,7 +133,7 @@ test("API requests disable redirects and do not expose response bodies on failur
     assert.equal(url, "http://localhost:5173/api/v1/account");
     assert.equal(settings.maxRedirects, 0);
     assert.equal(settings.headers.Origin, "http://localhost:5173");
-    return new Response("sensitive diagnostic", { status: 403 });
+    return apiResponse(403, "sensitive diagnostic");
   } }, "http://localhost:5173");
   await assert.rejects(api("GET", "/api/v1/account"), error => error.message.includes("HTTP 403") && !error.message.includes("sensitive"));
 });
@@ -140,8 +143,8 @@ test("sign-up requires explicit seeding and a 401, never an arbitrary server fai
     const calls = [];
     await assert.rejects(authenticate(async (method, route) => {
       calls.push(route);
-      return new Response(null, { status });
-    }, seed));
+      return apiResponse(status);
+    }, seed), error => error.message.includes(`HTTP ${status}`));
     assert.deepEqual(calls, ["/api/auth/sign-in/email"]);
   }
 });
