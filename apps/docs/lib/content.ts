@@ -5,7 +5,7 @@ import { docs } from "collections/server";
 import { loader } from "fumadocs-core/source";
 import { buildContent } from "./content-model";
 
-export { HELP_ORIGIN, isContentPreview, type Article, type ContentCategory } from "./content-model";
+export { HELP_ORIGIN, isContentPreview, type Article, type ContentCategory, type ContentSection } from "./content-model";
 
 export const content = buildContent(docs.docs.map((page) => page.article));
 

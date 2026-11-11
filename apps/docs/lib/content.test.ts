@@ -126,6 +126,29 @@ describe("publication boundary", () => {
     expect(content.articles.map((entry) => entry.slug)).toEqual(["first", "alpha", "zebra", "first"]);
     expect(content.categories.map((category) => category.slug)).toEqual(["tasks-capture", "coach"]);
   });
+
+  it("groups a category's articles into sections ordered by their first article", () => {
+    const content = loadContent(site({
+      "content/tasks-capture/repeat.mdx": article({ order: 3, section: "Dates & repeats" }),
+      "content/tasks-capture/quick-add.mdx": article({ order: 2, section: "Adding tasks" }),
+      "content/tasks-capture/dates.mdx": article({ order: 1, section: "Dates & repeats" }),
+      "content/tasks-capture/bulk.mdx": article({ order: 4, section: "Adding tasks" }),
+      "content/tasks-capture/hidden.mdx": article({ order: 5, section: "Drafts", published: false }),
+      "content/coach/intro.mdx": article({ category: "coach" }),
+    }));
+    const sections = (slug: string) => content.category(slug)?.sections.map((section) => ({
+      name: section.name, id: section.id, slugs: section.articles.map((entry) => entry.slug),
+    }));
+    expect(sections("tasks-capture")).toEqual([
+      { name: "Dates & repeats", id: "dates-repeats", slugs: ["dates", "repeat"] },
+      { name: "Adding tasks", id: "adding-tasks", slugs: ["quick-add", "bulk"] },
+    ]);
+    expect(sections("coach")).toEqual([{ name: "Coach", id: "coach", slugs: ["intro"] }]);
+  });
+
+  it("rejects an empty section", () => {
+    expect(() => loadContent(site({ "content/tasks-capture/a.mdx": article({ section: " " }) }))).toThrow(/invalid frontmatter/);
+  });
 });
 
 describe("frontmatter and address integrity", () => {
@@ -356,5 +379,9 @@ describe("real help-center content", () => {
     expect(content.category("coach")?.articles.every((entry) => entry.badge === "experiment")).toBe(true);
     expect(content.article("/apps-account/allow-notifications-and-the-microphone-on-mac")?.platforms).toEqual(["mac"]);
     expect(content.articles.map((entry) => entry.title)).toContain("What's new");
+    expect(content.articles.every((entry) => entry.section)).toBe(true);
+    expect(content.category("organise-views")?.sections.map((section) => section.name)).toEqual([
+      "Daily views", "Projects, labels & filters", "Layouts & search",
+    ]);
   });
 });

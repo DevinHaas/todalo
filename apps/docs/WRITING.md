@@ -237,11 +237,18 @@ title: "Bring your tasks from Todoist"
 description: "Import your Todoist projects, sections, tasks and labels into Todalo and choose what comes over."
 category: "get-started"
 order: 4
+section: "First steps"
 platforms: ["web", "mac"]
 related: ["/get-started/create-your-account-and-sign-in"]
 published: false
 ---
 ```
+
+`section` (optional) is the heading the article is listed under on its
+category page. Sections appear in the order of their first article (by
+`order`); an article without one is listed under the category's name. Keep
+sections few: two or three per category, or one for a small category. Reuse
+the exact spelling of an existing section, or you create a new one.
 
 Add `badge: "experiment"` to Coach articles. Leave `published: false`; the
 owner publishes after review.

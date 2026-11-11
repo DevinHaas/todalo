@@ -1,16 +1,29 @@
 import type { ReactNode } from "react";
+import { Icon } from "./icons";
+
+const CALLOUTS = {
+  tip: { label: "Tip", icon: "lightbulb" },
+  note: { label: "Note", icon: "info" },
+  warning: { label: "Warning", icon: "alert" },
+} as const;
 
 export function Callout({ type = "note", title, children }: {
-  type?: "tip" | "note" | "warning";
+  type?: keyof typeof CALLOUTS;
   title?: string;
   children: ReactNode;
 }) {
-  const label = title ?? { tip: "Tip", note: "Note", warning: "Warning" }[type];
-  return <aside className={`callout callout-${type}`} aria-label={label}><p className="callout-title">{label}</p><div>{children}</div></aside>;
+  const label = title ?? CALLOUTS[type].label;
+  return (
+    <aside className={`callout callout-${type}`} aria-label={label}>
+      <Icon name={CALLOUTS[type].icon} size={20} className="callout-icon" />
+      <p className="callout-title">{label}</p>
+      <div className="callout-body">{children}</div>
+    </aside>
+  );
 }
 
 export function Steps({ children }: { children: ReactNode }) {
-  return <ol className="article-steps">{children}</ol>;
+  return <ol>{children}</ol>;
 }
 
 export function Step({ children }: { children: ReactNode }) {

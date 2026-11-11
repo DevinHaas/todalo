@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { defaultPlatform, isPlatform, keyLabel, keyStyle, needsPlatformSwitcher, PLATFORM_KEY, PLATFORMS, platformScript, platformStyles, resolvePlatform } from "./platform";
+import { defaultPlatform, isPlatform, keyLabel, keyStyle, PLATFORM_KEY, PLATFORMS, platformScript, platformStyles, resolvePlatform } from "./platform";
 
 // "Reported OS" is what the browser says: navigator.userAgentData.platform
 // ("macOS", "Windows") or navigator.platform ("MacIntel", "Win32").
@@ -66,22 +66,6 @@ it("accepts the plus key itself", () => {
   expect(keyLabel("Mod++", "ctrl")).toBe("Ctrl++");
 });
 
-it("needs the switcher when the article has a platform block", () => {
-  const article = `Open the task.\n\n<Platform on="mac">\n\nPress the menu bar icon.\n\n</Platform>\n`;
-  expect(needsPlatformSwitcher(article)).toBe(true);
-});
-
-it("does not need the switcher when the article is the same on every platform", () => {
-  expect(needsPlatformSwitcher("Press <Kbd keys=\"Mod+K\" /> to search.\n")).toBe(false);
-  expect(needsPlatformSwitcher("Todalo runs on every platform.\n")).toBe(false);
-  expect(needsPlatformSwitcher("<PlatformList />\n")).toBe(false);
-});
-
-it("ignores a platform block that is only shown as example code", () => {
-  const article = "Authors write:\n\n```mdx\n<Platform on=\"mac\">Mac only</Platform>\n```\n";
-  expect(needsPlatformSwitcher(article)).toBe(false);
-});
-
 it("validates stored choices without accepting unknown or non-string values", () => {
   for (const platform of PLATFORMS) expect(isPlatform(platform)).toBe(true);
   for (const value of [undefined, null, 1, {}, "", "Mac", "ios"]) expect(isPlatform(value)).toBe(false);
@@ -91,29 +75,6 @@ it("shows one Ctrl when both Mod and Ctrl name the same physical key", () => {
   expect(keyLabel("Mod+Ctrl+K", "ctrl")).toBe("Ctrl+K");
   expect(keyLabel("Mod+Ctrl+K", "mac")).toBe("⌃⌘K");
   expect(keyLabel(" shift + MOD + K ", "mac")).toBe("⇧⌘K");
-});
-
-it("detects the public PlatformContent component, including multiline props", () => {
-  expect(needsPlatformSwitcher('<PlatformContent\n  on="web"\n>Browser steps</PlatformContent>')).toBe(true);
-  expect(needsPlatformSwitcher('<PlatformContent on="mac" />')).toBe(true);
-  expect(needsPlatformSwitcher("<PlatformContentList />")).toBe(false);
-  expect(needsPlatformSwitcher('<Steps>\n    <PlatformContent on="mac">Mac steps</PlatformContent>\n</Steps>')).toBe(true);
-});
-
-it("ignores inline code, comments and frontmatter mentioning the component", () => {
-  expect(needsPlatformSwitcher('Use `<Platform on="mac">` to add steps.')).toBe(false);
-  expect(needsPlatformSwitcher('Use ``<PlatformContent on="web" />``.')).toBe(false);
-  expect(needsPlatformSwitcher('<!-- <Platform on="mac" /> -->')).toBe(false);
-  expect(needsPlatformSwitcher('{/* <PlatformContent on="mac" /> */}')).toBe(false);
-  expect(needsPlatformSwitcher('---\ntitle: \'<Platform on="mac" />\'\n---\nAn article.')).toBe(false);
-});
-
-it("handles tilde fences, nested fence examples, CRLF and unterminated fences", () => {
-  expect(needsPlatformSwitcher('~~~mdx\n<Platform on="mac" />\n~~~')).toBe(false);
-  expect(needsPlatformSwitcher('````mdx\n```\n<Platform on="mac" />\n```\n````')).toBe(false);
-  expect(needsPlatformSwitcher('```mdx\r\n<Platform on="mac" />\r\n```')).toBe(false);
-  expect(needsPlatformSwitcher('```mdx\n<PlatformContent on="mac" />')).toBe(false);
-  expect(needsPlatformSwitcher('~~~mdx\nAn example\n~~~\n<Platform on="mac" />')).toBe(true);
 });
 
 type Visitor = {
@@ -179,10 +140,9 @@ it("preserves the current page choice if the provider remounts with blocked stor
   expect(pagePlatform({ existingPlatform: "unknown", reportedOS: "macOS" })["data-platform"]).toBe("mac");
 });
 
-it("generates source-preserving hiding and selection rules for every launch platform", () => {
+it("generates source-preserving hiding rules for every launch platform", () => {
   for (const platform of PLATFORMS) {
     expect(platformStyles).toContain(`html[data-platform="${platform}"] [data-platform-content]:not([data-platform-content="${platform}"]) { display: none !important; }`);
-    expect(platformStyles).toContain(`[data-platform-choice="${platform}"]`);
   }
   expect(platformStyles).toContain('html[data-key-style="mac"]');
   expect(platformStyles).toContain('html[data-key-style="ctrl"]');
