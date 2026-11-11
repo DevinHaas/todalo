@@ -36,3 +36,5 @@ Places where the app contradicts the spec, `CONTEXT.md` or itself:
 
 Checks: docs tests 100/100, typecheck, lint, production build, preview content validation (40 articles), and in preview mode `/organise-views` plus all eight article URLs return 200 (server stopped afterwards).
 
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

@@ -35,12 +35,18 @@ mod tests {
     }
 
     #[test]
+    fn opens_a_listed_article() {
+        assert_eq!(
+            help_url(Some("google-calendar")).as_deref(),
+            Some("https://help.todalo.app/integrations/use-google-calendar-with-todalo")
+        );
+    }
+
+    #[test]
     fn refuses_anything_that_is_not_a_listed_article() {
         for value in [
             "",
             "unknown",
-            // Parked under "unpublished" until the Integrations category is published.
-            "google-calendar",
             "https://evil.example",
             "/integrations/use-google-calendar-with-todalo",
             "@evil.example",

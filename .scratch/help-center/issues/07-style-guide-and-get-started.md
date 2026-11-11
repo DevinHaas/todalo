@@ -36,3 +36,5 @@ Places where the app contradicts the spec or looks broken:
 
 Checks: docs tests 100/100, typecheck, lint, production build (0 published), preview content validation (40 articles), and in preview mode all five article URLs plus `/get-started` return 200. Only the two articles that have platform blocks render the switcher.
 
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

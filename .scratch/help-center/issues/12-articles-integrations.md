@@ -38,3 +38,5 @@ Where the app and the code, spec or itself disagree, or look wrong:
 12. With no account, the screen says "Sign in with Google to get started." next to **Link another Google account** (already noted in ticket 07).
 
 Checks: docs tests 100/100, typecheck, lint, production build, preview content validation (40 articles), and in preview mode (port 3006) `/integrations` and both article URLs return 200 (server stopped afterwards).
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

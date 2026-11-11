@@ -46,3 +46,5 @@ Mismatches between the app, the spec and itself:
 9. The `ritual.season-review` note typo from ticket 10 is still in `keyboard.ts` (not user-visible).
 
 Checks: docs tests 107/107, typecheck, lint, production build; in preview mode `/apps-account` and all seven article URLs return 200 (the shortcut table renders 136 rows, What's new lists 0.1.0); server stopped afterwards.
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

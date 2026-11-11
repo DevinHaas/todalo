@@ -35,3 +35,5 @@ Deviations and open points:
 ### 2026-11-11 (agent, branch `help-center-review-fixes`)
 
 The Settings › Calendars hint now links to the help center home, because the Google Calendar article is unpublished and would 404. Its address is parked under `unpublished` in `apps/client/src/help-links.json`. **When the Integrations category is published:** move `google-calendar` back under `articles`, change `helpLink()` in `apps/client/src/calendar-views.tsx` to `helpLink("google-calendar")`, and restore the article expectations in `apps/client/src/help.test.ts` and `src-tauri/src/help.rs`.
+
+2026-11-11 — Integrations published: the calendar hint links to `/integrations/use-google-calendar-with-todalo` again (help-links.json `articles`, client test and Rust allow-list test updated).

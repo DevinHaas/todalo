@@ -63,7 +63,7 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
     {error && <p className="error" role="alert">{error}</p>}
     {body}
     <div className="calendar-link">
-      <p className="setting-hint"><a className="text-action" {...helpLink(/* "google-calendar" once Integrations is published */)}>Find out how to show events from multiple accounts.</a></p>
+      <p className="setting-hint"><a className="text-action" {...helpLink("google-calendar")}>Find out how to show events from multiple accounts.</a></p>
       {link}
     </div>
   </section>;

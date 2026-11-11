@@ -348,20 +348,23 @@ describe("git update metadata", () => {
 });
 
 describe("real help-center content", () => {
-  it("declares seven ordered categories and keeps every unreviewed stub private", () => {
+  it("declares seven ordered categories and publishes every article without preview", () => {
     const content = loadContent({ preview: false });
     expect(categories.map((category) => category.name)).toEqual([
       "Get started", "Tasks & capture", "Organise & views", "Goals, seasons & rituals", "Coach", "Integrations", "Apps & account",
     ]);
     expect(categories.map((category) => category.order)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(new Set(categories.map((category) => category.slug)).size).toBe(7);
-    expect(content.articles).toEqual([]);
-    expect(content.categories).toEqual([]);
-    expect(content.search).toEqual([]);
-    expect(content.sitemap).toEqual([{ url: "/", updatedAt: null }]);
+    expect(content.articles).toHaveLength(40);
+    expect(content.categories).toHaveLength(7);
+    expect(content.search.length).toBeGreaterThanOrEqual(40);
+    const sitemap = content.sitemap.map((entry) => entry.url);
+    for (const url of ["/", ...content.categories.map((category) => `/${category.slug}`), ...content.articles.map((entry) => entry.url)]) {
+      expect(sitemap).toContain(url);
+    }
   });
 
-  it("loads all 40 explicitly named spec topics as complete, uniquely addressed drafts", () => {
+  it("loads all 40 explicitly named spec topics as complete, uniquely addressed, published articles", () => {
     const content = loadContent({ preview: true });
     expect(content.articles).toHaveLength(40);
     expect(content.categories.map((category) => category.articles.length)).toEqual([5, 9, 8, 5, 4, 2, 7]);
@@ -370,7 +373,7 @@ describe("real help-center content", () => {
       expect(category.articles.map((entry) => entry.order)).toEqual(category.articles.map((_, index) => index + 1));
       for (const entry of category.articles) {
         expect(articleSchema.safeParse(entry).success).toBe(true);
-        expect(entry.published).toBe(false);
+        expect(entry.published).toBe(true);
         expect(entry.url).toMatch(/^\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
         expect(entry.category).toBe(category.slug);
         expect(entry.slug).not.toBe("placeholder");

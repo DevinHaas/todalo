@@ -37,3 +37,5 @@ Places where the app contradicts the spec, `CONTEXT.md` or itself:
 11. Ritual notifications only fire while the app is open (client-side check every 30 s); the Settings hint says so and the article repeats it.
 
 Checks: docs tests 100/100, typecheck, lint, production build, and in preview mode `/goals-seasons-rituals` plus all five article URLs return 200 (server stopped afterwards).
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

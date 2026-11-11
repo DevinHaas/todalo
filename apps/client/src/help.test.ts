@@ -23,11 +23,9 @@ describe("help center links", () => {
     expect(helpLink().href).toBe("https://help.todalo.app");
   });
 
-  // Integrations is not published yet: the article waits under "unpublished"
-  // until it is, so no link can lead to a missing page.
-  it("links no unpublished article", () => {
-    expect(links.articles).toEqual({});
-    expect(links.unpublished).toEqual({ "google-calendar": "/integrations/use-google-calendar-with-todalo" });
+  it("links the published Google Calendar article", () => {
+    expect(helpLink("google-calendar").href).toBe("https://help.todalo.app/integrations/use-google-calendar-with-todalo");
+    expect(links.unpublished).toEqual({});
   });
 
   it("is a plain new-tab link in the browser", () => {
@@ -49,12 +47,12 @@ describe("help center links", () => {
 });
 
 describe("calendar settings", () => {
-  it("links the multiple-accounts hint to the help center until the Google Calendar article is published", () => {
+  it("links the multiple-accounts hint to the Google Calendar article", () => {
     const html = renderToStaticMarkup(createElement(CalendarSettings, {
       state: { status: "success", error: null, data: [] }, onRetry: () => undefined,
       actions: {} as never, pending: new Set<string>(), error: null, link: null,
     } as never));
-    expect(html).toContain('href="https://help.todalo.app"');
+    expect(html).toContain('href="https://help.todalo.app/integrations/use-google-calendar-with-todalo"');
     expect(html).toContain("show events from multiple accounts");
   });
 });

@@ -38,3 +38,5 @@ Mismatches between the app, the spec, `CONTEXT.md` and the ADRs (the articles fo
 9. The recommendation button reads "Chat with coach" (lower-case c), unlike "Coach" elsewhere. Not quoted in the articles.
 
 Checks: docs tests 100/100, typecheck, lint, production build, preview content validation (40 articles); in preview mode `/coach` and all four article URLs return 200, articles show the Experiment badge (server stopped afterwards).
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.

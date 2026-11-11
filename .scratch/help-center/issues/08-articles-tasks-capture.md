@@ -35,3 +35,5 @@ Where the app and the spec or `CONTEXT.md` disagree, or the app looks wrong:
 11. `CONTEXT.md` lists "dictation" under _Avoid_ for Ramble session, but the spec's title is "Dictate tasks with Ramble". I kept the title and avoided the noun in the body.
 
 Checks: docs tests 100/100, typecheck, lint and production build pass; preview content validation passes (40 articles); in preview mode all nine article URLs and `/tasks-capture` return 200.
+
+2026-11-11 — Published on the owner's request (`published: true`), merged to main.
