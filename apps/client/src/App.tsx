@@ -56,8 +56,11 @@ export default function App() {
     </ComposerChoicesProvider></SmartDatesProvider></BrowserRouter>;
   }
 
-  return <main className="centered"><section className="account-panel" aria-busy={pending || state.status === "loading"}>
-    {state.status === "loading" ? <p role="status">Loading your account…</p> : state.status === "error" ? <>
+  // Same markup as index.html's boot splash, so launch → account load is one continuous animation.
+  if (state.status === "loading") return <div className="boot" role="status" aria-label="Loading your account"><img src="/bonsai-loader.svg" alt="" /></div>;
+
+  return <main className="centered"><section className="account-panel" aria-busy={pending}>
+    {state.status === "error" ? <>
       <h1>Account unavailable</h1><p role="alert">{state.error}</p>
       <button onClick={() => void session.refresh()}>Try again</button>
     </> : <>

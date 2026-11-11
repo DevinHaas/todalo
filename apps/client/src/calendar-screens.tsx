@@ -7,7 +7,7 @@ import { calendarMutations, startLiveUpdates, type CalendarEventDto } from "./ca
 import { CalendarSettings } from "./calendar-views";
 import { GoogleButton } from "./google";
 import { inlineError } from "./toasts";
-import { Button, Spinner } from "./ui";
+import { Button } from "./ui";
 
 const none: CalendarEventDto[] = [];
 /** The user's visible provider events; a failed read just shows no events (tasks still render). */
@@ -33,8 +33,7 @@ export function useSyncReload(userId: string) {
     void Promise.all([sync.reload().catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))]).finally(() => setReloading(false));
   };
   const splash = reloading && <div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
-    <img src="/todalo-logo.svg" alt="todalo" className="size-16 dark:invert" />
-    <Spinner />
+    <img src="/bonsai-loader.svg" alt="" className="w-24 dark:invert" />
   </div>;
   return { sync, reload, splash };
 }
