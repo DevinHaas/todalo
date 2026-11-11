@@ -1,11 +1,89 @@
 ---
 title: "Introduction to recurring dates"
-description: "Repeat tasks from their due date or completion date."
+description: "Make a task repeat, choose whether it counts from its date or from when you complete it, and set an end."
 category: "tasks-capture"
 order: 4
 platforms: ["web", "mac"]
-related: []
+related: ["/tasks-capture/schedule-a-date-and-time", "/tasks-capture/use-quick-add", "/tasks-capture/introduction-to-tasks"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+Some tasks never stay done: watering the plants, paying the rent, a weekly call. Instead of adding them again each time, give the task a recurring date. When you complete it, Todalo moves it on to its next date and keeps it in your list.
+
+## How a recurring task works
+
+A recurring date has three parts:
+
+- How often: every so many days, weeks, months or years. Every day, every 2 weeks and every 3 months all fit.
+- What it counts from: the task's date, or the day you complete it. The next section explains the difference.
+- When it ends: never, or on a date you choose.
+
+A recurring task shows a repeat icon next to its date in your lists. To see its rule, open the task and click its date: the rule is under **Repeat**.
+
+When you complete a recurring task, it isn't ticked off. Its date moves on by one step, and it's back on your list on that day. Once a next date would fall after the end date, completing the task ticks it off for good.
+
+## Repeat from the date or from completion
+
+The difference matters when you're late. Say a task repeats every week and is due on Monday, and you complete it on Wednesday.
+
+| Counts from | Next date | Use it for |
+| --- | --- | --- |
+| **Scheduled date** | The Monday after | Things tied to the calendar: bins, rent, a weekly meeting |
+| **Completed date** | The Wednesday after | Things that should happen a set time after you last did them: watering plants, a haircut, changing a filter |
+
+With **Scheduled date**, a task you're late with keeps its rhythm, so it can come due again soon after you complete it. With **Completed date**, the gap after each completion stays the same, however late you were.
+
+Every repeat counts from the scheduled date unless you choose **Completed date** in a custom repeat.
+
+## Type a repeat into the task name
+
+With smart date recognition on, you can type the repeat as part of the name while you add the task:
+
+| Type this | To get this |
+| --- | --- |
+| `every day` or `daily` | Every day |
+| `every week` or `weekly` | Every week |
+| `every month` or `monthly` | Every month |
+| `every year` | Every year |
+| `every 3 days`, `every 2 weeks`, `every 6 months` | Every so many days, weeks, months or years |
+
+Add a date to set where it starts: `Pay rent every month 1.12` repeats monthly from 1 December. A typed repeat always counts from the scheduled date.
+
+<Note>Give a recurring task a date as well. A repeat without a date has nothing to count from, so the task waits in your list until you first complete it.</Note>
+
+Todalo doesn't understand weekday rules such as `every monday` or `every weekday`. To repeat on Mondays, set the date to a Monday and choose a weekly repeat.
+
+## Choose a repeat while adding a task
+
+To set a repeat from Quick Add:
+
+<Steps>
+<Step>Type the task, then click the **Date** chip under the name.</Step>
+<Step>Pick the first date.</Step>
+<Step>Under **Repeat**, choose **Every day**, the weekly option (for example **Every week on Friday**) or the monthly option (for example **Every month on the 12th**).</Step>
+<Step>Press Enter to add the task.</Step>
+</Steps>
+
+For every so many days, type the number next to **Every**, then click **Set**. For anything else, click **Custom…**.
+
+## Set a custom repeat
+
+A custom repeat lets you count from completion, repeat in weeks, months or years at any interval, and set an end date. To set one:
+
+<Steps>
+<Step>In Quick Add, click the **Date** chip, then **Custom…**.</Step>
+<Step>Under **Based on**, choose **Scheduled date** or **Completed date**.</Step>
+<Step>Next to **Every**, type a number and choose day, week, month or year.</Step>
+<Step>Under **Ends**, choose **Never**, or **On date** and pick an **End date**.</Step>
+<Step>Click **Set**.</Step>
+</Steps>
+
+To give an existing task a custom repeat, move to it in a list with the arrow keys and press <Shortcut keys="Mod+E" />. The task opens in the same card as Quick Add, with the same **Date** chip.
+
+## Change or remove a recurring date
+
+Open the task and click its date next to **Date**. Under **Repeat**, choose **Daily**, **Weekly** or **Monthly**, or **Does not repeat** to stop the task repeating. Then click **Save**.
+
+A task with a custom repeat shows its rule in the same list. To change a custom rule, edit the task with <Shortcut keys="Mod+E" /> and choose **Custom…** again.
+
+<Note>The repeat choices in the open task always count from the scheduled date. To repeat from completion, use a custom repeat.</Note>
