@@ -63,31 +63,6 @@ export function keyLabel(keys: string, style: KeyStyle): string {
   return [...new Set(modifiers), ...rest].join(style === "mac" ? "" : "+");
 }
 
-export function needsPlatformSwitcher(source: string): boolean {
-  let fence: string | undefined;
-  const prose = source
-    .replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "")
-    .replace(/<!--[\s\S]*?-->|\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
-    .split(/\r?\n/)
-    .map((line) => {
-      const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-      if (fence) {
-        if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) {
-          fence = undefined;
-        }
-        return "";
-      }
-      if (marker) {
-        fence = marker[1];
-        return "";
-      }
-      return line;
-    })
-    .join("\n")
-    .replace(/(`+)[\s\S]*?\1/g, "");
-  return /<(?:Platform|PlatformContent)(?=[\s/>])/.test(prose);
-}
-
 export const platformScript = `(function () {
   var root = document.documentElement;
   var platforms = ${JSON.stringify(PLATFORMS)};
@@ -104,10 +79,9 @@ export const platformScript = `(function () {
 export const platformStyles = [
   'html:not([data-platform]) [data-platform-content]:not([data-platform-content="web"]) { display: none !important; }',
   'html:not([data-key-style]) [data-key-style-content="mac"] { display: none !important; }',
-  ...PLATFORMS.flatMap((platform) => [
-    `html[data-platform="${platform}"] [data-platform-content]:not([data-platform-content="${platform}"]) { display: none !important; }`,
-    `html[data-platform="${platform}"] [data-platform-choice="${platform}"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }`,
-  ]),
+  ...PLATFORMS.map(
+    (platform) => `html[data-platform="${platform}"] [data-platform-content]:not([data-platform-content="${platform}"]) { display: none !important; }`,
+  ),
   ...(["mac", "ctrl"] as const).map(
     (style) => `html[data-key-style="${style}"] [data-key-style-content]:not([data-key-style-content="${style}"]) { display: none !important; }`,
   ),

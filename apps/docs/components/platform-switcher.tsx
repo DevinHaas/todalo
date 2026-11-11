@@ -1,29 +1,28 @@
 "use client";
 
-import { PLATFORMS, PLATFORM_LABELS } from "../lib/platform";
+import { useId } from "react";
+import { PLATFORMS, PLATFORM_LABELS, isPlatform } from "../lib/platform";
+import { Icon } from "./icons";
 import { usePlatform } from "./platform-provider";
 
-export type PlatformSwitcherProps = { hasPlatformContent: boolean; className?: string };
-
-export function PlatformSwitcher({ hasPlatformContent, className }: PlatformSwitcherProps) {
+/**
+ * "Select Platform:" with a select pill. Every instance reads and writes the one
+ * global, remembered choice, so they stay in sync.
+ */
+export function PlatformSwitcher({ className = "platform-select" }: { className?: string }) {
   const { platform, setPlatform } = usePlatform();
-  if (!hasPlatformContent) return null;
+  const id = useId();
+  // ponytail: before hydration the select shows Web even when Mac is remembered (the content
+  // itself is already right, via CSS). Render the options per platform if that flash matters.
   return (
-    <div role="group" aria-label="Platform" className={className}>
-      <div className="inline-flex gap-1 rounded-lg border border-ink/15 bg-paper p-1">
-        {PLATFORMS.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            aria-pressed={platform === choice}
-            data-platform-choice={choice}
-            className="cursor-pointer rounded-md border border-transparent px-3 py-1 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-            onClick={() => setPlatform(choice)}
-          >
-            {PLATFORM_LABELS[choice]}
-          </button>
-        ))}
-      </div>
+    <div className={className}>
+      <label htmlFor={id}>Select Platform:</label>
+      <span className="select-pill">
+        <select id={id} value={platform} onChange={(event) => isPlatform(event.target.value) && setPlatform(event.target.value)}>
+          {PLATFORMS.map((choice) => <option key={choice} value={choice}>{PLATFORM_LABELS[choice]}</option>)}
+        </select>
+        <Icon name="chevron-down" />
+      </span>
     </div>
   );
 }

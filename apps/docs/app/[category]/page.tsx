@@ -3,29 +3,47 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { content } from "@/lib/content";
 import { Support } from "@/components/support";
-import { Illustration } from "@/components/illustration-slot";
+import { PageChrome } from "@/components/page-chrome";
+import { CategoryNav } from "@/components/category-nav";
+import { Icon } from "@/components/icons";
 
 type Props = { params: Promise<{ category: string }> };
 
 function getCategory(slug: string) {
   const category = content.category(slug);
   if (!category) notFound();
-  return { category, articles: category.articles };
+  return category;
 }
 
 export default async function CategoryPage({ params }: Props) {
-  const { category, articles } = getCategory((await params).category);
+  const category = getCategory((await params).category);
   return <>
-    <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Help center</Link><span aria-hidden="true">/</span><span aria-current="page">{category.name}</span></nav>
-    <header className="category-heading"><div><p className="eyebrow">{articles.length} {articles.length === 1 ? "guide" : "guides"}</p><h1>{category.name}</h1><p>{category.tagline}</p></div><Illustration src={category.illustration} compact /></header>
-    <nav className="category-switcher" aria-label="Categories">{content.categories.map((entry) => <Link key={entry.slug} href={`/${entry.slug}`} className="search-chip" aria-current={entry.slug === category.slug ? "page" : undefined}>{entry.name}</Link>)}</nav>
-    <div className="article-list">{articles.map((article) => <Link key={article.url} href={article.url}><div><h2>{article.title}</h2><p>{article.description}</p></div><span aria-hidden="true">↗</span></Link>)}</div>
-    <Support title="Couldn’t find what you need?" />
+    <PageChrome trail={[{ label: "Help Center", href: "/" }, { label: category.name }]} />
+    <h1 className="sr-only">{category.name}</h1>
+    <div className="category-layout">
+      <CategoryNav
+        categories={content.categories.map(({ slug, name }) => ({ slug, name }))}
+        current={category.slug}
+        sections={category.sections.map((section) => ({ title: section.name, url: `#${section.id}` }))}
+      />
+      <div>
+        {category.sections.map((section) => <section key={section.id} className="category-section" aria-labelledby={section.id}>
+          <h2 id={section.id}>{section.name}</h2>
+          <ul className="article-grid">{section.articles.map((article) => <li key={article.url}>
+            <Link href={article.url}>
+              <span>{article.title}</span>
+              <span className="read-pill" aria-hidden="true">Read article <Icon name="arrow-right" /></span>
+            </Link>
+          </li>)}</ul>
+        </section>)}
+        <Support title="Couldn’t find what you need?" />
+      </div>
+    </div>
   </>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { category } = getCategory((await params).category);
+  const category = getCategory((await params).category);
   return { title: category.name, description: category.tagline, alternates: { canonical: `/${category.slug}` } };
 }
 

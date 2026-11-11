@@ -13,7 +13,8 @@ export type Article = ArticleFrontmatter & {
   updatedAt: string | null;
 };
 
-export type ContentCategory = Category & { articles: Article[] };
+export type ContentSection = { name: string; id: string; articles: Article[] };
+export type ContentCategory = Category & { articles: Article[]; sections: ContentSection[] };
 export type ContentOptions = {
   dir?: string;
   publicDir?: string;
@@ -43,10 +44,10 @@ export function buildContent(allArticles: readonly Article[], options: ContentOp
   const articles = allArticles.filter((article) => article.published || preview).sort((first, second) =>
     (categoryOrder.get(first.category)! - categoryOrder.get(second.category)!) ||
     first.order - second.order || first.slug.localeCompare(second.slug));
-  const visibleCategories = categories.map((category) => ({
-    ...category,
-    articles: articles.filter((article) => article.category === category.slug),
-  })).filter((category) => category.articles.length > 0);
+  const visibleCategories = categories.map((category) => {
+    const categoryArticles = articles.filter((article) => article.category === category.slug);
+    return { ...category, articles: categoryArticles, sections: sectionsOf(category.name, categoryArticles) };
+  }).filter((category) => category.articles.length > 0);
   const byUrl = new Map(articles.map((article) => [article.url, article]));
   const byCategory = new Map(visibleCategories.map((category) => [category.slug as string, category]));
 
@@ -65,4 +66,16 @@ export function buildContent(allArticles: readonly Article[], options: ContentOp
       ...articles.map(({ url, updatedAt }) => ({ url, updatedAt })),
     ],
   };
+}
+
+/** A category's articles grouped by `section`, sections in order of their first article. */
+function sectionsOf(categoryName: string, articles: Article[]): ContentSection[] {
+  const sections = new Map<string, Article[]>();
+  for (const article of articles) {
+    const name = article.section ?? categoryName;
+    sections.set(name, [...(sections.get(name) ?? []), article]);
+  }
+  return [...sections].map(([name, entries]) => ({
+    name, id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), articles: entries,
+  }));
 }

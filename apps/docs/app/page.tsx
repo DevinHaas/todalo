@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SearchTrigger } from "@/components/help-search";
+import { SearchBar, SearchTrigger } from "@/components/help-search";
 import { Illustration } from "@/components/illustration-slot";
 import { Support } from "@/components/support";
 import { content } from "@/lib/content";
@@ -10,7 +10,7 @@ export default function HelpHome() {
   const visibleCategories = content.categories;
   return <>
     <section className="help-hero">
-      <div><p className="eyebrow">A little guidance, a clearer day</p><h1>How can we help?</h1><p>Find your feet, make room for what matters, and get more out of Todalo.</p><SearchTrigger /><div className="suggested-searches"><span>Try:</span>{suggestions.map((query) => <SearchTrigger key={query} query={query} className="search-chip">{query}</SearchTrigger>)}</div></div>
+      <div><p className="eyebrow">A little guidance, a clearer day</p><h1>How can we help?</h1><p>Find your feet, make room for what matters, and get more out of Todalo.</p><SearchBar /><div className="suggested-searches"><span>Try:</span>{suggestions.map((query) => <SearchTrigger key={query} query={query} className="search-chip">{query}</SearchTrigger>)}</div></div>
       <Illustration src="/illustrations/hero.webp" priority />
     </section>
     <section className="browse-section" aria-labelledby="browse-title"><div className="section-heading"><h2 id="browse-title">Explore the guides</h2><p>A good place to start, wherever you are.</p></div>

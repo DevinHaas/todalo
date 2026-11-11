@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useStaticSearch } from "fumadocs-core/search/client";
 import posthog from "posthog-js";
+import { Icon } from "./icons";
 
 export type SearchArticle = { url: string; title: string; description: string; category: string };
 const SearchContext = createContext<(query?: string) => void>(() => {});
@@ -58,4 +59,14 @@ export function HelpSearchProvider({ articles, children }: { articles: SearchArt
 export function SearchTrigger({ query, children, className = "search-trigger" }: { query?: string; children?: ReactNode; className?: string }) {
   const openSearch = useContext(SearchContext);
   return <button type="button" className={className} onClick={() => openSearch(query)}>{children ?? <><span aria-hidden="true">⌕</span> Search help <span aria-hidden="true">↗</span></>}</button>;
+}
+
+/** The full-width search field at the top of pages; opens the search dialog. */
+export function SearchBar() {
+  return (
+    <SearchTrigger className="search-bar">
+      <Icon name="search" size={20} /><span>Search</span><span className="sr-only"> help</span>
+      <span className="search-bar-go" aria-hidden="true"><Icon name="arrow-right" /></span>
+    </SearchTrigger>
+  );
 }

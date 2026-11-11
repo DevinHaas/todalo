@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 
 export type Heading = { title: string; url: string };
 
-export function TableOfContents({ headings }: { headings: Heading[] }) {
+/** The `#anchor` of the last heading scrolled past (the first one at the top of the page). */
+export function useActiveHeading(headings: Heading[]) {
   const [active, setActive] = useState(headings[0]?.url);
 
   useEffect(() => {
@@ -21,23 +22,29 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
     return () => window.removeEventListener("scroll", update);
   }, [headings]);
 
-  if (!headings.length) return null;
+  return active;
+}
 
-  const links = (
-    <ul className="toc-list">
-      {headings.map((heading) => (
-        <li key={heading.url}>
-          <a href={heading.url} aria-current={active === heading.url ? "location" : undefined}>
-            {heading.title}
-          </a>
+/** Sidebar links with the red bar on the current one. */
+export function SideLinks({ links, active }: { links: Heading[]; active?: string }) {
+  return (
+    <ul className="side-links">
+      {links.map((link) => (
+        <li key={link.url}>
+          <a href={link.url} aria-current={active === link.url ? "location" : undefined}>{link.title}</a>
         </li>
       ))}
     </ul>
   );
+}
 
+export function TableOfContents({ headings }: { headings: Heading[] }) {
+  const active = useActiveHeading(headings);
+  if (!headings.length) return null;
+  const links = <SideLinks links={headings} active={active} />;
   return (
-    <nav aria-label="On this page">
-      <div className="desktop-toc"><h2 className="sidebar-title">On this page</h2>{links}</div>
+    <nav aria-label="On this page" className="toc">
+      <div className="desktop-toc"><h2 className="sidebar-title">Table of Contents</h2>{links}</div>
       <details className="mobile-toc"><summary>On this page</summary>{links}</details>
     </nav>
   );

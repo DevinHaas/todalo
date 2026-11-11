@@ -11,6 +11,8 @@ export const articleSchema = pageSchema.extend({
   description: z.string().trim().min(1),
   category: z.enum(categories.map((category) => category.slug)),
   order: z.number().int().positive(),
+  /** Heading the article is listed under on its category page; defaults to the category name. */
+  section: z.string().trim().min(1).optional(),
   platforms: z.array(z.enum(["web", "mac", "ios"])).min(1)
     .refine((values) => new Set(values).size === values.length, "Platforms must be unique"),
   related: z.array(z.string().regex(articleUrlPattern)).max(4)
