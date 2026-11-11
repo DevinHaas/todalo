@@ -110,6 +110,16 @@ const SHOTS = [
     crop: page => page.getByRole("form", { name: "Season setup: Goals", exact: true }),
   },
   {
+    // Use keyboard shortcuts: Settings › Keyboard shortcuts, the top of the list with its search, filters and profile menu.
+    name: "keyboard-shortcut-settings",
+    route: "/inbox",
+    steps: async page => {
+      await page.goto(`${page.url().replace(/\/inbox$/, "")}/settings/keyboard-shortcuts`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("textbox", { name: "Search keyboard shortcuts", exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true }),
+  },
+  {
     // Use Google Calendar with Todalo: one connected account's card. The demo account has no
     // Google account, so the account list is a synthetic read; every write is refused.
     name: "calendar-settings",
