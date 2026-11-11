@@ -119,6 +119,27 @@ const SHOTS = [
     },
     crop: page => page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true }),
   },
+  {
+    // Use Google Calendar with Todalo: one connected account's card. The demo account has no
+    // Google account, so the account list is a synthetic read; every write is refused.
+    name: "calendar-settings",
+    route: "/inbox",
+    steps: async page => {
+      await page.route(url => url.pathname.startsWith("/api/v1/calendar/accounts"), route => route.request().method() === "GET"
+        ? route.fulfill({ json: { accounts: [{
+          id: "acct-demo", email: "alex.demo@gmail.com", needsConsent: false, hasSyncError: false, showEvents: true,
+          calendars: [
+            { id: "primary", summary: "Alex Demo", color: "#4285f4", enabled: true },
+            { id: "family", summary: "Family", color: "#33b679", enabled: true },
+            { id: "holidays", summary: "Holidays in Switzerland", color: "#8e24aa", enabled: false },
+          ],
+        }] } })
+        : route.abort());
+      await page.goto(`${page.url().replace(/\/inbox$/, "")}/settings/calendars`, { waitUntil: "domcontentloaded" });
+      await page.getByText("alex.demo@gmail.com", { exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.locator(".calendar-card"),
+  },
 ];
 
 function options(args) {
