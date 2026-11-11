@@ -1,11 +1,150 @@
 ---
 title: "Introduction to filters"
-description: "Build task views with queries and Filter Assist."
+description: "Save custom task views with filter queries, or describe one in plain words and let Filter Assist write it."
 category: "organise-views"
 order: 4
 platforms: ["web", "mac"]
-related: []
+related: ["/organise-views/introduction-to-labels", "/organise-views/find-anything-with-search", "/coach/connect-an-ai-provider", "/organise-views/plan-your-day-with-the-today-view"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+Today and Upcoming answer "what's due when". Sometimes you need a different question answered: everything urgent at work, errands due this week, tasks with no date at all. A filter is a saved view built from a short query, and it always shows your open tasks that match it right now. If you'd rather not learn the syntax, Filter Assist can write the query for you.
+
+## Create a filter
+
+To create a filter:
+
+<Steps>
+<Step>Click **Filters & Labels** in the sidebar.</Step>
+<Step>Click the plus button beside **My Filters** (**Add filter**).</Step>
+<Step>Type a **Name**, for example `Work this week`.</Step>
+<Step>Type the query in **Query**, for example `#Work & 7 days`. The **Preview** below shows the matching tasks as you type.</Step>
+<Step>Optionally add a **Description**, pick a **Color** and switch on **Add to favorites**.</Step>
+<Step>Click **Add**.</Step>
+</Steps>
+
+The filter appears under **My Filters**. Click it to open its page.
+
+{/* screenshot: filter-dialog */}
+
+If Todalo can't read the query, the preview says why instead of listing tasks, and **Add** stays unavailable until you fix it.
+
+<Tip>Press <Shortcut keys="G" /> then <Shortcut keys="V" /> to open Filters & Labels from anywhere.</Tip>
+
+## Let Filter Assist write the query
+
+Filter Assist turns a plain description into a query. To use it:
+
+<Steps>
+<Step>In the **Add filter** dialog, click **Try it** beside **Filter Assist**.</Step>
+<Step>Describe what you want in **Describe the filter**, for example `High-priority work due this week`.</Step>
+<Step>Click **Generate**. Todalo shows "Query added below. Check the preview before saving." and fills in **Query**.</Step>
+<Step>Check the **Preview**, adjust the query if you need to, then add a name and click **Add**.</Step>
+</Steps>
+
+Filter Assist knows the names of your projects, sections and labels, so it can refer to them.
+
+<Note>Filter Assist uses the Coach's AI provider. Until you connect one, it shows "Connect the Coach in Settings › Coach to use Filter Assist." See [Connect an AI provider](/coach/connect-an-ai-provider).</Note>
+
+## Open and manage filters
+
+A filter's page lists its matching open tasks under **Today**, **Upcoming** and **No date**. If the filter has a description, it shows under the name. Click **Manage filters** to go back to the list.
+
+On the Filters & Labels page, hover over a filter to see its buttons. **Edit** opens the same dialog as **Add filter**; click **Save** when you're done. The heart adds it to the sidebar's **Favorites**, or removes it. **Delete** removes the filter after you confirm; your tasks are not touched.
+
+### Show several lists in one filter
+
+Separate queries with a comma to show each as its own list on the same page. For example, `today, tomorrow` shows today's tasks, then tomorrow's, each under its own heading.
+
+## Write a query
+
+A query is made of terms, such as `today`, `p1` or `#Work`, joined with operators:
+
+| Type this | To get this |
+| --- | --- |
+| `&` | Both terms match: `today & p1` |
+| <code>&#124;</code> | Either term matches: <code>today &#124; overdue</code> |
+| `!` | The term doesn't match: `!#Work` |
+| `( )` | Group terms: <code>(today &#124; overdue) &amp; #Work</code> |
+| `,` | Separate lists, each with its own heading: `today, tomorrow` |
+| `\` | Use the next character as part of a name: `#One \& Two` |
+
+`!` is applied first, then `&`, then <code>&#124;</code>. Use brackets when you're unsure. Names of projects, sections and labels don't care about capitals. A name that matches nothing, such as a label you've deleted, isn't an error: it simply matches no task.
+
+## Query reference
+
+Filters list open tasks only. Completed tasks never match.
+
+### Dates
+
+A task's date is its due date. A task without a due date uses its deadline instead.
+
+| Type this | To get this |
+| --- | --- |
+| `today` or `tod` | Due today |
+| `tomorrow` or `tom` | Due tomorrow |
+| `yesterday` | Due yesterday |
+| `overdue` or `od` | Overdue |
+| `7 days` or `next 7 days` | Due today or in the six days after |
+| `no date` | No date |
+| `no time` | A due date without a time |
+| `recurring` | Repeats |
+| `Jan 3`, `3 Jan 2027`, `5/5`, `2026-12-03` | Due on that day |
+| `saturday` or `sat` | Due this Saturday (today, if it's Saturday) |
+| `today at 2pm` | Due at that time |
+
+Dates written with slashes are always month first: `5/12` is 12 May. A date without a year is in the current year.
+
+### Date fields
+
+To ask about one kind of date, add a field and, if you want, `before:` or `after:`:
+
+| Type this | To get this |
+| --- | --- |
+| `due: Jan 3` | Due on 3 January |
+| `date before: next week` | Due before next Monday |
+| `deadline: today` | Deadline today |
+| `deadline before: in 7 days` | Deadline within the next seven days, or already passed |
+| `created after: -7 days` | Added in the last seven days |
+| `no deadline` | No deadline |
+
+`date:` and `due:` both mean the due date (or the deadline, as above). Besides the dates in the previous table, these fields accept `next week` (next Monday), `first day` (the first day of next month), `+4 hours`, `-365 days`, `in 7 days` and `1 week after next week`.
+
+### Priority, labels, projects and sections
+
+| Type this | To get this |
+| --- | --- |
+| `p1`, `p2`, `p3`, `p4` | That priority |
+| `no priority` | Priority 4 |
+| `@errands` | Has the label "errands" (`%errands` works too) |
+| `@home*` | Has a label starting with "home" |
+| `no labels` | No labels |
+| `#Work` | In the project "Work" |
+| `#*work` | In a project whose name ends in "work" |
+| `#Inbox` | In the Inbox (no project) |
+| `/Meetings` | In a section called "Meetings" |
+| `/*` | In any section |
+| `!/*` | Not in a section |
+
+`##Work` works like `#Work`, because Todalo has no sub-projects.
+
+### Everything else
+
+| Type this | To get this |
+| --- | --- |
+| `search: dentist` | The name or description contains every word |
+| `subtask` | Sub-tasks |
+| `!subtask` | Top-level tasks only |
+| `all` or `view all` | Every open task |
+
+<Note>Todalo has no shared projects, so `assigned`, `assigned to:`, `assigned by:`, `added by:`, `shared`, `workspace:` and `uncompletable` are refused with a message instead of being guessed.</Note>
+
+### Examples
+
+| Type this | To get this |
+| --- | --- |
+| <code>(today &#124; overdue) &amp; #Work</code> | Work that's due or late |
+| `@errands & 7 days` | Errands for the coming week |
+| `no date & !#Inbox` | Filed tasks you haven't scheduled |
+| `p1 & !recurring` | Urgent one-off tasks |
+| `overdue, today, tomorrow` | Three lists: late, today, tomorrow |

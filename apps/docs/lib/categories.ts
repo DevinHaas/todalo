@@ -23,5 +23,5 @@ export const categories: readonly Category[] = definitions.map(([slug, name, tag
   name,
   tagline,
   order: index + 1,
-  illustration: `/illustrations/${slug}.png`,
+  illustration: `/illustrations/${slug}.webp`,
 }));
