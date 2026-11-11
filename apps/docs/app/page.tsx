@@ -1,23 +1,21 @@
 import Link from "next/link";
-import { source } from "@/lib/source";
+import { SearchTrigger } from "@/components/help-search";
+import { IllustrationSlot } from "@/components/illustration-slot";
+import { Support } from "@/components/support";
+import { loadContent } from "@/lib/content";
 
-// Placeholder landing: a plain list of every article. The real landing page
-// (search, category cards) replaces this in a later ticket.
-export default function Home() {
-  return (
-    <>
-      <h1 className="font-display text-6xl leading-[0.77] font-black tracking-[-0.01em]">
-        How can we <span className="font-thin">help?</span>
-      </h1>
-      <ul className="mt-12 space-y-3">
-        {source.getPages().map((page) => (
-          <li key={page.url}>
-            <Link className="text-brand underline underline-offset-4" href={page.url}>
-              {page.data.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+const suggestions = ["Quick Add", "Google Calendar", "Import from Todoist", "Keyboard shortcuts"];
+
+export default function HelpHome() {
+  const { categories: visibleCategories } = loadContent();
+  return <>
+    <section className="help-hero">
+      <div><p className="eyebrow">A little guidance, a clearer day</p><h1>How can we help?</h1><p>Find your feet, make room for what matters, and get more out of Todalo.</p><SearchTrigger /><div className="suggested-searches"><span>Try:</span>{suggestions.map((query) => <SearchTrigger key={query} query={query} className="search-chip">{query}</SearchTrigger>)}</div></div>
+      <IllustrationSlot />
+    </section>
+    <section className="browse-section" aria-labelledby="browse-title"><div className="section-heading"><h2 id="browse-title">Explore the guides</h2><p>A good place to start, wherever you are.</p></div>
+      {visibleCategories.length ? <div className="category-grid">{visibleCategories.map((category) => <Link className="category-card" key={category.slug} href={`/${category.slug}`}><IllustrationSlot compact /><h3>{category.name}</h3><p>{category.tagline}</p><span className="card-arrow" aria-hidden="true">↗</span></Link>)}</div> : <p className="empty-guides">We’re putting the finishing touches on our guides. In the meantime, we’re happy to help with any questions.</p>}
+    </section>
+    <Support title="Still need a hand?" />
+  </>;
 }

@@ -4,16 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
-    "build": "next build",
+    "build": "NODE_ENV=production bun run validate:content && next build",
     "start": "next start --port 3003",
     "lint": "eslint",
     "typecheck": "fumadocs-mdx && tsc --noEmit",
-    "test": "vitest run --root ../.. apps/docs"
+    "test": "vitest run --root ../.. apps/docs",
+    "validate:content": "bun lib/content-check.ts"
   },
   "dependencies": {
+    "featurespace": "0.2.0",
     "fumadocs-core": "16.18.4",
     "fumadocs-mdx": "15.5.3",
     "next": "16.2.10",
+    "posthog-js": "1.447.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.6.7"

@@ -1,8 +1,13 @@
 import { docs } from "collections/server";
 import { loader } from "fumadocs-core/source";
+import { loadContent } from "./content";
 
-// Every MDX file under content/, addressed as /{folder}/{file}.
+export { loadContent } from "./content";
+
+const visible = new Set(loadContent().articles.map((article) => article.url));
+const compiled = docs.toFumadocsSource();
+
 export const source = loader({
   baseUrl: "/",
-  source: docs.toFumadocsSource(),
+  source: { files: compiled.files.filter((file) => file.type === "page" && visible.has(file.data.article.url)) },
 });

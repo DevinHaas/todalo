@@ -103,9 +103,11 @@
       "name": "@todalo/docs",
       "version": "0.1.0",
       "dependencies": {
+        "featurespace": "0.2.0",
         "fumadocs-core": "16.18.4",
         "fumadocs-mdx": "15.5.3",
         "next": "16.2.10",
+        "posthog-js": "1.447.10",
         "react": "19.2.4",
         "react-dom": "19.2.4",
         "zod": "^4.6.7",

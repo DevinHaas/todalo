@@ -151,7 +151,7 @@ and are generated with Higgsfield. The app links to the help center from "Help
 - Three levels: landing, category, article. No sub-categories; a category page may group its articles under headings.
 - Seven categories in this order: Get started; Tasks & capture; Organise & views; Goals, seasons & rituals; Coach; Integrations; Apps & account.
 - Article addresses are `/{category}/{article}` with readable slugs and no generated ID suffix.
-- 37 articles in v1:
+- 40 articles in v1:
   - **Get started:** Get started with Todalo; Use Todalo on the web or install it on your Mac; Create your account and sign in; Bring your tasks from Todoist; Todalo glossary.
   - **Tasks & capture:** Introduction to tasks; Use Quick Add; Schedule a date and time; Introduction to recurring dates; Set a priority; Use sub-tasks; Add comments and files to tasks; Add or manage multiple tasks; Dictate tasks with Ramble.
   - **Organise & views:** Use the Inbox; Introduction to projects and sections; Introduction to labels; Introduction to filters; Plan your day with the Today view; Plan your week with the Upcoming view; Use the list, board, calendar and table layouts; Find anything with search.
