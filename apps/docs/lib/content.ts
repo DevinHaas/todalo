@@ -1,11 +1,12 @@
+// The app's one door to content. source.config.ts compiles only the articles
+// the loader let through (content-loader.ts reads and validates them), so
+// everything here is already inside the publication boundary.
 import { docs } from "collections/server";
-import { getContent as selectContent, type Content, type ContentOptions } from "./content-model";
+import { loader } from "fumadocs-core/source";
+import { buildContent } from "./content-model";
 
-export type { Article, Content, ContentCategory, ContentOptions } from "./content-model";
-export { isContentPreview } from "./content-model";
+export { HELP_ORIGIN, isContentPreview, type Article, type ContentCategory } from "./content-model";
 
-export function loadContent(options: Pick<ContentOptions, "preview" | "environment"> = {}): Content {
-  return selectContent(docs.docs.map((page) => page.article), options);
-}
+export const content = buildContent(docs.docs.map((page) => page.article));
 
-export const getContent = loadContent;
+export const source = loader({ baseUrl: "/", source: docs.toFumadocsSource() });

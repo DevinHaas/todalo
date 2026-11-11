@@ -2,12 +2,12 @@ import Link from "next/link";
 import { SearchTrigger } from "@/components/help-search";
 import { Illustration } from "@/components/illustration-slot";
 import { Support } from "@/components/support";
-import { loadContent } from "@/lib/content";
+import { content } from "@/lib/content";
 
 const suggestions = ["Add a task", "Recurring dates", "Connect the Coach", "Google Calendar"];
 
 export default function HelpHome() {
-  const { categories: visibleCategories } = loadContent();
+  const visibleCategories = content.categories;
   return <>
     <section className="help-hero">
       <div><p className="eyebrow">A little guidance, a clearer day</p><h1>How can we help?</h1><p>Find your feet, make room for what matters, and get more out of Todalo.</p><SearchTrigger /><div className="suggested-searches"><span>Try:</span>{suggestions.map((query) => <SearchTrigger key={query} query={query} className="search-chip">{query}</SearchTrigger>)}</div></div>

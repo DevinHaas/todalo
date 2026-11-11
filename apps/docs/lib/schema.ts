@@ -3,7 +3,8 @@ import { z } from "zod";
 import { categories } from "./categories";
 
 export const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const articleUrlPattern = /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const slug = slugPattern.source.slice(1, -1);
+export const articleUrlPattern = new RegExp(`^/${slug}/${slug}$`);
 
 export const articleSchema = pageSchema.extend({
   title: z.string().trim().min(1),

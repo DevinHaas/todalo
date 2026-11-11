@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { frontmatter } from "fumadocs-core/content/md/frontmatter";
 import { validateContent } from "./content-validation";
-import { getContent, type Article, type Content, type ContentOptions } from "./content-model";
+import { buildContent, type Article, type Content, type ContentOptions } from "./content-model";
 import { articleSchema, slugPattern } from "./schema";
 
 export function docsDirectory(): string {
@@ -20,22 +20,30 @@ function filesIn(directory: string): string[] {
     });
 }
 
-function lastUpdated(path: string): Article["lastUpdated"] {
+/**
+ * Dates written by the Docker build (see Dockerfile), whose builder has no git:
+ * one "category/article.mdx<TAB>ISO date" line per article.
+ */
+function readManifest(path: string): Map<string, string> {
+  if (!existsSync(path)) return new Map();
+  return new Map(readFileSync(path, "utf8").split("\n").map((line) => line.split("\t") as [string, string]));
+}
+
+function updatedAt(path: string, file: string, manifest: Map<string, string>): string | null {
+  let date: string | undefined;
   try {
-    const output = execFileSync("git", ["log", "-1", "--follow", "--format=%aI%x00%an", "--", path], {
+    date = execFileSync("git", ["log", "-1", "--follow", "--format=%aI", "--", path], {
       cwd: dirname(path), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    const [date, name] = output.split("\0");
-    if (date && Number.isFinite(Date.parse(date))) {
-      return { author: name?.trim().split(/\s+/)[0] || "Devin", date: new Date(date).toISOString() };
-    }
   } catch {}
-  return { author: "Devin", date: null };
+  date ||= manifest.get(file);
+  return date && Number.isFinite(Date.parse(date)) ? new Date(date).toISOString() : null;
 }
 
 export function loadContent(options: ContentOptions = {}): Content {
   const dir = resolve(options.dir ?? join(docsDirectory(), "content"));
   const publicDir = resolve(options.publicDir ?? join(docsDirectory(), "public"));
+  const manifest = readManifest(resolve(dir, "../.article-dates"));
   const urls = new Set<string>();
   const allArticles = filesIn(dir).map((path): Article => {
     const file = relative(dir, path).split(sep).join("/");
@@ -51,10 +59,9 @@ export function loadContent(options: ContentOptions = {}): Content {
     const metadata = articleSchema.safeParse(parsed.data);
     if (!metadata.success) throw new Error(`${file}: invalid frontmatter: ${metadata.error.message}`);
     if (metadata.data.category !== category) throw new Error(`${file}: category must match its directory`);
-    const updated = lastUpdated(path);
-    return { ...metadata.data, slug, url, file, body: parsed.content, updatedAt: updated.date, lastUpdated: updated };
+    return { ...metadata.data, slug, url, file, body: parsed.content, updatedAt: updatedAt(path, file, manifest) };
   });
-  const content = getContent(allArticles, options);
+  const content = buildContent(allArticles, options);
   validateContent(content, allArticles, publicDir);
   return content;
 }
