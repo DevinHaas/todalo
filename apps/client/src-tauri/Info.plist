@@ -4,6 +4,9 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>todalo uses the microphone only while you record a Ramble, to transcribe the tasks you speak.</string>
+	<!-- the App Store reads the icon from the asset catalog (icons/macos/Assets.car, compiled with actool) -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<!-- HTTPS only; exempt from export compliance -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

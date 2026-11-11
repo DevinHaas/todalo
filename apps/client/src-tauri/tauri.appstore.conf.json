@@ -1,11 +1,12 @@
 {
   "bundle": {
     "macOS": {
-      "bundleVersion": "2",
+      "bundleVersion": "3",
       "signingIdentity": "3rd Party Mac Developer Application: Devin Hasler (BS65XAQ9NH)",
       "entitlements": "./Entitlements.plist",
       "files": {
-        "embedded.provisionprofile": "./embedded.provisionprofile"
+        "embedded.provisionprofile": "./embedded.provisionprofile",
+        "Resources/Assets.car": "./icons/macos/Assets.car"
       }
     }
   }
