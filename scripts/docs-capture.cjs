@@ -47,6 +47,20 @@ const SHOTS = [
     },
     crop: page => page.locator("form.import-card"),
   },
+  {
+    // Introduction to filters: the Add filter dialog with a query and its live preview.
+    name: "filter-dialog",
+    route: "/inbox",
+    steps: async page => {
+      await page.getByLabel("Sidebar", { exact: true }).getByRole("link", { name: "Filters & Labels", exact: true }).click();
+      await page.getByRole("button", { name: "Add filter", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Add filter", exact: true });
+      await dialog.getByRole("textbox", { name: "Query", exact: true }).fill("p2 | p3");
+      await dialog.getByText(TASKS.find(task => task.priority === 2).title, { exact: true }).waitFor({ state: "visible" });
+      await dialog.getByRole("region", { name: "Preview", exact: true }).scrollIntoViewIfNeeded();
+    },
+    crop: page => page.getByRole("dialog", { name: "Add filter", exact: true }),
+  },
 ];
 
 function options(args) {
