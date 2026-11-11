@@ -1,0 +1,93 @@
+---
+title: "Bring your tasks from Todoist"
+description: "Import your Todoist projects, sections, tasks and labels into Todalo and choose what comes over."
+category: "get-started"
+order: 4
+section: "First steps"
+platforms: ["web", "mac"]
+related: ["/get-started/get-started-with-todalo", "/get-started/create-your-account-and-sign-in", "/get-started/todalo-glossary"]
+published: true
+---
+
+Switching apps is easier when your lists come with you. Todalo can import your projects, sections, tasks and labels from Todoist, along with their dates, priorities and comments. You choose which projects and which details come over, and you can run the import again later without creating duplicates.
+
+## Start the import
+
+Right after you create your account, Todalo asks "Bring your tasks from Todoist?". Click **Import from Todoist** to go straight to the import, or **Skip** to do it later. Todalo asks only once.
+
+To start the import at any other time:
+
+<Steps>
+<Step>Click your name at the top left of the sidebar, then click **Settings**.</Step>
+<Step>Click **Integrations**.</Step>
+<Step>Under **Import from Todoist**, click **Connect Todoist**.</Step>
+</Steps>
+
+## Connect your Todoist account
+
+Todalo needs your permission to read your Todoist account. It only reads; it never changes anything in Todoist.
+
+<Platform on="web">
+1. After you click **Connect Todoist**, Todoist opens in the same tab. Sign in to Todoist if it asks.
+2. Allow Todalo to access your Todoist data.
+3. Todoist sends you back to **Settings** › **Integrations** in Todalo, with your Todoist projects listed.
+</Platform>
+
+<Platform on="mac">
+1. After you click **Connect Todoist**, Todoist opens in your default browser. Todalo shows "Waiting for Todoist… Finish connecting in your browser, then come back here."
+2. In the browser, sign in to Todoist if it asks, then allow Todalo to access your Todoist data.
+3. The browser shows "Todoist is connected. Return to todalo to choose what to import." Click **Return to todalo**, or switch back to Todalo yourself.
+4. Todalo lists your Todoist projects.
+
+Changed your mind while Todalo is waiting? Click **Cancel**.
+</Platform>
+
+If you don't allow access, Todalo shows "Todoist access was not granted. Nothing was imported." Click **Connect Todoist** to try again.
+
+## Choose what to import
+
+Todalo shows every Todoist project with its number of tasks. All of them are ticked to start with.
+
+<Steps>
+<Step>Under **Projects**, untick any project you'd rather leave behind. Your Todoist Inbox is listed as **Inbox (into your todalo Inbox)**; its tasks go into your Todalo Inbox.</Step>
+<Step>Under **Also import**, choose which details come with your tasks: **Sections**, **Sub-tasks**, **Labels**, **Recurring schedules** and **Comments** are ticked to start with.</Step>
+<Step>To bring finished tasks as well, tick **Completed tasks** and choose how far back: **Last 3 months**, **Last year** or **Everything**.</Step>
+<Step>Click **Import**.</Step>
+</Steps>
+
+{/* screenshot: import-chooser */}
+
+Todalo shows "Importing from Todoist…" while it works. When it's done, **Import finished** tells you what was added, for example "Added 48 tasks, 5 projects, 9 sections and 6 labels."
+
+<Note>**Everything** reaches back to when you joined Todoist, so a long history can take a few minutes.</Note>
+
+<Tip>Finish choosing within half an hour of connecting. After that, Todalo forgets the connection and you'll need to click **Connect Todoist** again.</Tip>
+
+## What comes over
+
+Each imported task keeps its name, description, priority, due date and time, duration and deadline.
+
+| In Todoist | In Todalo |
+| --- | --- |
+| Projects | Projects with the same names |
+| Sections | Sections in the same projects, if **Sections** is ticked |
+| Sub-tasks | Sub-tasks, if **Sub-tasks** is ticked |
+| Labels | Labels with the same names, if **Labels** is ticked |
+| Recurring due dates | Recurring dates, if **Recurring schedules** is ticked. A date written with `every!` or "after" repeats from the day you complete the task, as it did in Todoist. |
+| Comments | Comments on the task, if **Comments** is ticked. A file attached to a comment comes over as its file name and link. |
+| Completed tasks | Completed tasks, if **Completed tasks** is ticked |
+
+Todoist filters and reminders are not imported.
+
+## Check the import warnings
+
+A few things in Todoist have no exact match in Todalo. When the import has to adjust something, **Import finished** lists it below the summary:
+
+- **Recurring schedules Todalo can't read.** The task keeps its next date but doesn't repeat. Open the task and set the repeat again; see [Introduction to recurring dates](/tasks-capture/introduction-to-recurring-dates).
+- **Sub-tasks nested very deeply.** Todalo nests sub-tasks up to three levels. Deeper sub-tasks move up to the deepest level Todalo allows.
+
+## Import again
+
+You can run the import as often as you like, for example after you've kept using Todoist for a few more days. Go to **Settings** › **Integrations** and click **Import again**. Tasks you imported before are skipped: the project list shows how many of each project's tasks are already imported, and Todalo adds only the new ones.
+
+<Note>Re-importing doesn't update tasks you imported before. If you changed a task in Todoist after importing it, change it in Todalo too.</Note>

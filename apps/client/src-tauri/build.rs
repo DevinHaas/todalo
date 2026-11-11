@@ -153,6 +153,7 @@ fn main() {
             "ramble_socket",
             "open_microphone_settings",
             "ramble_commit",
+            "open_help",
             "feedback",
             "settings",
             "update_settings",

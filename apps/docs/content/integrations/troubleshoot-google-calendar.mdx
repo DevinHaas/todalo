@@ -1,0 +1,95 @@
+---
+title: "Troubleshoot Google Calendar"
+description: "Fix missing events, calendar access requests, sync errors and failed connections between Todalo and Google Calendar."
+category: "integrations"
+order: 2
+section: "Google Calendar"
+platforms: ["web", "mac"]
+related: ["/integrations/use-google-calendar-with-todalo", "/apps-account/troubleshoot-sign-in", "/apps-account/sync-and-working-offline"]
+published: true
+---
+
+Most calendar problems come down to a calendar that isn't shown, a Google permission that was withdrawn, or a connection that dropped. Find the message or symptom you see below. Every fix starts in **Settings** › **Calendars**, which you open by clicking your name at the top left of the sidebar, then **Settings**.
+
+## An account says "Grant calendar access to show this account's events."
+
+Todalo can't read that account's calendars. Usually access to your calendars was not allowed when you connected, or it was removed later in your Google account settings.
+
+To grant access again:
+
+<Steps>
+<Step>On the account's card, click **Link another Google account**.</Step>
+<Step>In Google, choose the same Google account.</Step>
+<Step>Allow Todalo to access your calendars.</Step>
+</Steps>
+
+When you're back in Todalo, the card lists the account's calendars again. Show the ones you want with the eye buttons.
+
+## An account shows Error instead of Live
+
+Each card shows **Live** when its visible calendars are up to date. **Error** means a calendar you chose to show hasn't been read from Google yet. Click **Resync** on the card. If it still says **Error**, hide the calendar and show it again with its eye button.
+
+## Events are missing from Today or Upcoming
+
+Check these in **Settings** › **Calendars**:
+
+- **The calendar is shown.** New accounts start with every calendar hidden. Click the eye button next to the calendar's name.
+- **The account's events are on.** **Show events in Today/Upcoming** must be on for the account.
+- **The account is up to date.** Click **Resync** on the card.
+
+Some events never appear, by design:
+
+- Events further back than about two months, or more than about a year ahead.
+- Events Todalo created from your own tasks. The task already shows in their place.
+
+## A task doesn't appear in Google Calendar
+
+Only tasks with a date go to Google Calendar, into the main calendar of the first Google account you connected. Todalo doesn't show a message when sending a task fails. To try again:
+
+<Steps>
+<Step>Check that the account's card doesn't ask you to grant calendar access. If it does, grant it as described above.</Step>
+<Step>Change the task's name, date or time. Todalo sends the task again.</Step>
+</Steps>
+
+Tasks that already had a date when you connected are sent the next time you change them. Completed tasks that don't repeat stay in Google Calendar; delete them there if you don't want them.
+
+## A change in Google didn't reach the task
+
+Only the title, date and time of events created from your tasks come back to Todalo. Description changes, and events you created in Google yourself, stay in Google.
+
+Todalo also skips a change from Google if the task changed in Todalo after it, even in a detail Google doesn't show, such as its priority. Make the change in Todalo instead; it's sent to Google if it touches the name, description, date or time.
+
+## Your calendars could not be loaded
+
+If **Settings** › **Calendars** shows "Your calendars could not be loaded. Try again.", click **Try again**. If it shows "Cannot reach todalo. Check your connection and try again.", check your internet connection first.
+
+## A calendar change didn't save
+
+When showing, hiding, resyncing or disconnecting fails, Todalo undoes the change on screen and shows a message such as "Couldn't hide the calendar". Click **Retry** in the message.
+
+- "You're offline." means your device has no connection. Try again once you're back online.
+- "Something went wrong on todalo's side." can mean Google didn't answer. Wait a moment and click **Retry**.
+- "It no longer exists; it may have been deleted on another device." means the account was disconnected elsewhere. The list refreshes by itself.
+
+## You can't disconnect a Google account
+
+If your Todalo account has no password and this is its only Google account, that Google account is how you sign in, so Todalo can't unlink it. Clicking **Disconnect** shows "Couldn't disconnect the calendar account", and the account's calendars are hidden.
+
+To stop seeing its events, keep the account and turn off **Show events in Today/Upcoming**, or hide its calendars.
+
+## Linking a Google account fails
+
+The message appears above **Link another Google account**:
+
+| Message | What to do |
+| --- | --- |
+| "That Google account is already linked to a different todalo account." | Sign in to that other Todalo account and disconnect the Google account there, or link a different Google account. |
+| "Google sign-in took too long. Try again." | Click **Link another Google account** again and finish in the browser without a long pause. |
+| "Cannot open Google sign-in. Try again." | Check your connection, then try again. |
+| "Google sign-in could not be completed. Try again." | Wait a moment, then click **Link another Google account** again. |
+
+If you close Google without allowing access, nothing changes and no message appears.
+
+## Google sign-in says to link Google from your account
+
+If you tried **Continue with Google** and saw "This email already has a todalo account. Sign in with your password, then link Google from your account.", sign in with your email and password first. Then go to **Settings** › **Calendars** and click **Link another Google account**. That's where Todalo links Google to an existing account. For other sign-in problems, see [Troubleshoot sign-in](/apps-account/troubleshoot-sign-in).

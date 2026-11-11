@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AudioLines, CalendarClock, ChevronDown, FlaskConical, Gift, HelpCircle, Layers,
+  AudioLines, CalendarClock, ChevronDown, FlaskConical, Gift, HelpCircle, Keyboard, Layers,
   LineChart, ListFilter, LogOut, MessageSquare, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search, Settings,
 } from "lucide-react";
 import type { Account } from "./session";
@@ -39,6 +39,9 @@ import { PlanningHost } from "./planning-screens";
 import { useCommandDrag } from "./quick-add-drag";
 import { cn } from "./ui";
 import { openFeedback, useFeedbackBoard } from "./feedback-board";
+import { helpLink } from "./help";
+
+const helpCenter = helpLink();
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -204,7 +207,7 @@ export function Shell({ account }: { account: Account }) {
         <Inert icon={<LineChart />} label="Reporting" muted />
         <Inert icon={<MoreHorizontal />} label="More" muted />
       </ul></nav>
-      <button type="button" className="nav-item help" onClick={() => { setMobileOpen(false); window.dispatchEvent(new Event("todalo:help")); }}><HelpCircle /><span>Help & resources</span></button>
+      <a className="nav-item help" {...helpCenter} onClick={click => { setMobileOpen(false); helpCenter.onClick(click); }}><HelpCircle /><span>Help & resources</span></a>
     </aside>
     <div className="inset">
       <div className="toolbar" data-tauri-drag-region>
@@ -297,6 +300,7 @@ function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: ()
   const userId = account.user.id;
   const openSettings = useOpenSettings();
   const settingsKeys = useCommandBindings(userId, "navigation.settings");
+  const helpKeys = useCommandBindings(userId, "general.help");
   const { sync, reload, splash } = useSyncReload(userId);
   const [pending, setPending] = useState(false);
   const [dialog, setDialog] = useState<ReleaseDialogKind | null>(null);
@@ -319,6 +323,9 @@ function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: ()
           {divider}
           <button type="button" role="menuitem" className="popover-item" onClick={show("whats-new")}><Gift /><span>What's new</span></button>
           <button type="button" role="menuitem" className="popover-item" onClick={show("experiments")}><FlaskConical /><span>Latest experiments</span></button>
+          <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); window.dispatchEvent(new Event("todalo:help")); }}>
+            <Keyboard /><span>Keyboard shortcuts</span>{helpKeys.length > 0 && <span className={right}><ShortcutKeys bindings={helpKeys.slice(0, 1)} /></span>}
+          </button>
           <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); openFeedback(); }}><MessageSquare /><span>Send feedback</span></button>
           {divider}
           <SyncRow sync={sync} onSync={() => { close(false); onNavigate(); reload(); }} />

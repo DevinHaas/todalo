@@ -1,0 +1,102 @@
+---
+title: "Connect an AI provider"
+description: "Turn on the Coach with your ChatGPT plan, an OpenAI, Anthropic or OpenRouter key, or Ollama."
+category: "coach"
+order: 2
+section: "The Coach"
+platforms: ["web", "mac"]
+related: ["/coach/introduction-to-the-coach", "/coach/review-the-coachs-drafts", "/coach/manage-what-the-coach-has-learned"]
+badge: "experiment"
+published: true
+---
+
+The Coach doesn't come with its own AI. It runs on a provider you choose: your ChatGPT plan, an API key you pay for, or a model on your own computer. Until you connect one, Todalo shows no Coach at all and everything else works the same.
+
+To get there, click your name at the top left of the sidebar, then **Settings** › **Coach**. Each provider has its own card.
+
+{/* screenshot: coach-providers */}
+
+## Choose a provider
+
+| Provider | What you need | Notes |
+| --- | --- | --- |
+| **OpenAI**, signed in with ChatGPT | A ChatGPT plan | Usage counts against your plan. |
+| **OpenAI**, with an API key | An OpenAI API key | Billed by OpenAI. |
+| **Anthropic** | An Anthropic API key | Billed by Anthropic. |
+| **OpenRouter** | An OpenRouter API key | Gives access to many models from other companies. |
+| **Ollama** | Ollama running where the Todalo server runs | See the note under its section. |
+
+You can set up several and switch between them.
+
+## Sign in with ChatGPT
+
+To run the Coach on your ChatGPT plan:
+
+1. Click **Configure** on the **OpenAI** card.
+2. Make sure **Sign in with ChatGPT** is selected, then click the **Sign in with ChatGPT** button below it. OpenAI's sign-in page opens in your browser.
+3. Sign in to OpenAI and allow sharing of your ChatGPT plan with Todalo.
+
+<Platform on="web">
+4. OpenAI then sends your browser to an address starting with `http://127.0.0.1` that doesn't load. That's expected. Copy the whole address from the address bar.
+5. Back in Todalo, paste it into **Address from the browser** and click **Finish sign-in**.
+</Platform>
+
+<Platform on="mac">
+4. Switch back to Todalo. The card updates by itself and says you're signed in.
+</Platform>
+
+If you closed OpenAI's page too early, click **Open OpenAI sign-in again**.
+
+<Warning>OpenAI hasn't published this sign-in for other apps, so it may change or stop working without notice. If you rely on the Coach, also add an API key or another provider, so the Coach keeps running.</Warning>
+
+If ChatGPT signs you out, the card shows "Sign-in expired". Sign in again; until then, the Coach uses another provider you've set up.
+
+## Add an API key
+
+To connect OpenAI, Anthropic or OpenRouter with an API key:
+
+1. Click **Configure** on the provider's card. For OpenAI, select **API key** at the top of the card.
+2. Paste your key into **API key**.
+3. Choose a model in **Model**. The recommended one is preselected.
+4. Click **Connect**. The card shows "Connected" with the last characters of your key.
+
+The key is stored encrypted on Todalo's server and is never shown again. To change it, click **Manage**, paste a new key and click **Save**. Leave the field empty to keep the current key.
+
+## Use a local model with Ollama
+
+Ollama runs AI models on a computer instead of a provider's servers. To connect it:
+
+1. Click **Configure** on the **Ollama** card.
+2. Check **Ollama address**. The default is `http://127.0.0.1:11434`.
+3. Choose a model you've installed in Ollama, then click **Connect**.
+
+<Note>Todalo's server makes the call to Ollama, not your browser or Mac app, and it accepts only a localhost address. So Ollama works only when the Todalo server runs on the same computer as Ollama, for example a copy of Todalo you run yourself.</Note>
+
+## Choose the model the Coach uses
+
+Once a provider is set up, **Coach model** at the top of Settings › Coach shows which provider and model the Coach uses. Click it to switch to another provider you've set up.
+
+To change a provider's model, click **Manage** on its card and pick from **Model**. Models more than a year old are under **Older models**. To use a model that isn't listed, choose **Custom model…** and type its name.
+
+If the chosen provider can't run, for example because a ChatGPT sign-in expired, the Coach uses another one you've set up and says so under **Coach model**.
+
+<Tip>Press <Shortcut keys="Alt+Shift+M" /> to switch to the next provider you've set up.</Tip>
+
+## Test, change or disconnect a provider
+
+- To check that it works, click **Test connection**. Todalo shows "Connected: the model answered." or the reason it failed.
+- To remove a key or Ollama, click **Manage** on the card, then **Disconnect**.
+- To stop using your ChatGPT plan, click **Sign out of ChatGPT**.
+
+## What's sent and where
+
+The Coach's requests go from your app to Todalo's server, which sends them to the provider you chose. Depending on what you ask, a request can include:
+
+- your goal titles, season targets and goal statuses;
+- the titles, dates and times of tasks on your schedule and tasks to plan, and the names of your projects and sections;
+- when your calendar events make you busy; their titles only if you switch on **Share event titles with the AI**;
+- your patterns, your recent messages to the Coach, and the text or images of documents you attach.
+
+The provider handles that data under its own terms. With Ollama, it stays on the computer that runs both Todalo's server and Ollama. Nothing is sent while no provider is connected.
+
+Todalo keeps your conversation and attached documents on its server until you start a new conversation, and keeps your patterns until you delete them.
