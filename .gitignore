@@ -53,3 +53,6 @@ next-env.d.ts
 # local Claude Code state
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+
+# fumadocs-mdx codegen
+**/.source/
