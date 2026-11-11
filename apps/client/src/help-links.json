@@ -1,0 +1,6 @@
+{
+  "base": "https://help.todalo.app",
+  "articles": {
+    "google-calendar": "/integrations/use-google-calendar-with-todalo"
+  }
+}

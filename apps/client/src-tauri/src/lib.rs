@@ -11,6 +11,7 @@ mod credentials;
 mod endpoint;
 mod feedback;
 mod goals;
+mod help;
 mod imports;
 mod links;
 mod metadata;
@@ -229,6 +230,7 @@ pub fn run() {
             ramble::ramble_socket,
             ramble::open_microphone_settings,
             ramble::ramble_commit,
+            help::open_help,
             feedback::feedback,
             settings::settings,
             settings::update_settings,
