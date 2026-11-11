@@ -132,7 +132,7 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
   const width = `min(var(--spacing-page), 100% - ${room}px)`;
   return <LiquidActive.Provider value={active}>
     <div ref={host} data-coach-bar="" data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
-      className="ui pointer-events-none sticky bottom-0 z-[25] mt-auto! -mb-6! flex pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      className="ui pointer-events-none sticky bottom-0 z-[25] mt-auto! -mb-6! flex pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
       onKeyDown={(event) => { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); onOpenChange(false); } }}>
       {/* Behind the content, above the page: the liquid. */}
       {active && <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 size-full" />}
@@ -143,7 +143,7 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
         <div className={cn("flex flex-col", active && "[&>:not([data-liquid-target])]:opacity-(--liquid-bar)")} style={active ? undefined : { opacity: "var(--liquid-bar)" }}>{children}</div>
       </div>
       {/* The button stays in the corner: the Coach while closed, the × while open. */}
-      <div className="absolute right-4 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3">
+      <div className="absolute right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] flex items-center gap-3">
         {docked && <div inert={open} className={cn("transition-opacity duration-200", open ? "opacity-0" : "pointer-events-auto opacity-100")} data-liquid-docked="">{docked}</div>}
         <button ref={blob} type="button" aria-expanded={open} aria-label={open ? "Close the Coach" : "Open the Coach"} title={open ? "Close (Esc)" : "Coach"}
           onClick={() => onOpenChange(!open)} data-liquid-blob=""
