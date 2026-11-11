@@ -29,7 +29,8 @@ export const metadata: Metadata = {
   title: { default: "Todalo Help", template: "%s | Todalo Help" },
   description: "Guides and answers for Todalo on the web and on Mac.",
   icons: { icon: "/todalo-logo.svg" },
-  openGraph: { siteName: "Todalo Help", type: "website", locale: "en_US" },
+  openGraph: { siteName: "Todalo Help", type: "website", locale: "en_US", images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Todalo Help" }] },
+  twitter: { card: "summary_large_image", images: ["/og.jpg"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
