@@ -56,3 +56,6 @@ next-env.d.ts
 
 # fumadocs-mdx codegen
 **/.source/
+
+# help center: article dates written by the docs Docker build
+apps/docs/.article-dates
