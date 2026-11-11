@@ -13,7 +13,7 @@ const BadgeCard = dynamic(() => import("@todalo/badge").then(m => m.BadgeCard), 
 export function MembershipCard({ member, founding }: { member: number; founding: boolean }) {
   return (
     // a fixed width: the grid column sizes to its content, so a full-width card would collapse
-    <div className="w-[min(380px,82vw)]" style={{ "--badge-display": "var(--font-sanela)", "--badge-radius": "18px" } as React.CSSProperties}>
+    <div className="w-[min(380px,82vw)]" style={{ "--badge-display": "var(--font-sanela)" } as React.CSSProperties}>
       <BadgeCard member={member} name="Your name" since={new Date()} founding={founding} logo="/todalo-logo.svg" params={badgeSceneDefaults} width="100%" />
     </div>
   );

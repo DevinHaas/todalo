@@ -1,3 +1,4 @@
+import "./instrument"; // first: Sentry must load before the modules it instruments
 import { createApi } from "./app";
 import { productionDependencies } from "./production";
 import { auth } from "@todalo/auth";

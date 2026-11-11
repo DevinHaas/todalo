@@ -16,6 +16,7 @@
     "local-models": "bun scripts/local-models.ts"
   },
   "dependencies": {
+    "@sentry/elysia": "11.12.0",
     "@todalo/auth": "*",
     "@todalo/db": "*",
     "@todalo/ramble": "*",

@@ -78,6 +78,7 @@
     "@todalo/auth": "*",
     "@todalo/db": "*",
     "@todalo/ramble": "*",
+    "aws4fetch": "1.0.20",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "googleapis": "^173.0.0",

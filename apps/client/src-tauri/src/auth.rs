@@ -32,6 +32,9 @@ impl Drop for Credentials {
 pub struct Account {
     user: User,
     expires_at: String,
+    /// The member badge (number, join date, founding), passed through to the webview as the API sent it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    member: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -366,5 +369,22 @@ impl NativeAuth {
             }
             _ => Err("Cannot reach todalo. Check your connection and try again."),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Account;
+
+    #[test]
+    fn account_keeps_the_member_badge_for_the_webview() {
+        let user = r#""user":{"id":"u","name":"Ada","email":"a@b.c","image":null,"emailVerified":true},"expiresAt":"2026-12-01T00:00:00.000Z""#;
+        let with: Account = serde_json::from_str(&format!(r#"{{{user},"member":{{"number":7,"since":"2026-06-14T00:00:00.000Z","founding":true}}}}"#)).unwrap();
+        let out = serde_json::to_value(&with).unwrap();
+        assert_eq!(out["member"]["number"], 7);
+        assert_eq!(out["member"]["founding"], true);
+        // older APIs send no member; the webview then gets none rather than null
+        let without: Account = serde_json::from_str(&format!("{{{user}}}")).unwrap();
+        assert!(serde_json::to_value(&without).unwrap().get("member").is_none());
     }
 }

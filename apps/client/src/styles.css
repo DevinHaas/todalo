@@ -821,11 +821,36 @@ button.property-value:hover { background: var(--accent); }
 .settings-body { width: 100%; max-width: 42rem; margin: 0; padding: 1.5rem; }
 /* The pane header names the page; the screens' own headings stay for assistive tech. */
 .settings-body :is(#keyboard-shortcuts-title, #calendars-title) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; padding: 0; border: 0; }
-.settings-fields { display: grid; gap: 1.25rem; }
-.settings-badge { display: flex; justify-content: center; padding: 0.5rem 0 0.75rem; }
-.settings-field { display: grid; gap: .375rem; }
-.settings-label { font-weight: 600; }
-.settings-photo { width: 4.5rem; height: 4.5rem; border-radius: .5rem; object-fit: cover; font-size: 1.75rem; }
+/* Settings › Account: who you are (with Log out) on top, then the membership badge beside what it means */
+.account-settings { display: grid; gap: 2rem; }
+.account-profile { display: flex; align-items: center; gap: .875rem; padding: .875rem 1rem; border: 1px solid var(--border); border-radius: .75rem; }
+.account-photo { display: grid; place-items: center; width: 3rem; height: 3rem; flex: none; border-radius: 999px; object-fit: cover; font-size: 1.25rem; }
+.account-photo-button { position: relative; flex: none; padding: 0; border: 0; border-radius: 999px; background: none; color: inherit; cursor: pointer; }
+.account-photo-button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.account-photo-edit { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 999px; background: #0000008c; color: #fff; opacity: 0; transition: opacity .15s; }
+.account-photo-button:is(:hover, :focus-visible) .account-photo-edit { opacity: 1; }
+.account-identity { display: grid; flex: 1; min-width: 0; }
+.account-photo-actions { display: flex; gap: .75rem; margin-top: .25rem; }
+.account-photo-actions .text-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; font-size: .8125rem; cursor: pointer; }
+.account-photo-actions .text-link:hover { text-decoration: underline; }
+.account-photo-actions .text-link:disabled { color: var(--muted-foreground); cursor: default; text-decoration: none; }
+.account-photo-error { margin-top: .25rem; color: var(--destructive); font-size: .8125rem; }
+.account-name { font-size: 1rem; font-weight: 600; }
+.account-email { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.account-section-title { margin: 0 0 .75rem; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+.account-membership-body { display: grid; grid-template-columns: 15rem minmax(0, 1fr); align-items: center; gap: 2rem; }
+.account-member-info { display: grid; gap: .5rem; align-content: center; }
+.account-member-info p { margin: 0; }
+.account-member-title { font-size: 1.25rem; font-weight: 600; line-height: 1.75rem; }
+.account-founding { color: var(--muted-foreground); }
+.account-member-info dl { display: grid; gap: .75rem; margin: 1rem 0 0; padding-top: 1rem; border-top: 1px solid var(--border); }
+.account-member-info dt { color: var(--muted-foreground); font-size: .75rem; }
+.account-member-info dd { margin: .125rem 0 0; }
+@media (max-width: 40rem) {
+  .account-membership-body { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+  .account-badge { width: min(100%, 16rem); }
+  .account-member-info, .account-founding { color: var(--muted-foreground); }
+}
 @media (max-width: 767px) {
   .dialog-backdrop.settings-backdrop { padding: 0; align-items: stretch; }
   .settings-dialog { width: 100%; height: 100%; grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }

@@ -28,6 +28,21 @@ async function signIn(request: ReturnType<typeof fixture>["request"]) {
 afterEach(() => vi.useRealTimers());
 
 describe("shared account authentication", () => {
+  it("saves a small uploaded profile photo and refuses anything else", async () => {
+    const { request } = fixture();
+    const token = (await signIn(request)).headers.get("set-auth-token")!;
+    const setPhoto = (image: string | null) => request("/api/auth/update-user", {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ image }),
+    });
+    const photo = (async () => ((await (await request("/api/v1/account", { headers: { authorization: `Bearer ${token}` } })).json()) as { user: { image: string | null } }).user.image);
+    expect((await setPhoto("data:image/jpeg;base64,/9j/4AAQ")).ok).toBe(true);
+    expect(await photo()).toBe("data:image/jpeg;base64,/9j/4AAQ");
+    expect((await setPhoto("javascript:alert(1)")).ok).toBe(false);
+    expect(await photo()).toBe("data:image/jpeg;base64,/9j/4AAQ");
+    expect((await setPhoto(null)).ok).toBe(true);
+    expect(await photo()).toBeNull();
+  });
+
   it("adds the member badge to the account when membership is known", async () => {
     const { request } = fixture(3600, async () => ({ number: 42, since: "2026-06-14T00:00:00.000Z", founding: true }));
     const cookie = (await signIn(request)).headers.get("set-cookie")!.split(";")[0];

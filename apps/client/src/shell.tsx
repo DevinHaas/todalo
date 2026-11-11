@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "reac
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines, CalendarClock, ChevronDown, FlaskConical, Gift, HelpCircle, Layers,
-  LineChart, ListFilter, LogOut, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search, Settings,
+  LineChart, ListFilter, LogOut, MessageSquare, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search, Settings,
 } from "lucide-react";
 import type { Account } from "./session";
 import { coachReads, connection, projectReads, queries, reads, session } from "./runtime";
@@ -38,6 +38,7 @@ import { PendingChangesContext, pendingChanges } from "./pending-changes";
 import { PlanningHost } from "./planning-screens";
 import { useCommandDrag } from "./quick-add-drag";
 import { cn } from "./ui";
+import { openFeedback, useFeedbackBoard } from "./feedback-board";
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
@@ -171,6 +172,7 @@ export function Shell({ account }: { account: Account }) {
   const [addingGoal, setAddingGoal] = useState(false);
   const goalsShown = useGoalsShown(account.user.id);
   const today = useQuery(reads.today(account.user.id));
+  useFeedbackBoard(account);
   useEffect(() => {
     if (!mobileOpen) return;
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileOpen(false); };
@@ -290,7 +292,7 @@ function SyncRow({ sync, onSync }: { sync: Sync; onSync: () => void }) {
   </button>;
 }
 
-/** Sidebar account menu (Todoist-style): Settings; What's new and Latest experiments; Sync; Log out; version and Changelog. */
+/** Sidebar account menu (Todoist-style): Settings; What's new, Latest experiments and Send feedback; Sync; Log out; version and Changelog. */
 function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: () => void }) {
   const userId = account.user.id;
   const openSettings = useOpenSettings();
@@ -317,6 +319,7 @@ function AccountMenu({ account, onNavigate }: { account: Account; onNavigate: ()
           {divider}
           <button type="button" role="menuitem" className="popover-item" onClick={show("whats-new")}><Gift /><span>What's new</span></button>
           <button type="button" role="menuitem" className="popover-item" onClick={show("experiments")}><FlaskConical /><span>Latest experiments</span></button>
+          <button type="button" role="menuitem" className="popover-item" onClick={() => { close(false); onNavigate(); openFeedback(); }}><MessageSquare /><span>Send feedback</span></button>
           {divider}
           <SyncRow sync={sync} onSync={() => { close(false); onNavigate(); reload(); }} />
           {divider}

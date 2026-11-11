@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@todalo/db";
 import { coachDocuments, coachDraftItems, coachDrafts, goalTasks, taskAttachments, tasks, userSettings } from "@todalo/db/schema";
+import { storeFile } from "./storage";
 import { atomically, completeTasks, deleteTasks } from "./bulk";
 import { getCalendarEventsForUser } from "./calendar-connections";
 import { getGoalLinks } from "./goals";
@@ -118,7 +119,7 @@ export async function resolveDraft(userId: string, draft: DraftRecord, { accepte
     } else if (write.op === "attach") {
       const taskId = parentOf(write);
       const document = documents.find(row => row.id === write.documentId);
-      if (taskId && document) writes.push(db.insert(taskAttachments).values({ userId, taskId, name: document.name, mediaType: document.mediaType, byteSize: document.byteSize, content: document.content }));
+      if (taskId && document) writes.push(db.insert(taskAttachments).values({ userId, taskId, name: document.name, mediaType: document.mediaType, byteSize: document.byteSize, content: await storeFile(Buffer.from(document.content, "base64")) }));
     } else if (write.taskId) {
       writes.push(db.update(tasks).set({ ...times, updatedAt: new Date() }).where(and(eq(tasks.id, write.taskId), eq(tasks.userId, userId))));
       touched.push(write.taskId);

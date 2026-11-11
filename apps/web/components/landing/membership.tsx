@@ -1,10 +1,14 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { FOUNDING_MEMBERS } from "@todalo/server/members";
+import { FOUNDING_MEMBERS } from "@todalo/server/founders";
 import { MembershipCard } from "./membership-card";
 
-/** After Pricing: every member's badge, grown from their member number. `next` is the number the next sign-up gets. */
-export function Membership({ next }: { next: number }) {
+/** After Pricing: every member's badge, grown from their member number. `initial` is the number the next sign-up gets. */
+export function Membership({ next: initial }: { next: number }) {
+  const next = useNextMember(initial);
   const founding = next <= FOUNDING_MEMBERS;
   const left = FOUNDING_MEMBERS - next + 1;
   const number = `#${String(next).padStart(4, "0")}`;
@@ -35,4 +39,20 @@ export function Membership({ next }: { next: number }) {
       </div>
     </section>
   );
+}
+
+// ponytail: polls every 30 s while the tab is visible, which catches sign-ups from the site and
+// the app alike; push it (SSE) if the tree must change the instant someone joins.
+function useNextMember(initial: number) {
+  const [next, setNext] = useState(initial);
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return;
+      fetch("/api/members/next", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (typeof d?.next === "number") setNext(d.next); }).catch(() => {});
+    };
+    const timer = setInterval(check, 30_000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", check); };
+  }, []);
+  return next;
 }

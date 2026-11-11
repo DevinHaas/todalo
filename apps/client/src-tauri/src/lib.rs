@@ -62,6 +62,24 @@ async fn sign_out(state: tauri::State<'_, NativeAuth>) -> Result<(), String> {
     state.sign_out().await.map_err(str::to_owned)
 }
 
+/// Settings › Account: sets (a small JPEG data URL from the photo picker) or clears the
+/// profile photo. Fixed path; the API checks the image (packages/auth profileImageAllowed).
+#[tauri::command]
+async fn set_profile_photo(
+    state: tauri::State<'_, NativeAuth>,
+    image: Option<String>,
+) -> Result<(), String> {
+    state
+        .write(
+            reqwest::Method::POST,
+            "/api/auth/update-user",
+            Some(serde_json::json!({ "image": image })),
+        )
+        .await
+        .map(|_| ())
+        .map_err(str::to_owned)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -98,6 +116,7 @@ pub fn run() {
             sign_in,
             sign_up,
             sign_out,
+            set_profile_photo,
             reads::today,
             reads::task,
             reads::sync_changes,

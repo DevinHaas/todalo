@@ -1,5 +1,5 @@
 // Server-only attachment operations shared by the legacy Next routes and
-// /api/v1. Storage is the task_attachments row itself (base64 content), so
+// /api/v1. Bytes live in R2 or, without it, in the row as base64 (storage.ts), so
 // legacy and new transports read and write identical records.
 import { and, eq } from "drizzle-orm";
 import { db } from "@todalo/db";
@@ -7,6 +7,7 @@ import { tasks, taskAttachments } from "@todalo/db/schema";
 import { validateAttachmentFiles } from "./attachment-limits";
 import { AttachmentError, type UploadedFile } from "./attachment-http";
 import { getOwnedProject } from "./projects";
+import { fileContent, storeFile } from "./storage";
 
 export { AttachmentError, attachmentDownload, readUploadForm, uploadedFiles } from "./attachment-http";
 
@@ -23,7 +24,7 @@ export async function createFileTasks(userId: string, projectId: string, files: 
   await requireOwnedProject(userId, projectId);
   try { validateAttachmentFiles(files); } catch (error) { throw new AttachmentError((error as Error).message, 400); }
   const newTasks = files.map(file => ({ id: crypto.randomUUID(), userId, projectId, title: file.name }));
-  const attachments = await Promise.all(files.map(async (file, index) => ({ id: crypto.randomUUID(), userId, taskId: newTasks[index].id, name: file.name, mediaType: file.type || "application/octet-stream", byteSize: file.size, content: Buffer.from(await file.arrayBuffer()).toString("base64") })));
+  const attachments = await Promise.all(files.map(async (file, index) => ({ id: crypto.randomUUID(), userId, taskId: newTasks[index].id, name: file.name, mediaType: file.type || "application/octet-stream", byteSize: file.size, content: await storeFile(new Uint8Array(await file.arrayBuffer())) })));
   // Neon HTTP batch is one database transaction; a failed attachment insert
   // rolls back the task insertion as well.
   await db.batch([db.insert(tasks).values(newTasks), db.insert(taskAttachments).values(attachments)]);
@@ -37,5 +38,6 @@ export async function readAttachment(userId: string, id: string) {
   const [attachment] = await db.select().from(taskAttachments).where(and(eq(taskAttachments.id, id), eq(taskAttachments.userId, userId))).limit(1);
   if (!attachment) throw new AttachmentError("Attachment not found.", 404);
   await requireOwnedTask(userId, attachment.taskId);
-  return attachment;
+  // ponytail: R2 bytes come back as base64 so downloads keep one shape; stream them if files outgrow 10 MB
+  return { ...attachment, content: await fileContent(attachment.content) };
 }

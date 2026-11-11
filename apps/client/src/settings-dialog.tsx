@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, type To } from "react-router";
-import { Blocks, CalendarDays, Sunrise, ChevronLeft, Keyboard, Palette, Search, Settings, Sparkles, UserRound, X } from "lucide-react";
+import { Blocks, Camera, CalendarDays, Sunrise, ChevronLeft, Keyboard, Palette, Search, Settings, Sparkles, UserRound, X } from "lucide-react";
 import type { Account } from "./session";
 import { session } from "./runtime";
 import { haptics, hapticsSupported } from "./feedback";
@@ -15,6 +15,7 @@ import { ImportSettingsScreen } from "./import-screen";
 import { RitualSettingsScreen } from "./ritual-screens";
 import { CoachSettingsScreen } from "./coach-screens";
 import { BadgeCard, badgeSceneDefaults } from "@todalo/badge";
+import { saveProfilePhoto, squarePhoto } from "./profile-photo";
 import "./badge-fonts";
 
 const icons: Record<SettingsSection, ReactNode> = {
@@ -23,18 +24,48 @@ const icons: Record<SettingsSection, ReactNode> = {
 
 function AccountSection({ account }: { account: Account }) {
   const [pending, setPending] = useState(false);
+  const [photo, setPhoto] = useState<{ saving: boolean; error: string | null }>({ saving: false, error: null });
+  const picker = useRef<HTMLInputElement>(null);
   const { name, email, image } = account.user;
-  const dark = useSyncExternalStore(theme.subscribe, theme.dark);
-  return <div className="settings-fields">
-    {account.member && <div className="settings-badge">
-      <BadgeCard member={account.member.number} name={name} since={account.member.since} founding={account.member.founding}
-        logo="/todalo-logo.svg" params={{ ...badgeSceneDefaults, dark }} width="min(100%, 300px)" />
-    </div>}
-    <div className="settings-field"><span className="settings-label">Photo</span>
-      {image ? <img className="settings-photo" src={image} alt="" /> : <span className="settings-photo avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}</div>
-    <div className="settings-field"><span className="settings-label">Name</span><span>{name}</span></div>
-    <div className="settings-field"><span className="settings-label">Email</span><span>{email}</span></div>
-    <div><button type="button" className="button outline" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Log out"}</button></div>
+  const member = account.member;
+  const savePhoto = async (next: () => Promise<string | null>) => {
+    setPhoto({ saving: true, error: null });
+    try { await saveProfilePhoto(await next()); await session.refresh(); setPhoto({ saving: false, error: null }); }
+    catch { setPhoto({ saving: false, error: "Your photo could not be saved. Try another image." }); }
+  };
+  return <div className="account-settings">
+    <section className="account-profile" aria-label="Profile">
+      <button type="button" className="account-photo-button" aria-label="Change photo" title="Change photo" disabled={photo.saving} onClick={() => picker.current?.click()}>
+        {image ? <img className="account-photo" src={image} alt="" /> : <span className="account-photo avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
+        <span className="account-photo-edit" aria-hidden="true"><Camera /></span>
+      </button>
+      <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp,image/heic" hidden
+        onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void savePhoto(() => squarePhoto(file)); }} />
+      <div className="account-identity"><span className="account-name">{name}</span><span className="account-email">{email}</span>
+        <span className="account-photo-actions">
+          <button type="button" className="text-link" disabled={photo.saving} onClick={() => picker.current?.click()}>{photo.saving ? "Saving photo…" : "Change photo"}</button>
+          {image && !photo.saving && <button type="button" className="text-link" onClick={() => void savePhoto(async () => null)}>Remove</button>}
+        </span>
+        {photo.error && <span className="account-photo-error" role="alert">{photo.error}</span>}
+      </div>
+      <button type="button" className="button outline" disabled={pending} onClick={async () => { setPending(true); await session.signOut(); setPending(false); }}>{pending ? "Please wait…" : "Log out"}</button>
+    </section>
+    {member && <section className="account-membership" aria-labelledby="membership-title">
+      <h3 id="membership-title" className="account-section-title">Membership</h3>
+      <div className="account-membership-body">
+        {/* always the light card, like the printed badge; it doesn't follow the app theme */}
+        <div className="account-badge"><BadgeCard member={member.number} name={name} since={member.since} founding={member.founding}
+          logo="/todalo-logo.svg" params={badgeSceneDefaults} width="100%" /></div>
+        <div className="account-member-info">
+          <p className="account-member-title">Member #{member.number}</p>
+          {member.founding && <p className="account-founding">Founding member: one of the first to join todalo.</p>}
+          <dl>
+            <div><dt>Joined</dt><dd>{new Date(member.since).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</dd></div>
+            <div><dt>Your tree</dt><dd>Grown from your member number. No two are alike, and yours never changes.</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>}
   </div>;
 }
 

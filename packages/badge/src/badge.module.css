@@ -1,8 +1,8 @@
 /* The display face is the host's Sanela: the app registers "Sanela"; the landing page sets --badge-display to its next/font family. */
 .stage { perspective: 1200px; }
 .card {
-  /* hosts can match their own corner radius, e.g. the landing page's 18px cards */
-  position: relative; aspect-ratio: 0.69; border-radius: var(--badge-radius, 4.5cqw); overflow: hidden; container-type: inline-size;
+  /* the landing page's 18px cards; a host can still set its own --badge-radius */
+  position: relative; aspect-ratio: 0.69; border-radius: var(--badge-radius, 18px); overflow: hidden; container-type: inline-size;
   border: 1px solid rgb(0 0 0 / 0.08);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 24px 48px -24px rgb(0 0 0 / 0.18);
   transform: rotateX(var(--ty, 0deg)) rotateY(var(--tx, 0deg));
@@ -10,10 +10,11 @@
   text-align: left;
 }
 .card[data-dark] { border-color: rgb(255 255 255 / 0.08); }
-.canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* own radius: WebKit lets a WebGL canvas in a 3D-tilted card escape the card's overflow clip */
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: inherit; }
 /* a faint light that follows the pointer, like glass over a print */
 .sheen {
-  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light;
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; border-radius: inherit;
   background: radial-gradient(60% 45% at var(--mx, 30%) var(--my, 20%), rgb(255 255 255 / 0.55), transparent 70%);
 }
 

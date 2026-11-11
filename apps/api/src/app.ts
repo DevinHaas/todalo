@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { withElysia } from "@sentry/elysia";
 import type { connectSpeech } from "./speech";
 import type { commitRambleTodos } from "./commit";
 import { RambleConnection } from "./ramble-session";
@@ -30,7 +31,8 @@ export function createApi(dependencies: ApiDependencies) {
   const connections = new Map<string, Promise<RambleConnection | undefined>>();
   const authenticated = new WeakMap<Request, { userId: string; preferences: Promise<Preferences> }>();
   const tickets = dependencies.tickets ?? createSocketTickets();
-  return new Elysia({ websocket: { maxPayloadLength: 64_000, idleTimeout: 120, backpressureLimit: 512_000, closeOnBackpressureLimit: true } })
+  // Sentry hooks go first so they cover every route below; a no-op until Sentry.init (instrument.ts).
+  return withElysia(new Elysia({ websocket: { maxPayloadLength: 64_000, idleTimeout: 120, backpressureLimit: 512_000, closeOnBackpressureLimit: true } }))
     .get("/api/ramble/health", () => ({ ok: true }))
     .get("/api/ramble/session", async ({ request, status }) => {
       const userId = await dependencies.verify(request.headers);

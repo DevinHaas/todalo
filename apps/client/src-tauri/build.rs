@@ -41,6 +41,7 @@ fn main() {
             "sign_in",
             "sign_up",
             "sign_out",
+            "set_profile_photo",
             "today",
             "task",
             "sync_changes",
