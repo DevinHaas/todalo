@@ -31,3 +31,7 @@ Deviations and open points:
 - The help center is not deployed, so both links lead nowhere until ticket 17.
 - The legacy web app's "Help & resources" (`apps/web/components/app-sidebar.tsx`) is unchanged, as the spec leaves that app alone.
 - Tests: `apps/client/src/help.test.ts` and Rust unit tests in `help.rs`. The sidebar link and the new account-menu entry have no render test (the shell has none), and nothing was run inside the real Mac app.
+
+### 2026-11-11 (agent, branch `help-center-review-fixes`)
+
+The Settings › Calendars hint now links to the help center home, because the Google Calendar article is unpublished and would 404. Its address is parked under `unpublished` in `apps/client/src/help-links.json`. **When the Integrations category is published:** move `google-calendar` back under `articles`, change `helpLink()` in `apps/client/src/calendar-views.tsx` to `helpLink("google-calendar")`, and restore the article expectations in `apps/client/src/help.test.ts` and `src-tauri/src/help.rs`.

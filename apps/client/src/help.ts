@@ -1,6 +1,8 @@
 // Links to the help center. Every address comes from help-links.json, which the
 // Mac app's `open_help` command (src-tauri/src/help.rs) embeds too: correct a
-// URL or add an article there and both sides follow.
+// URL or add an article there and both sides follow. Only "articles" are
+// linked; "unpublished" holds addresses whose help pages are not live yet
+// (move an entry up once its category is published).
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import links from "./help-links.json";
 
@@ -17,7 +19,7 @@ export function helpLink(article?: HelpArticle) {
     onClick: (click: { preventDefault(): void }) => {
       if (!isTauri()) return;
       click.preventDefault();
-      void invoke("open_help", { article: article ?? null }).catch(() => {});
+      invoke("open_help", { article: article ?? null }).catch((error: unknown) => console.error("Could not open the help center", error));
     },
   };
 }

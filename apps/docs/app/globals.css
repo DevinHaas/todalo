@@ -117,6 +117,8 @@ h1 { font-family: var(--font-display); font-weight: 900; letter-spacing: -.025em
 .category-heading { display: flex; gap: 48px; align-items: center; justify-content: space-between; margin-bottom: 48px; }
 .category-heading h1 { font-size: clamp(40px, 5vw, 64px); margin-block: 16px; }
 .category-heading .illustration { max-width: 240px; min-height: 160px; }
+.category-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; font-size: 13px; color: var(--muted); }
+.category-switcher [aria-current="page"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .article-list { max-width: 800px; }
 .article-list > a { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 26px; border-top: 1px solid var(--line); }
 .article-list > a:hover h2 { color: var(--link); }

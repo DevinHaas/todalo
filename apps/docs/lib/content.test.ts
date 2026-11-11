@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { categories } from "./categories";
 import { loadContent } from "./content-loader";
-import { getContent } from "./content-model";
+import { buildContent } from "./content-model";
 import { articleSchema } from "./schema";
 
 const roots: string[] = [];
@@ -59,7 +59,7 @@ it("returns a published article with its details and address", () => {
     published: true,
   });
   expect(content.articles[0].body).toContain("Body text.");
-  expect(content.article("tasks-capture", "use-quick-add")).toBe(content.articles[0]);
+  expect(content.article("/tasks-capture/use-quick-add")).toBe(content.articles[0]);
 });
 
 describe("publication boundary", () => {
@@ -71,18 +71,13 @@ describe("publication boundary", () => {
     });
   }
 
-  it("filters lists, lookups, navigation, search and sitemap through the same boundary", () => {
+  it("filters lists, lookups, search and sitemap through the same boundary", () => {
     const content = loadContent(mixedSite());
     expect(content.articles.map((entry) => entry.slug)).toEqual(["published"]);
-    expect(content.visibleArticles).toBe(content.articles);
     expect(content.categories.map((category) => category.slug)).toEqual(["tasks-capture"]);
     expect(content.category("coach")).toBeUndefined();
-    expect(content.article("tasks-capture", "draft")).toBeUndefined();
+    expect(content.article("/tasks-capture/draft")).toBeUndefined();
     expect(content.category("tasks-capture")?.articles).toEqual(content.articles);
-    expect(content.navigation).toEqual([{
-      title: "Tasks & capture", url: "/tasks-capture",
-      articles: [{ title: "Use Quick Add", url: "/tasks-capture/published" }],
-    }]);
     expect(content.search.map((entry) => entry.url)).toEqual(["/tasks-capture/published"]);
     expect(content.sitemap.map((entry) => entry.url)).toEqual(["/", "/tasks-capture", "/tasks-capture/published"]);
   });
@@ -94,9 +89,8 @@ describe("publication boundary", () => {
     const content = loadContent(options);
     expect(content.preview).toBe(true);
     expect(content.category("coach")?.articles).toHaveLength(1);
-    expect(content.article("tasks-capture", "draft")).toBeDefined();
+    expect(content.article("/tasks-capture/draft")).toBeDefined();
     expect(content.search).toHaveLength(3);
-    expect(content.navigation.flatMap((category) => category.articles)).toHaveLength(3);
     expect(content.sitemap).toHaveLength(6);
     expect(loadContent({ ...options, preview: false }).articles).toHaveLength(1);
   });
@@ -108,7 +102,7 @@ describe("publication boundary", () => {
     vi.stubEnv("NODE_ENV", "production");
     for (const content of [
       loadContent({ ...options, preview: true, environment: "development" }),
-      getContent(preview.articles, { preview: true }),
+      buildContent(preview.articles, { preview: true }),
     ]) {
       expect(content.preview).toBe(false);
       expect(content.articles).toHaveLength(1);
@@ -300,11 +294,18 @@ describe("article references", () => {
 describe("git update metadata", () => {
   it("uses no invented date for an untracked article", () => {
     const content = loadContent(site({ "content/tasks-capture/example.mdx": article() }));
-    expect(content.articles[0].lastUpdated).toEqual({ author: "Devin", date: null });
     expect(content.articles[0].updatedAt).toBeNull();
   });
 
-  it("uses the latest article commit and the author's first name", () => {
+  it("reads dates from the build manifest when there is no git history", () => {
+    const content = loadContent(site({
+      "content/tasks-capture/example.mdx": article(),
+      ".article-dates": "tasks-capture/example.mdx\t2026-03-04T05:06:07+01:00\nother/missing.mdx\tnot-a-date\n",
+    }));
+    expect(content.articles[0].updatedAt).toBe("2026-03-04T04:06:07.000Z");
+  });
+
+  it("uses the latest article commit", () => {
     const options = site({ "content/tasks-capture/example.mdx": article() });
     const root = dirname(options.dir);
     const git = (args: string[], date?: string, author = "Devin Hasler") => execFileSync("git", args, {
@@ -315,13 +316,11 @@ describe("git update metadata", () => {
     git(["init"]);
     git(["add", "."]);
     git(["-c", "commit.gpgsign=false", "commit", "-m", "Article"], "2026-01-02T12:00:00Z");
-    expect(loadContent(options).articles[0].lastUpdated).toEqual({ author: "Devin", date: "2026-01-02T12:00:00.000Z" });
+    expect(loadContent(options).articles[0].updatedAt).toBe("2026-01-02T12:00:00.000Z");
     writeFileSync(join(options.dir, "tasks-capture/example.mdx"), article({}, "Revised body."));
     git(["add", "."]);
     git(["-c", "commit.gpgsign=false", "commit", "-m", "Revise article"], "2026-02-03T15:30:00Z", "Alex Writer");
-    expect(loadContent(options).articles[0]).toMatchObject({
-      updatedAt: "2026-02-03T15:30:00.000Z", lastUpdated: { author: "Alex", date: "2026-02-03T15:30:00.000Z" },
-    });
+    expect(loadContent(options).articles[0].updatedAt).toBe("2026-02-03T15:30:00.000Z");
   });
 });
 
@@ -335,7 +334,6 @@ describe("real help-center content", () => {
     expect(new Set(categories.map((category) => category.slug)).size).toBe(7);
     expect(content.articles).toEqual([]);
     expect(content.categories).toEqual([]);
-    expect(content.navigation).toEqual([]);
     expect(content.search).toEqual([]);
     expect(content.sitemap).toEqual([{ url: "/", updatedAt: null }]);
   });
@@ -356,7 +354,7 @@ describe("real help-center content", () => {
       }
     }
     expect(content.category("coach")?.articles.every((entry) => entry.badge === "experiment")).toBe(true);
-    expect(content.article("apps-account", "allow-notifications-and-the-microphone-on-mac")?.platforms).toEqual(["mac"]);
+    expect(content.article("/apps-account/allow-notifications-and-the-microphone-on-mac")?.platforms).toEqual(["mac"]);
     expect(content.articles.map((entry) => entry.title)).toContain("What's new");
   });
 });

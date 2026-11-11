@@ -1,5 +1,9 @@
+// The publication boundary. Pure, so both the build-time loader
+// (content-loader.ts) and the app (content.ts) build Content the same way.
 import { categories, type Category } from "./categories";
 import type { ArticleFrontmatter } from "./schema";
+
+export const HELP_ORIGIN = "https://help.todalo.app";
 
 export type Article = ArticleFrontmatter & {
   slug: string;
@@ -7,7 +11,6 @@ export type Article = ArticleFrontmatter & {
   file: string;
   body: string;
   updatedAt: string | null;
-  lastUpdated: { author: string; date: string | null };
 };
 
 export type ContentCategory = Category & { articles: Article[] };
@@ -20,12 +23,10 @@ export type ContentOptions = {
 
 export type Content = {
   articles: Article[];
-  visibleArticles: Article[];
   categories: ContentCategory[];
   preview: boolean;
-  article: (category: string, slug: string) => Article | undefined;
+  article: (url: string) => Article | undefined;
   category: (slug: string) => ContentCategory | undefined;
-  navigation: { title: string; url: string; articles: { title: string; url: string }[] }[];
   search: { title: string; description: string; category: string; url: string; content: string }[];
   sitemap: { url: string; updatedAt: string | null }[];
 };
@@ -35,7 +36,8 @@ export function isContentPreview(options: Pick<ContentOptions, "preview" | "envi
   return options.preview ?? process.env.DOCS_PREVIEW === "true";
 }
 
-export function getContent(allArticles: readonly Article[], options: ContentOptions = {}): Content {
+/** Published articles (plus drafts in local preview), ordered, with every derived view. */
+export function buildContent(allArticles: readonly Article[], options: ContentOptions = {}): Content {
   const preview = isContentPreview(options);
   const categoryOrder = new Map(categories.map((category) => [category.slug, category.order]));
   const articles = allArticles.filter((article) => article.published || preview).sort((first, second) =>
@@ -50,16 +52,10 @@ export function getContent(allArticles: readonly Article[], options: ContentOpti
 
   return {
     articles,
-    visibleArticles: articles,
     categories: visibleCategories,
     preview,
-    article: (category, slug) => byUrl.get(`/${category}/${slug}`),
+    article: (url) => byUrl.get(url),
     category: (slug) => byCategory.get(slug),
-    navigation: visibleCategories.map((category) => ({
-      title: category.name,
-      url: `/${category.slug}`,
-      articles: category.articles.map(({ title, url }) => ({ title, url })),
-    })),
     search: articles.map(({ title, description, category, url, body }) => ({
       title, description, category, url, content: body,
     })),

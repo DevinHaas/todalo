@@ -4,7 +4,8 @@
 
 export const PLATFORMS = ["web", "mac"] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLATFORM_LABELS: Record<Platform, string> = { web: "Web", mac: "Mac" };
+/** Every platform an article can be available on; only Web and Mac are switchable. */
+export const PLATFORM_LABELS = { web: "Web", mac: "Mac", ios: "iOS" } as const;
 export const PLATFORM_KEY = "todalo-help-platform";
 
 /** What the browser reports as its operating system ("macOS", "MacIntel", "Win32"). */

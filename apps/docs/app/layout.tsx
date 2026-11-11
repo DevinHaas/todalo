@@ -6,7 +6,7 @@ import { Footer } from "@/components/footer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HelpSearchProvider, SearchTrigger } from "@/components/help-search";
 import { PlatformProvider } from "@/components/platform-provider";
-import { loadContent } from "@/lib/content";
+import { HELP_ORIGIN, content } from "@/lib/content";
 import { categories } from "@/lib/categories";
 import { themeScript } from "@/lib/theme";
 import "./globals.css";
@@ -25,7 +25,7 @@ const sanela = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://help.todalo.app"),
+  metadataBase: new URL(HELP_ORIGIN),
   title: { default: "Todalo Help", template: "%s | Todalo Help" },
   description: "Guides and answers for Todalo on the web and on Mac.",
   icons: { icon: "/todalo-logo.svg" },
@@ -34,7 +34,6 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const content = loadContent();
   const articles = content.articles.map((article) => ({
     url: article.url, title: article.title, description: article.description,
     category: categories.find((category) => category.slug === article.category)?.name ?? article.category,

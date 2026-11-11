@@ -1,5 +1,21 @@
 # Help center (apps/docs). Build with the repo root as context:
 #   docker build -f apps/docs/Dockerfile .
+#
+# "Last updated" dates come from git, which the bun images lack. The `dates`
+# stage writes them to apps/docs/.article-dates (one "path<TAB>date" line per
+# article) and the loader reads that file when git is unavailable. .git reaches
+# the build context only for this image, through Dockerfile.dockerignore (BuildKit
+# uses it instead of the root .dockerignore), and only the dates file leaves the
+# stage: no history ships in the image. Needs a full clone: with Coolify's
+# shallow clone on, every article gets the last commit's date.
+FROM alpine/git AS dates
+WORKDIR /repo
+COPY .git ./.git
+COPY apps/docs/content ./apps/docs/content
+RUN cd apps/docs/content && find . -name '*.md*' | sed 's|^\./||' | sort | while read -r file; do \
+      printf '%s\t%s\n' "$file" "$(git log -1 --follow --format=%aI -- "$file")"; \
+    done > ../.article-dates
+
 FROM oven/bun:1 AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
@@ -19,7 +35,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps ./apps
 COPY --from=deps /app/packages ./packages
+# ponytail: this also copies .git into the builder (not the image); use
+# COPY --exclude=.git (dockerfile:1.7 syntax) if build-cache size matters.
 COPY . .
+COPY --from=dates /repo/apps/docs/.article-dates ./apps/docs/.article-dates
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 RUN bun run --filter @todalo/docs build

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve } from "node:path";
 import { remarkHeading } from "fumadocs-core/mdx-plugins/remark-heading";
 import { remarkGfm } from "fumadocs-core/mdx-plugins/remark-gfm";
-import type { Article, Content } from "./content-model";
+import { HELP_ORIGIN, type Article, type Content } from "./content-model";
 
 type Node = {
   type: string;
@@ -76,8 +76,8 @@ function references(article: Article): References {
 }
 
 function resolveLink(reference: string, article: Article): URL {
-  const link = new URL(reference, `https://help.todalo.app${article.url}`);
-  if (link.origin === "https://help.todalo.app" && /\.mdx?$/.test(link.pathname)) {
+  const link = new URL(reference, `${HELP_ORIGIN}${article.url}`);
+  if (link.origin === HELP_ORIGIN && /\.mdx?$/.test(link.pathname)) {
     link.pathname = link.pathname.replace(/\.mdx?$/, "");
   }
   return link;
@@ -118,7 +118,7 @@ export function validateContent(content: Content, allArticles: readonly Article[
       }
       for (const reference of refs.links) {
         const link = resolveLink(reference, article);
-        if (link.origin !== "https://help.todalo.app") continue;
+        if (link.origin !== HELP_ORIGIN) continue;
         const path = decodeURIComponent(link.pathname).replace(/\/$/, "") || "/";
         const category = content.category(path.slice(1));
         if (path === "/" || (category && (!article.published || category.articles.some((entry) => entry.published)))) {

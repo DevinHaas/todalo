@@ -1,0 +1,10 @@
+# Used instead of /.dockerignore when building apps/docs/Dockerfile. Same list,
+# except .git is kept for the article-dates stage.
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+.scratch
+.local-models
+.env*
