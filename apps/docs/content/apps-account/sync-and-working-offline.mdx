@@ -1,11 +1,53 @@
 ---
 title: "Sync and working offline"
-description: "Understand how changes sync and what works offline."
+description: "Learn how Todalo keeps your devices up to date, and what happens when your connection drops."
 category: "apps-account"
 order: 4
 platforms: ["web", "mac"]
-related: []
+related: ["/get-started/use-todalo-on-the-web-or-install-it-on-your-mac", "/apps-account/manage-your-account", "/apps-account/troubleshoot-sign-in"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+Todalo saves every change to your account as you make it, so the web and your Mac show the same tasks. Changes you make on one device appear on the others on their own, usually within a few seconds. Saving needs a connection, so it helps to know what Todalo does when you're offline.
+
+## How your devices stay in sync
+
+When you add, edit, complete or move something, Todalo shows the change at once and saves it to your account in the background. Other devices where you're signed in pick the change up by themselves:
+
+- While Todalo is open, it hears about changes as they happen and updates the screen in place.
+- It also checks for changes every minute while its window is visible.
+- When you come back to Todalo after using another app, or when your connection returns, it checks straight away.
+
+You don't need to refresh. If two devices change the same task at almost the same time, the first save wins. The second shows "Couldn't" followed by what you tried to do, and "It was changed on another device, so the latest version is shown. Your change was undone." Look at the task, then make your change again if you still need it.
+
+## Sync now
+
+To check for changes yourself, click **Synced** in the toolbar at the top of the screen. It reads "Syncing…" while Todalo reloads your data.
+
+You can also click your name at the top left of the sidebar and click **Sync**. That row also shows when Todalo last synced, for example "5 seconds ago".
+
+<Tip>Press <Shortcut keys="Mod+R" /> to sync now from anywhere. In Todalo it reloads all your data in place instead of reloading the page, so nothing you're typing is lost.</Tip>
+
+## When you're offline
+
+If your device loses its connection, Todalo shows "You're offline. Changes can't be saved until you reconnect." at the top of the screen, under the toolbar.
+
+While you're offline:
+
+- Everything already on screen stays there. You can keep reading your tasks and moving between screens you've already opened.
+- Changes aren't saved. If you complete, add or edit something, Todalo puts it back as it was and shows "You're offline. Your change was undone." with a **Retry** button.
+- A task you're writing in Quick Add or a form stays in the form, so you can save it once you're back online.
+
+When the connection returns, the message goes away and Todalo checks for changes. Click **Retry** on any change that didn't save, or make it again.
+
+<Note>Todalo doesn't keep a copy of your tasks on the device and doesn't queue changes to send later. If you open or reload Todalo while you're offline, your tasks can't load until you reconnect.</Note>
+
+## When Todalo can't be reached
+
+Sometimes your device is online but Todalo's server can't be reached. Todalo then shows "Can't reach todalo. Changes can't be saved right now." with a **Try again** button. Changes behave as they do offline: they're undone, with a **Retry** button on each.
+
+Click **Try again** to check whether Todalo is back. If it keeps happening, check whether other websites load. If they do, wait a few minutes and try again.
+
+## Signed out on another device
+
+Each device has its own session. Logging out on your Mac doesn't log you out in your browser, and the other way round. If Todalo signs you out on its own, for example after a long time away, sign in again: your tasks are all still in your account. See [Troubleshoot sign-in](/apps-account/troubleshoot-sign-in) if that doesn't work.

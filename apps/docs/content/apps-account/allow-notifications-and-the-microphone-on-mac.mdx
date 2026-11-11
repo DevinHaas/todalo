@@ -1,11 +1,60 @@
 ---
 title: "Allow notifications and the microphone on Mac"
-description: "Allow Mac notifications and microphone access for Todalo."
+description: "Let the Todalo Mac app use your microphone for Ramble and show notifications when a Ritual is ready."
 category: "apps-account"
 order: 5
 platforms: ["mac"]
-related: []
+related: ["/tasks-capture/dictate-tasks-with-ramble", "/goals-seasons-rituals/introduction-to-rituals", "/get-started/use-todalo-on-the-web-or-install-it-on-your-mac"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+The Todalo Mac app asks macOS for two permissions: the microphone, so you can speak tasks with Ramble, and notifications, so it can tell you when a Ritual is ready. macOS asks you once for each, the first time Todalo needs it. If you said no, or want to change your answer, you can do it in System Settings at any time.
+
+## Allow the microphone
+
+Todalo uses the microphone only while you record a Ramble session, or while you speak an answer in a Ritual. The first time you start Ramble, macOS asks whether Todalo may use the microphone, with the message "todalo uses the microphone only while you record a Ramble, to transcribe the tasks you speak." Click **Allow**.
+
+If you clicked **Don't Allow**, Ramble shows "Microphone access is off." with an **Open System Settings** button. To allow it:
+
+<Steps>
+<Step>In Ramble, click **Open System Settings**. System Settings opens on **Privacy & Security** › **Microphone**.</Step>
+<Step>Switch on **todalo** in the list.</Step>
+<Step>Go back to Todalo and start Ramble again.</Step>
+</Steps>
+
+You can also get there yourself: open the Apple menu, choose **System Settings**, click **Privacy & Security** in the sidebar, then click **Microphone**.
+
+<Note>macOS may ask you to quit and reopen Todalo before the change takes effect. Staged tasks that you haven't added yet are lost when you quit, so add them first.</Note>
+
+### Choose which microphone Ramble uses
+
+Ramble uses your Mac's default microphone. To use another one, such as a headset, choose it in the **Choose microphone** menu at the top of Ramble. Todalo remembers the choice only until you leave Ramble.
+
+If recording stops with "Recording stopped because the microphone was interrupted or disconnected.", check that the microphone is still connected, then start again.
+
+## Allow notifications
+
+Todalo shows a notification when one of your Rituals is ready: "Your Check-in is ready", "Your Evening review is ready" or "Your Weekly review is ready". It's the only thing Todalo sends notifications for.
+
+macOS asks whether to allow them the first time you switch on a Ritual, or **Notify me when a ritual is ready**, in **Settings** › **Rituals**. Click **Allow** when it asks.
+
+To allow notifications later, or to change how they look:
+
+<Steps>
+<Step>Open the Apple menu and choose **System Settings**.</Step>
+<Step>Click **Notifications** in the sidebar.</Step>
+<Step>Click **todalo** in the list of apps.</Step>
+<Step>Switch on **Allow notifications**, and choose how the notifications appear.</Step>
+</Steps>
+
+<Note>Ritual notifications only appear while Todalo is open. If you quit the app, nothing arrives until you open it again. You can still start a Ritual from **Rituals** in the sidebar.</Note>
+
+Click a notification to bring Todalo to the front; the Ritual opens.
+
+### Stop Ritual notifications
+
+To stop them without changing your Mac's settings, click your name at the top left of the sidebar, then **Settings** › **Rituals**, and switch off **Notify me when a ritual is ready**. Your Rituals still appear in the sidebar at their time, without a notification.
+
+## On the web
+
+In a browser, your browser asks for these permissions instead of macOS, and your browser's site settings control them. The steps above are only for the Mac app.

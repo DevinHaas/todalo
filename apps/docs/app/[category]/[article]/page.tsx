@@ -8,12 +8,13 @@ import { PlatformContent } from "@/components/platform-content";
 import { PlatformSwitcher } from "@/components/platform-switcher";
 import { Shortcut } from "@/components/keyboard-shortcut";
 import { ThemedScreenshot } from "@/components/themed-screenshot";
+import { ReleaseNotes, ShortcutTable } from "@/components/generated-content";
 import { TableOfContents } from "@/components/table-of-contents";
 import { Support } from "@/components/support";
 import { PLATFORM_LABELS, needsPlatformSwitcher } from "@/lib/platform";
 
 type Props = { params: Promise<{ category: string; article: string }> };
-const components = { Callout, Steps, Step, Tip, Note, Warning, Platform: PlatformContent, PlatformContent, Shortcut, Kbd: Shortcut, ThemedScreenshot };
+const components = { Callout, Steps, Step, Tip, Note, Warning, Platform: PlatformContent, PlatformContent, Shortcut, Kbd: Shortcut, ThemedScreenshot, ShortcutTable, ReleaseNotes };
 
 function getArticle(category: string, slug: string) {
   const content = loadContent();
