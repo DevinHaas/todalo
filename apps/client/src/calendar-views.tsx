@@ -5,6 +5,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { openEvent, type CalendarAccountDto, type CalendarEventDto, type CalendarVisibilityInput } from "./calendar";
+import { helpLink } from "./help";
 import { blockFor, labels } from "./schedule";
 import type { ReadState } from "./views";
 
@@ -62,7 +63,7 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
     {error && <p className="error" role="alert">{error}</p>}
     {body}
     <div className="calendar-link">
-      <p className="setting-hint">Find out how to show events from multiple accounts.</p>
+      <p className="setting-hint"><a className="text-action" {...helpLink("google-calendar")}>Find out how to show events from multiple accounts.</a></p>
       {link}
     </div>
   </section>;

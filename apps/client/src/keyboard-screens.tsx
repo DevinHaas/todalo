@@ -246,7 +246,7 @@ export function KeyboardCommands({ userId, onCapture, onSidebar, onFind, onNewGo
     return () => { live = false; };
   }, [key, hash]);
   useEffect(() => { if (!status) return; const id = setTimeout(() => setStatus(null), 4000); return () => clearTimeout(id); }, [status]);
-  // The sidebar's Help & resources opens the same sheet as `?`.
+  // The account menu's Keyboard shortcuts opens the same sheet as `?`.
   useEffect(() => {
     const open = () => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setHelp(true); };
     window.addEventListener("todalo:help", open);
