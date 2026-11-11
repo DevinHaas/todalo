@@ -50,8 +50,8 @@ export default async function ArticlePage({ params }: Props) {
         {article.badge === "experiment" && <section><h2 className="sidebar-title">Status</h2><ul className="chips"><li className="chip chip-experiment">Experiment</li></ul></section>}
         <section><h2 className="sidebar-title">Platforms</h2><ul className="chips">{article.platforms.map((platform) => <li key={platform} className="chip">{PLATFORM_LABELS[platform]}</li>)}</ul></section>
         <TableOfContents headings={headings} />
-        {related.length > 0 && <section><h2 className="sidebar-title">Related articles</h2><ul className="related-links">{related.map((entry) => <li key={entry.url}><Link href={entry.url}><Icon name="article" />{entry.title}</Link></li>)}</ul></section>}
-        <section><h2 className="sidebar-title">Last updated by</h2><div className="author"><span className="avatar" aria-hidden="true">{AUTHOR[0]}</span><div><p>{AUTHOR}</p>{article.updatedAt ? <time dateTime={article.updatedAt}>{new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(article.updatedAt))}</time> : <p>Awaiting first review</p>}</div></div></section>
+        {related.length > 0 && <section className="sidebar-after"><h2 className="sidebar-title">Related articles</h2><ul className="related-links">{related.map((entry) => <li key={entry.url}><Link href={entry.url}><Icon name="article" />{entry.title}</Link></li>)}</ul></section>}
+        <section className="sidebar-after"><h2 className="sidebar-title">Last updated by</h2><div className="author"><span className="avatar" aria-hidden="true">{AUTHOR[0]}</span><div><p>{AUTHOR}</p>{article.updatedAt ? <time dateTime={article.updatedAt}>{new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(article.updatedAt))}</time> : <p>Awaiting first review</p>}</div></div></section>
       </aside>
       <article className="article-content"><div className="article" id="overview"><Body components={components} /></div><Support /></article>
     </div>

@@ -54,7 +54,8 @@ button, summary { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 4px; }
 
 /* Chrome: a 72px header across the window, then a 1136px page (1088px content). */
-.site-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 72px; padding-inline: 64px; }
+.site-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; max-width: 1136px; min-height: 72px; margin-inline: auto; padding-inline: 24px; }
+.mobile-categories { display: none; }
 .site-header nav { display: flex; align-items: center; gap: 28px; white-space: nowrap; font-size: 15.5px; font-weight: 500; }
 .site-main, .site-footer > ul { width: 100%; max-width: 1136px; margin-inline: auto; padding-inline: 24px; }
 .site-main { flex: 1; padding-block: 80px 96px; }
@@ -218,6 +219,16 @@ button, summary { cursor: pointer; }
 }
 @media (max-width: 768px) {
   .site-header { padding-inline: 20px; min-height: 64px; }
+  .desktop-categories { display: none; }
+  .mobile-categories { display: block; border-block: 1px solid var(--divider); }
+  .mobile-categories > summary { list-style: none; }
+  .mobile-categories > summary::-webkit-details-marker { display: none; }
+  .mobile-categories[open] > summary svg { transform: rotate(180deg); }
+  .mobile-categories ul { padding-bottom: 8px; }
+  .mobile-categories li .category-nav-row { font-weight: 500; color: var(--muted); }
+  .article-sidebar { display: contents; }
+  .article-content { order: 1; }
+  .sidebar-after { order: 2; }
   .site-header nav { gap: 16px; font-size: 14px; }
   .site-main, .site-footer > ul { padding-inline: 20px; }
   .site-main { padding-block: 24px 64px; }
@@ -248,7 +259,7 @@ button, summary { cursor: pointer; }
   .article .platform-block { margin-inline: 0; }
 }
 @media (max-width: 600px) {
-  .header-search { max-width: 50px; text-align: left; }
+  .header-search { display: none; }
   .help-hero { display: block; padding-block: 24px 52px; }
   .help-hero > .illustration { display: none; }
   .help-hero h1 { font-size: 52px; }
