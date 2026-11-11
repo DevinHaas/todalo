@@ -1,11 +1,123 @@
 ---
 title: "Use Google Calendar with Todalo"
-description: "Connect Google Calendar and view your schedule."
+description: "Connect your Google accounts, choose which calendars show in Today and Upcoming, and keep dated tasks in step."
 category: "integrations"
 order: 1
 platforms: ["web", "mac"]
-related: []
+related: ["/integrations/troubleshoot-google-calendar", "/organise-views/plan-your-day-with-the-today-view", "/organise-views/plan-your-week-with-the-upcoming-view", "/tasks-capture/schedule-a-date-and-time"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+A plan only works if it fits around the meetings and appointments already in your week. Connect Google Calendar and Todalo shows your events next to your tasks in Today and Upcoming. Your dated tasks also appear in Google Calendar, and changes you make to them there come back to Todalo.
+
+## Connect a Google account
+
+If you signed in to Todalo with Google, that account is already connected. Go to **Settings** › **Calendars** to choose which of its calendars show.
+
+To connect a Google account:
+
+<Steps>
+<Step>Click your name at the top left of the sidebar, then click **Settings**.</Step>
+<Step>Click **Calendars**.</Step>
+<Step>Click **Link another Google account**.</Step>
+</Steps>
+
+<Platform on="web">
+1. Google opens in the same tab. Choose your Google account.
+2. Allow Todalo to access your calendars.
+3. Google sends you back to **Settings** › **Calendars**, where the account now has its own card.
+</Platform>
+
+<Platform on="mac">
+1. Your default browser opens, and Todalo shows "Continue in your browser, then return to todalo."
+2. In the browser, choose your Google account and allow Todalo to access your calendars.
+3. When the browser shows the page to return to Todalo, click it. If your browser asks whether to open Todalo, allow it.
+4. The account appears under **Calendars** with its own card.
+
+Changed your mind? Click **Cancel** in Todalo while it's waiting.
+</Platform>
+
+## Choose which calendars show
+
+Each connected Google account has a card listing its calendars, each with its colour. Calendars start out hidden, so a new account shows no events until you choose some.
+
+{/* screenshot: calendar-settings */}
+
+To show a calendar, click the eye button next to its name (**Show** followed by the calendar's name, for example **Show Family**). Click the eye again (**Hide** and the name) to hide the calendar and remove its events from Todalo.
+
+To hide every event from one account at once, turn off **Show events in Today/Upcoming** on its card. Its calendars keep their choices, so turning the switch back on brings the same events back.
+
+## Show events from more than one Google account
+
+You can connect several Google accounts, for example a personal and a work account. Todalo shows their visible events together.
+
+To add another account:
+
+<Steps>
+<Step>Go to **Settings** › **Calendars**.</Step>
+<Step>Click **Link another Google account** below the cards.</Step>
+<Step>In Google, choose the other account and allow access, as described in [Connect a Google account](#connect-a-google-account).</Step>
+<Step>On the new card, click the eye button next to each calendar you want to see.</Step>
+</Steps>
+
+<Note>A Google account can belong to only one Todalo account. If it's already linked elsewhere, Todalo shows "That Google account is already linked to a different todalo account."</Note>
+
+## How events appear in Today and Upcoming
+
+Events from your visible calendars show in the colour of their calendar:
+
+- In the Today view, today's events come first under today's heading, above today's tasks.
+- In the Upcoming view, each event sits under its day.
+- In the Calendar layout of Today, Upcoming or a project, timed events sit in the hours like task blocks, and all-day events sit in the **All day** row.
+
+Events are read-only in Todalo. Click one to open it in Google Calendar in your browser and change it there. Todalo shows events from about two months back to just over a year ahead.
+
+When the Coach drafts a plan for you, it treats your visible events as busy time. See [Review the Coach's drafts](/coach/review-the-coachs-drafts).
+
+## How your tasks sync with Google Calendar
+
+Sync works in both directions, but only for tasks that have a date. Events you create in Google never become tasks.
+
+### From Todalo to Google
+
+Every task you add or change with a date gets an event in the main calendar of the first Google account you connected. This happens whether or not that calendar is shown in Todalo, and Todalo doesn't show these events a second time next to the tasks.
+
+| In Todalo | In Google Calendar |
+| --- | --- |
+| A task with a start and end time | A timed event at those times |
+| Any other task with a date, including one with only a time | An all-day event on that day |
+| The task's name and description | The event's title and description |
+| You change the name, description, date or time | The event changes to match |
+| You remove the date or delete the task | The event is deleted |
+| You complete a recurring task | The event moves to the next date |
+| You complete a task that doesn't repeat | The event stays in Google Calendar |
+
+Tasks that already had a date when you connected get their event the next time you change them.
+
+### From Google to Todalo
+
+When you change an event that came from one of your tasks, Todalo updates the task:
+
+- A new title renames the task.
+- A new date or time moves the task. Making the event all-day makes the task all-day.
+- Deleting the event keeps the task but removes its date.
+
+Changes to the event's description are not copied back. If the task and its event both change, the more recent change wins.
+
+## Resync an account
+
+If an account's events look out of date, click **Resync** on its card. Todalo reads the account's visible calendars again from the start.
+
+## Disconnect a Google account
+
+To disconnect an account, click **Disconnect** on its card. There is no confirmation, and the card goes straight away.
+
+Disconnecting does the following:
+
+- The account's events disappear from Todalo and its calendar choices are forgotten.
+- The Google account is unlinked from your Todalo account.
+- Events Todalo already created from your tasks stay in Google Calendar. Todalo no longer updates them, so delete them in Google if you don't want them. Your tasks keep their dates.
+
+<Warning>You can't disconnect the only way you sign in. If your Todalo account has no password and only one Google account, disconnecting that account fails and its calendars are hidden. See [Troubleshoot Google Calendar](/integrations/troubleshoot-google-calendar).</Warning>
+
+<Tip>Moving from Todoist? Its import works separately from Google Calendar. See [Bring your tasks from Todoist](/get-started/bring-your-tasks-from-todoist).</Tip>
