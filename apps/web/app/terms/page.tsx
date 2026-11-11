@@ -44,8 +44,8 @@ export default function TermsPage() {
         <h2>Contact</h2>
         <p>
           Questions about these terms? Write to{" "}
-          <a href="mailto:devin.hasler@bleat.ch" className="text-foreground underline decoration-foreground/25 underline-offset-4 hover:decoration-brand">
-            devin.hasler@bleat.ch
+          <a href="mailto:support@todalo.app" className="text-foreground underline decoration-foreground/25 underline-offset-4 hover:decoration-brand">
+            support@todalo.app
           </a>
           .
         </p>
