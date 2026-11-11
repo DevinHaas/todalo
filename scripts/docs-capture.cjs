@@ -26,6 +26,27 @@ const SHOTS = [
     },
     crop: page => page.getByRole("dialog", { name: "Add task", exact: true }),
   },
+  {
+    // Bring your tasks from Todoist. The chooser needs a live Todoist connection, so the
+    // status read is answered with a synthetic preview; nothing is connected or imported.
+    name: "import-chooser",
+    route: "/inbox",
+    steps: async page => {
+      await page.route(url => url.pathname === "/api/v1/imports/todoist", route => route.request().method() === "GET"
+        ? route.fulfill({ json: { status: "connected", preview: {
+          projects: [
+            { id: "p-inbox", name: "Inbox", inbox: true, tasks: 12, imported: 0 },
+            { id: "p-home", name: "Home", inbox: false, tasks: 18, imported: 0 },
+            { id: "p-garden", name: "Garden", inbox: false, tasks: 9, imported: 0 },
+          ],
+          counts: { sections: 6, subtasks: 14, labels: 5, recurring: 7, comments: 11 },
+        } } })
+        : route.abort());
+      await page.goto(`${page.url().replace(/\/inbox$/, "")}/settings/integrations`, { waitUntil: "domcontentloaded" });
+      await page.getByText("Also import", { exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.locator("form.import-card"),
+  },
 ];
 
 function options(args) {
