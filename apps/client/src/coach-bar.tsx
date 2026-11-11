@@ -30,6 +30,7 @@ import { goalColorValue } from "./goals";
 import { localZone } from "./seasons";
 import { modalOpen } from "./keyboard";
 import { reportCoachError } from "./coach-errors";
+import { playCue } from "./sounds";
 import { LiquidCoach } from "./liquid-coach";
 import { LiquidPanel, useLiquidPanelToggle, useLiquidParams } from "./liquid-panel";
 import {
@@ -43,7 +44,10 @@ const ACCEPT = ".pdf,.docx,.txt,.md,.markdown,.csv,.png,.jpg,.jpeg,.gif,.webp,ap
 let state = { focus: 0, prompt: null as string | null, send: false, open: false, hidden: 0 };
 const watchers = new Set<() => void>();
 const barState = { get: () => state, subscribe: (watcher: () => void) => { watchers.add(watcher); return () => { watchers.delete(watcher); }; } };
-const update = (next: Partial<typeof state>) => { state = { ...state, ...next }; watchers.forEach(watcher => watcher()); };
+const update = (next: Partial<typeof state>) => {
+  if (next.open && !state.open) playCue("coach");
+  state = { ...state, ...next }; watchers.forEach(watcher => watcher());
+};
 /** Opens the bar and focuses its field; `prompt` pre-fills it (a recommendation's "Chat with coach") for the user to edit and send. */
 export const focusCoachBar = (prompt?: string) => update({ focus: state.focus + 1, prompt: prompt ?? null, send: false, open: true });
 /** Ticket 32: opens the bar and sends `prompt` as if typed (the Weekly review's "Tidy up"). */

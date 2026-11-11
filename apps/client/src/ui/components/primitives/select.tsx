@@ -187,8 +187,7 @@ function SelectContent({
             data-slot="select-content"
             data-align-trigger={alignItemWithTrigger}
             className={cn(
-              "floating-popup-surface relative isolate z-50 max-h-(--available-height) min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border text-[color:var(--color-popover-foreground)] duration-100 data-[align-trigger=true]:w-(--anchor-width) data-[align-trigger=true]:animate-none data-[align-trigger=false]:w-max data-[align-trigger=false]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-              "floating-popup-surface relative isolate z-50 max-h-(--available-height) min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border popup-text-xs-plus text-[color:var(--color-popover-foreground)] duration-100 data-[align-trigger=true]:w-(--anchor-width) data-[align-trigger=true]:animate-none data-[align-trigger=false]:w-max data-[align-trigger=false]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:zoom-out-95",
+              "floating-popup-surface relative isolate z-50 max-h-(--available-height) min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border p-1 shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] popup-text-xs-plus text-[color:var(--color-popover-foreground)] duration-100 data-[align-trigger=true]:w-(--anchor-width) data-[align-trigger=true]:animate-none data-[align-trigger=false]:w-max data-[align-trigger=false]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:zoom-out-95",
               className,
             )}
             {...props}
@@ -283,7 +282,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-8 pl-2 popup-text-xs-plus leading-normal tracking-tight font-medium outline-hidden select-none hover:bg-[color:color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus:bg-[color:color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus:text-[color:var(--color-accent-foreground)] not-data-[variant=destructive]:focus:**:text-[color:var(--color-accent-foreground)] data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-8 pl-2.5 text-sm leading-normal font-normal data-selected:font-medium outline-hidden select-none hover:bg-[color:color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus:bg-[color:color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus:text-[color:var(--color-accent-foreground)] not-data-[variant=destructive]:focus:**:text-[color:var(--color-accent-foreground)] data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
       {...props}
@@ -298,7 +297,7 @@ function SelectItem({
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator
         render={
-          <span className="pointer-events-none absolute right-2 flex items-center justify-center" />
+          <span className="pointer-events-none absolute right-2.5 flex items-center justify-center" />
         }
       >
         <CheckIcon className="pointer-events-none" />

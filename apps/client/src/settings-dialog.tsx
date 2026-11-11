@@ -16,6 +16,8 @@ import { RitualSettingsScreen } from "./ritual-screens";
 import { CoachSettingsScreen } from "./coach-screens";
 import { BadgeCard, badgeSceneDefaults } from "@todalo/badge";
 import { saveProfilePhoto, squarePhoto } from "./profile-photo";
+import { playCue, SOUND_CHOICES, sounds, type SoundSlot } from "./sounds";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui";
 import "./badge-fonts";
 
 const icons: Record<SettingsSection, ReactNode> = {
@@ -69,11 +71,31 @@ function AccountSection({ account }: { account: Account }) {
   </div>;
 }
 
+/** One sound slot: picking a sound plays it, so the list doubles as a preview. */
+function SoundPicker({ slot, title }: { slot: SoundSlot; title: string }) {
+  const [choice, setChoice] = useState(() => sounds.choice(slot));
+  const items = SOUND_CHOICES[slot].map(({ id, label }) => ({ value: id, label }));
+  return <div className="setting-card">
+    <span className="setting-title">{title}</span>
+    <Select items={items} value={choice} onValueChange={(next) => { if (!next) return; sounds.choose(slot, next as string); setChoice(next as string); playCue(slot); }}>
+      <SelectTrigger aria-label={`${title} sound`} size="xl" className="w-60 text-sm"><SelectValue /></SelectTrigger>
+      <SelectContent alignItemWithTrigger={false} sideOffset={6} align="end" className="max-h-80">{items.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+    </Select>
+  </div>;
+}
+
 function GeneralSection({ userId }: { userId: string }) {
   const [feel, setFeel] = useState(haptics.enabled);
+  const [audible, setAudible] = useState(sounds.enabled);
   return <div className="settings-general">
     <SmartDatesSettingScreen userId={userId} />
     <GoalsHiddenSettingScreen userId={userId} />
+    <SettingSwitch title="Sound effects" hint="Soft sounds when you complete a task, open the Coach and use Ramble." checked={audible}
+      onChange={(on) => { sounds.set(on); setAudible(on); if (on) playCue("complete"); }} />
+    {audible && <>
+      <SoundPicker slot="complete" title="Task completed" />
+      <SoundPicker slot="coach" title="Coach opens" />
+    </>}
     {hapticsSupported && <SettingSwitch title="Haptic feedback" hint="Feel a tap when you complete a task." checked={feel}
       onChange={(on) => { haptics.set(on); setFeel(on); }} />}
   </div>;

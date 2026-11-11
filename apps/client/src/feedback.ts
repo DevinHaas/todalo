@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { playCue } from "./sounds";
 
 /** Semantic feedback events: callers say what happened, never which pattern plays. */
 export type FeedbackEvent = "taskCompleted";
@@ -34,4 +35,6 @@ export function feedback(play: (event: FeedbackEvent) => Promise<unknown>, enabl
 /** Standard haptics exist only in the iPhone/iPad app; web and Mac use the no-op. */
 export const hapticsSupported = isTauri() && /iPhone|iPad|iPod/.test(navigator.userAgent);
 export const haptics = hapticsPreference();
-export const nativeFeedback = feedback(hapticsSupported ? (event) => invoke("feedback", { event }) : async () => {}, haptics.enabled);
+const haptic = feedback(hapticsSupported ? (event) => invoke("feedback", { event }) : async () => {}, haptics.enabled);
+/** The haptic (iPhone/iPad) and the sound for each event; each has its own setting. */
+export const nativeFeedback: Feedback = { play: (event) => { haptic.play(event); if (event === "taskCompleted") playCue("complete"); } };

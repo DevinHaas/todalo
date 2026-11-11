@@ -6,7 +6,7 @@
   border: 1px solid rgb(0 0 0 / 0.08);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 24px 48px -24px rgb(0 0 0 / 0.18);
   transform: rotateX(var(--ty, 0deg)) rotateY(var(--tx, 0deg));
-  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.5s ease;
   text-align: left;
 }
 .card[data-dark] { border-color: rgb(255 255 255 / 0.08); }
@@ -16,6 +16,25 @@
 .sheen {
   position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; border-radius: inherit;
   background: radial-gradient(60% 45% at var(--mx, 30%) var(--my, 20%), rgb(255 255 255 / 0.55), transparent 70%);
+}
+
+/* hover: a band of light sweeps once across the card, like a foil print turned to the lamp,
+   and the card lifts a little. Restarts on every new hover; still for reduced motion. */
+.card::after {
+  /* z-index: above the WebGL canvas, which otherwise composites over it */
+  content: ""; position: absolute; z-index: 2; inset: -20% -60%; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.18) 45%, rgb(255 252 244 / 0.62) 49.5%, rgb(255 255 255 / 0.7) 50%, rgb(255 252 244 / 0.62) 50.5%, rgb(255 255 255 / 0.18) 55%, transparent 60%);
+  transform: translateX(-30%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stage:hover .card::after { animation: glint 1.15s cubic-bezier(0.25, 0.6, 0.25, 1) both; }
+  .stage:hover .card { box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 32px 64px -28px rgb(0 0 0 / 0.28); }
+}
+@keyframes glint {
+  0% { transform: translateX(-30%); opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateX(30%); opacity: 0; }
 }
 
 /* founding members: a quiet pill, top left, like a membership tier on a card */
