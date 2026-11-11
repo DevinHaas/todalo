@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadContent } from "@/lib/content";
 import { Support } from "@/components/support";
-import { IllustrationSlot } from "@/components/illustration-slot";
+import { Illustration } from "@/components/illustration-slot";
 
 type Props = { params: Promise<{ category: string }> };
 
@@ -17,7 +17,7 @@ export default async function CategoryPage({ params }: Props) {
   const { category, articles } = getCategory((await params).category);
   return <>
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Help center</Link><span aria-hidden="true">/</span><span aria-current="page">{category.name}</span></nav>
-    <header className="category-heading"><div><p className="eyebrow">{articles.length} {articles.length === 1 ? "guide" : "guides"}</p><h1>{category.name}</h1><p>{category.tagline}</p></div><IllustrationSlot compact /></header>
+    <header className="category-heading"><div><p className="eyebrow">{articles.length} {articles.length === 1 ? "guide" : "guides"}</p><h1>{category.name}</h1><p>{category.tagline}</p></div><Illustration src={category.illustration} compact /></header>
     <div className="article-list">{articles.map((article) => <Link key={article.url} href={article.url}><div><h2>{article.title}</h2><p>{article.description}</p></div><span aria-hidden="true">↗</span></Link>)}</div>
     <Support title="Still need a hand?" />
   </>;

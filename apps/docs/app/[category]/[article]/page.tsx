@@ -42,7 +42,7 @@ export default async function ArticlePage({ params }: Props) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const route = await params;
   const { article } = getArticle(route.category, route.article);
-  return { title: article.title, description: article.description, alternates: { canonical: article.url }, robots: article.published ? undefined : { index: false, follow: false }, openGraph: { title: article.title, description: article.description, url: article.url } };
+  return { title: article.title, description: article.description, alternates: { canonical: article.url }, robots: article.published ? undefined : { index: false, follow: false }, openGraph: { title: article.title, description: article.description, url: article.url, images: ["/og.jpg"] } };
 }
 
 // Folder = category, file = article: content/get-started/foo.mdx is /get-started/foo.
