@@ -1,6 +1,6 @@
 # Help center illustrations
 
-How the landing hero, category cards and social image were made, so new ones match.
+How the category cards were made, so new ones match, and how the social image is built from the logo.
 
 ## Style: sliced ink
 
@@ -9,11 +9,11 @@ How the landing hero, category cards and social image were made, so new ones mat
 - Ink is near-black `#111110`. **Exactly one small red accent**, about three short segments, in `#c8342b`.
 - Flat: no shading, no gradients, no outlines, no texture.
 - One object, centred, generous empty space, transparent background.
-- No people, faces, readable text or logos. The bonsai is reserved for the hero and the social image.
+- No people, faces, readable text or logos. Never draw a bonsai: the bonsai is the Todalo logo, and only the real logo file is used for it.
 
 ## Generating a new image
 
-- Tool: Higgsfield, model `gpt_image_2_6`, `quality: high`, `background: transparent`, aspect `3:2` (hero `4:3`, social `16:9` opaque on `#f6f5f2`).
+- Tool: Higgsfield, model `gpt_image_2_6`, `quality: high`, `background: transparent`, aspect `3:2`.
 - Pass **two references** as `image_references`:
   - the original style reference, job `120e458a-b087-435a-b78f-ff1b89f7e184`;
   - the Integrations card for line weight, job `4759dc55-36db-41fd-ab9a-30d98003d9cf`.
@@ -27,7 +27,6 @@ How the landing hero, category cards and social image were made, so new ones mat
 
 | File | Subject | Higgsfield job |
 |---|---|---|
-| `public/illustrations/hero.webp` | Bonsai | `5492ed09-c283-4669-9e67-54681a40503a` |
 | `public/illustrations/get-started.webp` | Seedling in a pot | `3aa2b74e-7feb-4a82-85db-7d09067e3e36` |
 | `public/illustrations/tasks-capture.webp` | Task card with tick | `286b6406-f3e3-48b0-a65a-319dc83af876` |
 | `public/illustrations/organise-views.webp` | Shelves | `e02fdb39-fc78-4e82-bdf4-9d617550f0a3` |
@@ -35,9 +34,11 @@ How the landing hero, category cards and social image were made, so new ones mat
 | `public/illustrations/coach.webp` | The app's Coach button with sparkle | `fbf2fab7-cc93-4b7e-8154-ddf4b693524c` |
 | `public/illustrations/integrations.webp` | Plug and socket | `4759dc55-36db-41fd-ab9a-30d98003d9cf` |
 | `public/illustrations/apps-account.webp` | Laptop | `d4117f76-9d2d-4e2b-a48e-5bf6162b2796` |
-| `public/og.jpg` | Bonsai, right third, 1200×630 | `6746ed56-e562-4861-b48e-33f53f52506a` |
+| `public/og.jpg` | The Todalo logo (`public/todalo-logo.svg`) centred on `#f6f5f2`, 1200×630 | not generated |
 
-Convert new PNGs with `cwebp -q 85 -alpha_q 100 -resize 800 0 in.png -o out.webp`. Build the social image with `magick in.png -resize 1200x630^ -gravity center -extent 1200x630 -quality 88 og.jpg`.
+Rebuild the social image from the logo with `rsvg-convert -w 420 public/todalo-logo.svg -o /tmp/logo.png && magick -size 1200x630 xc:"#f6f5f2" /tmp/logo.png -gravity center -composite -quality 90 public/og.jpg`.
+
+Convert new PNGs with `cwebp -q 85 -alpha_q 100 -resize 800 0 in.png -o out.webp`.
 
 ## Dark mode
 

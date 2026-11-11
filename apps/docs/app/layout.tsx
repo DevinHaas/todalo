@@ -49,7 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main-content" className="skip-link">Skip to content</a>
         {content.preview && <div className="preview-banner" role="status">Local draft preview · Unpublished guides are visible here only.</div>}
         <header className="site-header">
-          <Link href="/" className="font-display text-2xl font-black tracking-[-0.01em]">
+          <Link href="/" className="site-logo font-display text-2xl font-black tracking-[-0.01em]">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static SVG mark */}
+            <img src="/todalo-logo.svg" alt="" width={36} height={31} />
             Todalo <span className="font-thin">Help</span>
           </Link>
           <nav aria-label="Help center"><SearchTrigger className="header-search">Search help</SearchTrigger><ThemeToggle /></nav>
