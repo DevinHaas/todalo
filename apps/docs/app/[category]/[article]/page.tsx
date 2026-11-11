@@ -51,7 +51,8 @@ export default async function ArticlePage({ params }: Props) {
         <section><h2 className="sidebar-title">Platforms</h2><ul className="chips">{article.platforms.map((platform) => <li key={platform} className="chip">{PLATFORM_LABELS[platform]}</li>)}</ul></section>
         <TableOfContents headings={headings} />
         {related.length > 0 && <section className="sidebar-after"><h2 className="sidebar-title">Related articles</h2><ul className="related-links">{related.map((entry) => <li key={entry.url}><Link href={entry.url}><Icon name="article" />{entry.title}</Link></li>)}</ul></section>}
-        <section className="sidebar-after"><h2 className="sidebar-title">Last updated by</h2><div className="author"><span className="avatar" aria-hidden="true">{AUTHOR[0]}</span><div><p>{AUTHOR}</p>{article.updatedAt ? <time dateTime={article.updatedAt}>{new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(article.updatedAt))}</time> : <p>Awaiting first review</p>}</div></div></section>
+        <section className="sidebar-after"><h2 className="sidebar-title">Last updated by</h2><div className="author">{/* eslint-disable-next-line @next/next/no-img-element -- tiny static avatar */}
+          <img className="avatar" src="/devin.webp" alt="" width={36} height={36} /><div><p>{AUTHOR}</p>{article.updatedAt ? <time dateTime={article.updatedAt}>{new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(new Date(article.updatedAt))}</time> : <p>Awaiting first review</p>}</div></div></section>
       </aside>
       <article className="article-content"><div className="article" id="overview"><Body components={components} /></div><Support /></article>
     </div>
