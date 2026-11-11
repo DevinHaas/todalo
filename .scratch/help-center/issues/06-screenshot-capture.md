@@ -1,6 +1,6 @@
 # 06. Screenshot capture script
 
-Status: ready-for-agent
+Status: in-progress
 Type: task
 
 **Blocked by:** 01.
@@ -12,3 +12,5 @@ Spec: `.scratch/help-center/spec.md` (Screenshots).
 **Acceptance:** Running the script against a local client produces two example shots in both themes, and the themed screenshot component can show them. The script is not part of the build or test command.
 
 ## Comments
+
+2026-11-11 — Built in the root checkout by a Codex run that stopped at its usage limit before committing; checked afterwards by Claude: capture script `scripts/docs-capture.cjs`, demo-data script `scripts/help-center-demo.cjs` (with test) and run guide `docs/help-center-screenshots.md`. Not run yet: no screenshots exist; it needs a local API and client against a development database. Remaining: run it once and produce the two example shots.

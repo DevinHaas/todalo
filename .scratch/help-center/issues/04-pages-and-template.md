@@ -1,6 +1,6 @@
 # 04. Landing page, category pages and article template
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 
 **Blocked by:** 02, 03.
@@ -12,3 +12,5 @@ Spec: `.scratch/help-center/spec.md` (Landing and category pages, Article templa
 **Acceptance:** All pages read only through the content module. Works at phone width, keyboard navigable, images require alt text. Both themes checked by eye with the preview switch on.
 
 ## Comments
+
+2026-11-11 — Built in the root checkout by a Codex run that stopped at its usage limit before committing; checked afterwards by Claude: landing, category and article pages, sidebar with tracking table of contents, Experiment badge, Get in touch with support address and the FeatureSpace button, callouts, themed screenshot component, illustration placeholders. Dark-mode links use a lighter red (#f28e80) for contrast. In preview mode all 51 routes return 200 with no server errors. Not checked by eye in a browser yet.
