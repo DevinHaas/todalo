@@ -30,12 +30,8 @@ mod tests {
     use super::{LINKS, help_url};
 
     #[test]
-    fn opens_the_home_and_listed_articles() {
+    fn opens_the_home() {
         assert_eq!(help_url(None).as_deref(), Some("https://help.todalo.app"));
-        assert_eq!(
-            help_url(Some("google-calendar")).as_deref(),
-            Some("https://help.todalo.app/integrations/use-google-calendar-with-todalo")
-        );
     }
 
     #[test]
@@ -43,6 +39,8 @@ mod tests {
         for value in [
             "",
             "unknown",
+            // Parked under "unpublished" until the Integrations category is published.
+            "google-calendar",
             "https://evil.example",
             "/integrations/use-google-calendar-with-todalo",
             "@evil.example",

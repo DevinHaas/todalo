@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/api/core", async (original) => ({
 }));
 
 import { helpLink } from "./help";
+import links from "./help-links.json";
 import { CalendarSettings } from "./calendar-views";
 
 const click = () => ({ preventDefault: vi.fn() });
@@ -18,13 +19,19 @@ const click = () => ({ preventDefault: vi.fn() });
 describe("help center links", () => {
   beforeEach(() => { native.tauri = false; native.calls.length = 0; });
 
-  it("points at the help center home and at article addresses", () => {
+  it("points at the help center home", () => {
     expect(helpLink().href).toBe("https://help.todalo.app");
-    expect(helpLink("google-calendar").href).toBe("https://help.todalo.app/integrations/use-google-calendar-with-todalo");
+  });
+
+  // Integrations is not published yet: the article waits under "unpublished"
+  // until it is, so no link can lead to a missing page.
+  it("links no unpublished article", () => {
+    expect(links.articles).toEqual({});
+    expect(links.unpublished).toEqual({ "google-calendar": "/integrations/use-google-calendar-with-todalo" });
   });
 
   it("is a plain new-tab link in the browser", () => {
-    const link = helpLink("google-calendar");
+    const link = helpLink();
     const event = click();
     link.onClick(event);
     expect(link).toMatchObject({ target: "_blank", rel: "noreferrer" });
@@ -34,22 +41,20 @@ describe("help center links", () => {
 
   it("asks the Mac app to open the system browser, naming the article and never a URL", () => {
     native.tauri = true;
-    const home = click(), article = click();
+    const home = click();
     helpLink().onClick(home);
-    helpLink("google-calendar").onClick(article);
     expect(home.preventDefault).toHaveBeenCalled();
-    expect(article.preventDefault).toHaveBeenCalled();
-    expect(native.calls).toEqual([["open_help", { article: null }], ["open_help", { article: "google-calendar" }]]);
+    expect(native.calls).toEqual([["open_help", { article: null }]]);
   });
 });
 
 describe("calendar settings", () => {
-  it("links the multiple-accounts hint to the Google Calendar article", () => {
+  it("links the multiple-accounts hint to the help center until the Google Calendar article is published", () => {
     const html = renderToStaticMarkup(createElement(CalendarSettings, {
       state: { status: "success", error: null, data: [] }, onRetry: () => undefined,
       actions: {} as never, pending: new Set<string>(), error: null, link: null,
     } as never));
-    expect(html).toContain('href="https://help.todalo.app/integrations/use-google-calendar-with-todalo"');
+    expect(html).toContain('href="https://help.todalo.app"');
     expect(html).toContain("show events from multiple accounts");
   });
 });
