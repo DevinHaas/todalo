@@ -27,6 +27,28 @@ const SHOTS = [
     crop: page => page.getByRole("dialog", { name: "Add task", exact: true }),
   },
   {
+    // Introduction to tasks: the open task, with its property sidebar.
+    name: "task-sheet",
+    route: "/inbox",
+    steps: async page => {
+      await page.getByRole("link", { name: "Order paint samples", exact: true }).click();
+      await page.getByRole("dialog", { name: "Order paint samples", exact: true }).getByLabel("Task properties", { exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.getByRole("dialog", { name: "Order paint samples", exact: true }),
+  },
+  {
+    // Schedule a date and time: the open task's Date panel (calendar and Repeat) for an undated task.
+    name: "task-date-panel",
+    route: "/inbox",
+    steps: async page => {
+      await page.getByRole("link", { name: "Book a bike service", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "Book a bike service", exact: true });
+      await sheet.getByRole("button", { name: "Add date", exact: true }).click();
+      await sheet.getByRole("dialog", { name: "Add date", exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.getByRole("dialog", { name: "Add date", exact: true }),
+  },
+  {
     // Bring your tasks from Todoist. The chooser needs a live Todoist connection, so the
     // status read is answered with a synthetic preview; nothing is connected or imported.
     name: "import-chooser",

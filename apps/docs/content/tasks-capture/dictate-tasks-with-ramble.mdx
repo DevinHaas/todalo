@@ -1,11 +1,73 @@
 ---
 title: "Dictate tasks with Ramble"
-description: "Dictate tasks and review them before saving."
+description: "Speak a list of tasks, check the cards Todalo makes from them, and add them all at once."
 category: "tasks-capture"
 order: 9
 platforms: ["web", "mac"]
-related: []
+related: ["/tasks-capture/use-quick-add", "/tasks-capture/add-or-manage-multiple-tasks", "/tasks-capture/schedule-a-date-and-time", "/apps-account/allow-notifications-and-the-microphone-on-mac"]
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+Sometimes it's quicker to say what's on your mind than to type it. In a Ramble session you talk through your tasks, Todalo turns each one into a card, and you check the cards before anything is saved. Nothing is added to your lists until you say so.
+
+## Start a Ramble session
+
+To start Ramble, use any of these:
+
+- Click the waveform button (**Open Ramble**) next to **Add task** at the top of the sidebar.
+- Press <Shortcut keys="Mod+Shift+R" />.
+- Open Quick Add and, before you type anything, click the waveform button at the bottom right.
+
+Ramble opens and starts listening. The first time, Todalo needs permission to use your microphone.
+
+<Platform on="web">
+Your browser asks whether Todalo may use the microphone. Click to allow it.
+</Platform>
+
+<Platform on="mac">
+macOS asks whether Todalo may use the microphone. Allow it. If you turned it down before, Ramble shows a message with **Open System Settings**: click it, switch Todalo on under Microphone, then start Ramble again.
+</Platform>
+
+## Speak your tasks
+
+Say one task at a time, with a short pause after each, as you'd say it to someone: "Buy groceries tomorrow at 17:00". Each task appears as a card with its date, time and project. Dates, times and repeats work as they do when you type them; see [Schedule a date and time](/tasks-capture/schedule-a-date-and-time).
+
+While Todalo is still working out what you said, the status at the bottom reads "Understanding tasks…" and new cards are dimmed. Dimmed cards can't be edited or removed until they're confirmed.
+
+If you start Ramble from the **Add task** fields on a day in the Upcoming view, your tasks get that day unless you say another date.
+
+## Use spoken commands
+
+A few phrases control the session instead of adding a task. Say them on their own, with a pause before and after:
+
+| Say | What happens |
+| --- | --- |
+| "sub-task" | The next tasks you say become sub-tasks of the last task. The screen shows "Capturing sub-tasks" |
+| "top level" or "end sub-task" | The next tasks are ordinary tasks again |
+| "undo", "remove last" or "scratch that" | The last change is undone, such as the last task you added |
+| "done", "that's all" or "stop" | Listening stops and all the cards are added |
+
+Only these exact phrases work as commands. Anything else you say becomes a task.
+
+## Check and fix the cards
+
+Before you add anything, go through the cards:
+
+- To change a card, click its text. It opens in the same card as Quick Add, where you can fix the name, date, priority, labels and project. Click **Save task** to keep the change.
+- To drop a card, click the cross at its right.
+- To stop listening for a moment, click the microphone button at the top right (**Pause listening**). Click it again (**Resume listening**) to carry on.
+- To use another microphone, choose it from the list next to it (**Choose microphone**).
+
+## Add the tasks
+
+When the cards look right, click the arrow button at the bottom right, or say "done". Todalo adds every card as a task, shows "Tasks added" and closes Ramble.
+
+To throw the session away instead, click the cross at the bottom right (**Discard and close Ramble**) or press Esc. Nothing is saved.
+
+<Warning>Leaving Ramble or closing the window ends the session, and cards you haven't added are lost.</Warning>
+
+If Todalo is hidden, for example when you switch to another tab or minimise the window, Ramble stops listening. Your cards stay; click **Resume listening** when you're back.
+
+## If Ramble stops
+
+Ramble stops listening when it loses its connection or your microphone is disconnected, and shows a message saying why. Cards you've already made stay on screen: add them with the arrow button, or click **Start a new session** to begin again. If Todalo couldn't work out part of what you said, click **Retry understanding**.
