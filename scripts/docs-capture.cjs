@@ -1,7 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
-const { ACCOUNT, TASKS, localOrigin, assertAccount, assertFixtures, readSnapshot, seedDemo } = require("./help-center-demo.cjs");
+const { ACCOUNT, GOALS, TASKS, localOrigin, assertAccount, assertFixtures, readSnapshot, seedDemo } = require("./help-center-demo.cjs");
 
 const OUTPUT = path.resolve(__dirname, "../apps/docs/public/screenshots");
 const VIEWPORT = { width: 1280, height: 800 };
@@ -92,6 +92,22 @@ const SHOTS = [
       await page.getByRole("list", { name: "AI providers", exact: true }).waitFor({ state: "visible" });
     },
     crop: page => page.getByRole("list", { name: "AI providers", exact: true }),
+  },
+  {
+    // Plan a season: the setup's Goals step without a Coach, one goal switched on with a target.
+    // Nothing is saved: the setup writes only on Start season.
+    name: "season-setup-goals",
+    route: "/season",
+    steps: async page => {
+      await page.getByRole("textbox", { name: "What this season is about", exact: true }).fill("Get fit enough for a half marathon in March, and finish my essay collection.");
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      const goal = GOALS[0].title;
+      await page.getByRole("switch", { name: `Focus on ${goal} this season`, exact: true }).click();
+      await page.getByRole("textbox", { name: `Target for ${goal}`, exact: true }).fill("Run 21 km without stopping");
+      await page.getByRole("group", { name: `Tier of ${goal}`, exact: true }).getByRole("button", { name: "Primary", exact: true }).click();
+    },
+    crop: page => page.getByRole("form", { name: "Season setup: Goals", exact: true }),
   },
 ];
 
