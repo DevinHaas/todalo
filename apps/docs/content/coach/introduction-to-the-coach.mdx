@@ -1,12 +1,94 @@
 ---
 title: "Introduction to the Coach"
-description: "Learn what the Coach can help with and its limits."
+description: "Learn what the Coach can help you plan and change, what it can't do, and how to talk to it."
 category: "coach"
 order: 1
 platforms: ["web", "mac"]
-related: []
+related: ["/coach/connect-an-ai-provider", "/coach/review-the-coachs-drafts", "/coach/manage-what-the-coach-has-learned", "/goals-seasons-rituals/introduction-to-goals"]
 badge: "experiment"
 published: false
 ---
 
-This article is a draft awaiting writing and review.
+Plans drift. Tasks pile up without dates, a goal gets no time for a week, and a syllabus arrives with twelve deadlines to type in. The Coach is Todalo's AI helper for that kind of work: it reads your goals, schedule and tasks, answers in a few sentences and drafts the changes. It never changes anything on its own. You review every change and keep only what you want.
+
+The Coach is optional and is an experiment, so it may change. It only appears once you connect an AI provider. See [Connect an AI provider](/coach/connect-an-ai-provider).
+
+## What the Coach can do
+
+Ask in your own words. The Coach can:
+
+- answer questions about your goals, your plan and the documents you attach;
+- schedule tasks over the next seven days, move them, or take them off the schedule;
+- add new tasks, including tasks due on a day up to a year ahead (for example, every assignment in a syllabus);
+- add sub-tasks, and attach a document you gave it to a task;
+- complete, delete or move a task to another project or section, when you ask it to;
+- move a task to Now, Next or Later;
+- tidy up tasks nobody has touched for 30 days or more.
+
+Elsewhere in Todalo, the Coach also drafts your day or week from the Plan sidebar, runs planning sessions about a goal, explains each goal's status on the Season page and recommends what to do about a goal that's off track. Filter Assist uses the same AI provider to write filter queries.
+
+## What the Coach can't do
+
+- Change anything without you. Every change arrives as a draft. Your tasks stay as they are until you accept. See [Review the Coach's drafts](/coach/review-the-coachs-drafts).
+- Schedule at a time further than a week ahead. It puts tasks at a time only within the next seven days. A due date without a time can be up to a year ahead.
+- See your whole account. It works from a set of facts Todalo sends with each message: your goals, the week's schedule and tasks to plan, a limited number of other open tasks, your project and section names, your patterns and your attached documents. It doesn't see comments, and it doesn't see your calendar event titles unless you allow it.
+- Remember everything. Each message carries only the last 20 messages of your conversation. What the Coach learns over time is kept as Patterns, which you can read and change. See [Manage what the Coach has learned](/coach/manage-what-the-coach-has-learned).
+- Be always right. Its replies come from an AI model. Read each change before you keep it.
+
+## Talk to the Coach
+
+The Coach button is the round button at the bottom right of every main view. To ask the Coach something:
+
+<Steps>
+<Step>Click the Coach button (**Open the Coach**). It opens into a bar at the bottom of the page.</Step>
+<Step>Type your question or the change you want in **Ask the Coach or ask for a change…**, for example `Find two hours this week for my essay`.</Step>
+<Step>Press <Shortcut keys="Enter" /> or click **Send**. Todalo shows "The Coach is thinking…" while it works.</Step>
+<Step>Read the reply above the bar. If the Coach drafted changes, a summary such as "2 added, 1 moved" appears above the bar too.</Step>
+</Steps>
+
+Press <Shortcut keys="Shift+Enter" /> for a new line. Press <Shortcut keys="Escape" /> to close the reply, and again to close the bar. Changes still waiting for you stay beside the Coach button while the bar is closed.
+
+<Tip>Press <Shortcut keys="O" /> then <Shortcut keys="A" /> to open the Coach bar from anywhere.</Tip>
+
+### See what you've asked
+
+Click the Coach sidebar button (**Coach sidebar**) at the top of the page to show what you've asked in this conversation, your attached documents and every task the waiting changes affect. Each task links to its page. The sidebar is a record only; you talk to the Coach in the bar.
+
+To start again, click the bin button (**New conversation**) in the sidebar. This deletes the conversation and its documents. Changes still waiting for a decision stay, except changes that would attach one of those documents.
+
+## Attach documents
+
+The Coach can read a document and act on it, for example turning a course outline into dated tasks. To attach one:
+
+<Steps>
+<Step>Open the Coach bar.</Step>
+<Step>Click the paperclip button (**Attach a document**) and choose one or more files. You can also drop files onto the bar or paste them into it.</Step>
+<Step>Wait while Todalo shows "Reading…". Each file then appears as a chip above the field.</Step>
+<Step>Ask what you want done with it, then click **Send**.</Step>
+</Steps>
+
+To remove a document, click the cross on its chip.
+
+<Note>You can attach PDF, Word (.docx), text, Markdown, CSV and image files. Each file can be up to 5 MB, up to 5 files and 10 MB at once, and up to 10 documents in a conversation. Images reach the model only with OpenAI, Anthropic or a ChatGPT plan; with OpenRouter or Ollama, the Coach knows only the image's name.</Note>
+
+## Tidy up your backlog
+
+A task goes stale when it's open, has no date, isn't in Later and nobody has touched it for 30 days. While you have stale tasks, the Coach bar shows a **Tidy up** button. The Weekly review offers the same when stale tasks are waiting.
+
+Click **Tidy up**, or type `Tidy up my backlog`. The Coach drafts one change for each stale task, up to 40 at a time, each with a reason: move it to Later, delete it, complete it, move it, or keep it. Keeping a task changes nothing except that it counts as fresh for another 30 days. The Coach never suggests deleting work for a primary goal.
+
+## Plan a goal with the Coach
+
+A planning session helps when you know what a goal needs but not the steps. Click **Plan with the Coach** on a goal's page or on the Season page, or choose **Plan a goal with the Coach** in the Weekly review. To plan:
+
+<Steps>
+<Step>Choose the goal in **Goal**, then type or speak what's on your mind about it.</Step>
+<Step>Click **Continue**. The Coach asks a few multiple-choice questions.</Step>
+<Step>Pick an answer and click **Next**, or choose **Something else…** to type or speak your own.</Step>
+<Step>When the Coach has enough, or when you click **Draft now**, it drafts new tasks with times and milestones for the goal.</Step>
+<Step>Accept or decline the changes in the dialog, then click **Close**.</Step>
+</Steps>
+
+<Note>What you say in a planning session isn't saved. If you close the dialog before the Coach drafts, nothing is kept.</Note>
+
+<Tip>Press <Shortcut keys="O" /> then <Shortcut keys="G" /> to plan the goal you're looking at.</Tip>

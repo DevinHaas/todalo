@@ -84,6 +84,16 @@ const SHOTS = [
     crop: page => page.getByRole("dialog", { name: "Add filter", exact: true }),
   },
   {
+    // Connect an AI provider: Settings › Coach's provider cards, none connected (the demo account has no provider).
+    name: "coach-providers",
+    route: "/inbox",
+    steps: async page => {
+      await page.goto(`${page.url().replace(/\/inbox$/, "")}/settings/coach`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("list", { name: "AI providers", exact: true }).waitFor({ state: "visible" });
+    },
+    crop: page => page.getByRole("list", { name: "AI providers", exact: true }),
+  },
+  {
     // Plan a season: the setup's Goals step without a Coach, one goal switched on with a target.
     // Nothing is saved: the setup writes only on Start season.
     name: "season-setup-goals",
