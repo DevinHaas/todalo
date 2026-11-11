@@ -1,6 +1,7 @@
 // Connected calendars (ticket 20): the events read for Today/Upcoming, the live
 // stream for the signed-in user, and the Calendars section of the Account screen.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendar, calendarReads, live, session, syncFor } from "./runtime";
 import { calendarMutations, startLiveUpdates, type CalendarEventDto } from "./calendar";
@@ -32,9 +33,10 @@ export function useSyncReload(userId: string) {
     // ponytail: 400 ms floor so a fast reload reads as a reload, not a flicker.
     void Promise.all([sync.reload().catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))]).finally(() => setReloading(false));
   };
-  const splash = reloading && <div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
+  // Portaled to <body>: it renders from inside the toolbar, whose styles would otherwise trap `fixed` and shrink the splash.
+  const splash = reloading && createPortal(<div role="status" aria-label="Reloading" className="ui fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-6 bg-background">
     <img src="/bonsai-loader.svg" alt="" className="w-24 dark:invert" />
-  </div>;
+  </div>, document.body);
   return { sync, reload, splash };
 }
 
