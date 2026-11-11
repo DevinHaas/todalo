@@ -132,7 +132,7 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
   const width = `min(var(--spacing-page), 100% - ${room}px)`;
   return <LiquidActive.Provider value={active}>
     <div ref={host} data-coach-bar="" data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
-      className="ui pointer-events-none sticky bottom-0 z-[25] flex pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      className="ui pointer-events-none sticky bottom-0 z-[25] mt-auto! -mb-6! flex pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       onKeyDown={(event) => { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); onOpenChange(false); } }}>
       {/* Behind the content, above the page: the liquid. */}
       {active && <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 size-full" />}
