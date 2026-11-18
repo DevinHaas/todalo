@@ -32,7 +32,7 @@ export function Membership({ next: initial }: { next: number }) {
             Get your unique tree <ArrowRight className="size-3.5" />
           </Link>
         </div>
-        {/* the soft reveal: landing-reveal ends on filter: blur(0), and any filter on an ancestor flattens the card's 3D tilt in WebKit */}
+        {/* the soft reveal: landing-reveal blurs while it runs, and any filter on an ancestor flattens the card's 3D tilt in WebKit */}
         <div className="landing-reveal-soft flex justify-center">
           <MembershipCard member={next} founding={founding} />
         </div>

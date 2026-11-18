@@ -531,9 +531,10 @@ const ITEMS: RingCardItem[] = [
   },
 ];
 
-// no backdrop-blur: per-slice blur shows seams; a denser white reads the same
+// Opaque on purpose: slices overlap by a pixel to hide WebKit's antialiased seams, and a
+// translucent face would show every overlap as a line (as would a per-slice backdrop blur).
 const GLASS_FACE =
-  "rounded-[18px] border border-white/90 bg-gradient-to-b from-white/95 to-white/75 p-3.5";
+  "rounded-[18px] border border-white bg-gradient-to-b from-white to-[#fafaf8] p-3.5";
 const IMAGE_FACE =
   "overflow-hidden rounded-[18px] border border-white/70 bg-neutral-300";
 
@@ -580,8 +581,8 @@ function CurvedCard({ item }: { item: RingCardItem }) {
             key={i}
             className="absolute overflow-hidden"
             style={{
-              // opaque tiles get a hairline overlap to hide seams; translucent glass would show it doubled
-              width: item.kind === "image" ? sliceW + 0.6 : sliceW,
+              // a 1px overlap hides the seams WebKit leaves between separately composited slices
+              width: sliceW + 1,
               height: rowHeight,
               transform: `translate(-50%, -50%) translateY(${y}px) rotateY(${angle}deg) translateZ(${radius}px)`,
             }}

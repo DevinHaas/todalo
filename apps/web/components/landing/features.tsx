@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 
 // Real captures of the app (scripts/landing-capture.cjs), one per step, in story order.
 const STEPS = [
@@ -30,29 +31,48 @@ const src = (clip: string, ext: "mp4" | "webp") => `/landing/features/${clip}.${
 
 function Clip({ clip, playing, className = "" }: { clip: string; playing: boolean; className?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
+  // iOS refuses autoplay in Low Power Mode (NotAllowedError); then a tap starts it.
+  const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
     // Only the clip in view plays; reduced motion keeps the poster.
     if (playing && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
       video.currentTime = 0;
-      video.play().catch(() => {});
+      video.play().then(
+        () => setBlocked(false),
+        (e: unknown) => setBlocked(e instanceof DOMException && e.name === "NotAllowedError"),
+      );
     } else video.pause();
   }, [playing]);
   return (
-    <video
-      ref={ref}
-      src={src(clip, "mp4")}
-      poster={src(clip, "webp")}
-      muted
-      loop
-      playsInline
-      preload="none"
-      aria-hidden
-      width={1200}
-      height={1000}
-      className={"block aspect-[6/5] w-full rounded-[12px] bg-white object-cover ring-1 ring-black/[0.06] " + className}
-    />
+    <div className="relative">
+      {blocked && (
+        <button
+          type="button"
+          onClick={() => ref.current?.play().then(() => setBlocked(false), () => {})}
+          className="absolute inset-0 z-10 grid place-items-center rounded-[12px]"
+          aria-label="Play clip"
+        >
+          <span className="grid size-12 place-items-center rounded-full bg-foreground/80 text-white shadow-lg">
+            <Play className="ml-0.5 size-5 fill-current" aria-hidden />
+          </span>
+        </button>
+      )}
+      <video
+        ref={ref}
+        src={src(clip, "mp4")}
+        poster={src(clip, "webp")}
+        muted
+        loop
+        playsInline
+        preload="none"
+        aria-hidden
+        width={1200}
+        height={1000}
+        className={"block aspect-[6/5] w-full rounded-[12px] bg-white object-cover ring-1 ring-black/[0.06] " + className}
+      />
+    </div>
   );
 }
 

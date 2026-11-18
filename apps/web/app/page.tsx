@@ -26,8 +26,8 @@ export default async function LandingPage() {
   return (
     <div className={`${sanela.variable} min-h-screen overflow-x-clip bg-[#f5f4f1] text-foreground`}>
       <main>
-        {/* The header and hero fill the viewport, so the portrait stands on the fold and only the top of the next section shows (mobile: ~10px of its label; desktop: nothing). */}
-        <div className="flex min-h-[calc(100svh-122px)] flex-col md:min-h-svh">
+        {/* The header and hero fill the viewport, so the portrait stands on the fold. */}
+        <div className="flex min-h-svh flex-col">
           <SiteHeader signedIn={Boolean(session)} />
           <Hero />
         </div>
