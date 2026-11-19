@@ -155,6 +155,13 @@
   html {
     @apply font-sans;
   }
+  /* Landing nav anchors (#features, #pricing) glide instead of jump. Scoped to the
+     landing page so the app's own scrollTo calls stay instant. */
+  @media (prefers-reduced-motion: no-preference) {
+    html:has(#features) {
+      scroll-behavior: smooth;
+    }
+  }
 }
 
 /* Landing motion. The hero rises in on load (staggered with --enter-delay); sections
