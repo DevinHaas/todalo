@@ -61,7 +61,9 @@ import { resolve, sep } from "node:path";
 const clientDist = resolve(import.meta.dir, "../../client/dist");
 async function serveClient(request: Request) {
   const path = new URL(request.url).pathname; // URL already dropped any ../ segments
-  if (path.startsWith("/api/")) return new Response("NOT_FOUND", { status: 404 });
+  // This GET catch-all outranks auth-routes' `.mount(auth.handler)`, so API paths go back to
+  // Better Auth as before (Google callback, get-session, native-oauth/authorize; else its 404).
+  if (path.startsWith("/api/")) return auth.handler(request);
   const target = resolve(clientDist, `.${path}`);
   const file = Bun.file(target);
   if (target.startsWith(clientDist + sep) && await file.exists()) {
