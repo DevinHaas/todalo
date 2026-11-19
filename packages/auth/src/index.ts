@@ -20,9 +20,11 @@ export const auth = createSessionAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       accessType: "offline",
       prompt: "consent",
+      // The narrowest scopes for what calendar-sync.ts calls (Google verification asks for
+      // that): events list/watch/insert/update/delete, and the calendar list.
       scope: [
         "https://www.googleapis.com/auth/calendar.events",
-        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
       ],
     },
   },
