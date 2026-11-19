@@ -3,7 +3,7 @@
 // crops, encodes H.264 and writes a poster into apps/web/public/landing/features/.
 //
 // Setup (see docs/landing/landing-page-brief.md §2.3):
-//   API on :3002 with AUTH_TRUSTED_ORIGINS/RAMBLE_ALLOWED_ORIGINS=http://localhost:5173,
+//   API on :3002 with AUTH_TRUSTED_ORIGINS=http://localhost:5173 (the ramble clip needs only the client),
 //   client: CLIENT_API_PROXY_TARGET=http://127.0.0.1:3002 bun run dev (apps/client),
 //   playwright installed outside the repo: NODE_PATH=/tmp/landing-capture/node_modules.
 // Run:  NODE_PATH=/tmp/landing-capture/node_modules node scripts/landing-capture.cjs <clip|shot:path> [...]
@@ -37,13 +37,13 @@ addEventListener("DOMContentLoaded", () => {
   addEventListener("mouseup", () => { c.style.transform = ""; }, true);
 });`;
 
-async function open({ viewport = VIEWPORT } = {}) {
-  // Fake camera and microphone: the ramble clip listens on a silent device, its speech is mocked.
-  const browser = await chromium.launch({ executablePath: CHROME, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+async function open({ viewport = VIEWPORT, signIn = true } = {}) {
+  const browser = await chromium.launch({ executablePath: CHROME });
   const context = await browser.newContext({ viewport, deviceScaleFactor: SCALE, timezoneId: "Europe/Zurich", locale: "en-GB", colorScheme: "light" });
   await context.addInitScript(CURSOR);
-  await context.grantPermissions(["microphone"], { origin: BASE });
   const page = await context.newPage();
+  // Simulated clips (a stage page in apps/client) need no account.
+  if (!signIn) return { browser, context, page };
   await page.clock.setSystemTime(NOW);
   const res = await page.request.post(`${BASE}/api/auth/sign-in/email`, { data: LOGIN, headers: { Origin: BASE } });
   if (!res.ok()) throw new Error(`Sign-in failed: ${res.status()} ${await res.text()}`);
@@ -65,7 +65,8 @@ async function glide(page, target, { click = false, steps = 28, offset } = {}) {
 const type = (page, text, delay = 55) => page.keyboard.type(text, { delay });
 const wait = (page, ms) => page.waitForTimeout(ms);
 
-/** Records `act` as frames, cropped to `crop` ({x,y,w,h} in CSS px), and encodes `name`.mp4 + .webp. */
+/** Records `act` as frames, cropped to `crop` ({x,y,w,h} in CSS px), and encodes `name`.mp4 + .webp.
+ * The poster is the first frame, or the frame at the seconds `act` resolves with. */
 // ponytail: a screenshot loop, not Page.startScreencast: headless screencast frames are always 1x.
 async function record(page, name, crop, act, { width = 1200 } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `clip-${name}-`));
@@ -87,7 +88,8 @@ async function record(page, name, crop, act, { width = 1200 } = {}) {
   const cuts = [];
   const cut = async (fn) => { const start = Date.now() / 1000; await fn(); cuts.push([start, Date.now() / 1000]); };
   const t0 = Date.now() / 1000;
-  try { await act(cut); } finally { recording = false; await loop.catch(() => {}); }
+  let posterAt;
+  try { posterAt = await act(cut); } finally { recording = false; await loop.catch(() => {}); }
   const t1 = Date.now() / 1000;
   const inCut = (t) => cuts.some(([a, b]) => t > a && t < b);
   const cutBetween = (a, b) => cuts.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(b, y) - Math.max(a, x)), 0);
@@ -107,7 +109,8 @@ async function record(page, name, crop, act, { width = 1200 } = {}) {
     "-filter_complex", `[0:v]${c}[m];[1:v]${c}[f];[m][f]xfade=transition=fade:duration=0.6:offset=${(length - 0.6).toFixed(2)},format=yuv420p[v]`,
     "-map", "[v]", "-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-crf", "26", "-movflags", "+faststart", "-an", mp4]);
   const png = path.join(dir, "poster.png");
-  execFileSync("ffmpeg", ["-y", "-v", "error", "-i", kept[0].file, "-vf", `scale=${width}:-2:flags=lanczos`, "-frames:v", "1", png]);
+  const still = typeof posterAt === "number" ? kept.find(f => f.t >= t0 + posterAt) ?? kept[0] : kept[0];
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-i", still.file, "-vf", `scale=${width}:-2:flags=lanczos`, "-frames:v", "1", png]);
   execFileSync("cwebp", ["-quiet", "-q", "82", png, "-o", poster]);
   fs.rmSync(dir, { recursive: true, force: true });
   const kb = (file) => Math.round(fs.statSync(file).size / 1024);
@@ -142,8 +145,8 @@ async function main() {
     }
     const clip = clips[arg];
     if (!clip) throw new Error(`Unknown clip ${arg}`);
-    seed(clip.state);
-    const { browser, page } = await open({ viewport: clip.viewport });
+    if (clip.state) seed(clip.state);
+    const { browser, page } = await open({ viewport: clip.viewport, signIn: Boolean(clip.state) });
     try { await clip.run(page); }
     catch (error) { await page.screenshot({ path: path.join(SHOTS, `landing-fail-${arg}.png`) }).catch(() => {}); throw error; }
     finally { await browser.close(); }

@@ -72,11 +72,11 @@ Current state: `/` is the landing page (`apps/web/app/page.tsx`); signed-in visi
 
 ### 2.3 Features: one story told in order (reference: the todoist.com layout) — BUILT (2026-11-10)
 - Code: `apps/web/components/landing/features.tsx` (`#features`). Clips + posters: `apps/web/public/landing/features/*.mp4|webp`. Screenshots: `docs/landing/features-v2-*.png`.
-- All 4 clips are **real captures** of `apps/client` on branch `feat/smooth-sidebars`. Re-shoot: `scripts/landing-capture.cjs` + `scripts/landing-clips.cjs` (setup in the file header), demo data `scripts/seed-landing-demo.ts` on the `demo@todalo.dev` account. Only the Coach's answers are stubbed in the capture (fixed suggestions and drafts, no model); everything else is the real app.
+- Clips 1, 3 and 4 are **real captures** of `apps/client`; Ramble (step 2) is simulated, see below. Captured on branch `feat/smooth-sidebars`. Re-shoot: `scripts/landing-capture.cjs` + `scripts/landing-clips.cjs` (setup in the file header), demo data `scripts/seed-landing-demo.ts` on the `demo@todalo.dev` account. Only the Coach's answers are stubbed in the capture (fixed suggestions and drafts, no model); everything else is the real app.
 - **Layout:** the left column holds the steps (title, short copy) and scrolls normally. The right column is sticky and shows a video that changes to match the step in view.
 - **The story, in order (changed 2026-11-10: four steps):**
   1. **Set up your season:** the guided season setup (focus in your own words → length and start → switch on the goals to focus on, Primary or Secondary, from the Coach's suggestions and your own → where each goal starts from, in your own words → review; the Coach bar is hidden during it). Clip `season-setup`, seed state `setup`.
-  2. **Say it, then add it:** Ramble turns a spoken brain-dump into staged tasks; nothing is saved until Add.
+  2. **Say it, then add it:** Ramble turns a spoken brain-dump into staged tasks; nothing is saved until Add. Clip `ramble` is **simulated** (2026-11-19): the screen capture read too small on the card, so `apps/client/ramble-stage.html` acts it out with the app's own classes, much closer up, with three tasks and the spoken words shown in the empty state's quote style.
   3. **Plan the week with the Coach:** ask in the command bar (the Coach bar); the Coach drafts the week around the goals, the user keeps what fits, declines the rest and drags blocks to adjust. Clip `coach-plan`, seed state `coach`.
   4. **Review:** see progress and give the agent feedback, which shapes the next season.
 - **Mobile (decided):** the sticky column stacks as step, then video, then the next step.

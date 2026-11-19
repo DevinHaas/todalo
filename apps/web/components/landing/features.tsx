@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 
-// Real captures of the app (scripts/landing-capture.cjs), one per step, in story order.
+// Captures of the app (scripts/landing-capture.cjs), one per step, in story order. Ramble is acted out on
+// apps/client/ramble-stage.html with the app's styles, closer up than a screen capture.
 const STEPS = [
   {
     clip: "season-setup",
