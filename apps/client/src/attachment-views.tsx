@@ -3,6 +3,7 @@ import { Paperclip } from "lucide-react";
 import { ATTACHMENT_LIMIT_HINT, type AttachmentDto, type CreatedFileTask, type SavedFile } from "./attachments";
 import { AccountTransportError } from "./errors";
 import { Failure, type ReadState } from "./views";
+import { LinesSkeleton } from "./skeletons";
 
 // Pure attachment views (legacy ProjectFilePaste / TaskAttachments): no runtime imports.
 
@@ -91,7 +92,7 @@ export function TaskAttachments({ state, onRetry, href, onSave, saving }: {
   state: ReadState<AttachmentDto[] | null>; onRetry: () => void; href?: (id: string) => string; onSave?: (attachment: AttachmentDto) => void; saving?: SaveState;
 }) {
   let body;
-  if (state.status === "pending") body = <p role="status" className="state">Loading attachments…</p>;
+  if (state.status === "pending") body = <LinesSkeleton rows={2} label="Loading attachments" />;
   else if (state.status === "error") body = <Failure error={state.error} onRetry={onRetry} />;
   else if (!state.data?.length) body = <p className="state">No attachments</p>;
   else body = <ul className="attachment-list">{state.data.map(attachment => {

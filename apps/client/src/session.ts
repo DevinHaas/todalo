@@ -13,6 +13,8 @@ export interface AccountTransport {
   signIn(credentials: Credentials): Promise<Account>;
   signUp(credentials: Credentials & { name: string }): Promise<Account>;
   signOut(): Promise<void>;
+  /** Deletes the account and all its data; `password` is needed unless the session is under a day old. */
+  deleteAccount(password?: string): Promise<void>;
 }
 
 export type GoogleIntent = "sign-in" | "link";
@@ -103,6 +105,22 @@ export class SessionController {
       if (generation === this.generation) this.update({ status: "signed-out", account: null, error: null });
     } catch (error) {
       if (generation === this.generation) this.update({ ...this.state, error: error instanceof AccountTransportError ? error.message : "Sign-out could not reach the server. Try again to revoke this session." });
+    } finally {
+      this.mutationCount--;
+    }
+  }
+
+  /** Deletes the account for good. Resolves to an error message to show, or null once signed out. */
+  async deleteAccount(password?: string): Promise<string | null> {
+    this.mutationCount++;
+    try {
+      await this.transport.deleteAccount(password);
+      ++this.generation;
+      this.clearUserCache();
+      this.update({ status: "signed-out", account: null, error: null });
+      return null;
+    } catch (error) {
+      return error instanceof AccountTransportError ? error.message : "Your account could not be deleted. Try again.";
     } finally {
       this.mutationCount--;
     }

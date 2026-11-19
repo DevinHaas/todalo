@@ -116,7 +116,7 @@ async function record(page, name, crop, act, { width = 1200 } = {}) {
 
 /** Seeds one demo state (scripts/seed-landing-demo.ts). */
 function seed(state) {
-  execFileSync("bun", ["--env-file=.env", "scripts/seed-landing-demo.ts", state], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
+  execFileSync("bun", [`--env-file=${process.env.DEMO_ENV_FILE ?? ".env"}`, "scripts/seed-landing-demo.ts", state], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
 }
 
 async function goto(page, url) {

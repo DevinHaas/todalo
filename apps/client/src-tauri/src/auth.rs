@@ -186,6 +186,41 @@ impl NativeAuth {
         Ok(account)
     }
 
+    /// Settings › Account › Delete account. Better Auth's delete-user deletes the user and,
+    /// by cascade, all their data; then the saved credential goes too. Fixed path.
+    pub async fn delete_account(
+        &self,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<(), &'static str> {
+        let origin = self.origin()?;
+        let token = credentials::read(&origin)?.ok_or("Please sign in again.")?;
+        let body = match &password {
+            Some(password) => serde_json::json!({ "password": password.as_str() }),
+            None => serde_json::json!({}),
+        };
+        let response = self
+            .client
+            .post(self.url("/api/auth/delete-user")?)
+            .bearer_auth(&*token)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| "Cannot reach todalo. Check your connection and try again.")?;
+        match response.status() {
+            status if status.is_success() => credentials::clear(&origin),
+            StatusCode::UNAUTHORIZED => Err("Please sign in again."),
+            StatusCode::BAD_REQUEST => {
+                #[derive(Deserialize)]
+                struct Failure {
+                    code: Option<String>,
+                }
+                let code = response.json::<Failure>().await.ok().and_then(|f| f.code);
+                Err(delete_error(code.as_deref()))
+            }
+            _ => Err("Your account could not be deleted. Try again."),
+        }
+    }
+
     pub async fn sign_out(&self) -> Result<(), &'static str> {
         let origin = self.origin()?;
         if let Some(token) = credentials::read(&origin)? {
@@ -372,9 +407,40 @@ impl NativeAuth {
     }
 }
 
+/// Better Auth's delete-user refusals (400 `code`) → the webview's exact messages (src/errors.ts).
+fn delete_error(code: Option<&str>) -> &'static str {
+    match code {
+        Some("INVALID_PASSWORD") => "That password is not right. Try again.",
+        Some("SESSION_EXPIRED") => {
+            "For your safety, enter your password. Signed in with Google? Log out, sign in again, then delete within a day."
+        }
+        Some("CREDENTIAL_ACCOUNT_NOT_FOUND") => {
+            "This account has no password. Leave the field empty, or log out and sign in with Google again first."
+        }
+        _ => "Your account could not be deleted. Try again.",
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Account;
+    use super::{Account, delete_error};
+
+    #[test]
+    fn delete_refusals_become_safe_copy() {
+        assert_eq!(
+            delete_error(Some("INVALID_PASSWORD")),
+            "That password is not right. Try again."
+        );
+        assert!(delete_error(Some("SESSION_EXPIRED")).starts_with("For your safety"));
+        assert_eq!(
+            delete_error(Some("<script>")),
+            "Your account could not be deleted. Try again."
+        );
+        assert_eq!(
+            delete_error(None),
+            "Your account could not be deleted. Try again."
+        );
+    }
 
     #[test]
     fn account_keeps_the_member_badge_for_the_webview() {
@@ -385,6 +451,11 @@ mod tests {
         assert_eq!(out["member"]["founding"], true);
         // older APIs send no member; the webview then gets none rather than null
         let without: Account = serde_json::from_str(&format!("{{{user}}}")).unwrap();
-        assert!(serde_json::to_value(&without).unwrap().get("member").is_none());
+        assert!(
+            serde_json::to_value(&without)
+                .unwrap()
+                .get("member")
+                .is_none()
+        );
     }
 }

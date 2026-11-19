@@ -118,7 +118,7 @@ describe("label and filter screens", () => {
     const empty = directory(success({ labels: [], filters: [] }));
     expect(empty).toContain("Your list of filters will show up here.");
     expect(empty).toContain("Your list of labels will show up here.");
-    expect(directory({ status: "pending", error: null })).toContain("Loading filters and labels…");
+    expect(directory({ status: "pending", error: null })).toMatch(/data-skeleton=""[^]*Loading filters and labels/);
     expect(directory({ status: "error", error: new Error("Your tasks could not be loaded. Try again.") })).toContain("Try again");
     expect(directory(success({ labels: [], filters: [] }), "Check your entry and try again.")).toContain('role="alert"');
   });

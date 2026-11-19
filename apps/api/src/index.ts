@@ -37,6 +37,7 @@ import { createCommentRoutes } from "./comment-routes";
 import * as comments from "@todalo/server/comments";
 import { createSettingsRoutes } from "./settings-routes";
 import * as settings from "@todalo/server/settings";
+import * as personalization from "@todalo/server/personalization";
 import * as keyboard from "@todalo/server/keyboard";
 import * as attachments from "@todalo/server/attachments";
 import * as metadata from "@todalo/server/metadata";
@@ -266,6 +267,8 @@ const app = createApi(dependencies)
   update: settings.updateSettings,
   loadKeyboard: keyboard.loadKeyboardPreferences,
   saveKeyboard: keyboard.saveKeyboardPreferences,
+  loadPersonalization: personalization.loadPersonalization,
+  savePersonalization: personalization.savePersonalization,
 })).use(createMetadataRoutes({
   verify,
   allowedOrigins: dependencies.allowedOrigins,

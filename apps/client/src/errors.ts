@@ -41,6 +41,10 @@ const messages = {
   DOWNLOAD_FAILED: "The file could not be downloaded. Try again.",
   FILE_SAVE_FAILED: "The file could not be saved on this device. Try again.",
   IMPORT_UNAVAILABLE: "The Todoist import is unavailable. Try again.",
+  DELETE_PASSWORD_INVALID: "That password is not right. Try again.",
+  DELETE_SIGN_IN_AGAIN: "For your safety, enter your password. Signed in with Google? Log out, sign in again, then delete within a day.",
+  DELETE_NO_PASSWORD: "This account has no password. Leave the field empty, or log out and sign in with Google again first.",
+  DELETE_FAILED: "Your account could not be deleted. Try again.",
   UNKNOWN_NATIVE_ERROR: "The native account operation could not finish. Try again.",
 } as const;
 

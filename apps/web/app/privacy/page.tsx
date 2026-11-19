@@ -36,9 +36,17 @@ export default function PrivacyPage() {
         </ul>
       </section>
       <section>
+        <h2>Analytics and error reports</h2>
+        <ul>
+          <li>We count how the app is used (which screens and features, linked to your account id and email) with PostHog, hosted in the EU. There are no session recordings.</li>
+          <li>When something breaks, the app sends an error report with your account id to Sentry, so we can fix it.</li>
+          <li>Neither is used for advertising or shared with data brokers, and we don&apos;t track you across other apps or websites.</li>
+        </ul>
+      </section>
+      <section>
         <h2>Where your data goes</h2>
         <p>
-          Our database host and the services above (Google, ElevenLabs and the AI provider you choose) process data outside Switzerland, mostly in the
+          Our database host and the services above (Google, ElevenLabs, Sentry and the AI provider you choose) process data outside Switzerland, mostly in the
           USA. Where a country doesn&apos;t offer protection the FADP recognises as adequate, we rely on the standard data processing terms these
           providers publish, which include the standard contractual clauses the FADP accepts.
         </p>

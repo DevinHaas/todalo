@@ -70,6 +70,33 @@ pub async fn update_keyboard_preferences(
         .ok_or_else(|| INVALID_RESPONSE.to_owned())
 }
 
+// Settings › Appearance and Sidebar: the personalization document is opaque here too;
+// the API's personalizationInput validates it, and the body is rebuilt with one key.
+#[tauri::command]
+pub async fn personalization(state: tauri::State<'_, NativeAuth>) -> Result<Value, String> {
+    match state.read("/api/v1/settings/personalization").await {
+        Ok(Some(value)) => Ok(value),
+        Ok(None) => Err(INVALID_RESPONSE.to_owned()),
+        Err(READ_FAILED) => Err(UNAVAILABLE.to_owned()),
+        Err(error) => Err(error.to_owned()),
+    }
+}
+
+#[tauri::command]
+pub async fn update_personalization(
+    state: tauri::State<'_, NativeAuth>,
+    personalization: Value,
+) -> Result<Value, String> {
+    state
+        .write(
+            Method::PUT,
+            "/api/v1/settings/personalization",
+            Some(json!({ "personalization": personalization })),
+        )
+        .await?
+        .ok_or_else(|| INVALID_RESPONSE.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::Settings;

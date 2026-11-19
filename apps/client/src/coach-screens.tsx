@@ -9,13 +9,14 @@ import {
   type ChatgptDto, type ChatgptStartDto, type CoachDto, type CoachModelKind, type CoachModelOption, type CoachModelsDraft, type CoachProviderDto, type CoachProviderKind, type CoachTestResult,
 } from "./coach";
 import { modelTag, modelTagLabels } from "../../../packages/server/src/coach-models";
-import { FormError, LoadFailure, Loading } from "./goal-views";
+import { FormError, LoadFailure } from "./goal-views";
 import { CoachPatterns } from "./pattern-screens";
 import {
   Button, Combobox, ComboboxCollection, ComboboxContent, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxLabel, ComboboxList, ComboboxTrigger,
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger, Field, FieldDescription, FieldLabel, Hint, Input,
   ToggleGroup, ToggleGroupItem, cn,
 } from "./ui";
+import { CardsSkeleton } from "./skeletons";
 
 /**
  * Goals tickets 17, 17b, 18 and 17c: Settings › Coach. A card per provider
@@ -27,7 +28,7 @@ export function CoachSettingsScreen({ userId }: { userId: string }) {
   const query = useQuery(coachReads.provider(userId));
   // Outside the keyed settings, so an open card stays open when the data changes.
   const [open, setOpen] = useState<CoachModelKind | null>(null);
-  if (query.status === "pending") return <div className="ui"><Loading>Loading the Coach…</Loading></div>;
+  if (query.status === "pending") return <CardsSkeleton rows={4} label="Loading the Coach" />;
   if (!query.data) return <LoadFailure error={query.error} onRetry={() => void query.refetch()} />;
   return <CoachSettings userId={userId} coach={query.data} open={open} setOpen={setOpen} />;
 }

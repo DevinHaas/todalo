@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, type To } from "react-router";
-import { Blocks, Camera, CalendarDays, Sunrise, ChevronLeft, Keyboard, Palette, Search, Settings, Sparkles, UserRound, X } from "lucide-react";
+import { Blocks, Camera, CalendarDays, Sunrise, ChevronLeft, Keyboard, PanelLeft, Palette, Search, Settings, Sparkles, UserRound, X } from "lucide-react";
 import type { Account } from "./session";
 import { session } from "./runtime";
 import { haptics, hapticsSupported } from "./feedback";
 import { legacyHash, legacySettingsPath, searchSettings, settingsBackground, settingsSections, type SettingsSection } from "./settings-nav";
-import { theme } from "./theme";
+import { AppearanceSettingsScreen, SidebarSettingsScreen } from "./personalization-screens";
 import { SmartDatesSettingScreen } from "./settings-screen";
 import { GoalsHiddenSettingScreen } from "./goal-screens";
 import { SettingSwitch } from "./settings-views";
@@ -17,11 +17,11 @@ import { CoachSettingsScreen } from "./coach-screens";
 import { BadgeCard, badgeSceneDefaults } from "@todalo/badge";
 import { saveProfilePhoto, squarePhoto } from "./profile-photo";
 import { playCue, SOUND_CHOICES, sounds, type SoundSlot } from "./sounds";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Field, FieldDescription, FieldLabel, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui";
 import "./badge-fonts";
 
 const icons: Record<SettingsSection, ReactNode> = {
-  account: <UserRound />, general: <Settings />, theme: <Palette />, "keyboard-shortcuts": <Keyboard />, rituals: <Sunrise />, coach: <Sparkles />, calendars: <CalendarDays />, integrations: <Blocks />,
+  account: <UserRound />, general: <Settings />, theme: <Palette />, sidebar: <PanelLeft />, "keyboard-shortcuts": <Keyboard />, rituals: <Sunrise />, coach: <Sparkles />, calendars: <CalendarDays />, integrations: <Blocks />,
 };
 
 function AccountSection({ account }: { account: Account }) {
@@ -68,7 +68,55 @@ function AccountSection({ account }: { account: Account }) {
         </div>
       </div>
     </section>}
+    <DeleteAccount />
   </div>;
+}
+
+/** Settings › Account › Delete account (App Store Guideline 5.1.1(v)): the account and all its data, for good. */
+function DeleteAccount() {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const confirm = async (event: FormEvent) => {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    // Success signs out, which unmounts this; only a refusal comes back here.
+    const refusal = await session.deleteAccount(password || undefined);
+    setPending(false);
+    setError(refusal);
+  };
+  return <section className="account-delete" aria-labelledby="delete-account-title">
+    <h3 id="delete-account-title" className="account-section-title">Delete account</h3>
+    <div className="account-delete-body">
+      <p>Delete your account and everything in it. This can’t be undone.</p>
+      <button type="button" className="button outline account-delete-open" data-account-action="delete" onClick={() => { setPassword(""); setError(null); setOpen(true); }}>Delete account…</button>
+    </div>
+    <AlertDialog open={open} onOpenChange={(next) => { if (!pending) setOpen(next); }}>
+      <AlertDialogContent>
+        <form onSubmit={confirm} className="account-delete-form">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes your account and all your data right away: tasks, projects, goals, seasons and reviews, Coach chats and keys,
+              attachments, and your Google Calendar connection. It can’t be undone. Events Todalo already added to your Google Calendar stay there.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Field>
+            <FieldLabel htmlFor="delete-account-password">Password</FieldLabel>
+            <Input id="delete-account-password" type="password" autoComplete="current-password" value={password} disabled={pending} onChange={(event) => setPassword(event.target.value)} />
+            <FieldDescription>Only sign in with Google? Leave this empty.</FieldDescription>
+          </Field>
+          {error && <p className="account-photo-error" role="alert">{error}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction type="submit" variant="destructive" disabled={pending} data-account-action="confirm-delete">{pending ? "Deleting…" : "Delete account"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
+  </section>;
 }
 
 /** One sound slot: picking a sound plays it, so the list doubles as a preview. */
@@ -101,19 +149,14 @@ function GeneralSection({ userId }: { userId: string }) {
   </div>;
 }
 
-function ThemeSection() {
-  const dark = useSyncExternalStore(theme.subscribe, theme.dark);
-  return <div className="settings-general">
-    <SettingSwitch title="Dark theme" hint="Use the dark color scheme." checked={dark} onChange={(on) => theme.set(on)} />
-  </div>;
-}
 
 function sectionBody(id: SettingsSection, account: Account): ReactNode {
   const userId = account.user.id;
   switch (id) {
     case "account": return <AccountSection account={account} />;
     case "general": return <GeneralSection userId={userId} />;
-    case "theme": return <ThemeSection />;
+    case "theme": return <AppearanceSettingsScreen userId={userId} />;
+    case "sidebar": return <SidebarSettingsScreen userId={userId} />;
     case "keyboard-shortcuts": return <ShortcutSettingsScreen userId={userId} />;
     case "rituals": return <RitualSettingsScreen userId={userId} />;
     case "coach": return <CoachSettingsScreen userId={userId} />;

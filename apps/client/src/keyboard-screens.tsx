@@ -25,6 +25,7 @@ import { connectCoachErrors, reportCoachError } from "./coach-errors";
 import { useTaskWrites } from "./task-writes";
 import { isTimed, unscheduledDetails } from "./schedule";
 import { theme } from "./theme";
+import { CardsSkeleton } from "./skeletons";
 
 const platform = detectPlatform();
 const TITLE = ".task-title, .board-card-title";
@@ -618,7 +619,7 @@ export function ShortcutSettingsScreen({ userId }: { userId: string }) {
   const cache = useQueryClient();
   const { query, preferences, effective, syncError } = useShortcuts(userId);
   const [help, setHelp] = useState(false);
-  if (query.status === "pending") return <p className="state" role="status">Loading shortcuts…</p>;
+  if (query.status === "pending") return <CardsSkeleton rows={5} label="Loading shortcuts" />;
   return <>
     <ShortcutSettings preferences={preferences} platform={platform} syncError={syncError} onRetry={() => void query.refetch()} onHelp={() => setHelp(true)}
       onSave={async (draft: KeyboardPreferences) => {

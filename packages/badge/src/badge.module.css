@@ -18,16 +18,17 @@
   background: radial-gradient(60% 45% at var(--mx, 30%) var(--my, 20%), rgb(255 255 255 / 0.55), transparent 70%);
 }
 
-/* hover: a band of light sweeps once across the card, like a foil print turned to the lamp,
-   and the card lifts a little. Restarts on every new hover; still for reduced motion. */
+/* hover: a soft band of light sweeps once across the card, like a foil print turned to the lamp,
+   and the card lifts a little. badge-card.tsx sets data-glint on a hover after a quiet spell,
+   so leaving and coming straight back doesn't replay it; still for reduced motion. */
 .card::after {
   /* z-index: above the WebGL canvas, which otherwise composites over it */
   content: ""; position: absolute; z-index: 2; inset: -20% -60%; pointer-events: none; opacity: 0;
-  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.18) 45%, rgb(255 252 244 / 0.62) 49.5%, rgb(255 255 255 / 0.7) 50%, rgb(255 252 244 / 0.62) 50.5%, rgb(255 255 255 / 0.18) 55%, transparent 60%);
+  background: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / 0.06) 44%, rgb(255 252 244 / 0.22) 49%, rgb(255 255 255 / 0.28) 50%, rgb(255 252 244 / 0.22) 51%, rgb(255 255 255 / 0.06) 56%, transparent 62%);
   transform: translateX(-30%);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .stage:hover .card::after { animation: glint 1.15s cubic-bezier(0.25, 0.6, 0.25, 1) both; }
+  .card[data-glint]::after { animation: glint 1.4s cubic-bezier(0.25, 0.6, 0.25, 1) both; }
   .stage:hover .card { box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 32px 64px -28px rgb(0 0 0 / 0.28); }
 }
 @keyframes glint {

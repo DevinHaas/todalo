@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
+import { settingsBackground } from "./settings-nav";
 import { Mic, Square } from "lucide-react";
 import { coachReads, reads, ritualReads, rituals, seasonReads, seasons } from "./runtime";
 import { askCoach } from "./coach-bar";
 import { STALE_DAYS, TIDY_PROMPT, staleTasks } from "../../../packages/server/src/task-dto";
 import { seasonMutations, type NextSeason } from "./seasons";
 import { EndSeasonStep, seasonRange } from "./season-views";
-import { addDays, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
-import { eveningReviewCopy, RatingHistory, RitualPanel, RitualSettingsForm, RitualsNav, seasonReviewCopy, WeekSummary, weeklyReviewCopy } from "./ritual-views";
+import { addDays, dueRituals, readyRituals, ritualMutations, type PlanningAnswer, type RatingDto, type RitualKind, type RitualRun, type RitualSettingsDto, type RitualsDto } from "./rituals";
+import { eveningReviewCopy, RatingHistory, RitualPanel, RitualSettingsForm, DueRitualsNav, seasonReviewCopy, WeekSummary, weeklyReviewCopy } from "./ritual-views";
 import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
 import { showCalendarDay, useDisplay } from "./schedule-views";
@@ -16,11 +17,12 @@ import { parseDayKey } from "./schedule";
 import { askNotificationPermission, firstTimeFor, notifyReady } from "./ritual-notify";
 import { openPlan } from "./schedule-screens";
 import { planRitual } from "./plan-views";
-import { LoadFailure, Loading } from "./goal-views";
+import { LoadFailure } from "./goal-views";
 import { Button, Hint } from "./ui";
 import { openPlanning } from "./planning-screens";
 import { patternMutations } from "./patterns";
 import { reportCoachError } from "./coach-errors";
+import { CardsSkeleton } from "./skeletons";
 
 // Goals ticket 11: ritual settings, the sidebar entry and the step runner in the right sidebar.
 
@@ -61,7 +63,9 @@ export function useRitualTaskIds(userId: string): ReadonlyMap<string, RitualKind
 export function RitualSettingsScreen({ userId }: { userId: string }) {
   const query = useQuery(ritualReads.state(userId));
   const { save } = useRitualWrites(userId);
-  if (query.status === "pending") return <div className="ui"><Loading>Loading rituals…</Loading></div>;
+  const navigate = useNavigate();
+  const location = useLocation();
+  if (query.status === "pending") return <CardsSkeleton rows={3} label="Loading rituals" />;
   if (!query.data) return <LoadFailure error={query.error} onRetry={() => void query.refetch()} />;
   const before = query.data.settings;
   return <RitualSettingsForm settings={before} onChange={(settings: RitualSettingsDto) => {
@@ -69,12 +73,17 @@ export function RitualSettingsScreen({ userId }: { userId: string }) {
     const turnedOn = (["checkIn", "eveningReview", "weeklyReview"] as const).some(kind => settings[kind].enabled && !before[kind].enabled) || (settings.notify && !before.notify);
     if (settings.notify && turnedOn) void askNotificationPermission();
     save.mutate(settings);
-  }} />;
+  }}
+    // Opening one closes Settings: the ritual panel sits beside the page.
+    rituals={query.data} onOpen={(kind) => { navigate(settingsBackground(location) ?? "/today"); openRitual(kind); }} />;
 }
 
+/** The sidebar's cue for due rituals; re-checked each minute so one appears when its time comes. */
 export function RitualsSidebar({ userId }: { userId: string }) {
   const query = useQuery(ritualReads.state(userId));
-  return query.data ? <RitualsNav rituals={query.data} onStart={openRitual} /> : null;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
+  return query.data ? <DueRitualsNav due={dueRituals(query.data, now)} onStart={openRitual} /> : null;
 }
 
 /**

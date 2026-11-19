@@ -142,7 +142,7 @@ describe("project Display (Todoist)", () => {
 describe("project screens", () => {
   it("renders directory loading, error, empty and populated states", () => {
     const view = (state: Parameters<typeof ProjectsView>[0]["state"]) => render(createElement(ProjectsView, { state, onRetry: noop, actions, write: idle }));
-    expect(view({ status: "pending", error: null })).toContain("Loading projects…");
+    expect(view({ status: "pending", error: null })).toMatch(/data-skeleton=""[^]*Loading projects/);
     expect(view({ status: "error", error: new Error("Your tasks could not be loaded. Try again.") })).toContain("Try again");
     expect(view(success([]))).toContain("Create a project to organize your tasks.");
     const populated = view(success([{ ...work, completedCount: 1, openCount: 3 }, { ...work, id: "a/b", name: "Home", completedCount: 0, openCount: 0 }, { ...work, id: "old", name: "Old", archived: true, completedCount: 0, openCount: 0 }]));
@@ -183,7 +183,7 @@ describe("project screens", () => {
     expect(view(success({ project: work, sections: [], tasks: [] }))).toContain("No open tasks in this project.");
     expect(view(success(null))).toContain("Project not found");
     expect(view({ status: "error", error: new Error("Cannot reach todalo. Check your connection and try again.") })).toContain("Cannot reach todalo");
-    expect(view({ status: "pending", error: null })).toContain("Loading project…");
+    expect(view({ status: "pending", error: null })).toMatch(/data-skeleton=""[^]*Loading project/);
   });
 
   it("labels Today rows with their project, falling back to Inbox", () => {

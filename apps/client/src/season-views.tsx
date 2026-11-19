@@ -2,7 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "re
 import { Link, NavLink } from "react-router";
 import { CalendarRange, History, Pencil, Plus, Sparkles } from "lucide-react";
 import { nextGoalColor, type GoalColor, type GoalDto, type GoalIcon as GoalIconName, type NewGoal } from "./goals";
-import { CoachExplanation, CoachRecommendation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, Loading, SeasonTarget } from "./goal-views";
+import { CoachExplanation, CoachRecommendation, ColorPicker, FormError, GoalIcon, GoalStatusBadge, IconPicker, LoadFailure, SeasonTarget } from "./goal-views";
 import { TrajectoryChart } from "./trajectory-chart";
 import { SeasonSetup, type SeasonPlan } from "./season-setup";
 import type { SeasonSetupDto, SeasonSetupInput } from "./coach";
@@ -15,6 +15,7 @@ import {
   FieldLabel, FieldLegend, FieldSet, Hint, Input, Label, List, ListRow, PageHeader, PageSection, Progress, RadioGroup, RadioGroupItem, Select,
   SelectContent, SelectItem, SelectTrigger, SelectValue, SidebarSectionHeader, Switch, Textarea, ToggleGroup, ToggleGroupItem, cn, sidebarItemClassName,
 } from "./ui";
+import { SeasonSkeleton } from "./skeletons";
 
 // Pure season views (goals tickets 04-05): no runtime imports. Built only from src/ui (docs/agents/ui.md).
 type Write = { pending: boolean; error: string | null };
@@ -41,12 +42,12 @@ const goalPath = (goalId: string) => `/goals/${encodeURIComponent(goalId)}`;
 
 /** The sidebar's Seasons section, separate from Goals: the current season (or a way to start one) and the latest past ones. */
 export function SeasonsNav({ current, past }: { current: Season | null; past: SeasonDto[] }) {
-  return <section className="ui mb-3 flex flex-col" aria-label="Seasons">
+  return <section className="ui flex flex-col" aria-label="Seasons">
     <SidebarSectionHeader title="Seasons" />
-    {current ? <NavLink to="/season" end className={sidebarItemClassName}><CalendarRange /><span className="flex-1 truncate">Current season</span><span className="text-xs text-subtle-foreground">{seasonShortLabel(current.progress)}</span></NavLink>
-      : <NavLink to="/season" end className={cn(sidebarItemClassName, "text-muted-foreground")}><Plus /><span className="truncate">Start a season</span></NavLink>}
+    {current ? <NavLink to="/season" end className={cn(sidebarItemClassName, "flex-none!")}><CalendarRange /><span className="flex-1 truncate">Current season</span><span className="text-xs text-subtle-foreground">{seasonShortLabel(current.progress)}</span></NavLink>
+      : <NavLink to="/season" end className={cn(sidebarItemClassName, "flex-none! text-muted-foreground")}><Plus /><span className="truncate">Start a season</span></NavLink>}
     {/* ponytail: the latest three; the season page lists them all. */}
-    {past.slice(0, 3).map(season => <NavLink key={season.id} to={`/season/${encodeURIComponent(season.id)}`} className={cn(sidebarItemClassName, "text-muted-foreground")}><History /><span className="truncate">{seasonRange(season)}</span></NavLink>)}
+    {past.slice(0, 3).map(season => <NavLink key={season.id} to={`/season/${encodeURIComponent(season.id)}`} className={cn(sidebarItemClassName, "flex-none! text-muted-foreground")}><History /><span className="truncate">{seasonRange(season)}</span></NavLink>)}
   </section>;
 }
 
@@ -89,7 +90,7 @@ export function SeasonView({ state, goals, past, explanations, recommendations, 
   write: Write;
 }) {
   const [ending, setEnding] = useState(false);
-  if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
+  if (state.status === "pending") return <SeasonSkeleton />;
   if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   const season = state.data?.season;
   if (!season || settingUp) return <div className="ui max-w-page">
@@ -198,7 +199,7 @@ const GoalTitle = ({ goalId, color, icon, title, archived }: { goalId: string; c
 
 /** A past season, read-only: its goals with the tiers and targets they had. */
 export function PastSeasonView({ state, id, onRetry }: { state: ReadState<SeasonDto[]>; id: string; onRetry: () => void }) {
-  if (state.status === "pending") return <div className="ui"><Loading>Loading season…</Loading></div>;
+  if (state.status === "pending") return <SeasonSkeleton />;
   if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   const season = state.data?.find(item => item.id === id);
   const back = <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Current season</Button>;

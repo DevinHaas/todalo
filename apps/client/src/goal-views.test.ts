@@ -3,7 +3,7 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { TaskDto } from "./tasks";
-import { GoalView, MilestoneToggle, type MilestoneSlots } from "./goal-views";
+import { GoalView, MilestoneToggle, type GoalTaskSlots, type MilestoneSlots } from "./goal-views";
 import { milestoneTaskIds, type GoalDetailDto, type GoalDto } from "./goals";
 import { MilestoneTasks } from "./task-tree";
 import { TaskRow } from "./views";
@@ -16,10 +16,11 @@ const task: TaskDto = {
   id: "beta", title: "Ship beta", description: null, status: "todo", priority: 4, projectId: null, sectionId: null, parentId: null,
   dueDate: null, dueDateEnd: null, deadline: null, completedAt: null, labelIds: [], recurrence: null, updatedAt: "2026-11-06T00:00:00.000Z",
 };
-const page = (detail: Partial<GoalDetailDto>, season: { tier: "primary" | "secondary"; target: string } | null = null) => render(createElement(GoalView, {
+const page = (detail: Partial<GoalDetailDto>, season: { tier: "primary" | "secondary"; target: string } | null = null, rows?: GoalTaskSlots) => render(createElement(GoalView, {
   state: { status: "success", error: null, data: { goal: goal(), projects: [], tasks: [], milestones: [], ...detail } }, season,
-  onRetry: () => undefined, onSave: async () => undefined, onArchive: () => undefined, onUnlink: () => undefined, write: { pending: false, error: null },
+  onRetry: () => undefined, onSave: async () => undefined, onArchive: () => undefined, onUnlink: () => undefined, write: { pending: false, error: null }, rows,
 }));
+const rows: GoalTaskSlots = { actions: { complete: () => undefined, remove: () => undefined }, projectNames: {}, onCreate: async () => undefined };
 const slots = (extra: Partial<MilestoneSlots> = {}): MilestoneSlots => ({ goals: [goal()], milestone: null, onChange: () => undefined, error: null, ...extra });
 
 describe("goal page", () => {
@@ -42,9 +43,23 @@ describe("goal page", () => {
     expect(html).toMatch(/data-slot="goal-icon"[^>]*style="background:oklch\(0.65 0.11 190\)"><svg[^>]*lucide-book-open/);
   });
 
-  it("flags linked tasks that are milestones", () => {
-    const html = page({ tasks: [task, { ...task, id: "plain", title: "Plain" }], milestones: [{ task, criteria: [], reached: false }] });
-    expect(html.match(/class="milestone-mark"/g)).toHaveLength(2); // the milestone list and its task row
+  // The user's report: the goal page listed plain links (Escape then left the legacy task page) and could not add work.
+  it("lists milestones and tasks as the shared task rows, each once, with Add milestone and Add task", () => {
+    const html = render(createElement(MilestoneTasks.Provider, { value: new Set(["beta"]) }, createElement(GoalView, {
+      state: { status: "success", error: null, data: { goal: goal(), projects: [], tasks: [task, { ...task, id: "plain", title: "Plain" }], milestones: [{ task, criteria: [], reached: false }] } },
+      onRetry: () => undefined, onSave: async () => undefined, onArchive: () => undefined, onUnlink: () => undefined, write: { pending: false, error: null }, rows,
+    })));
+    expect(html.match(/class="task-row/g)).toHaveLength(2);
+    expect(html.match(/data-task-id="beta"/g)).toHaveLength(1);
+    expect(html.match(/class="milestone-mark"/g)).toHaveLength(1);
+    expect(html).toContain("No criteria");
+    expect(html).toContain('aria-label="Unlink Plain"');
+    expect(html).toMatch(/class="composer"[^>]*>.*Add milestone<\/button>/);
+    expect(html).toMatch(/class="composer"[^>]*>.*Add task<\/button>/);
+  });
+
+  it("adds nothing to an archived goal", () => {
+    expect(page({ goal: goal({ archived: true }) }, null, rows)).not.toContain('class="composer"');
   });
 });
 

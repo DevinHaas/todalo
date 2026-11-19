@@ -119,7 +119,7 @@ describe("attachment views", () => {
 
   it("renders attachment loading, error, empty and both download styles", () => {
     const view = (props: Partial<Parameters<typeof TaskAttachments>[0]>) => render(createElement(TaskAttachments, { state: success([doc]), onRetry: () => {}, ...props }));
-    expect(view({ state: { status: "pending", error: null } })).toContain("Loading attachments…");
+    expect(view({ state: { status: "pending", error: null } })).toMatch(/data-skeleton=""[^]*Loading attachments/);
     expect(view({ state: { status: "error", error: new Error("Your tasks could not be loaded. Try again.") } })).toContain("Try again");
     expect(view({ state: success([]) })).toContain("No attachments");
     const link = view({ href: id => `/api/v1/attachments/${id}` });

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-personalization"
+description = "Enables the personalization command without any pre-configured scope."
+commands.allow = ["personalization"]
+
+[[permission]]
+identifier = "deny-personalization"
+description = "Denies the personalization command without any pre-configured scope."
+commands.deny = ["personalization"]

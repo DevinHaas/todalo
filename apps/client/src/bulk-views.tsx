@@ -12,6 +12,7 @@ import type { ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import { AccountTransportError } from "./errors";
 import { inlineError, toasted } from "./toasts";
+import { LinesSkeleton } from "./skeletons";
 
 // Pure views for ticket 15 (no runtime imports). The legacy client selected
 // tasks with X and acted on the selection from a toolbar (Complete, Delete,
@@ -144,7 +145,7 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
     <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
       <h2 className="dialog-title">{title}</h2>
       {error && <p role="alert" className="form-error">{error}</p>}
-      {field === "labels" && !labels ? <p role="status" className="state">Loading labels…</p> : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>
+      {field === "labels" && !labels ? <LinesSkeleton rows={3} label="Loading labels" /> : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>
         {field === "priority" && <label>Priority<select autoFocus value={priority} onChange={(event) => setPriority(Number(event.target.value))}>
           {[1, 2, 3, 4].map(value => <option key={value} value={value}>Priority {value}{value === 1 ? " — highest" : value === 4 ? " — normal" : ""}</option>)}
         </select></label>}

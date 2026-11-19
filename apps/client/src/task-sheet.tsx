@@ -21,6 +21,7 @@ import { PendingAttachments, usePendingChanges } from "./pending-changes";
 import { GoalPicker, GoalSuggestion, MilestoneToggle, type GoalSlots, type MilestoneSlots } from "./goal-views";
 import { moveCriterion, type CriterionDto } from "./goals";
 import { Button, Checkbox, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, cn } from "./ui";
+import { LinesSkeleton } from "./skeletons";
 
 type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
 
@@ -461,7 +462,7 @@ function Comments({ task, slots }: { task: TaskDto; slots: CommentSlots }) {
   return <section className="sheet-section" aria-label="Comments">
     <SectionHeader title={<>Comments{count > 0 && <span className="muted-count">{count}</span>}</>} open={open} onToggle={() => setOpen(value => !value)} />
     {open && <>
-      {slots.state.status === "pending" && <p className="state" role="status">Loading comments…</p>}
+      {slots.state.status === "pending" && <LinesSkeleton rows={2} label="Loading comments" />}
       {slots.state.status === "error" && <p className="state"><span role="alert">{slots.state.error?.message ?? "Comments could not be loaded."}</span> <button type="button" className="text-action" onClick={slots.onRetry}>Try again</button></p>}
       {list.length > 0 && <ul className="comment-list">{list.map(comment => <li key={comment.id} className="comment">
         <Avatar author={comment.author} />

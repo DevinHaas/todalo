@@ -83,7 +83,7 @@ describe("browser task transport", () => {
 
 describe("Today and task screens", () => {
   it("renders loading, error, empty and populated Today states", () => {
-    expect(render(createElement(TodayView, { state: { status: "pending", error: null }, onRetry: noop, now }))).toContain("Loading tasks…");
+    expect(render(createElement(TodayView, { state: { status: "pending", error: null }, onRetry: noop, now }))).toMatch(/data-skeleton=""[^]*Loading tasks/);
     const failed = render(createElement(TodayView, { state: { status: "error", error: new Error("Cannot reach todalo."), }, onRetry: noop, now }));
     expect(failed).toContain("Cannot reach todalo.");
     expect(failed).toContain("Try again");

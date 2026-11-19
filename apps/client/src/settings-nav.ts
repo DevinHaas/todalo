@@ -4,9 +4,10 @@ import { hapticsSupported } from "./feedback";
 
 /** Settings categories; `terms` are the settings inside, matched by the nav search. */
 export const settingsSections = [
-  { id: "account", name: "Account", terms: ["Photo", "Name", "Email", "Log out"] },
+  { id: "account", name: "Account", terms: ["Photo", "Name", "Email", "Log out", "Delete account"] },
   { id: "general", name: "General", terms: ["Smart date recognition", "Show goals", ...(hapticsSupported ? ["Haptic feedback"] : [])] },
-  { id: "theme", name: "Theme", terms: ["Dark theme"] },
+  { id: "theme", name: "Appearance", terms: ["Theme", "Dark mode", "Light mode", "Colours", "Gradient", "Grain", "Intensity", "Accent", "Design code"] },
+  { id: "sidebar", name: "Sidebar", terms: ["Show in sidebar", "Hide", "Reorder"] },
   { id: "keyboard-shortcuts", name: "Keyboard shortcuts", terms: ["Shortcut help"] },
   { id: "rituals", name: "Rituals", terms: ["Check-in", "Weekly review", "Season review"] },
   { id: "coach", name: "Coach", terms: ["AI provider", "API key", "OpenAI", "OpenRouter", "Ollama", "Test connection"] },

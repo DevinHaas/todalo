@@ -10,7 +10,7 @@ it("clears user data on logout and prevents an earlier account read restoring it
   let finish!: (value: Account | null) => void;
   const transport: AccountTransport = {
     account: () => new Promise((resolve) => { finish = resolve; }),
-    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const cached = new Map([["private-task", "Alice's task"]]);
   const session = new SessionController(transport, () => cached.clear());
@@ -24,7 +24,7 @@ it("clears user data on logout and prevents an earlier account read restoring it
 
 it("clears queries after remote session expiry and when switching accounts", async () => {
   let current: Account | null = account;
-  const transport: AccountTransport = { account: async () => current, signIn: async () => account, signUp: async () => account, signOut: async () => {} };
+  const transport: AccountTransport = { account: async () => current, signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {} };
   const queries = new QueryClient();
   const session = new SessionController(transport, () => queries.clear());
   await session.refresh();
@@ -47,6 +47,7 @@ it("keeps logout retryable when server revocation fails", async () => {
   const transport: AccountTransport = {
     account: async () => account, signIn: async () => account, signUp: async () => account,
     signOut: async () => { if (offline) throw new Error("offline"); },
+    deleteAccount: async () => {},
   };
   const session = new SessionController(transport, () => {});
   await session.refresh();
@@ -61,7 +62,7 @@ it("a foreground refresh cannot discard an in-flight successful sign-in", async 
   let finish!: (value: Account) => void;
   const transport: AccountTransport = {
     account: async () => null, signIn: () => new Promise((resolve) => { finish = resolve; }),
-    signUp: async () => account, signOut: async () => {},
+    signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const session = new SessionController(transport, () => {});
   await session.refresh();
@@ -75,7 +76,7 @@ it("a foreground refresh cannot discard an in-flight successful sign-in", async 
 it("a Keychain-denied account refresh tells the user to unlock the device", async () => {
   const transport: AccountTransport = {
     account: async () => { throw nativeAccountError("Apple Keychain is unavailable. Unlock your device and try again."); },
-    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const session = new SessionController(transport, () => {});
   await session.refresh();
@@ -85,7 +86,7 @@ it("a Keychain-denied account refresh tells the user to unlock the device", asyn
 it("a missing native endpoint keeps its configuration recovery message", async () => {
   const transport: AccountTransport = {
     account: async () => { throw nativeAccountError("Configure the native API endpoint."); },
-    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const session = new SessionController(transport, () => {});
   await session.refresh();
@@ -96,7 +97,7 @@ it("unknown transport exceptions never become account recovery copy", async () =
   let failure: unknown = new Error("unexpected transport detail with private data");
   const transport: AccountTransport = {
     account: async () => { throw failure; },
-    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const session = new SessionController(transport, () => {});
   await session.refresh();
@@ -110,7 +111,7 @@ it("a refresh that cannot reach the server keeps the signed-in screens, cache an
   let failure: unknown = null;
   const transport: AccountTransport = {
     account: async () => { if (failure) throw failure; return account; },
-    signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {},
   };
   const queries = new QueryClient();
   const session = new SessionController(transport, () => queries.clear());
@@ -130,4 +131,40 @@ it("a refresh that cannot reach the server keeps the signed-in screens, cache an
 
 it("the browser account read reports a lost connection as CONNECTION_FAILED", async () => {
   await expect(browserTransport(async () => { throw new TypeError("Failed to fetch"); }).account()).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
+});
+
+it("deleting the account signs out and clears data; a refusal keeps the session and says why", async () => {
+  let refuse = true;
+  const transport: AccountTransport = {
+    account: async () => account, signIn: async () => account, signUp: async () => account, signOut: async () => {},
+    deleteAccount: async () => { if (refuse) throw new AccountTransportError("DELETE_PASSWORD_INVALID"); },
+  };
+  const cached = new Map<string, string>();
+  const session = new SessionController(transport, () => cached.clear());
+  await session.refresh();
+  cached.set("private-task", "Alice's task");
+  expect(await session.deleteAccount("wrong")).toBe("That password is not right. Try again.");
+  expect(session.getSnapshot().status).toBe("signed-in");
+  expect(cached.size).toBe(1);
+  refuse = false;
+  expect(await session.deleteAccount("right")).toBeNull();
+  expect(session.getSnapshot()).toEqual({ status: "signed-out", account: null, error: null });
+  expect(cached.size).toBe(0);
+});
+
+it("maps the browser's delete-user refusals to safe copy and sends the password only when given", async () => {
+  const bodies: unknown[] = [];
+  const reply = (status: number, body: unknown) => async (_: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify(body), { status });
+  };
+  await expect(browserTransport(reply(400, { code: "SESSION_EXPIRED" }) as typeof fetch).deleteAccount()).rejects.toMatchObject({ code: "DELETE_SIGN_IN_AGAIN" });
+  await expect(browserTransport(reply(400, { code: "INVALID_PASSWORD" }) as typeof fetch).deleteAccount("x")).rejects.toMatchObject({ code: "DELETE_PASSWORD_INVALID" });
+  await expect(browserTransport(reply(400, { code: "<b>odd</b>" }) as typeof fetch).deleteAccount("x")).rejects.toMatchObject({ code: "DELETE_FAILED" });
+  await expect(browserTransport(reply(200, { success: true }) as typeof fetch).deleteAccount("x")).resolves.toBeUndefined();
+  expect(bodies).toEqual([{}, { password: "x" }, { password: "x" }, { password: "x" }]);
+});
+
+it("recognises the native delete messages exactly", () => {
+  expect(nativeAccountError("For your safety, enter your password. Signed in with Google? Log out, sign in again, then delete within a day.").code).toBe("DELETE_SIGN_IN_AGAIN");
+  expect(nativeAccountError("This account has no password. Leave the field empty, or log out and sign in with Google again first.").code).toBe("DELETE_NO_PASSWORD");
 });

@@ -63,6 +63,24 @@ async fn sign_out(state: tauri::State<'_, NativeAuth>) -> Result<(), String> {
     state.sign_out().await.map_err(str::to_owned)
 }
 
+/// Settings › Account › Delete account: deletes the account and all its data on the server,
+/// then the saved credential. The password is only sent to the fixed delete-user path.
+#[tauri::command]
+async fn delete_account(
+    state: tauri::State<'_, NativeAuth>,
+    password: Option<String>,
+) -> Result<(), String> {
+    let _gate = state.gate.lock().await;
+    state
+        .delete_account(
+            password
+                .filter(|p| !p.is_empty())
+                .map(zeroize::Zeroizing::new),
+        )
+        .await
+        .map_err(str::to_owned)
+}
+
 /// Settings › Account: sets (a small JPEG data URL from the photo picker) or clears the
 /// profile photo. Fixed path; the API checks the image (packages/auth profileImageAllowed).
 #[tauri::command]
@@ -117,6 +135,7 @@ pub fn run() {
             sign_in,
             sign_up,
             sign_out,
+            delete_account,
             set_profile_photo,
             reads::today,
             reads::task,
@@ -236,6 +255,8 @@ pub fn run() {
             settings::update_settings,
             settings::keyboard_preferences,
             settings::update_keyboard_preferences,
+            settings::personalization,
+            settings::update_personalization,
             imports::import_status,
             imports::import_connect,
             imports::import_run,

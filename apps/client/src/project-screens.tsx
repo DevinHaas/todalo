@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Hash } from "lucide-react";
+import { Hash, Plus } from "lucide-react";
 import type { Account } from "./session";
 import { projectReads, projects } from "./runtime";
 import { projectMutations, type NewProject, type ProjectChange, type ProjectDisplay } from "./projects";
@@ -19,7 +19,8 @@ import { datedDetails, deadlineDetails, dueDetails } from "./schedule";
 import { copyProjectLink } from "./links";
 import { inlineError, toasts } from "./toasts";
 import { defaultProjectDisplay } from "../../../packages/server/src/project-dto";
-import { SidebarSectionHeader, sidebarItemClassName } from "./ui";
+import { SidebarSectionHeader, cn, sidebarItemClassName } from "./ui";
+import { SidebarSkeleton } from "./skeletons";
 
 function useProjectMutations(userId: string) {
   const cache = useQueryClient();
@@ -48,13 +49,16 @@ export function ProjectsScreen({ account }: { account: Account }) {
 
 /** The sidebar's My Projects: every project that is not archived. */
 export function ProjectsSidebar({ userId }: { userId: string }) {
-  const active = (useQuery(projectReads.list(userId)).data ?? []).filter(project => !project.archived);
-  if (!active.length) return null;
-  return <section className="ui mb-3 flex flex-col" aria-label="My Projects">
-    <SidebarSectionHeader title={<NavLink to="/projects" end className="no-underline">My Projects</NavLink>} />
-    {active.map(project => <NavLink key={project.id} to={`/projects/${encodeURIComponent(project.id)}`} className={sidebarItemClassName}>
+  const query = useQuery(projectReads.list(userId));
+  if (query.isPending) return <SidebarSkeleton rows={4} label="Loading projects" />;
+  const active = (query.data ?? []).filter(project => !project.archived);
+  // Always shown (the old Projects link in the views is gone): the heading opens the projects page.
+  return <section className="ui flex flex-col" aria-label="My Projects">
+    <SidebarSectionHeader title={<NavLink to="/projects" end className="no-underline hover:text-foreground">My Projects</NavLink>} />
+    {active.map(project => <NavLink key={project.id} to={`/projects/${encodeURIComponent(project.id)}`} className={cn(sidebarItemClassName, "flex-none!")}>
       <Hash style={{ color: project.color ?? "var(--color-priority-4)" }} /><span className="flex-1 truncate">{project.name}</span>
     </NavLink>)}
+    {!active.length && <NavLink to="/projects" end className={cn(sidebarItemClassName, "flex-none! text-muted-foreground")}><Plus /><span className="truncate">Add a project</span></NavLink>}
   </section>;
 }
 

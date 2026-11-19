@@ -9,6 +9,25 @@ import { AccountTransportError, nativeAccountError } from "./errors";
 export type { NotifyKind } from "../../../packages/server/src/ritual-dto";
 export type { PlanningAnswer, ProgressRating, RatingDto, RitualKind, RitualRunDto, RitualSettingsDto, RitualsDto, RunStatus, RatingHistoryItem, SeasonReviewDto, WeekGoalSummary, WeeklyReviewDto };
 export { addDays, progressRatings, ratingLabels, readyRituals } from "../../../packages/server/src/ritual-dto";
+import { readyRituals } from "../../../packages/server/src/ritual-dto";
+
+const hhmm = (now: Date) => `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+/**
+ * The sidebar's cue: rituals whose moment has come and that are neither done nor
+ * skipped. Unlike notifications this ignores the "notify me" setting. A missed
+ * Weekly review stays two more days, so a forgotten one still gets a reminder.
+ * ponytail: the two-day grace is a plain rule; the week's period (weeklyReviewPeriod) still decides when it resets.
+ */
+export function dueRituals(rituals: RitualsDto, now: Date): RitualKind[] {
+  const { settings } = rituals;
+  const time = hhmm(now);
+  const due: RitualKind[] = readyRituals({ ...rituals, settings: { ...settings, notify: true } }, time, now.getDay())
+    .map(item => item.kind).filter(kind => kind !== "weeklyReview");
+  const since = (now.getDay() - settings.weeklyReview.day + 7) % 7;
+  if (settings.weeklyReview.enabled && !rituals.weeklyReview.status && (since === 0 ? time >= settings.weeklyReview.time : since <= 2)) due.push("weeklyReview");
+  if (settings.seasonReview.enabled && rituals.seasonReview.period && rituals.seasonReview.due && !rituals.seasonReview.status) due.push("seasonReview");
+  return due;
+}
 export interface RitualRun { kind: RitualKind; period: string; status: RunStatus; ratings: RatingDto[]; planning?: PlanningAnswer | null }
 
 export interface RitualTransport {

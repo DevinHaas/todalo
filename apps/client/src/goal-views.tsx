@@ -3,14 +3,15 @@ import { Link, NavLink } from "react-router";
 import {
   Apple, Baby, Bike, BookOpen, Brain, Briefcase, CalendarRange, Camera, Code, Dog, Dumbbell, Flame, Footprints, GraduationCap, Hash, Heart, House, Leaf,
   CalendarClock, Lightbulb, MessageCircle,
-  Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Sparkles, Star, Sun, Target, Trophy, Users, Wallet, X, type LucideIcon,
+  Moon, Mountain, Music, Palette, Pencil, PenTool, PiggyBank, Plane, Plus, Rocket, Sparkles, Star, Sun, Target, Trophy, Unlink, Users, Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { criteriaProgress, goalColorKeys, goalColorValue, goalIcons, type GoalColor, type GoalIcon as GoalIconName, type GoalDetailDto, type GoalDto, type GoalLinkKind, type GoalPatch, type MilestoneDto } from "./goals";
 import { bandLabels, type GoalBand, type GoalStatusDto, type SeasonTier } from "./seasons";
-import { taskPath } from "./links";
 import type { ReorderPosition } from "./bulk";
 import { SortableRow, SortableTasks } from "./bulk-views";
-import { MilestoneMark, type ReadState } from "./views";
+import { TaskRow, type ReadState, type RowActions } from "./views";
+import { Composer } from "./composer";
+import type { NewTask } from "./tasks";
 import { releaseFocus } from "./software-keyboard";
 import {
   Alert, AlertDescription, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -18,6 +19,7 @@ import {
   ListRow, PageHeader, PageSection, Popover, PopoverContent, PopoverTitle, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger,
   SelectValue, SidebarSectionHeader, Spinner, SwatchPicker, Switch, Textarea, ToggleGroup, ToggleGroupItem, cn, sidebarItemClassName, type Swatch,
 } from "./ui";
+import { GoalPageSkeleton } from "./skeletons";
 
 // Pure goal views (goals ticket 01): no runtime imports. Built only from src/ui (docs/agents/ui.md).
 type Write = { pending: boolean; error: string | null };
@@ -77,8 +79,7 @@ export const GoalStatusDot = ({ status }: { status?: GoalStatusDto }) => !status
 
 /** A form-level error line. */
 export const FormError = ({ children }: { children: ReactNode }) => <p role="alert" className="text-xs-plus text-destructive">{children}</p>;
-/** Loading and load-failure states for a page. */
-export const Loading = ({ children }: { children: ReactNode }) => <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner />{children}</p>;
+/** The load-failure state for a page (loading states: skeletons.tsx). */
 export function LoadFailure({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
   return <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center gap-2">
     <span>{error?.message ?? "This could not be loaded."}</span><Button size="sm" variant="outline" onClick={onRetry}>Try again</Button>
@@ -95,7 +96,7 @@ export function GoalsNav({ goals, statuses = {}, adding, onAdding, onCreate, onR
     event.preventDefault();
     try { await onCreate(title); setTitle(""); onAdding(false); } catch { /* shown through write.error */ }
   }
-  return <section className="ui mb-3 flex flex-col" aria-label="Goals">
+  return <section className="ui flex flex-col" aria-label="Goals">
     <SidebarSectionHeader title="Goals" action={<Button variant="ghost" size="icon-sm" aria-label="Add goal" aria-expanded={adding} data-goal-action="create" onClick={() => onAdding(!adding)}><Plus /></Button>} />
     {adding && <form className="flex gap-1.5 px-1 py-1" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onAdding(false); } }}>
       <Input aria-label="New goal title" placeholder="New goal" autoFocus value={title} onChange={event => setTitle(event.target.value)} required maxLength={200} />
@@ -259,24 +260,35 @@ const linkClass = "inline-flex min-w-0 items-center gap-2 [overflow-wrap:anywher
  * keeps its data. Shows its season target (that lives on the season, not the
  * goal) and lists its milestones and linked projects and tasks.
  */
-export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, onPlan, write }: {
+/** The goal page's task rows: the shared row (its title opens the task sheet in place), and adding straight into the goal. */
+export interface GoalTaskSlots {
+  actions: RowActions;
+  projectNames: Record<string, string>;
+  /** Adds a task linked to this goal; `milestone` makes it one of the goal's milestones. */
+  onCreate: (task: NewTask, milestone: boolean) => Promise<unknown>;
+}
+
+export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, onPlan, write, rows }: {
   state: ReadState<GoalDetailDto | null>; season?: GoalSeason | null; onRetry: () => void; onSave: (patch: GoalPatch) => Promise<unknown>; onArchive: (archived: boolean) => void;
   /** Removes only the link; the project or task stays. */
   onUnlink: (kind: GoalLinkKind, targetId: string) => void; write: Write;
   /** Ticket 23: a planning session with the Coach about this goal (only with a provider). */
   onPlan?: () => void;
+  rows?: GoalTaskSlots;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<GoalColor>("blue");
   const [icon, setIcon] = useState<GoalIconName>("target");
-  if (state.status === "pending") return <div className="ui"><Loading>Loading goal…</Loading></div>;
+  if (state.status === "pending") return <div className="max-w-page"><GoalPageSkeleton /></div>;
   if (state.status === "error") return <div className="ui"><LoadFailure error={state.error} onRetry={onRetry} /></div>;
   if (!state.data) return <div className="ui flex flex-col items-start gap-3"><PageHeader title="Goal not found" />
     <Hint>This goal does not exist or you do not have access to it.</Hint><Button variant="outline" size="sm" nativeButton={false} render={<Link to="/today" />}>Back to Today</Button></div>;
   const { goal, projects, tasks, milestones } = state.data;
   const marked = new Set(milestones.map(item => item.task.id));
+  const others = tasks.filter(task => !marked.has(task.id));
+  const now = new Date();
   const edit = () => { setTitle(goal.title); setDescription(goal.description ?? ""); setColor(goal.color); setIcon(goal.icon); setEditing(true); };
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -284,7 +296,8 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
   }
   const unlink = (kind: GoalLinkKind, id: string, name: string) => <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100"
     aria-label={`Unlink ${name}`} title="Unlink" disabled={write.pending} onClick={() => onUnlink(kind, id)}><X /></Button>;
-  return <div className="ui max-w-page" data-goal-id={goal.id}>
+  // The task rows and composers are legacy markup: they sit outside the UI kit's `.ui` reset scope (ui-scope.test.ts).
+  return <div className="max-w-page" data-goal-id={goal.id}><div className="ui">
     <PageHeader icon={<GoalIcon color={goal.color} icon={goal.icon} size="lg" />} title={goal.title} actions={<>
       {onPlan && !goal.archived && <Button variant="outline" size="sm" data-goal-action="plan" onClick={onPlan}><Sparkles className="text-brand" />Plan with the Coach</Button>}
       {!goal.archived && <Button variant="outline" size="sm" data-goal-action="edit" aria-expanded={editing} onClick={() => editing ? setEditing(false) : edit()}><Pencil />Edit</Button>}
@@ -311,21 +324,25 @@ export function GoalView({ state, season, onRetry, onSave, onArchive, onUnlink, 
       </CardContent>
       <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/season" />}>Season</Button>
     </Card></section>}
-    <PageSection title="Milestones" aria-label="Milestones">
-      {milestones.length ? <List>{milestones.map(({ task, criteria, reached }) => <ListRow key={task.id} data-done={reached || undefined} className="justify-between">
-        <Link className={cn(linkClass, reached && "text-muted-foreground line-through")} to={taskPath(task.id)}>{task.title}<MilestoneMark /></Link>
-        <span className="text-xs-plus text-muted-foreground tabular-nums" aria-label={reached ? "Reached" : `${criteriaProgress(criteria)} done criteria ticked`}>{reached ? "Reached" : criteria.length ? criteriaProgress(criteria) : "No criteria"}</span>
-      </ListRow>)}</List> : <Hint className="py-2">No milestones. Turn on Milestone in a linked task's details.</Hint>}
-    </PageSection>
-    <PageSection title="Projects" aria-label="Linked projects">
+    </div>
+    <section className="mt-7" aria-label="Milestones"><h2 className="section-heading">Milestones</h2>
+      {milestones.map(({ task, criteria, reached }) => <TaskRow key={task.id} task={task} now={now} actions={rows?.actions} projectName={task.projectId ? rows?.projectNames[task.projectId] : undefined}
+        tools={<span className="self-center text-xs-plus text-muted-foreground tabular-nums" aria-label={reached ? "Reached" : `${criteriaProgress(criteria)} done criteria ticked`}>{reached ? "Reached" : criteria.length ? criteriaProgress(criteria) : "No criteria"}</span>} />)}
+      {!milestones.length && <p className="state">No milestones yet. Add one, or turn on Milestone in a linked task's details.</p>}
+      {rows && !goal.archived && <Composer key="milestone" label="Add milestone" dueDate={() => null} onCreate={(task) => rows.onCreate(task, true)} />}
+    </section>
+    <div className="ui"><PageSection title="Projects" aria-label="Linked projects">
       {projects.length ? <List>{projects.map(project => <ListRow key={project.id} className="justify-between">
         <Link className={linkClass} to={`/projects/${encodeURIComponent(project.id)}`}><Hash />{project.name}</Link>{unlink("projects", project.id, project.name)}
       </ListRow>)}</List> : <Hint className="py-2">No linked projects. Link one from its project page.</Hint>}
-    </PageSection>
-    <PageSection title="Tasks" aria-label="Linked tasks">
-      {tasks.length ? <List>{tasks.map(task => <ListRow key={task.id} data-done={task.status === "done" || undefined} className="justify-between">
-        <Link className={cn(linkClass, task.status === "done" && "text-muted-foreground line-through")} to={taskPath(task.id)}>{task.title}{marked.has(task.id) && <MilestoneMark />}</Link>{unlink("tasks", task.id, task.title)}
-      </ListRow>)}</List> : <Hint className="py-2">No linked tasks. Link one from its task details.</Hint>}
-    </PageSection>
+    </PageSection></div>
+    <section className="mt-7" aria-label="Linked tasks"><h2 className="section-heading">Tasks</h2>
+      {/* Milestones are listed above; here only the goal's other tasks. */}
+      {others.map(task => <TaskRow key={task.id} task={task} now={now} actions={rows?.actions} projectName={task.projectId ? rows?.projectNames[task.projectId] : undefined}
+        tools={<Button variant="ghost" size="icon-sm" className="self-center opacity-0 group-hover/task:opacity-100 group-focus-within/task:opacity-100 pointer-coarse:opacity-100"
+          aria-label={`Unlink ${task.title}`} title="Unlink from goal" disabled={write.pending} onClick={() => onUnlink("tasks", task.id)}><Unlink /></Button>} />)}
+      {!others.length && <p className="state">No tasks yet. Add one, or link one from its task details.</p>}
+      {rows && !goal.archived && <Composer key="task" dueDate={() => null} onCreate={(task) => rows.onCreate(task, false)} />}
+    </section>
   </div>;
 }

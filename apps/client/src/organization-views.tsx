@@ -6,6 +6,7 @@ import { treeOrder, type TaskDto } from "./tasks";
 import { Failure, type ReadState } from "./views";
 import { releaseFocus } from "./software-keyboard";
 import { inlineError } from "./toasts";
+import { LinesSkeleton } from "./skeletons";
 
 // Pure views for ticket 13 (no runtime imports). The legacy client offered
 // move/nest/unnest only as keyboard commands (v, Ctrl+], Ctrl+[); these are the
@@ -74,7 +75,7 @@ export function MoveDialog({ task, destinations, onRetry, pending, error, onSubm
   return <Dialog title="Move task" pending={pending} onClose={onClose}>
     {error && <p role="alert" className="form-error">{error}</p>}
     {!data
-      ? destinations.status === "error" ? <Failure error={destinations.error} onRetry={onRetry} /> : <p role="status" className="state">Loading destinations…</p>
+      ? destinations.status === "error" ? <Failure error={destinations.error} onRetry={onRetry} /> : <LinesSkeleton rows={4} label="Loading destinations" />
       : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>
         <label>Project<select autoFocus aria-label="Move to project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setSectionId(""); }}>
           <option value="">Inbox</option>
@@ -99,7 +100,7 @@ function NestDialog({ task, tasks, pending, error, onSubmit, onClose }: {
   const [parentId, setParentId] = useState("");
   return <Dialog title="Nest task" pending={pending} onClose={onClose}>
     {error && <p role="alert" className="form-error">{error}</p>}
-    {!tasks ? <p role="status" className="state">Loading tasks…</p>
+    {!tasks ? <LinesSkeleton rows={4} label="Loading tasks" />
       : candidates.length === 0 ? <p className="state">There is no other open task here to nest under (sub-tasks nest at most {MAX_SUBTASK_DEPTH} levels deep).</p>
       : <form ref={releaseFocus} onSubmit={(event) => { event.preventDefault(); if (parentId) void onSubmit({ parentId }); }}><fieldset disabled={pending}>
         <label>Parent task<select aria-label="Parent task" value={parentId} onChange={(event) => setParentId(event.target.value)}>

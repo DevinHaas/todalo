@@ -15,23 +15,35 @@ const longDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeri
 export const dayLabel = (day: string) => longDay.format(Date.parse(`${day}T00:00:00Z`));
 
 /** Settings › Rituals: each ritual is opt-in, with its time. Every change saves at once. */
-export function RitualSettingsForm({ settings, disabled, onChange }: { settings: RitualSettingsDto; disabled?: boolean; onChange: (settings: RitualSettingsDto) => void }) {
+export function RitualSettingsForm({ settings, disabled, onChange, rituals, onOpen }: {
+  settings: RitualSettingsDto; disabled?: boolean; onChange: (settings: RitualSettingsDto) => void;
+  /** Open a ritual now (the sidebar only shows due ones), with this period's Done/Skipped. */
+  rituals?: RitualsDto; onOpen?: (kind: RitualKind) => void;
+}) {
   const { checkIn, eveningReview, weeklyReview, seasonReview } = settings;
+  const open = (kind: RitualKind) => {
+    if (!onOpen || !rituals || (kind === "seasonReview" && !rituals.seasonReview.period)) return undefined;
+    const status = rituals[kind].status;
+    return <Button type="button" variant="outline" size="sm" className="ml-auto self-start" data-ritual-open={kind} onClick={() => onOpen(kind)}>
+      {status === "completed" ? "Done · Open" : status === "skipped" ? "Skipped · Open" : "Open"}
+    </Button>;
+  };
   const time = (label: string, value: string, set: (time: string) => void) =>
     <Input type="time" aria-label={label} className="w-28" required value={value} disabled={disabled} onChange={event => { if (event.target.value) set(event.target.value); }} />;
-  const row = (id: string, title: string, hint: string, on: boolean, toggle: (on: boolean) => void, extra?: ReactNode) =>
+  const row = (id: string, title: string, hint: string, on: boolean, toggle: (on: boolean) => void, extra?: ReactNode, kind?: RitualKind) =>
     <Field orientation="horizontal" className="items-start gap-3 border-b border-border-subtle py-3">
       <Switch id={id} className="mt-0.5" checked={on} disabled={disabled} onCheckedChange={toggle} />
       <FieldContent><FieldLabel htmlFor={id}>{title}</FieldLabel><FieldDescription>{hint}</FieldDescription>
         {on && extra && <div className="mt-2 flex flex-wrap items-center gap-2">{extra}</div>}</FieldContent>
+      {on && kind && open(kind)}
     </Field>;
   return <div className="ui flex flex-col" data-ritual-settings="">
     {row("ritual-check-in", "Check-in", "Each morning: plan today. Schedule what matters from your Inbox, overdue and due-today tasks, then adjust today's schedule. Shows on your schedule (and Google Calendar) as a recurring item.", checkIn.enabled,
       enabled => onChange({ ...settings, checkIn: { ...checkIn, enabled } }),
-      <>Every day at {time("Check-in time", checkIn.time, value => onChange({ ...settings, checkIn: { ...checkIn, time: value } }))}</>)}
+      <>Every day at {time("Check-in time", checkIn.time, value => onChange({ ...settings, checkIn: { ...checkIn, time: value } }))}</>, "checkIn")}
     {row("ritual-evening-review", "Evening review", "Each evening: rate today's progress on each season goal. Shows on your schedule (and Google Calendar) as a recurring item.", eveningReview.enabled,
       enabled => onChange({ ...settings, eveningReview: { ...eveningReview, enabled } }),
-      <>Every day at {time("Evening review time", eveningReview.time, value => onChange({ ...settings, eveningReview: { ...eveningReview, time: value } }))}</>)}
+      <>Every day at {time("Evening review time", eveningReview.time, value => onChange({ ...settings, eveningReview: { ...eveningReview, time: value } }))}</>, "eveningReview")}
     {row("ritual-weekly-review", "Weekly review", "Weekly: check each goal's week and plan the next one.", weeklyReview.enabled,
       enabled => onChange({ ...settings, weeklyReview: { ...weeklyReview, enabled } }),
       <>Every
@@ -40,39 +52,29 @@ export function RitualSettingsForm({ settings, disabled, onChange }: { settings:
           <SelectTrigger size="sm" aria-label="Weekly review day" className="w-32"><SelectValue /></SelectTrigger>
           <SelectContent>{weekdays.map((label, value) => <SelectItem key={value} value={String(value)}>{label}</SelectItem>)}</SelectContent>
         </Select>
-        at {time("Weekly review time", weeklyReview.time, value => onChange({ ...settings, weeklyReview: { ...weeklyReview, time: value } }))}</>)}
+        at {time("Weekly review time", weeklyReview.time, value => onChange({ ...settings, weeklyReview: { ...weeklyReview, time: value } }))}</>, "weeklyReview")}
     {row("ritual-season-review", "Season review", "When a season ends: look back, choose which goals continue and set next season's targets.", seasonReview.enabled,
-      enabled => onChange({ ...settings, seasonReview: { enabled } }))}
+      enabled => onChange({ ...settings, seasonReview: { enabled } }), undefined, "seasonReview")}
     {row("ritual-notify", "Notify me when a ritual is ready", "At a ritual's time, unless it is done or skipped: one notification per ritual and day (or week). Works while todalo is open.", settings.notify,
       notify => onChange({ ...settings, notify }))}
-    <Hint className="pt-3">Rituals are optional: skip or close one any time, and the rest of the app works the same without them.</Hint>
+    <Hint className="pt-3">Rituals are optional: skip or close one any time, and the rest of the app works the same without them. A ritual shows in the sidebar only while it is due.</Hint>
   </div>;
 }
 
-/** The left sidebar's Rituals section: one click starts a ritual. Hidden while every ritual is off (or only the Season review, without a season). */
-export function RitualsNav({ rituals, onStart }: { rituals: RitualsDto; onStart: (kind: RitualKind) => void }) {
-  const { settings, checkIn, eveningReview, weeklyReview, seasonReview } = rituals;
-  const season = settings.seasonReview.enabled && seasonReview.period !== null;
-  if (!settings.checkIn.enabled && !settings.eveningReview.enabled && !settings.weeklyReview.enabled && !season) return null;
-  const state = (status: RunStatus | null, otherwise: string) => status === "completed" ? "Done" : status === "skipped" ? "Skipped" : otherwise;
-  return <section className="ui mb-3 flex flex-col" aria-label="Rituals">
-    <SidebarSectionHeader title="Rituals" />
-    {settings.checkIn.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("checkIn")} data-ritual-start="checkIn">
-      {checkIn.status ? <CircleCheck /> : <Sunrise />}<span className="flex-1 truncate">Check-in</span>
-      <span className="text-xs text-subtle-foreground">{state(checkIn.status, settings.checkIn.time)}</span>
-    </button>}
-    {settings.eveningReview.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("eveningReview")} data-ritual-start="eveningReview">
-      {eveningReview.status ? <CircleCheck /> : <Moon />}<span className="flex-1 truncate">Evening review</span>
-      <span className="text-xs text-subtle-foreground">{state(eveningReview.status, settings.eveningReview.time)}</span>
-    </button>}
-    {settings.weeklyReview.enabled && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("weeklyReview")} data-ritual-start="weeklyReview">
-      {weeklyReview.status ? <CircleCheck /> : <CalendarRange />}<span className="flex-1 truncate">Weekly review</span>
-      <span className="text-xs text-subtle-foreground">{state(weeklyReview.status, weekdays[settings.weeklyReview.day]!.slice(0, 3))}</span>
-    </button>}
-    {season && <button type="button" className={cn(sidebarItemClassName, "text-left")} onClick={() => onStart("seasonReview")} data-ritual-start="seasonReview">
-      {seasonReview.status ? <CircleCheck /> : <CalendarCheck />}<span className="flex-1 truncate">Season review</span>
-      <span className="text-xs text-subtle-foreground">{state(seasonReview.status, seasonReview.due ? "Due" : "")}</span>
-    </button>}
+const ritualIcons = { checkIn: Sunrise, eveningReview: Moon, weeklyReview: CalendarRange, seasonReview: CalendarCheck } as const;
+const ritualNames = { checkIn: "Check-in", eveningReview: "Evening review", weeklyReview: "Weekly review", seasonReview: "Season review" } as const;
+
+/**
+ * The sidebar's ritual cue: only rituals that are due now (dueRituals). Done or
+ * skipped, they leave the sidebar; Settings › Rituals opens any of them on demand.
+ */
+export function DueRitualsNav({ due, onStart }: { due: readonly RitualKind[]; onStart: (kind: RitualKind) => void }) {
+  if (!due.length) return null;
+  return <section className="ui flex flex-col gap-0.5" aria-label="Due rituals">
+    {due.map(kind => { const Icon = ritualIcons[kind]; return <button key={kind} type="button" data-ritual-start={kind} onClick={() => onStart(kind)}
+      className={cn(sidebarItemClassName, "bg-brand-tint/60 text-left text-brand-tint-foreground hover:bg-brand-tint [&_svg]:text-brand-tint-foreground")}>
+      <Icon /><span className="flex-1 truncate">{ritualNames[kind]}</span><span className="text-xs font-medium">Ready</span>
+    </button>; })}
   </section>;
 }
 

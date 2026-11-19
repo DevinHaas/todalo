@@ -4,5 +4,5 @@
   "private": true,
   "exports": { ".": "./src/index.ts" },
   "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@todalo/db": "*", "better-auth": "^1.6.23" }
+  "dependencies": { "@todalo/db": "*", "better-auth": "^1.6.23", "drizzle-orm": "^0.45.2" }
 }

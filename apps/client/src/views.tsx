@@ -17,6 +17,7 @@ import { ComposerChoices } from "./composer";
 import { MilestoneTasks, TaskGoals, TaskTree, subtasksOf } from "./task-tree";
 import { GoalIcon } from "./goal-views";
 import { PendingAttachments, PendingChip, PendingNewTasks, PendingSubtaskRows, ownLook, pendingRowClass, usePendingChanges } from "./pending-changes";
+import { CalendarSkeleton, TaskDetailSkeleton, TaskListSkeleton } from "./skeletons";
 
 // Pure screen views: no runtime/transport imports, so they render in tests.
 export type ReadState<T> = { status: "pending" | "error" | "success"; data?: T; error: Error | null };
@@ -169,7 +170,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
 }) {
   const [overdueOpen, setOverdueOpen] = useState(true);
   const header = <><div className="project-header"><h1 className="page-title">Today</h1>{!calendar && state.data && selection?.control}</div><p className="page-count">{state.data ? `${state.data.openCount} tasks` : " "}</p></>;
-  if (state.status === "pending") return <div>{header}<p className="state" role="status">Loading tasks…</p></div>;
+  if (state.status === "pending") return <div>{header}{calendar ? <CalendarSkeleton days={1} /> : <TaskListSkeleton />}</div>;
   if (!state.data) return <div>{header}<Failure error={state.error} onRetry={onRetry} /></div>;
   if (calendar) return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{calendar(state.data.tasks)}</div>;
   const { overdue, today } = todaySections(state.data.tasks, now, showCompleted);
@@ -202,7 +203,7 @@ export function TaskView({ state, onRetry, actions, attachments, onEdit, editor,
   organize?: (task: TaskDto) => ReactNode;
 }) {
   let body: ReactNode;
-  if (state.status === "pending") body = <p className="state" role="status">Loading task…</p>;
+  if (state.status === "pending") body = <TaskDetailSkeleton />;
   else if (state.status === "error") body = <Failure error={state.error} onRetry={onRetry} />;
   else if (!state.data) body = <><h1 className="page-title">Task not found</h1><p className="state">This task does not exist or you do not have access to it.</p></>;
   else {

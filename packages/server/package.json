@@ -41,6 +41,8 @@
     "./coach-suggestions-store": "./src/coach-suggestions-store.ts",
     "./settings": "./src/settings.ts",
     "./settings-input": "./src/settings-input.ts",
+    "./personalization": "./src/personalization.ts",
+    "./personalization-dto": "./src/personalization-dto.ts",
     "./keyboard": "./src/keyboard.ts",
     "./tasks": "./src/tasks.ts",
     "./task-rules": "./src/task-rules.ts",

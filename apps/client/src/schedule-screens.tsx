@@ -26,6 +26,7 @@ import { useCalendarEvents } from "./calendar-screens";
 import { BoardScreen } from "./board-screens";
 import { useBulkSelection } from "./bulk-screens";
 import { reportCoachError } from "./coach-errors";
+import { CalendarSkeleton, MonthSkeleton, TaskListSkeleton } from "./skeletons";
 
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
 function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection, planner: scope }: { projectId?: string | null; selection?: SelectionSlots; planner?: "day" | "week" } = {}) {
@@ -265,7 +266,7 @@ export function UpcomingScreen({ account }: { account: Account }) {
   const composer = (day: Date): ReactNode => <Composer dueDate={() => startOfDay(day).toISOString()} destination={dayDestination(day, now)}
     onCreate={(task) => writes.create.mutateAsync(task)} />;
   let body: ReactNode;
-  if (query.status === "pending") body = <p className="state" role="status">Loading tasks…</p>;
+  if (query.status === "pending") body = layout === "calendar" ? calendarRange === "month" ? <MonthSkeleton /> : <CalendarSkeleton /> : <TaskListSkeleton />;
   else if (!query.data) body = <Failure error={query.error} onRetry={() => void query.refetch()} />;
   else body = <>
     {query.status === "error" && <Failure error={query.error} onRetry={() => void query.refetch()} />}

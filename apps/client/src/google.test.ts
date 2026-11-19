@@ -5,7 +5,7 @@ import { browserGoogle } from "./transport";
 
 const alice: Account = { user: { id: "alice", name: "Alice", email: "alice@example.test", image: null, emailVerified: true }, expiresAt: "2026-10-16T10:00:00.000Z" };
 const bob: Account = { ...alice, user: { ...alice.user, id: "bob" } };
-const signedOut: AccountTransport = { account: async () => null, signIn: async () => alice, signUp: async () => alice, signOut: async () => {} };
+const signedOut: AccountTransport = { account: async () => null, signIn: async () => alice, signUp: async () => alice, signOut: async () => {}, deleteAccount: async () => {} };
 
 function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (error: unknown) => void;

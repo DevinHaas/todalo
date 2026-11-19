@@ -30,8 +30,28 @@ export function browserTransport(fetcher: typeof fetch = fetch): AccountTranspor
       const response = await fetcher("/api/auth/sign-out", { method: "POST", credentials: "same-origin" });
       if (!response.ok) throw new AccountTransportError("LOGOUT_UNCONFIRMED");
     },
+    deleteAccount: async (password) => {
+      let response: Response;
+      try {
+        response = await fetcher("/api/auth/delete-user", {
+          method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+          body: JSON.stringify(password ? { password } : {}),
+        });
+      } catch { throw new AccountTransportError("CONNECTION_FAILED"); }
+      if (response.ok) return;
+      if (response.status === 401) throw new AccountTransportError("UNAUTHENTICATED");
+      const code = response.status === 400 ? ((await response.json().catch(() => null)) as { code?: unknown } | null)?.code : null;
+      throw new AccountTransportError(deleteErrors[String(code)] ?? "DELETE_FAILED");
+    },
   };
 }
+
+// Better Auth's delete-user refusals → safe copy (the native side maps the same codes in auth.rs).
+const deleteErrors: Record<string, AccountErrorCode> = {
+  INVALID_PASSWORD: "DELETE_PASSWORD_INVALID",
+  SESSION_EXPIRED: "DELETE_SIGN_IN_AGAIN",
+  CREDENTIAL_ACCOUNT_NOT_FOUND: "DELETE_NO_PASSWORD",
+};
 
 // Better Auth's browser error codes → safe copy.
 const googleErrors: Record<string, AccountErrorCode> = {
@@ -97,5 +117,6 @@ export function accountTransport(): AccountTransport {
     signIn: (credentials) => command<Account>("sign_in", { credentials }),
     signUp: (credentials) => command<Account>("sign_up", { credentials }),
     signOut: () => command<void>("sign_out"),
+    deleteAccount: (password) => command<void>("delete_account", { password: password ?? null }),
   };
 }

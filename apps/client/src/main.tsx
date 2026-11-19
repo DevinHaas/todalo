@@ -1,5 +1,6 @@
 import { identify } from "./monitoring"; // first: catches errors from everything below
 import { theme } from "./theme";
+import { applySavedDesign } from "./personalization";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
@@ -14,6 +15,7 @@ import { Toaster } from "./ui";
 
 // ponytail: before render, not pre-paint; the Tauri CSP forbids an inline <head> script.
 theme.apply();
+applySavedDesign();
 trackSoftwareKeyboard();
 // Task deep links Rust accepted (cold or warm launch); before render so none waits.
 if (isTauri()) void followNativeLinks();

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Account } from "./session";
-import { coach, coachReads, goalReads, goals, ritualReads, seasonReads, seasons } from "./runtime";
+import { coach, coachReads, goalReads, goals, projectReads, ritualReads, seasonReads, seasons } from "./runtime";
 import { openRitual, showWeekPlan } from "./ritual-screens";
 import { seasonKeys, seasonMutations, type GoalStatusDto, type NextSeason, type SeasonGoalDto, type SeasonGoalPatch, type SeasonTier } from "./seasons";
 import { draftMutations } from "./coach";
@@ -14,10 +14,12 @@ import type { SeasonPlan } from "./season-setup";
 import { goalKeys, goalMutations, linkedGoalIds, milestoneTaskIds, setCriteriaPrompt, type GoalLinkKind, type GoalPatch, type MilestoneDto, type NewGoal } from "./goals";
 import type { ReorderPosition } from "./bulk";
 import { goalOf } from "./schedule";
-import type { TaskDto } from "./tasks";
+import { draftTask, type NewTask, type TaskDto } from "./tasks";
+import { useTaskWrites } from "./task-writes";
 import { CriteriaConfirm, GoalPicker, GoalsNav, GoalView, type GoalSlots, type MilestoneSlots, type RecommendationSlot } from "./goal-views";
 import { SettingSwitch } from "./settings-views";
 import { reportCoachError } from "./coach-errors";
+import { SidebarSkeleton } from "./skeletons";
 
 function useGoalMutations(userId: string) {
   const cache = useQueryClient();
@@ -104,6 +106,7 @@ export function GoalsSidebar({ userId, adding, onAdding }: { userId: string; add
   const reorder = useMutation({ mutationFn: ({ id, anchorId, position }: { id: string; anchorId: string; position: ReorderPosition }) => writes.reorder(id, anchorId, position), meta: { action: () => "move the goal" } });
   // Ticket 15: the same current-season read the Seasons section makes, so the dots cost no extra request.
   const current = useQuery({ ...seasonReads.current(userId), enabled: query.data?.hidden === false });
+  if (query.isPending) return <SidebarSkeleton rows={3} label="Loading goals" />;
   if (!query.data || query.data.hidden) return null;
   return <GoalsNav goals={query.data.goals} statuses={current.data?.season?.statuses} adding={adding} onAdding={onAdding}
     onCreate={(title) => create.mutateAsync(title)}
@@ -150,10 +153,34 @@ export function GoalScreen({ account }: { account: Account }) {
   const writes = useGoalMutations(account.user.id);
   const update = useMutation({ mutationFn: (patch: GoalPatch) => writes.update(id, patch), meta: { action: (patch: GoalPatch) => patch.archived === undefined ? "save the goal" : patch.archived ? "archive the goal" : "restore the goal" } });
   const unlink = useMutation({ mutationFn: ({ kind, targetId }: { kind: GoalLinkKind; targetId: string }) => writes.link(id, kind, targetId, false), meta: { action: ({ kind }: { kind: GoalLinkKind }) => `unlink the ${kind === "projects" ? "project" : "task"} from the goal` } });
-  return <GoalView key={id} state={query} season={inSeason ? { tier: inSeason.tier, target: inSeason.target, status: current.data?.season?.statuses[id], explanation: explanations?.[id] } : null} onRetry={() => void query.refetch()}
+  const tasks = useTaskWrites(account.user.id);
+  const projects = useQuery(projectReads.list(account.user.id)).data;
+  // A task added on the goal page joins the goal (and, from Milestones, becomes one). The create toasts its own failure.
+  const join = useMutation({ mutationFn: async ({ taskId, milestone }: { taskId: string; milestone: boolean }) => {
+    await writes.link(id, "tasks", taskId, true);
+    if (milestone) await writes.setMilestone(taskId, { goalId: id, criteria: [] });
+  }, meta: { action: ({ milestone }: { milestone: boolean }) => milestone ? "make the task a milestone" : "link the task to the goal" } });
+  // Added rows show at once and stay until the goal's own read lists them (a refetch between the create
+  // and the link would otherwise drop them for a moment). The draft keeps the create's operation ID, which the server keeps.
+  const [adding, setAdding] = useState<{ task: TaskDto; milestone: boolean }[]>([]);
+  const drop = (taskId: string) => setAdding(list => list.filter(item => item.task.id !== taskId));
+  const add = async (task: NewTask, milestone: boolean) => {
+    setAdding(list => [...list, { task: draftTask(task), milestone }]);
+    try {
+      const created = await tasks.create.mutateAsync(task);
+      await join.mutateAsync({ taskId: created.id, milestone });
+    } catch (error) { drop(task.id); throw error; }
+  };
+  const listed = useMemo(() => new Set(query.data?.tasks.map(task => task.id)), [query.data]);
+  useEffect(() => { if (adding.some(item => listed.has(item.task.id))) setAdding(list => list.filter(item => !listed.has(item.task.id))); }, [listed, adding]);
+  const shown = query.data && adding.length ? { ...query, data: { ...query.data,
+    tasks: [...query.data.tasks, ...adding.map(item => item.task)],
+    milestones: [...query.data.milestones, ...adding.filter(item => item.milestone).map(item => ({ task: item.task, criteria: [], reached: false }))] } } : query;
+  return <GoalView key={id} state={shown} season={inSeason ? { tier: inSeason.tier, target: inSeason.target, status: current.data?.season?.statuses[id], explanation: explanations?.[id] } : null} onRetry={() => void query.refetch()}
     onSave={update.mutateAsync} onArchive={(archived) => update.mutate({ archived })}
     onUnlink={(kind, targetId) => unlink.mutate({ kind, targetId })}
     onPlan={coachConnected ? () => openPlanning({ goalId: id, source: "goal" }) : undefined}
+    rows={{ actions: tasks.actions, projectNames: Object.fromEntries((projects ?? []).map(project => [project.id, project.name])), onCreate: add }}
     write={{ pending: update.isPending || unlink.isPending, error: (update.error ?? unlink.error)?.message ?? null }} />;
 }
 

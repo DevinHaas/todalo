@@ -8,6 +8,7 @@ import { openEvent, type CalendarAccountDto, type CalendarEventDto, type Calenda
 import { helpLink } from "./help";
 import { blockFor, labels } from "./schedule";
 import type { ReadState } from "./views";
+import { CardsSkeleton } from "./skeletons";
 
 // A new tab in the browser; the system browser natively (openEvent).
 const link = (event: CalendarEventDto) => ({ href: event.htmlLink ?? undefined, target: "_blank", rel: "noreferrer", onClick: (click: { preventDefault(): void; stopPropagation(): void }) => openEvent(event, click) });
@@ -52,7 +53,7 @@ export function CalendarSettings({ state, onRetry, actions, pending, error, link
   pending: ReadonlySet<string>; error: string | null; link: ReactNode;
 }) {
   let body: ReactNode;
-  if (state.status === "pending") body = <p className="state" role="status">Loading calendars…</p>;
+  if (state.status === "pending") body = <CardsSkeleton rows={2} label="Loading calendars" />;
   else if (!state.data) body = <p className="error" role="alert">{state.error?.message ?? "Your calendars could not be loaded. Try again."} <button type="button" className="text-action" onClick={onRetry}>Try again</button></p>;
   else body = <>
     {state.data.length === 0 && <p className="setting-hint">No Google accounts connected yet. Sign in with Google to get started.</p>}

@@ -16,6 +16,7 @@ import { Calendar, Dropdown, Popover, type Option } from "./popover";
 import { releaseFocus } from "./software-keyboard";
 import { inlineError } from "./toasts";
 import { cn } from "./ui";
+import { LinesSkeleton } from "./skeletons";
 
 const PARSE_DEBOUNCE_MS = 150;
 
@@ -51,7 +52,9 @@ function seedState(dueDate: string | null, dueDateEnd: string | null): QuickAddS
  * the task to create is unchanged, so resubmitting after an unclear failure
  * cannot create a second copy of a task that was in fact saved.
  */
-export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, quick = false, smartDates: override, projectId = null, sectionId = null, placement, parentId, editing, onUpdate }: {
+export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel, startOpen = false, quick = false, smartDates: override, projectId = null, sectionId = null, placement, parentId, editing, onUpdate, label: triggerLabel = "Add task" }: {
+  /** The closed composer's button text (the goal page's "Add milestone"). */
+  label?: string;
   /** Initial due date (with time for a schedule slot); null starts undated (Inbox). */
   dueDate: () => string | null;
   /** End of a schedule slot (ticket 16). */
@@ -139,7 +142,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     setMetadata({ priority: 4, deadline: "", labelIds: [] }); operation.current = null;
   };
   const close = () => { setOpen(false); reset(); setError(null); setPosition(placement); onCancel?.(); requestAnimationFrame(() => trigger.current?.focus()); };
-  if (!open) return <button ref={trigger} type="button" className="composer" onClick={() => setOpen(true)}><Plus />Add task</button>;
+  if (!open) return <button ref={trigger} type="button" className="composer" onClick={() => setOpen(true)}><Plus />{triggerLabel}</button>;
 
   function reject(match: QuickAddMatch) {
     setRejected(previous => new Set(previous).add(match.text.toLowerCase()));
@@ -237,7 +240,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       {close => <>
         {!describing && <button type="button" className="popover-item add-description" onClick={() => { setDescribing(true); close(false); }}>Add description</button>}
         <p className="panel-heading">Labels</p>
-        {!choices.labels ? <p className="state" role="status">Loading labels…</p> : choices.labels.length > 0 ? choices.labels.map(choice => <label key={choice.id} className="popover-item label-option">
+        {!choices.labels ? <LinesSkeleton rows={3} label="Loading labels" /> : choices.labels.length > 0 ? choices.labels.map(choice => <label key={choice.id} className="popover-item label-option">
           <input type="checkbox" checked={metadata.labelIds.includes(choice.id)} onChange={(event) => setMetadata(current => ({ ...current, labelIds: event.target.checked ? [...current.labelIds, choice.id] : current.labelIds.filter(id => id !== choice.id) }))} />{choice.name}
         </label>) : <p className="state">Create labels in Labels.</p>}
       </>}

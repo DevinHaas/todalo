@@ -5,9 +5,13 @@ import { nativeOAuth } from "./native-oauth";
 
 // Both HTTP hosts use this configuration and the existing session database.
 // Accepting the database here also lets boundary tests use Better Auth's adapter.
-export function createSessionAuth(options: Pick<BetterAuthOptions, "database" | "baseURL" | "secret" | "trustedOrigins" | "socialProviders" | "session" | "logger">) {
+// `onUserDeleted` runs after the user row (and, by cascade, all their data) is gone.
+export function createSessionAuth({ onUserDeleted, ...options }: Pick<BetterAuthOptions, "database" | "baseURL" | "secret" | "trustedOrigins" | "socialProviders" | "session" | "logger"> & { onUserDeleted?: (userId: string) => Promise<void> }) {
   return betterAuth({
     ...options,
+    // Settings › Account › Delete account: POST /api/auth/delete-user. Needs the password, or a session
+    // younger than a day (Better Auth's freshAge) for Google-only accounts. Every table cascades from `user`.
+    user: { deleteUser: { enabled: true, afterDelete: onUserDeleted ? (user) => onUserDeleted(user.id) : undefined } },
     emailAndPassword: { enabled: true },
     // update-user takes any string as the image; only a small uploaded photo or a provider's https URL is kept
     databaseHooks: { user: { update: { before: async (user) => {

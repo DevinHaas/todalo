@@ -3,6 +3,7 @@ import { settingsInput, type SettingsDto } from "@todalo/server/settings-input";
 import type { KeyboardPreferences } from "@todalo/ramble/keyboard";
 import { KeyboardPreferencesError } from "@todalo/ramble/keyboard-account-preferences";
 import { writeUser } from "./project-routes";
+import type { PersonalizationDto } from "@todalo/server/personalization-dto";
 
 export interface SettingsStore {
   /** Resolves the session user from cookies (browser) or bearer token (native). */
@@ -16,6 +17,10 @@ export interface SettingsStore {
   loadKeyboard(userId: string): Promise<{ preferences: KeyboardPreferences; error?: string }>;
   /** Validates (shape, conflicts, reserved keys) before writing; throws KeyboardPreferencesError. */
   saveKeyboard(userId: string, input: unknown): Promise<KeyboardPreferences>;
+  /** Settings › Appearance and Sidebar: null when the account never saved one. */
+  loadPersonalization(userId: string): Promise<PersonalizationDto | null>;
+  /** Validates and replaces the document; null when the input is invalid. */
+  savePersonalization(userId: string, input: unknown): Promise<PersonalizationDto | null>;
 }
 
 const UNAUTHENTICATED = { code: "UNAUTHENTICATED", message: "Please sign in again." } as const;
@@ -58,5 +63,18 @@ export function createSettingsRoutes(store: SettingsStore) {
         if (error instanceof KeyboardPreferencesError) return status(400, { code: "INVALID_INPUT", message: error.message });
         throw error;
       }
+    })
+    .get("/settings/personalization", async ({ request, status }) => {
+      const userId = await store.verify(request.headers);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      return { personalization: await store.loadPersonalization(userId) };
+    })
+    // The whole document is replaced; personalizationInput is the trust boundary for both apps.
+    .put("/settings/personalization", async ({ request, body, status }) => {
+      const userId = await writeUser(store, request);
+      if (userId === "forbidden") return status(403, FORBIDDEN);
+      if (!userId) return status(401, UNAUTHENTICATED);
+      const saved = await store.savePersonalization(userId, (body as { personalization?: unknown } | null)?.personalization);
+      return saved ? { personalization: saved } : status(400, INVALID);
     });
 }

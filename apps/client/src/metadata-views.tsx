@@ -12,8 +12,9 @@ import { Failure, listTree, TaskRow, type ReadState, type RowActions, type Selec
 import { PendingNewTasks } from "./pending-changes";
 import { CHARCOAL, namedColors, type FilterAssistDto, type FilterFields, type LabelDto, type LabelFields, type MetadataDto, type SavedFilterDto } from "./metadata";
 import { definitionToQuery, FILTER_QUERY_MAX } from "../../../packages/server/src/filter-query";
-import { FormError, Loading, LoadFailure } from "./goal-views";
+import { FormError, LoadFailure } from "./goal-views";
 import { releaseFocus } from "./software-keyboard";
+import { LinesSkeleton, PageHeaderSkeleton, TaskListSkeleton } from "./skeletons";
 
 // Pure screen views (the Filters & Labels page, its dialogs, the label and
 // filter pages): no runtime imports, so they render in tests.
@@ -58,7 +59,7 @@ export function MetadataDirectory({ state, onRetry, projects, actions, write, pr
   const pending = write.pending;
 
   let body: ReactNode;
-  if (state.status === "pending") body = <Loading>Loading filters and labels…</Loading>;
+  if (state.status === "pending") body = <LinesSkeleton rows={5} label="Loading filters and labels" />;
   else if (!state.data) body = <LoadFailure error={state.error} onRetry={onRetry} />;
   else {
     const { labels, filters } = state.data;
@@ -251,8 +252,8 @@ export function FavoritesNav({ metadata, projects = [] }: { metadata?: MetadataD
   const labels = metadata?.labels.filter(item => item.favorite) ?? [];
   const favoriteProjects = projects.filter(item => item.favorite && !item.archived);
   if (!filters.length && !labels.length && !favoriteProjects.length) return null;
-  const item = (key: string, to: string, icon: ReactNode, name: string) => <NavLink key={key} to={to} className={sidebarItemClassName}>{icon}<span className="flex-1 truncate">{name}</span></NavLink>;
-  return <section className="ui mb-3 flex flex-col" aria-label="Favorites">
+  const item = (key: string, to: string, icon: ReactNode, name: string) => <NavLink key={key} to={to} className={cn(sidebarItemClassName, "flex-none!")}>{icon}<span className="flex-1 truncate">{name}</span></NavLink>;
+  return <section className="ui flex flex-col" aria-label="Favorites">
     <SidebarSectionHeader title="Favorites" />
     {favoriteProjects.map(project => item(project.id, `/projects/${encodeURIComponent(project.id)}`, <Hash style={colorOf(project)} />, project.name))}
     {filters.map(filter => item(filter.id, `/filters/${encodeURIComponent(filter.id)}`, <ListFilter style={colorOf(filter)} />, filter.name))}
@@ -304,7 +305,7 @@ export function TaskCollectionView({ kind, state, onRetry, ...slots }: Collectio
   state: ReadState<{ name: string; tasks: TaskDto[]; description?: string | null; groups?: { title: string; tasks: TaskDto[] }[] } | null>;
 }) {
   const manage = kind === "label" ? <Link className="text-action" to="/labels">Manage labels</Link> : kind === "filter" ? <Link className="text-action" to="/filters">Manage filters</Link> : null;
-  if (state.status === "pending") return <p className="state" role="status">Loading tasks…</p>;
+  if (state.status === "pending") return <div className="collection"><PageHeaderSkeleton /><TaskListSkeleton heading={false} /></div>;
   if (state.status === "error" && !state.data) return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div className="collection"><h1 className="page-title">{kind === "label" ? "Label not found" : "Filter not found"}</h1>
     <p className="state">This {kind} does not exist or you do not have access to it.</p>{manage}</div>;

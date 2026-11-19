@@ -3,8 +3,9 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { createSessionAuth } from "../../../packages/auth/src/config";
 import { createAuthRoutes } from "./auth-routes";
 
-function fixture(expiresIn = 3600, membership?: Parameters<typeof createAuthRoutes>[1]) {
+function fixture(expiresIn = 3600, membership?: Parameters<typeof createAuthRoutes>[1], onUserDeleted?: (userId: string) => Promise<void>) {
   const auth = createSessionAuth({
+    onUserDeleted,
     database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
     baseURL: "http://localhost:3000",
     secret: "ticket-two-test-secret-at-least-32-characters",
@@ -119,5 +120,33 @@ describe("shared account authentication", () => {
       headers: { "content-type": "application/json", origin: "https://attacker.example", "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" },
       body: JSON.stringify({ email: "native@example.test", password: "test-password-123" }),
     })).status).toBe(403);
+  });
+
+  it("deletes the account with the password, then the session no longer works", async () => {
+    const deleted: string[] = [];
+    const { request } = fixture(3600, undefined, async (id) => { deleted.push(id); });
+    const token = (await signIn(request)).headers.get("set-auth-token")!;
+    const bearer = { "content-type": "application/json", authorization: `Bearer ${token}` };
+    const remove = (password: string) => request("/api/auth/delete-user", { method: "POST", headers: bearer, body: JSON.stringify({ password }) });
+    const wrong = await remove("not-my-password");
+    expect(wrong.status).toBe(400);
+    expect(((await wrong.json()) as { code: string }).code).toBe("INVALID_PASSWORD");
+    expect((await request("/api/v1/account", { headers: bearer })).status).toBe(200);
+    expect((await remove("test-password-123")).status).toBe(200);
+    expect(deleted).toHaveLength(1);
+    expect((await request("/api/v1/account", { headers: bearer })).status).toBe(401);
+    expect((await request("/api/auth/sign-in/email", {
+      method: "POST", headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+      body: JSON.stringify({ email: "native@example.test", password: "test-password-123" }),
+    })).status).toBe(401);
+  });
+
+  it("asks a day-old session without a password to sign in again", async () => {
+    const { request } = fixture(7 * 86400);
+    const token = (await signIn(request)).headers.get("set-auth-token")!;
+    vi.useFakeTimers({ now: Date.now() + 2 * 86400 * 1000 });
+    const response = await request("/api/auth/delete-user", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: "{}" });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { code: string }).code).toBe("SESSION_EXPIRED");
   });
 });

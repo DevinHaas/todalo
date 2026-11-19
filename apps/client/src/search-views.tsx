@@ -5,6 +5,7 @@ import { Failure, type ReadState } from "./views";
 import { CollectionBody, type CollectionSlots } from "./metadata-views";
 import { matchFindItems, type FindItem, type SearchDto } from "./search";
 import { releaseFocus } from "./software-keyboard";
+import { LinesSkeleton, TaskListSkeleton } from "./skeletons";
 
 /**
  * Legacy Quick Find (organization-navigation.tsx): title-only matches over the
@@ -23,7 +24,7 @@ export function QuickFindDialog({ state, onRetry, sectionsOnly = false, onOpen, 
       <input ref={releaseFocus} autoFocus aria-label="Search tasks, projects and sections" placeholder="Search tasks, projects and sections" value={query}
         onChange={(event) => setQuery(event.target.value)} />
       <div className="find-results" aria-live="polite">
-        {state.status === "pending" ? <p className="state" role="status">Loading…</p>
+        {state.status === "pending" ? <LinesSkeleton rows={4} label="Searching" />
           : state.status === "error" && !state.data ? <Failure error={state.error} onRetry={onRetry} />
           : <>
             {results.map(item => <a key={`${item.kind}-${item.id}`} className="find-result" href={item.href}
@@ -50,7 +51,7 @@ export function SearchView({ query, state, onSearch, onRetry, ...slots }: Collec
       <input aria-label="Search tasks" name="q" placeholder="Search tasks" enterKeyHint="search" value={draft} onChange={(event) => setDraft(event.target.value)} />
       <button type="submit" className="button outline">Search</button>
     </form>
-    {state.status === "pending" ? <p className="state" role="status">Loading tasks…</p>
+    {state.status === "pending" ? <TaskListSkeleton heading={false} label="Searching tasks" />
       : state.status === "error" && !state.data ? <Failure error={state.error} onRetry={onRetry} />
       : <>
         <p className="state" role="status">{tasks.length} results</p>

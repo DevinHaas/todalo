@@ -45,7 +45,10 @@ html[data-titlebar="overlay"] .sidebar-toggle { width: 2rem; height: 2rem; }
 .icon-button.brand { width: 2rem; height: 2rem; color: var(--brand); }
 .icon-button.brand svg { width: 1.25rem; height: 1.25rem; }
 .nav { list-style: none; margin: 0; padding: 0; display: grid; }
-.nav-item { display: flex; align-items: center; gap: .5rem; height: 2rem; padding: 0 .5rem; border-radius: .375rem; color: inherit; text-decoration: none; }
+.nav-item { display: flex; align-items: center; gap: .5rem; height: var(--spacing-sidebar-item); padding: 0 .5rem; border-radius: .5rem; color: inherit; text-decoration: none; }
+/* The sidebar's groups (shell.tsx): one even gap between the views, Favorites, Goals, Seasons and My Projects. */
+.sidebar-nav { display: flex; flex-direction: column; gap: 1.5rem; }
+.sidebar-nav > section > [data-slot="sidebar-section-header"] { margin-bottom: .125rem; }
 .nav-item.active { background: var(--color-brand-tint); color: var(--color-brand-tint-foreground); font-weight: 500; }
 .nav .muted .nav-item { opacity: .5; }
 .nav-badge { margin-left: auto; font-size: .75rem; font-weight: 500; padding-right: .25rem; }
@@ -839,6 +842,10 @@ button.property-value:hover { background: var(--accent); }
 .account-photo-error { margin-top: .25rem; color: var(--destructive); font-size: .8125rem; }
 .account-name { font-size: 1rem; font-weight: 600; }
 .account-email { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.account-delete-body { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 1rem; border: 1px solid var(--border); border-radius: .75rem; }
+.account-delete-body p { margin: 0; color: var(--muted-foreground); }
+.button.outline.account-delete-open { flex: none; color: var(--destructive); }
+.account-delete-form { display: grid; gap: 1rem; }
 .account-section-title { margin: 0 0 .75rem; font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
 .account-membership-body { display: grid; grid-template-columns: 15rem minmax(0, 1fr); align-items: center; gap: 2rem; }
 .account-member-info { display: grid; gap: .5rem; align-content: center; }
@@ -887,3 +894,50 @@ button.property-value:hover { background: var(--accent); }
 .snap-guide { position: fixed; z-index: 31; pointer-events: none; border: 0 dashed var(--brand); }
 .snap-guide.vertical { top: 0; bottom: 0; left: 50%; border-left-width: 1px; }
 .snap-guide.horizontal { left: 0; right: 0; top: 50%; border-top-width: 1px; }
+
+/* Loading skeletons (skeletons.tsx): the shapes of what loads, with a slow shimmer.
+   They fade in after a beat, so a load that finishes quickly never flashes. */
+.skeleton-group { animation: skeleton-in .3s ease-out .15s both; }
+.skeleton {
+  --skeleton-base: color-mix(in oklch, var(--foreground) 7%, transparent);
+  --skeleton-shine: color-mix(in oklch, var(--background) 65%, transparent);
+  display: block; flex-shrink: 0; max-width: 100%; border-radius: .375rem;
+  background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent) -150% 0 / 60% 100% no-repeat, var(--skeleton-base);
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+.skeleton-round, .skeleton-circle { border-radius: 999px; }
+.skeleton-circle { width: 1.25rem; height: 1.25rem; margin-top: .125rem; }
+.skeleton-row { pointer-events: none; }
+.skeleton-header, .skeleton-stack { display: grid; gap: .5rem; }
+.skeleton-header { margin-bottom: 1.25rem; }
+.skeleton-line { display: flex; align-items: center; gap: .625rem; min-height: 2.25rem; }
+.skeleton-lines { padding-block: .25rem; }
+.skeleton-cards { display: grid; gap: .75rem; }
+.skeleton-card { cursor: default; }
+.skeleton-card .skeleton-stack { flex: 1; }
+.skeleton-detail, .skeleton-page { display: grid; gap: 1rem; }
+.skeleton-page { gap: .75rem; }
+.skeleton-title-line { gap: .75rem; margin-bottom: .5rem; }
+.skeleton-goal-row { gap: .75rem; padding-block: .5rem; border-bottom: 1px solid var(--border); }
+.skeleton-box { border: 1px solid var(--border); border-radius: .75rem; background: color-mix(in oklch, var(--foreground) 2%, transparent); }
+.skeleton-days { display: grid; grid-template-columns: repeat(var(--days), minmax(0, 1fr)); border-top: 1px solid var(--border); }
+.skeleton-day { display: grid; gap: .75rem; padding-top: .75rem; border-left: 1px solid var(--border); }
+.skeleton-day:first-child { border-left: 0; }
+.skeleton-day-body { position: relative; height: 27rem; background: repeating-linear-gradient(to bottom, transparent 0 calc(3rem - 1px), var(--border) calc(3rem - 1px) 3rem); }
+@keyframes skeleton-shimmer { to { background-position: 250% 0, 0 0; } }
+@keyframes skeleton-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton, .skeleton-group { animation: none; } }
+.skeleton-month { grid-template-columns: repeat(7, minmax(0, 1fr)); border-left: 1px solid var(--border); }
+.skeleton-cell { display: grid; align-content: start; gap: .5rem; min-height: 6rem; padding: .5rem; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.skeleton-sidebar { margin-bottom: .75rem; }
+.skeleton-nav-item { min-height: var(--spacing-sidebar-item); padding-inline: .5rem; }
+
+/* Settings › Appearance (personalization.ts): with a design, the sidebar shows its gradient and grain. */
+html[data-design] .sidebar { background: var(--design-sidebar); }
+/* Settings › Appearance (personalization-screens.tsx): the colour field is a dot grid of hues, pale at the top and deep at the bottom. */
+.design-field { position: relative; height: 13rem; border-radius: .875rem; background: var(--color-muted); touch-action: none; cursor: crosshair; overflow: hidden; }
+.design-field::before { content: ""; position: absolute; inset: .75rem; background: linear-gradient(to bottom, color-mix(in oklch, white 62%, transparent), transparent 55%, color-mix(in oklch, black 18%, transparent)), var(--design-hues);
+  -webkit-mask: radial-gradient(circle, #000 2.2px, transparent 2.6px) 0 0 / 13px 13px; mask: radial-gradient(circle, #000 2.2px, transparent 2.6px) 0 0 / 13px 13px; }
+/* Settings › Sidebar: one draggable row per entry. */
+.sidebar-setting { display: flex; align-items: center; gap: .5rem; min-height: 2.5rem; padding-inline: .25rem; border-bottom: 1px solid var(--color-border-subtle, var(--border)); background: var(--color-background); }
+.sidebar-setting[data-dragging] { position: relative; z-index: 2; box-shadow: 0 6px 20px rgb(0 0 0 / .12); border-radius: .5rem; }

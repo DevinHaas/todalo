@@ -709,6 +709,14 @@ export const userKeyboardPreferences = pgTable("user_keyboard_preferences", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Settings › Appearance and Sidebar: the account's design and sidebar layout, one
+// versioned document (packages/server/src/personalization-dto.ts validates it).
+export const userPersonalization = pgTable("user_personalization", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  document: jsonb("document").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(user, {
     fields: [userSettings.userId],

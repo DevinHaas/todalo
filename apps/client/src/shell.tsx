@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AudioLines, CalendarClock, ChevronDown, FlaskConical, Gift, HelpCircle, Keyboard, Layers,
+  AudioLines, CalendarClock, CalendarDays, ChevronDown, FlaskConical, Gift, HelpCircle, Inbox, Keyboard,
   LineChart, ListFilter, LogOut, MessageSquare, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search, Settings,
 } from "lucide-react";
 import type { Account } from "./session";
@@ -27,6 +27,8 @@ import { QuickFind } from "./search-screens";
 import { KeyboardCommands, taskNeighbour, useCommandBindings } from "./keyboard-screens";
 import { TaskContextMenu } from "./task-menu";
 import { useOpenSettings } from "./settings-nav";
+import { PersonalizationSync, useSidebarLayout } from "./personalization-screens";
+import { sidebarViews, type SidebarEntry } from "./personalization";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds, useTaskGoalOf } from "./goal-screens";
 import { MilestoneTasks, TaskGoals } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
@@ -45,6 +47,19 @@ const helpCenter = helpLink();
 
 // ponytail: controls legacy also left without a feature (Reporting, More)
 // keep their legacy appearance but are inert (aria-disabled).
+/** Runs of views become one list; every section is its own group (the gap between groups is CSS). */
+function sidebarGroups(layout: readonly SidebarEntry[], render: (entry: SidebarEntry) => ReactNode) {
+  const groups: ReactNode[] = [];
+  let views: ReactNode[] = [];
+  const flush = () => { if (views.length) groups.push(<ul key={`views-${groups.length}`} className="nav">{views}</ul>); views = []; };
+  for (const entry of layout) {
+    if (sidebarViews.includes(entry)) views.push(render(entry));
+    else { flush(); groups.push(render(entry)); }
+  }
+  flush();
+  return groups;
+}
+
 function Inert({ icon, label, badge, muted }: { icon: ReactNode; label: string; badge?: string; muted?: boolean }) {
   return <li className={muted ? "muted" : undefined}><span className="nav-item" aria-disabled="true">{icon}<span>{label}</span>{badge && <span className="nav-beta">{badge}</span>}</span></li>;
 }
@@ -183,6 +198,7 @@ export function Shell({ account }: { account: Account }) {
     return () => window.removeEventListener("keydown", close);
   }, [mobileOpen]);
   const count = today.data?.openCount ?? 0;
+  const layout = useSidebarLayout(account.user.id);
   const { pathname } = useLocation();
   const projectPage = pathname.startsWith("/projects");
 
@@ -197,16 +213,24 @@ export function Shell({ account }: { account: Account }) {
         <button type="button" className="add-task" onClick={() => { setAdding(true); setMobileOpen(false); }}><Plus /><span>Add task</span></button>
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
-      <nav><FavoritesSidebar userId={account.user.id} /><GoalsSidebar userId={account.user.id} adding={addingGoal} onAdding={setAddingGoal} /><SeasonsSidebar userId={account.user.id} /><RitualsSidebar userId={account.user.id} /><ProjectsSidebar userId={account.user.id} /><ul className="nav">
-        <li><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>
-        <li><NavLink to="/inbox" className="nav-item"><Layers /><span>Inbox</span></NavLink></li>
-        <li><NavLink to="/projects" className="nav-item"><Layers /><span>Projects</span></NavLink></li>
-        <li><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>
-        <li><NavLink to="/upcoming" className="nav-item"><Layers /><span>Upcoming</span></NavLink></li>
-        <li><NavLink to="/filters" className={({ isActive }) => isActive || pathname.startsWith("/labels") ? "nav-item active" : "nav-item"}><ListFilter /><span>Filters & Labels</span></NavLink></li>
-        <Inert icon={<LineChart />} label="Reporting" muted />
-        <Inert icon={<MoreHorizontal />} label="More" muted />
-      </ul></nav>
+      {/* The account's layout (Settings › Sidebar): views next to each other share one list; each section is its own group. */}
+      <nav className="sidebar-nav">{sidebarGroups(layout, (entry) => {
+        const user = account.user.id;
+        switch (entry) {
+          case "rituals": return <RitualsSidebar key={entry} userId={user} />;
+          case "season": return <SeasonsSidebar key={entry} userId={user} />;
+          case "goals": return <GoalsSidebar key={entry} userId={user} adding={addingGoal} onAdding={setAddingGoal} />;
+          case "favorites": return <FavoritesSidebar key={entry} userId={user} />;
+          case "projects": return <ProjectsSidebar key={entry} userId={user} />;
+          case "search": return <li key={entry}><button type="button" className="nav-item" onClick={() => { setFinding("find"); setMobileOpen(false); }}><Search /><span>Search</span></button></li>;
+          case "inbox": return <li key={entry}><NavLink to="/inbox" className="nav-item"><Inbox /><span>Inbox</span></NavLink></li>;
+          case "today": return <li key={entry}><NavLink to="/today" className="nav-item"><CalendarClock /><span>Today</span>{count > 0 && <span className="nav-badge">{count}</span>}</NavLink></li>;
+          case "upcoming": return <li key={entry}><NavLink to="/upcoming" className="nav-item"><CalendarDays /><span>Upcoming</span></NavLink></li>;
+          case "filters": return <li key={entry}><NavLink to="/filters" className={({ isActive }) => isActive || pathname.startsWith("/labels") ? "nav-item active" : "nav-item"}><ListFilter /><span>Filters & Labels</span></NavLink></li>;
+          case "reporting": return <Inert key={entry} icon={<LineChart />} label="Reporting" muted />;
+          case "more": return <Inert key={entry} icon={<MoreHorizontal />} label="More" muted />;
+        }
+      })}</nav>
       <a className="nav-item help" {...helpCenter} onClick={click => { setMobileOpen(false); helpCenter.onClick(click); }}><HelpCircle /><span>Help & resources</span></a>
     </aside>
     <div className="inset">
@@ -225,6 +249,7 @@ export function Shell({ account }: { account: Account }) {
     {/* The Plan sidebar (schedule-screens Planner) portals here: full height, beside the page column. */}
     <div id="plan-slot" className="contents" />
     <RitualHost userId={account.user.id} />
+    <PersonalizationSync userId={account.user.id} />
     <CoachChatHost userId={account.user.id} />
     <PlanningHost userId={account.user.id} />
     {adding && <QuickAdd userId={account.user.id} onClose={() => setAdding(false)} />}

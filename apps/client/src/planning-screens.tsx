@@ -19,6 +19,7 @@ import {
   Button, Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Field, FieldLabel, Hint, Label, Progress,
   RadioGroup, RadioGroupItem, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Spinner, Textarea,
 } from "./ui";
+import { LinesSkeleton } from "./skeletons";
 
 let state = { open: false, goalId: null as string | null, source: "goal" as PlanningSource, key: 0 };
 const watchers = new Set<() => void>();
@@ -109,7 +110,7 @@ function PlanningSession({ userId, initialGoal, source }: { userId: string; init
   </DialogHeader>;
 
   // Wait for the drafts: a plan still to decide opens first.
-  if (drafts.isPending) return <>{header}<DialogBody><span role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground"><Spinner />Loading…</span></DialogBody></>;
+  if (drafts.isPending) return <>{header}<DialogBody><LinesSkeleton rows={3} icon={false} label="Loading the plan" /></DialogBody></>;
   if (draftId) return <>{header}<DialogBody className="flex flex-col gap-3" data-planning-step="draft">
     {draft && (draft.items.some(item => item.state === "pending") || draft.overflow)
       ? <DraftPanel scope="week" draft={draft} drafting={false} deciding={decide.isPending || overflow.isPending} message={null} onDecide={(accept, itemIds) => decide.mutate({ draftId: draft.id, accept, itemIds })}

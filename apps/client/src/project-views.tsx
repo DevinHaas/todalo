@@ -28,6 +28,7 @@ import { CHARCOAL } from "./metadata";
 import { ColorField, EditorDialog, FavoriteSwitch, NameField } from "./metadata-views";
 import { FormError } from "./goal-views";
 import { releaseFocus } from "./software-keyboard";
+import { LinesSkeleton, PageHeaderSkeleton, TaskListSkeleton } from "./skeletons";
 
 // Pure screen views (Todoist's My Projects page and project page with its
 // Display popover, list, board and table layouts): no runtime imports.
@@ -75,7 +76,7 @@ export function ProjectsView({ state, onRetry, actions, write }: { state: ReadSt
   const [editing, setEditing] = useState<ProjectDto | "new" | null>(null);
   const [deleting, setDeleting] = useState<ProjectDto | null>(null);
   let body: ReactNode;
-  if (state.status === "pending" && !state.data) body = <p className="state" role="status">Loading projects…</p>;
+  if (state.status === "pending" && !state.data) body = <LinesSkeleton rows={5} label="Loading projects" />;
   else if (!state.data) body = <Failure error={state.error} onRetry={onRetry} />;
   else {
     const needle = query.trim().toLowerCase();
@@ -513,7 +514,7 @@ export function ProjectView({ state, onRetry, write, project: projectActions, se
     window.addEventListener("todalo:toggle-sections", toggle);
     return () => window.removeEventListener("todalo:toggle-sections", toggle);
   }, [sectionIds]);
-  if (state.status === "pending" && !state.data) return <p className="state" role="status">Loading project…</p>;
+  if (state.status === "pending" && !state.data) return <div><PageHeaderSkeleton count={false} /><TaskListSkeleton label="Loading project" /></div>;
   if (state.status === "error" && !state.data) return <Failure error={state.error} onRetry={onRetry} />;
   if (!state.data) return <div><h1 className="page-title">Project not found</h1><p className="state">This project does not exist or you do not have access to it.</p><Link className="text-action" to="/projects">Back to My Projects</Link></div>;
   const { project, tasks, sections: sectionList = [] } = state.data;
