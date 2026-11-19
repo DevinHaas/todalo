@@ -15,9 +15,10 @@ COPY apps/docs/package.json apps/docs/package.json
 RUN bun install --frozen-lockfile
 
 # The browser build of apps/client; index.ts serves it for app.todalo.app.
+# ponytail: vite only, no tsc; typechecking is a dev/CI step, like the API's own source here.
 FROM dependencies AS client
 COPY . .
-RUN bun run --filter @todalo/client build
+RUN cd apps/client && bunx vite build
 
 FROM base AS runner
 ENV NODE_ENV=production
