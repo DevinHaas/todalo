@@ -54,6 +54,25 @@ import { todoistClient } from "./todoist";
 import * as todoistImport from "@todalo/server/todoist-import-run";
 import { db } from "@todalo/db";
 import { sql } from "drizzle-orm";
+import { resolve, sep } from "node:path";
+
+// The browser build of apps/client (app.todalo.app), served next to its API so
+// /api stays same-origin and live sync shares this process's bus.
+const clientDist = resolve(import.meta.dir, "../../client/dist");
+async function serveClient(request: Request) {
+  const path = new URL(request.url).pathname; // URL already dropped any ../ segments
+  if (path.startsWith("/api/")) return new Response("NOT_FOUND", { status: 404 });
+  const target = resolve(clientDist, `.${path}`);
+  const file = Bun.file(target);
+  if (target.startsWith(clientDist + sep) && await file.exists()) {
+    const immutable = path.startsWith("/assets/"); // Vite hashes these names
+    return new Response(file, { headers: { "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache" } });
+  }
+  // A missing hashed asset is a stale tab after a deploy: 404, not HTML posing as JS.
+  const index = Bun.file(`${clientDist}/index.html`);
+  if (path.startsWith("/assets/") || !await index.exists()) return new Response("NOT_FOUND", { status: 404 });
+  return new Response(index, { headers: { "cache-control": "no-cache" } });
+}
 
 // Opening the database link costs seconds; pay it at boot, not on the first Ramble.
 db.execute(sql`select 1`).catch(() => {});
@@ -317,7 +336,7 @@ const app = createApi(dependencies)
   apply: todoistImport.applyImportPlan,
   promptDue: todoistImport.importPromptDue,
   promptSeen: todoistImport.markImportPromptSeen,
-})).listen({
+})).get("/*", ({ request }) => serveClient(request)).listen({
   port: Number(process.env.RAMBLE_PORT ?? 3001),
   hostname: process.env.RAMBLE_HOST ?? "0.0.0.0",
 });

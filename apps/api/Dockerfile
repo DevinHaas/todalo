@@ -14,6 +14,11 @@ COPY apps/client/package.json apps/client/package.json
 COPY apps/docs/package.json apps/docs/package.json
 RUN bun install --frozen-lockfile
 
+# The browser build of apps/client; index.ts serves it for app.todalo.app.
+FROM dependencies AS client
+COPY . .
+RUN bun run --filter @todalo/client build
+
 FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=dependencies /app/node_modules ./node_modules
@@ -24,6 +29,7 @@ COPY packages/auth/src ./packages/auth/src
 COPY packages/db/src ./packages/db/src
 COPY packages/ramble/src ./packages/ramble/src
 COPY packages/server/src ./packages/server/src
+COPY --from=client /app/apps/client/dist ./apps/client/dist
 USER bun
 EXPOSE 3001
 CMD ["bun", "apps/api/src/index.ts"]
