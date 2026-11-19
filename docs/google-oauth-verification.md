@@ -15,12 +15,14 @@ app is capped at 100 users. Calendar scopes don't need the paid security assessm
 |---|------|-----|-------|
 | 1 | Scopes narrowed: `calendar.readonly` replaced by `calendar.calendarlist.readonly` | code | done |
 | 2 | Privacy policy: Google user data section + Limited Use statement | code | done |
-| 3 | Search Console: verify **todalo.app** as a Domain property (TXT record) | you clicks, DNS by agent | |
-| 4 | Search Console: confirm **bleat.ch** is verified under devin.hasler@gmail.com (a TXT token exists; the account showed no properties) | you | |
-| 5 | Branding page filled in (below) | you | |
-| 6 | Data access: scopes match the code, justifications pasted (below) | you | |
-| 7 | Demo video recorded and uploaded to YouTube as **Unlisted** | you | |
-| 8 | Verification centre: submit | you | |
+| 3 | Search Console: **todalo.app** and **bleat.ch** verified as Domain properties under devin.hasler@gmail.com (the project owner); TXT records in Cloudflare | agent | done 2026-11-19 |
+| 4 | Branding filled in, logo uploaded, branding verified and published | agent | done 2026-11-19 |
+| 5 | Data access: the five scopes below and the calendar.events justification saved | agent | done 2026-11-19 |
+| 6 | Demo video recorded and uploaded to YouTube as **Unlisted** | you | |
+| 7 | Verification centre → Prepare for verification: video link, submit | you | |
+
+todalo.app is also verified under devin.hasler@powercoders.org (a second TXT record).
+Keep every `google-site-verification` TXT record; removing one revokes that verification.
 
 Authorised domains must all be verified by a project owner in Search Console. They come
 from the redirect URIs: `todalo.app` (app.todalo.app) and `bleat.ch` (todalo.bleat.ch,
@@ -46,8 +48,8 @@ The app name on the consent screen must match the name on the homepage.
 Scopes (must match `packages/auth/src/index.ts` exactly; remove `calendar.readonly` if it is listed):
 
 - `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` (non-sensitive)
-- `https://www.googleapis.com/auth/calendar.events` (sensitive)
-- `https://www.googleapis.com/auth/calendar.calendarlist.readonly` (sensitive)
+- `https://www.googleapis.com/auth/calendar.calendarlist.readonly` (non-sensitive, per the console)
+- `https://www.googleapis.com/auth/calendar.events` (sensitive: the only scope under review)
 
 ### Justification: calendar.events
 
