@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { Logo } from "./site-header";
-import { FooterBand } from "./footer-band";
+import { FooterBand, FooterChin } from "./footer-band";
 
 const INK = "#121211";
 
@@ -10,7 +10,7 @@ export function Closing({ signedIn }: { signedIn: boolean }) {
   return (
     <>
       <section aria-labelledby="closing-title" className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-24 text-center md:pb-28 md:pt-32">
-        <h2 id="closing-title" className="landing-reveal font-display text-[clamp(2.6rem,6vw,5.25rem)] leading-[0.77] tracking-[-0.01em]">
+        <h2 id="closing-title" className="landing-reveal -my-[0.3em] py-[0.3em] font-display text-[clamp(2.6rem,6vw,5.25rem)] leading-[0.77] tracking-[-0.01em]">
           <span className="block font-black">Your next season</span>
           <span className="block font-thin">starts today.</span>
         </h2>
@@ -47,6 +47,7 @@ export function Closing({ signedIn }: { signedIn: boolean }) {
 export function Footer() {
   return (
       <footer className="text-white/60" style={{ background: INK }}>
+        <FooterChin />
         <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-10 px-6 pb-12 pt-6 md:grid-cols-[1fr_auto_auto] md:gap-20">
           <div className="col-span-2 text-white md:col-span-1">
             <Logo inverted />

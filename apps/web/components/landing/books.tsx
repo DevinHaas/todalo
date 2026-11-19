@@ -47,7 +47,7 @@ export function Books() {
 
   return (
     <section id="books" aria-labelledby="books-title" className="relative w-full overflow-x-clip py-24 md:py-36">
-      <div className="landing-reveal mx-auto max-w-2xl px-6 text-center">
+      <div className="landing-reveal mx-auto -mt-6 max-w-2xl px-6 pt-6 text-center">
         <h2 id="books-title" className="font-display text-[clamp(2.4rem,5vw,4.25rem)] leading-[0.77] tracking-[-0.01em]">
           <span className="block font-black">The leading productivity books,</span>
           <span className="block font-thin">built into one app.</span>

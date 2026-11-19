@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Clock } from "lucide-react";
 import { IntegrationRequest } from "./integration-request";
 
-// logo: a file in public/landing/logos (brand SVGs from the CC0 "logos" and MIT "theSVG"
-// sets; the Apple apps' icons taken from macOS). Marks stay their owners' trademarks.
+// logo: a file in public/landing/logos (brand marks from Brandfetch; Brandfetch only has the
+// parent company for Google Calendar, Outlook Calendar, Microsoft To Do and the Apple apps, so
+// those are the product icons, the Apple ones taken from macOS). Marks stay their owners' trademarks.
 // live: the one-liner shown when the tile is in focus. No `live` = not built yet ("Coming soon").
 type Integration = { name: string; logo: string; live?: string };
 
 const INTEGRATIONS: Integration[] = [
   { name: "Google Calendar", logo: "google-calendar.svg", live: "Time blocks sync with your Google Calendar." },
-  { name: "Todoist", logo: "todoist.svg", live: "Bring your projects and tasks over in one import." },
+  { name: "Todoist", logo: "todoist.webp", live: "Bring your projects and tasks over in one import." },
   { name: "OpenAI", logo: "openai.svg", live: "Sign in with ChatGPT or use your own key for the Coach." },
   { name: "Anthropic", logo: "anthropic.svg", live: "Your own Claude API key powers the Coach." },
   { name: "OpenRouter", logo: "openrouter.svg", live: "Any model on OpenRouter, with your own key." },
@@ -28,8 +29,8 @@ const INTEGRATIONS: Integration[] = [
   { name: "Linear", logo: "linear.svg" },
   { name: "GitHub", logo: "github.svg" },
   { name: "Obsidian", logo: "obsidian.svg" },
-  { name: "Zoom", logo: "zoom.svg" },
-  { name: "Zapier", logo: "zapier.svg" },
+  { name: "Zoom", logo: "zoom.webp" },
+  { name: "Zapier", logo: "zapier.webp" },
   { name: "Raycast", logo: "raycast.svg" },
   { name: "Shortcuts", logo: "apple-shortcuts.webp" },
   { name: "Telegram", logo: "telegram.svg" },
@@ -87,8 +88,9 @@ function Face({ item, focused }: { item: Integration; focused: boolean }) {
       }
       style={{ width: TILE, height: TILE }}
     >
+      {/* eager: iOS Safari never fires lazy loads for images inside the scaled 3D slices, so they stayed blank */}
       {/* eslint-disable-next-line @next/next/no-img-element -- tiny static logo, repeated per slice inside a 3D scene */}
-      <img src={`/landing/logos/${item.logo}`} alt="" className="size-[38px] object-contain" loading="lazy" decoding="async" draggable={false} />
+      <img src={`/landing/logos/${item.logo}`} alt="" className="size-[38px] object-contain" draggable={false} />
       {!item.live && (
         <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full border border-black/[0.06] bg-white text-foreground/55 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
           <Clock className="size-2.5" strokeWidth={2.2} />

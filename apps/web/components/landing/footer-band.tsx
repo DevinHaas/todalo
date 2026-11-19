@@ -19,3 +19,22 @@ export function FooterBand() {
     </div>
   );
 }
+
+/**
+ * Goes inside the footer. At the end of the page iOS 26 Safari fills the strip under its toolbar
+ * with the color of a fixed element on the bottom edge, else the body's white, which cut the dark
+ * footer off with a white band. This fixed strip in the footer's ink is there only while the
+ * footer is on screen (the footer then covers the bottom edge, so the strip blends in); mid-page it
+ * would tint the toolbar dark. Tested on the iOS 26 simulator: Safari skips a 1px strip and one
+ * hidden behind the page, so it's 8px and on top, inside the bottom row's 24px padding.
+ */
+export function FooterChin() {
+  const line = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = line.current!;
+    const observer = new IntersectionObserver(([entry]) => (el.hidden = !entry.isIntersecting));
+    observer.observe(el.parentElement!);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={line} hidden aria-hidden className="pointer-events-none fixed inset-x-0 bottom-0 h-2" style={{ background: INK }} />;
+}
