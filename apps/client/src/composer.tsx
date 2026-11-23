@@ -116,6 +116,8 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     : { priority: 4, deadline: "", labelIds: [] as string[] });
   const operation = useRef<{ key: string; id: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement | null>(null);
+  const closeNow = useRef((_refocus?: boolean) => {});
   const trigger = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   // `@` label autocomplete: the caret, the active suggestion, and a mention dismissed with Escape.
@@ -141,7 +143,16 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
     setTitle(""); setParsedTitle(""); setDescription(""); setDescribing(false); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
     setMetadata({ priority: 4, deadline: "", labelIds: [] }); operation.current = null;
   };
-  const close = () => { setOpen(false); reset(); setError(null); setPosition(placement); onCancel?.(); requestAnimationFrame(() => trigger.current?.focus()); };
+  const close = (refocus = true) => { setOpen(false); reset(); setError(null); setPosition(placement); onCancel?.(); if (refocus) requestAnimationFrame(() => trigger.current?.focus()); };
+  closeNow.current = close;
+  // Pressing anywhere outside an open add composer (another task, a checkbox…) closes it.
+  // ponytail: the quick-add dialog and an edit keep their own dismissal; the repeat dialog sits outside the form.
+  useEffect(() => {
+    if (!open || quick || editing || customRepeat) return;
+    const outside = (event: PointerEvent) => { if (!form.current?.contains(event.target as Node)) closeNow.current(false); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open, quick, editing, customRepeat]);
   if (!open) return <button ref={trigger} type="button" className="composer" onClick={() => setOpen(true)}><Plus />{triggerLabel}</button>;
 
   function reject(match: QuickAddMatch) {
@@ -273,9 +284,9 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const projectPicker = parentId ? <span className="chip">{projectId ? <Hash /> : <Inbox />}{projectId ? choices.projects?.find(item => item.id === projectId)?.name ?? "Project" : "Inbox"}</span>
     : <Dropdown label="Project" value={project ?? ""} options={projects} onChange={(value) => setProject(value || null)} className={quick ? "chip" : "chip project-picker"} chevron={!quick} />;
   // Legacy composer waveform: Ramble with this draft's date as the default (ticket 21).
-  const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={close}><AudioLines /></Link>;
+  const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={() => close()}><AudioLines /></Link>;
   return <>
-    <form ref={releaseFocus} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
+    <form ref={node => { form.current = node; return releaseFocus(node); }} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
@@ -309,7 +320,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
       {quick ? <div className="composer-footer">
         {projectPicker}
         <div className="composer-actions">
-          <button type="button" className="icon-button quick-close" aria-label="Close" onClick={close}><X /></button>
+          <button type="button" className="icon-button quick-close" aria-label="Close" onClick={() => close()}><X /></button>
           {editing ? <button type="submit" className="quick-primary" aria-label="Save task" disabled={pending || !title.trim()}><Check /></button>
             : title.trim() ? <button type="submit" className="quick-primary" aria-label="Add task" disabled={pending}><ArrowUp /></button>
             : ramble("quick-primary") || <button type="submit" className="quick-primary" aria-label="Add task" disabled><AudioLines /></button>}
@@ -318,7 +329,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
         {projectPicker}
         <div className="composer-actions">
           {ramble("icon-button")}
-          <button type="button" className="button outline" onClick={close}>Cancel</button>
+          <button type="button" className="button outline" onClick={() => close()}>Cancel</button>
           <button type="submit" className="button" disabled={!title.trim() || pending}>{pending ? "Adding…" : "Add task"}</button>
         </div>
       </div>}
