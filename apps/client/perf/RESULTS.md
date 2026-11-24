@@ -90,6 +90,14 @@ React renders per completion: 4,081 → 1,173 (React Scan, `results/step4-rows.m
 warm reload 118 → 67 ms, other-device sync 430 → 66 ms, server-confirmed quick add 229 → 47 ms,
 API reads ~200 → 16–23 ms, writes ~200–400 → 22–39 ms. Details and steps: `COLOCATION.md`.
 
+## Measured and left out (2026-11-24)
+
+| idea | measurement | why not |
+|---|---|---|
+| Completion in one database round trip (guarded UPDATE beside the read) | Frankfurt (`eu-colocated`): check-off on screen 33 ms, server answer 37.5 ms, other-device sync 66 ms; one round trip ≈ 17 ms | The check-off doesn't wait on the server, so the saving is invisible; sync 66 → ~49 ms stays under ~100 ms. It would also duplicate the milestone-criteria rule in SQL that the test database can't run. |
+| Font preload | Default load requests 0 fonts (the UI uses the system font stack); custom fonts from Appearance come from the service worker's asset cache after their first load | A preload would download a font nobody sees. |
+| Edge-caching the page (Cloudflare) | Production TTFB, 12 samples: page (origin) 115 ms p50, edge-cached asset 101 ms p50 | ~14 ms, first visit only (repeat visits come from the service worker), with a stale-page risk after deploys. |
+
 ## Not done here (needs a decision)
 
 - ~~**Co-locate the database and API**~~: done on 2026-11-24, see `COLOCATION.md`.
