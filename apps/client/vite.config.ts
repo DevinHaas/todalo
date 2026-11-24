@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { visualizer } from "rollup-plugin-visualizer";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { brotliCompressSync, constants } from "node:zlib";
 
 const host = process.env.TAURI_DEV_HOST;
 // Tauri runs this as beforeDev/BuildCommand in the CLI's own environment. Its
@@ -26,6 +29,18 @@ export default defineConfig({
         server.middlewares.use("/__ipcbench", (req, res) => {
           let body = ""; req.on("data", (chunk: Buffer) => { body += chunk; }); req.on("end", () => { console.log(`IPCBENCH ${body}`); res.end(); });
         });
+      },
+    },
+    // Web builds: a brotli-11 copy of each hashed text asset, served by apps/api (client-files.ts);
+    // ~20% smaller than Cloudflare's on-the-fly compression. Tauri builds read local files: none.
+    !process.env.TAURI_ENV_PLATFORM && {
+      name: "precompress", apply: "build" as const,
+      writeBundle: ({ dir = "dist" }: { dir?: string }, bundle: Record<string, unknown>) => {
+        for (const name of Object.keys(bundle)) {
+          if (!/^assets\/.+\.(js|css|svg|json)$/.test(name)) continue;
+          const data = readFileSync(join(dir, name));
+          if (data.length > 1024) writeFileSync(join(dir, `${name}.br`), brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
+        }
       },
     },
     reactScan && { name: "perf-react-scan", transform: (code: string, id: string) => id.endsWith("/src/main.tsx") ? `import "../perf/scan-entry";\n${code}` : undefined },

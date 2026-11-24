@@ -79,6 +79,7 @@ React renders per completion: 4,081 → 1,173 (React Scan, `results/step4-rows.m
 | 20 | Large lists (1,100 extra Today tasks, ~1,350 rows): `treeOrder` was O(n²) (a children filter per task), now one pass (randomised equivalence test); open count hoists "tomorrow"; bulk selection and server label grouping use maps/sets | ad-hoc runs at 1,500 tasks, then cleaned up | complete 86 → 56 ms (4× CPU 343 → 224); scroll 0 janky frames; tab switches 33–43 ms |
 | 21 | Native IPC measured in the running Mac app (`PERF_IPC_BENCH=1`, `perf/ipc-bench.ts`) | in-app bench | invoke < 1 ms, 170 KB payload 5 ms, 15 parallel 3 ms: no change needed |
 | 22 | Long lists (Today, Inbox/labels/filters, Upcoming) render the first 30 rows on mount and the rest the next frame (`useRowBudget`; `VITE_PROGRESSIVE_ROWS=0` turns it off for A/B) | A/B builds, 3 rounds | 4× CPU, first rows: Inbox 192 → 144, Upcoming 192 → 163, Today 119 → 104 ms; full list ~15 ms later |
+| 23 | Brotli-11 copies of hashed web assets at build time (`vite.config.ts` precompress, web builds only), served by the API when the client takes br (`apps/api/src/client-files.ts`); Cloudflare keeps origin brotli. Production today: Cloudflare compresses on the fly, the main chunk arrives as 849 KB gzip / 821 KB br | sizes of this build; Bun end-to-end check; unit test | main chunk over the wire 471 KB (gzip -9) → 380 KB (−19%); all JS/CSS 2.64 MB → 576 KB; build +~1.5 s |
 | (13) | React Compiler, tried and reverted (see `PLAN.md`) | `step13-compiler`, `step13-cpu4` | +93 KB gz, mixed results |
 
 ## Co-location, measured (database in Frankfurt instead of Oregon)
@@ -90,7 +91,4 @@ API reads ~200 → 16–23 ms, writes ~200–400 → 22–39 ms. Details and ste
 
 ## Not done here (needs a decision)
 
-- **Co-locate the database and API** (`PLAN.md` item 1). Each remaining round trip is ~196 ms,
-  because the API runs on Hetzner Helsinki and Neon is in us-west-2. In-region, reads would take
-  ~20 ms and writes ~60 ms. That's the largest remaining gain for every user action that
-  waits on the server (sync, "Added", first launch).
+- ~~**Co-locate the database and API**~~: done on 2026-11-24, see `COLOCATION.md`.
