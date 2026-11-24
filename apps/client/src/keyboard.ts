@@ -66,7 +66,7 @@ export const detectPlatform = (platform = navigator.platform): Platform =>
  * help and settings list only these. Every one has a click/touch path.
  */
 export const clientCommandIds = [
-  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find", "general.command-palette", "general.sync",
+  "general.capture", "general.ramble", "general.sidebar", "general.help", "general.search", "general.quick-find", "general.command-palette", "general.sync", "general.custom-css",
   "navigation.today", "navigation.upcoming", "navigation.projects", "navigation.labels", "navigation.filters",
   "navigation.settings", "navigation.account", "navigation.help", "navigation.theme", "navigation.inbox", "navigation.sections",
   "task.previous", "task.next", "view.first", "view.last",
@@ -115,7 +115,8 @@ export function dispatchCommands(handlers: Partial<Record<ClientCommandId, () =>
     // Ticket 23: Draft now works in the planning dialog, also from its answer field.
     const owned = command.context === "editor" || command.context === "quick-add" || command.id === "general.sync" || command.id === "coach.planning-draft";
     const sheet = SHEET_COMMANDS.includes(command.id as ClientCommandId);
-    const settings = SETTINGS_COMMANDS.includes(command.id as ClientCommandId);
+    // Toggle custom CSS is the way out of a theme that hides things: it works over any dialog.
+    const settings = SETTINGS_COMMANDS.includes(command.id as ClientCommandId) || command.id === "general.custom-css";
     // The palette also opens from a field while its keys are a chord (⌘P), so the browser never prints there.
     const chord = command.id === "general.command-palette" && bindings(command.id).every(binding => /^(Meta|Ctrl|Alt)\+/.test(binding));
     return handle ? [{ id: command.id, bindings: bindings(command.id), repeat: command.repeat, allowInEditor: owned || chord, allowInModal: owned || sheet || settings, handle }] : [];

@@ -117,7 +117,7 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   const later = task.horizon === "later" && task.status !== "done";
   return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} group/task ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
     data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && !ownLook(change) && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
-    data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined}>
+    data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined} data-region="task-row">
     {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} style={ring} onClick={() => actions.complete(task)} />
@@ -177,7 +177,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   const tree = listTree([...overdue, ...today]);
   const todayEvents = events.filter(event => eventDayKey(event) === dayKey(now));
   // A failed refetch keeps the last list (and an open composer's draft) on screen.
-  return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{selection?.toolbar}<div className="sections">
+  return <div>{header}{state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}{selection?.toolbar}<div className="sections" data-region="task-list">
     {overdue.length > 0 && <section>
       <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
         <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>

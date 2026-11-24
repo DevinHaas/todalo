@@ -198,7 +198,7 @@ export function SettingsDialog({ account, error }: { account: Account; error: st
   return <div className="dialog-backdrop settings-backdrop" onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
     <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="settings-page-title" tabIndex={-1}
       className="settings-dialog" data-section={param ? "open" : undefined}
-      onKeyDown={(event) => { if (event.key === "Escape" && (event.target as Element).closest('[role="dialog"]') === dialog.current) close(); }}>
+      onKeyDown={(event) => { if (event.key === "Escape" && (event.target as Element).closest('[role="dialog"]') === dialog.current) close(); }} data-region="settings">
       <nav className="settings-nav" aria-label="Settings">
         <div className="settings-nav-head"><h2 className="settings-title">Settings</h2>
           <button type="button" className="icon-button settings-close-narrow" aria-label="Close settings" onClick={close}><X /></button></div>

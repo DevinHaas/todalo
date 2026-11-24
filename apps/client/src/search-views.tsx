@@ -19,7 +19,7 @@ export function QuickFindDialog({ state, onRetry, sectionsOnly = false, onOpen, 
   const results = matchFindItems(state.data?.items ?? [], query, sectionsOnly);
   const go = (href: string) => { onClose(); onOpen(href); };
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="quick-find-title" className="dialog quick-find" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="quick-find-title" className="dialog quick-find" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} data-region="quick-find">
       <h2 id="quick-find-title" className="dialog-title">{sectionsOnly ? "Navigate sections" : "Quick Find"}</h2>
       <input ref={releaseFocus} autoFocus aria-label="Search tasks, projects and sections" placeholder="Search tasks, projects and sections" value={query}
         onChange={(event) => setQuery(event.target.value)} />

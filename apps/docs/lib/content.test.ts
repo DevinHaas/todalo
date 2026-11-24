@@ -355,20 +355,20 @@ describe("real help-center content", () => {
     ]);
     expect(categories.map((category) => category.order)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(new Set(categories.map((category) => category.slug)).size).toBe(7);
-    expect(content.articles).toHaveLength(40);
+    expect(content.articles).toHaveLength(41);
     expect(content.categories).toHaveLength(7);
-    expect(content.search.length).toBeGreaterThanOrEqual(40);
+    expect(content.search.length).toBeGreaterThanOrEqual(41);
     const sitemap = content.sitemap.map((entry) => entry.url);
     for (const url of ["/", ...content.categories.map((category) => `/${category.slug}`), ...content.articles.map((entry) => entry.url)]) {
       expect(sitemap).toContain(url);
     }
   });
 
-  it("loads all 40 explicitly named spec topics as complete, uniquely addressed, published articles", () => {
+  it("loads the 40 spec topics plus custom CSS as complete, uniquely addressed, published articles", () => {
     const content = loadContent({ preview: true });
-    expect(content.articles).toHaveLength(40);
-    expect(content.categories.map((category) => category.articles.length)).toEqual([5, 9, 8, 5, 4, 2, 7]);
-    expect(new Set(content.articles.map((entry) => entry.url)).size).toBe(40);
+    expect(content.articles).toHaveLength(41);
+    expect(content.categories.map((category) => category.articles.length)).toEqual([5, 9, 8, 5, 4, 2, 8]);
+    expect(new Set(content.articles.map((entry) => entry.url)).size).toBe(41);
     for (const category of content.categories) {
       expect(category.articles.map((entry) => entry.order)).toEqual(category.articles.map((_, index) => index + 1));
       for (const entry of category.articles) {
@@ -380,6 +380,7 @@ describe("real help-center content", () => {
       }
     }
     expect(content.category("coach")?.articles.every((entry) => entry.badge === "experiment")).toBe(true);
+    expect(content.articles.filter((entry) => entry.badge === "advanced").map((entry) => entry.url)).toEqual(["/apps-account/customize-with-css"]);
     expect(content.article("/apps-account/allow-notifications-and-the-microphone-on-mac")?.platforms).toEqual(["mac"]);
     expect(content.articles.map((entry) => entry.title)).toContain("What's new");
     expect(content.articles.every((entry) => entry.section)).toBe(true);

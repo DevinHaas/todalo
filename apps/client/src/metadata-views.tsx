@@ -290,7 +290,7 @@ export interface CollectionSlots {
 /** Legacy ListView body (label, filter, Inbox and search pages): selection toolbar and bucketed rows, or the chosen layout. */
 export function CollectionBody({ tasks, projectNames = {}, actions, now = new Date(), selection, layout }: CollectionSlots & { tasks: TaskDto[] }) {
   if (layout) return <>{layout(tasks)}</>;
-  return <>{selection?.toolbar}<div className="sections">
+  return <>{selection?.toolbar}<div className="sections" data-region="task-list">
     {listBuckets(tasks, now).map(bucket => { const tree = listTree(bucket.items); return <section key={bucket.label}>
       <h2 className="section-heading muted">{bucket.label}</h2>
       {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
@@ -314,7 +314,7 @@ export function TaskCollectionView({ kind, state, onRetry, ...slots }: Collectio
     {state.data.description && <p className="state">{state.data.description}</p>}
     {manage}
     {state.status === "error" && <Failure error={state.error} onRetry={onRetry} />}
-    {state.data.groups && state.data.groups.length > 1 && !slots.layout ? <>{slots.selection?.toolbar}<div className="sections">
+    {state.data.groups && state.data.groups.length > 1 && !slots.layout ? <>{slots.selection?.toolbar}<div className="sections" data-region="task-list">
       {state.data.groups.map((group, index) => { const items = treeOrder(group.tasks); const tree = listTree(items); return <section key={index}>
         <h2 className="section-heading muted">{group.title}</h2>
         {items.length ? items.map(task => <TaskRow key={task.id} task={task} now={slots.now ?? new Date()} projectName={task.projectId ? slots.projectNames?.[task.projectId] : undefined} actions={slots.actions} selection={slots.selection?.row(task)} {...tree(task)} />)

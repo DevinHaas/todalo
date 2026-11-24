@@ -58,7 +58,7 @@ export function CommandPalette({ commands, bindings, memory, onRun, onPin, onClo
   };
   return <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[12vh] dark:bg-black/60" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKeyDown}
-      className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl">
+      className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl" data-region="command-palette">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <input ref={releaseFocus} autoFocus role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="command-palette-list"
           aria-activedescendant={current ? optionId(current.id) : undefined} aria-label="Search commands" placeholder="Select a command…"
@@ -94,7 +94,7 @@ const menuActions: [TaskMenuAction, string][] = [["edit", "Edit"], ["date", "Cho
 /** Legacy "Task actions" dialog (the `.` key): each choice runs what the row's own control or key does. */
 export function TaskMenu({ title, onChoose, onClose }: { title: string; onChoose: (action: TaskMenuAction) => void; onClose: () => void }) {
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="task-menu-title" aria-describedby="task-menu-task" className="dialog task-menu" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="task-menu-title" aria-describedby="task-menu-task" className="dialog task-menu" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} data-region="dialog">
       <h2 id="task-menu-title" className="dialog-title">Task actions</h2>
       <p id="task-menu-task" className="state">{title}</p>
       {menuActions.map(([action, name], index) => <button key={action} type="button" className="button outline" autoFocus={index === 0} onClick={() => onChoose(action)}>{name}</button>)}
@@ -107,7 +107,7 @@ export function ShortcutHelp({ bindings, onCustomize, onClose }: { bindings: (id
   const [query, setQuery] = useState("");
   const listed = clientCommands.filter(command => bindings(command.id).length && matchesShortcut(command, bindings(command.id), query));
   return <div className="dialog-backdrop sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="dialog sheet shortcut-help" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="dialog sheet shortcut-help" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} data-region="dialog">
       <div className="dialog-header"><h2 id="shortcut-help-title" className="dialog-title">Keyboard shortcuts</h2>
         <button type="button" className="icon-button" aria-label="Close keyboard shortcuts" onClick={onClose}><X /></button></div>
       <button type="button" className="text-action" onClick={onCustomize}>Customize shortcuts in your account</button>

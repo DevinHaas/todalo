@@ -7,7 +7,8 @@ import { Callout, Steps, Step, Tip, Note, Warning } from "@/components/article-c
 import { PlatformContent } from "@/components/platform-content";
 import { Shortcut } from "@/components/keyboard-shortcut";
 import { ThemedScreenshot } from "@/components/themed-screenshot";
-import { ReleaseNotes, ShortcutTable } from "@/components/generated-content";
+import { ReleaseNotes, ShortcutTable, ThemeRegionTable, ThemeVariableTable } from "@/components/generated-content";
+import type { ArticleFrontmatter } from "@/lib/schema";
 import { TableOfContents } from "@/components/table-of-contents";
 import { Support } from "@/components/support";
 import { PageChrome } from "@/components/page-chrome";
@@ -15,8 +16,9 @@ import { Icon } from "@/components/icons";
 import { PLATFORM_LABELS } from "@/lib/platform";
 
 type Props = { params: Promise<{ category: string; article: string }> };
-const components = { Callout, Steps, Step, Tip, Note, Warning, Platform: PlatformContent, Shortcut, Kbd: Shortcut, ThemedScreenshot, ShortcutTable, ReleaseNotes };
+const components = { Callout, Steps, Step, Tip, Note, Warning, Platform: PlatformContent, Shortcut, Kbd: Shortcut, ThemedScreenshot, ShortcutTable, ReleaseNotes, ThemeVariableTable, ThemeRegionTable };
 const AUTHOR = "Devin";
+const BADGE_LABELS: Record<NonNullable<ArticleFrontmatter["badge"]>, string> = { experiment: "Experiment", advanced: "Advanced" };
 
 /** Plain text of a heading title (Fumadocs gives JSX when the heading has formatting). */
 function textOf(node: ReactNode): string {
@@ -47,7 +49,7 @@ export default async function ArticlePage({ params }: Props) {
     <header className="article-title"><h1>{article.title}</h1></header>
     <div className="article-layout">
       <aside className="article-sidebar" aria-label="Article details">
-        {article.badge === "experiment" && <section><h2 className="sidebar-title">Status</h2><ul className="chips"><li className="chip chip-experiment">Experiment</li></ul></section>}
+        {article.badge && <section><h2 className="sidebar-title">Status</h2><ul className="chips"><li className={`chip chip-${article.badge}`}>{BADGE_LABELS[article.badge]}</li></ul></section>}
         <section><h2 className="sidebar-title">Platforms</h2><ul className="chips">{article.platforms.map((platform) => <li key={platform} className="chip">{PLATFORM_LABELS[platform]}</li>)}</ul></section>
         <TableOfContents headings={headings} />
         {related.length > 0 && <section className="sidebar-after"><h2 className="sidebar-title">Related articles</h2><ul className="related-links">{related.map((entry) => <li key={entry.url}><Link href={entry.url}><Icon name="article" />{entry.title}</Link></li>)}</ul></section>}

@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { Shortcut } from "./keyboard-shortcut";
 import { shortcutGroups } from "../lib/shortcuts";
 import { releaseDate, releases } from "../lib/releases";
+import { themeRegions, variableGroups } from "../lib/theme-reference";
 
 function Keys({ bindings }: { bindings: string[][] }) {
   return bindings.map((steps, index) => <Fragment key={index}>
@@ -25,6 +26,25 @@ export function ShortcutTable() {
       </tr>)}</tbody>
     </table>
   </Fragment>);
+}
+
+/** Every theming variable from the client's reference (lib/theme-reference.ts), grouped. */
+export function ThemeVariableTable() {
+  return variableGroups().map(({ title, variables }) => <Fragment key={title}>
+    <h3>{title}</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>What it changes</th></tr></thead>
+      <tbody>{variables.map((variable) => <tr key={variable.name}><td><code>{variable.name}</code></td><td>{variable.description}</td></tr>)}</tbody>
+    </table>
+  </Fragment>);
+}
+
+/** Every `data-region` hook from the client's reference. */
+export function ThemeRegionTable() {
+  return <table>
+    <thead><tr><th>Selector</th><th>What it is</th></tr></thead>
+    <tbody>{themeRegions.map((entry) => <tr key={entry.region}><td><code>{`[data-region="${entry.region}"]`}</code></td><td>{entry.description}</td></tr>)}</tbody>
+  </table>;
 }
 
 /** Every release from the client's release notes, newest first. */

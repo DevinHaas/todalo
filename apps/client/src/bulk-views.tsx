@@ -142,7 +142,7 @@ function MetadataDialog({ field, tasks, labels, pending, error, onSave, onClose 
     void onSave(field === "priority" ? { priority } : field === "horizon" ? { horizon: horizon || null } : field === "labels" ? { labelIds: labelIds.filter(id => labels!.some(label => label.id === id)) } : { deadline: deadline ? localInstant(deadline) : null });
   }
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
+    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog} data-region="dialog">
       <h2 className="dialog-title">{title}</h2>
       {error && <p role="alert" className="form-error">{error}</p>}
       {field === "labels" && !labels ? <LinesSkeleton rows={3} label="Loading labels" /> : <form ref={releaseFocus} onSubmit={submit}><fieldset disabled={pending}>

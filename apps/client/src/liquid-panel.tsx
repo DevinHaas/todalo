@@ -4,7 +4,7 @@
 // paste over `liquidDefaults` in liquid.ts.
 import { useEffect, useState } from "react";
 import { Copy, RotateCcw, Save, X } from "lucide-react";
-import { liquidDefaults, type LiquidParams } from "./liquid";
+import { cssHex, liquidDefaults, type LiquidParams } from "./liquid";
 import { Button, ColorControl, ControlItem, ControlList, ControlSection, Input, PanelTitle, SliderControl } from "./ui";
 
 const KEY = "todalo-liquid", PRESETS = "todalo-liquid-presets";
@@ -12,7 +12,12 @@ const read = <T,>(key: string, fallback: T): T => { try { return { ...fallback, 
 
 /** The parameters: the defaults in production, the panel's values in dev. */
 export function useLiquidParams() {
-  const [params, setParams] = useState<LiquidParams>(() => import.meta.env.DEV ? read(KEY, liquidDefaults) : liquidDefaults);
+  const [params, setParams] = useState<LiquidParams>(() => {
+    if (!import.meta.env.DEV) return liquidDefaults;
+    const saved = read(KEY, liquidDefaults);
+    // The old default was a fixed red; saved before the blob followed the accent, it means "the accent".
+    return saved.blobColor.toLowerCase() === "#dc4c3e" ? { ...saved, blobColor: "" } : saved;
+  });
   useEffect(() => { if (import.meta.env.DEV) localStorage.setItem(KEY, JSON.stringify(params)); }, [params]);
   return [params, setParams] as const;
 }
@@ -85,7 +90,7 @@ export function LiquidPanel({ params, onChange, onClose }: { params: LiquidParam
     <ControlSection>
       <ControlList>
         <ControlItem><SliderControl name="Speed" value={params.speed} min={0.25} max={4} step={0.05} unit="×" onValueChange={(value) => set("speed", value)} /></ControlItem>
-        <ControlItem><ColorControl name="Blob colour" hex={params.blobColor} onValueChange={(value) => set("blobColor", value.hex)} /></ControlItem>
+        <ControlItem><ColorControl name="Blob colour" hex={params.blobColor || cssHex(getComputedStyle(document.documentElement).getPropertyValue("--color-brand"))} onValueChange={(value) => set("blobColor", value.hex)} /></ControlItem>
       </ControlList>
     </ControlSection>
     {groups.map(group => <ControlSection key={group.title}>

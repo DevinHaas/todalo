@@ -17,7 +17,7 @@ export const articleSchema = pageSchema.extend({
     .refine((values) => new Set(values).size === values.length, "Platforms must be unique"),
   related: z.array(z.string().regex(articleUrlPattern)).max(4)
     .refine((values) => new Set(values).size === values.length, "Related articles must be unique"),
-  badge: z.enum(["experiment"]).optional(),
+  badge: z.enum(["experiment", "advanced"]).optional(),
   published: z.boolean(),
 });
 

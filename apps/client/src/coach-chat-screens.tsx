@@ -62,7 +62,7 @@ function CoachChat({ userId }: { userId: string }) {
     .flatMap(draft => draft.items.filter(item => item.state === "pending").map(item => ({ item, draft }))), [drafts.data]);
   const title = (id: string | undefined) => tasks?.find(task => task.id === id)?.title;
 
-  return <RightSidebar className="ui w-plan! pr-3 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label="Coach" data-coach-chat=""
+  return <RightSidebar className="ui w-plan! pr-3 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full! max-md:bg-background" aria-label="Coach" data-coach-chat="" data-region="coach"
     title={<span className="flex items-center gap-1.5"><Sparkles aria-hidden="true" className="size-4 text-brand" />Coach</span>}
     actions={<>
       {(asked.length > 0 || documents.length > 0) && <Button type="button" variant="ghost" size="icon-sm" aria-label="New conversation" title="New conversation (also removes the documents)"

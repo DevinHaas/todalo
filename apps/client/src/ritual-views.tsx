@@ -170,7 +170,7 @@ export function RitualPanel({ copy, goals, status, pending, initial = [], summar
   const finish = (planning: PlanningAnswer) => onFinish(given(), planning);
   const back = goals.length > 0 && <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setStep(step - 1)}>Back</Button>;
   const contextId = `${copy.kind}-context`;
-  return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label={copy.title} data-ritual-panel={copy.kind}
+  return <RightSidebar className="ui pt-2 pr-4 max-md:fixed max-md:inset-0 max-md:z-20 max-md:w-full max-md:bg-background" aria-label={copy.title} data-ritual-panel={copy.kind} data-region="ritual"
     title={copy.title} actions={<>
       <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onSkip} data-ritual-action="skip">Skip</Button>
       <Button type="button" variant="ghost" size="icon-sm" aria-label={`Close ${copy.title}`} onClick={onClose}><X /></Button>

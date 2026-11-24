@@ -149,7 +149,7 @@ button, summary { cursor: pointer; }
 .article-sidebar > section > .sidebar-title, .desktop-toc > .sidebar-title { margin-bottom: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 4px 7px; border-radius: 6px; background: var(--tint); color: var(--muted); font-size: 12px; line-height: 18px; font-weight: 500; letter-spacing: .3px; }
-.chip-experiment { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--link); }
+.chip-experiment, .chip-advanced { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--link); }
 .related-links a { display: flex; gap: 10px; margin-inline: -10px; padding: 6.5px 10px; border-radius: 8px; color: var(--link); font-size: 15.5px; line-height: 20.9px; font-weight: 500; }
 .related-links svg { flex-shrink: 0; margin-top: 2.5px; }
 .related-links a:hover { background: var(--tint); }

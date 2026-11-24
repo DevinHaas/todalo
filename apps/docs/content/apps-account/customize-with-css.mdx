@@ -1,0 +1,113 @@
+---
+title: "Use custom CSS"
+description: "Restyle Todalo with your own stylesheet, let an AI assistant write it, and turn it off if needed."
+category: "apps-account"
+order: 8
+section: "Settings & shortcuts"
+platforms: ["web", "mac"]
+related: ["/apps-account/change-your-theme-and-sounds", "/apps-account/use-keyboard-shortcuts"]
+badge: "advanced"
+published: true
+---
+
+**Appearance** covers most looks in a few clicks. When you want more, custom CSS lets you restyle almost any part of Todalo with a stylesheet of your own. It's an advanced feature, for people who know some CSS or are happy to let an AI assistant write it for them.
+
+## Add your CSS
+
+To add a stylesheet:
+
+<Steps>
+<Step>Click your name at the top left of the sidebar, then click **Settings**.</Step>
+<Step>Click **Appearance** and scroll to **Custom CSS** at the bottom. If it's closed, click it to open it.</Step>
+<Step>Paste your CSS into the box, or click **Upload .css** and choose a CSS file. Todalo applies it straight away, on top of the design you chose above it.</Step>
+</Steps>
+
+To change your CSS later, edit it in the same box; Todalo applies each change as you type. Your CSS is saved to your account, so it follows you to every device you sign in on, and only you see it.
+
+Your CSS wins over the **Appearance** settings and Todalo's own styles, so set only what you want to change. You don't need `!important`.
+
+## Have an AI assistant write your CSS
+
+You don't have to write CSS yourself. **Copy prompt** copies instructions for an AI assistant: how Todalo can be styled, every variable and region listed below, and the rules your CSS must follow. To use it:
+
+<Steps>
+<Step>In **Custom CSS**, click **Copy prompt**. Todalo shows "Prompt copied".</Step>
+<Step>Paste the prompt into any AI assistant.</Step>
+<Step>Under "My theme" at the end of the prompt, describe the look you want. Add screenshots, photos or links to themes you like, so it has something to go on.</Step>
+<Step>Copy the CSS it gives back and paste it into the box in **Custom CSS**, or save it as a `.css` file and click **Upload .css**.</Step>
+</Steps>
+
+If something isn't right yet, tell the assistant what to change and paste the new version over the old one.
+
+## Turn custom CSS off
+
+Switch off **Use custom CSS** to go back to your design without it. Your CSS is kept, so you can switch it on again later. To delete it, click **Remove**.
+
+<Warning>**Remove** deletes your CSS from your account. Keep a copy of the file if you might want it again.</Warning>
+
+## Get back in when your CSS breaks the app
+
+If your CSS hides the settings or makes Todalo hard to read, you can still turn it off:
+
+<Platform on="web">
+1. Add `?safe` to the end of the address, or `&safe` if the address already has a `?`, and load the page. Todalo shows "Safe mode" and skips your custom CSS for this visit.
+2. Click your name, then **Settings** › **Appearance** › **Custom CSS**, and fix or remove the CSS.
+3. Load the page again without `?safe`.
+</Platform>
+
+<Platform on="mac">
+1. Press <Shortcut keys="U" /> and then <Shortcut keys="C" />. Todalo shows "Custom CSS off".
+2. Click your name, then **Settings** › **Appearance** › **Custom CSS**, and fix or remove the CSS.
+3. Switch on **Use custom CSS** again.
+</Platform>
+
+<Tip>Press <Shortcut keys="U" /> and then <Shortcut keys="C" /> anywhere in the app, even with a dialog open, to switch custom CSS off or on. It's saved like the switch, so it applies on every device.</Tip>
+
+## Limits
+
+Custom CSS never loads anything from the internet. A stylesheet that fetches images or fonts can reveal what's on your screen to the server it fetches from, so Todalo leaves out anything that would make a request:
+
+- `@import` is left out.
+- `url()` works only with `data:` URLs for images and fonts. Remote images are left out.
+- Web fonts don't load. Use a font already on your device, such as `Georgia` or `ui-monospace`, or an `@font-face` whose source is a `data:` URL.
+- A stylesheet can be up to 64 KB. A larger file isn't uploaded, and Todalo shows "That file is over 64 KB."
+
+When a part is left out, the note under the box says so, for example "One part was left out: only data: URLs load, and no @import."
+
+Todalo's class names change without notice. Style its variables and regions instead, so your CSS keeps working after updates.
+
+## An example
+
+This gives Todalo warm paper colours in the light theme, deep olive in the dark theme and a monospace sidebar:
+
+```css
+/* Light */
+:root {
+  --color-background: #f4efe6;
+  --color-sidebar: #ebe3d3;
+  --color-brand: #8a6d3b;
+}
+
+/* Dark: set both, or dark mode keeps your light colours */
+:root.dark {
+  --color-background: #1f1d17;
+  --color-sidebar: #27251d;
+  --color-brand: #c9a56a;
+}
+
+[data-region="sidebar"] {
+  font-family: ui-monospace, Menlo, monospace;
+}
+```
+
+## Variables you can change
+
+Variables are the colours, fonts and sizes the whole app is built from, so changing one restyles every place that uses it. Set them on `:root` for the light theme and on `:root.dark` for the dark theme.
+
+<ThemeVariableTable />
+
+## Regions you can target
+
+Each major part of the app carries a `data-region` attribute. Use it in a selector to style that part, for example to make the sidebar translucent or give dialogs a thicker border.
+
+<ThemeRegionTable />

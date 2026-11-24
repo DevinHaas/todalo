@@ -75,7 +75,7 @@ function QuickAdd({ userId, onClose }: { userId: string; onClose: () => void }) 
     {drag.guides}
     {/* 40% from the top by default; ⌘-drag moves it (quick-add-drag.tsx). */}
     <div role="dialog" aria-modal="true" aria-label="Add task" className={cn("dialog quick-add mt-[40vh]", drag.dragging && "cursor-grabbing select-none")}
-      style={drag.style} onPointerDown={drag.onPointerDown}>
+      style={drag.style} onPointerDown={drag.onPointerDown} data-region="quick-add">
       <Composer startOpen quick dueDate={() => null} onCancel={onClose} onCreate={async (task) => setAdded(await create.mutateAsync(task))} />
       {added && <p role="status" className="state">Added “{added.title}”{added.projectId ? "" : " to Inbox"}. <Link to={`/tasks/${encodeURIComponent(added.id)}`} onClick={onClose}>View task</Link></p>}
     </div>
@@ -179,7 +179,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
 
 /** The page column: lists keep a readable width; board and calendar layouts use the full width. */
 function Content({ children }: { children: ReactNode }) {
-  return <main className="content" data-layout={useDisplay().layout}>{children}</main>;
+  return <main className="content" data-layout={useDisplay().layout} data-region="content">{children}</main>;
 }
 
 export function Shell({ account }: { account: Account }) {
@@ -202,9 +202,9 @@ export function Shell({ account }: { account: Account }) {
   const { pathname } = useLocation();
   const projectPage = pathname.startsWith("/projects");
 
-  return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen}>
+  return <DisplayProvider><div className="app-shell" data-collapsed={collapsed} data-mobile-open={mobileOpen} data-region="app">
     <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />
-    <aside className="sidebar" data-tauri-drag-region aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }}>
+    <aside className="sidebar" data-tauri-drag-region aria-label="Sidebar" onClick={(event) => { if ((event.target as Element).closest("a")) setMobileOpen(false); }} data-region="sidebar">
       {/* Desktop: the one toggle, open and collapsed (it stays visible, styles.css). Mobile: closes the drawer. */}
       <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle sidebar" aria-expanded={!collapsed}
         onClick={() => { if (mobileOpen) setMobileOpen(false); else setCollapsed(closed => !closed); }}><PanelLeft /></button>
@@ -214,7 +214,7 @@ export function Shell({ account }: { account: Account }) {
         <Link to="/ramble" className="icon-button brand" aria-label="Open Ramble"><AudioLines /></Link>
       </div>
       {/* The account's layout (Settings › Sidebar): views next to each other share one list; each section is its own group. */}
-      <nav className="sidebar-nav">{sidebarGroups(layout, (entry) => {
+      <nav className="sidebar-nav" data-region="sidebar-nav">{sidebarGroups(layout, (entry) => {
         const user = account.user.id;
         switch (entry) {
           case "rituals": return <RitualsSidebar key={entry} userId={user} />;
@@ -234,7 +234,7 @@ export function Shell({ account }: { account: Account }) {
       <a className="nav-item help" {...helpCenter} onClick={click => { setMobileOpen(false); helpCenter.onClick(click); }}><HelpCircle /><span>Help & resources</span></a>
     </aside>
     <div className="inset">
-      <div className="toolbar" data-tauri-drag-region>
+      <div className="toolbar" data-tauri-drag-region data-region="toolbar">
         <div className="toolbar-start" data-tauri-drag-region>
           <button type="button" className="icon-button trigger" aria-label="Toggle sidebar" onClick={() => { setCollapsed(false); setMobileOpen(true); }}><PanelLeft /></button>
           {/* A project page has its own Display (project-views DisplayPopover). */}

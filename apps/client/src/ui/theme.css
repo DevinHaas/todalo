@@ -29,7 +29,7 @@
   --color-popover-foreground: #202020;
 
   /* Roles */
-  --color-primary: #dc4c3e;               /* primary buttons are brand red, as in Todoist */
+  --color-primary: var(--color-brand);    /* primary buttons are brand red, as in Todoist */
   --color-primary-foreground: #ffffff;
   --color-secondary: #f5f5f5;             /* secondary buttons */
   --color-secondary-foreground: #444444;
@@ -38,8 +38,8 @@
   --color-accent-foreground: #202020;
   --color-destructive: #d1453b;
   --color-destructive-foreground: #ffffff;
-  --color-link: #dc4c3e;                  /* links */
-  --color-selected: #ffefe5;              /* pressed toggles, checked menu items, selected rows */
+  --color-link: var(--color-brand);       /* links: the accent (personalization.ts) recolours brand, so these follow */
+  --color-selected: var(--color-brand-tint); /* pressed toggles, checked menu items, selected rows */
   --color-attention: #eb8909;
   --color-today: #058527;
   --color-success: #058527;               /* Goal status On track (Adjust is attention, Off track destructive) */
@@ -102,13 +102,13 @@
   --spacing-plan: 20rem;          /* Plan sidebar beside the schedule: 320 */
   --spacing-page: 50rem;          /* content column: 800 */
 
-  /* Radii */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 5px;    /* buttons, inputs, menu items */
-  --radius-xl: 10px;   /* popovers, cards, dialogs */
-  --radius-2xl: 12px;
+  /* Radii: --design-corners (Appearance › Corners) scales them; unset is 1, today's. */
+  --radius-xs: calc(2px * var(--design-corners, 1));
+  --radius-sm: calc(3px * var(--design-corners, 1));
+  --radius-md: calc(4px * var(--design-corners, 1));
+  --radius-lg: calc(5px * var(--design-corners, 1));    /* buttons, inputs, menu items */
+  --radius-xl: calc(10px * var(--design-corners, 1));   /* popovers, cards, dialogs */
+  --radius-2xl: calc(12px * var(--design-corners, 1));
 
   /* Shadows */
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
@@ -124,6 +124,8 @@
   --focus-ring-offset: 2px;
 }
 
+/* Layered as @theme's light tokens are, so the design layer and custom CSS override dark ones too. */
+@layer theme {
 :root.dark, .dark {
   color-scheme: dark;
   --color-brand: #de4c4a;
@@ -141,7 +143,7 @@
   --color-popover: #282828;
   --color-popover-foreground: #e6e6e6;
 
-  --color-primary: #de4c4a;
+  --color-primary: var(--color-brand);
   --color-primary-foreground: #ffffff;
   --color-secondary: #333333;
   --color-secondary-foreground: #e6e6e6;
@@ -150,8 +152,8 @@
   --color-accent-foreground: #e6e6e6;
   --color-destructive: #ff7066;
   --color-destructive-foreground: #1e1e1e;
-  --color-link: #ff7066;
-  --color-selected: #3b2724;
+  --color-link: var(--color-brand-tint-foreground);
+  --color-selected: var(--color-brand-tint);
   --color-attention: #ff9a14;
   --color-today: #25b84c;
   --color-success: #25b84c;
@@ -187,6 +189,7 @@
   --shadow-popover: 0 1px 8px rgb(0 0 0 / 0.4), 0 0 1px rgb(255 255 255 / 0.2);
   --shadow-dialog: 0 15px 50px rgb(0 0 0 / 0.6);
 }
+}
 
 /* Bridge: the legacy plain-CSS screens (src/styles.css) read these names. Remove one once no legacy rule uses it. */
 :root {
@@ -199,6 +202,80 @@
   --sidebar: var(--color-sidebar); --sidebar-accent: var(--color-sidebar-accent);
   --row-tint: color-mix(in oklch, var(--color-foreground) 8%, transparent);
   font-family: var(--font-sans);
+}
+
+/*
+ * Glass (Settings › Appearance, personalization.ts): with data-glass, the wallpaper (or the
+ * design colours as a wash) fills a fixed layer behind the app, and the big panels let it
+ * through at --design-glass opacity. Unlayered so it wins over the legacy and component
+ * fills. The wallpaper is blurred once on its own layer (cheap while scrolling);
+ * backdrop-filter is kept to panels that float over content (dialogs, the phone sidebar,
+ * sticky bars), never rows. Without data-glass none of this applies: today's look.
+ */
+@layer theme { /* the glass variables: custom CSS on :root overrides them */
+  html[data-glass] {
+    --design-surface: color-mix(in oklch, var(--color-background) var(--design-glass), transparent);
+    --design-panel: color-mix(in oklch, var(--color-popover) calc(50% + var(--design-glass) / 2), transparent);
+    --design-scrim: color-mix(in oklch, var(--color-background) 35%, transparent); /* light pages need more lift over a dark picture */
+    --design-frost: blur(24px) saturate(140%);
+  }
+  html.dark[data-glass] { --design-scrim: color-mix(in oklch, var(--color-background) 20%, transparent); }
+}
+html[data-glass]::before {
+  content: ""; position: fixed; z-index: -1; inset: calc(var(--design-blur) * -2); pointer-events: none;
+  background: var(--design-backdrop, var(--color-background)); filter: blur(var(--design-blur));
+}
+html[data-glass][data-wallpaper]::before {
+  background: linear-gradient(var(--design-scrim), var(--design-scrim)), var(--design-wallpaper) center / cover no-repeat;
+}
+html[data-glass] .inset { background-color: var(--design-surface); }
+/* Grain (personalization.ts grainImage): one tile on the page's own background, so under every
+   row, card and line of text; the sidebar's comes with --design-sidebar. It covers the wash and
+   wallpaper wherever they show, as the sidebar and page sit over them. */
+html[data-grain] .inset { background-image: var(--design-grain); }
+html[data-glass] :is(.dialog, .settings-dialog, [data-slot="dialog-content"], [data-slot="sheet-content"]) {
+  background: var(--design-panel); -webkit-backdrop-filter: var(--design-frost); backdrop-filter: var(--design-frost);
+}
+html[data-glass] .settings-pane-head, html[data-glass] body::before {
+  background: var(--design-panel); -webkit-backdrop-filter: var(--design-frost); backdrop-filter: var(--design-frost);
+}
+/* The schedule's sticky head (dates, all-day lane) can be most of the view and already sits on the page's
+   glass: frost only (hours scrolling under it blur), no second fill that would turn it near-solid. */
+html[data-glass] .schedule-head { background: transparent; -webkit-backdrop-filter: var(--design-frost); backdrop-filter: var(--design-frost); }
+html[data-glass] .schedule-head:has(> .all-day.single) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Fills that only matched the opaque page: clear, or they show as solid strips on the glass or grain. */
+html[data-glass] :is(.sortable-row, .sidebar-setting):not([data-dragging]), html[data-glass] .settings-nav,
+html[data-grain] .sortable-row:not([data-dragging]) { background: transparent; }
+html[data-glass] .task-sheet { --sheet-side: color-mix(in oklch, var(--color-foreground) 4%, transparent); }
+/*
+ * The main views (lists, board, schedule, month, composer, banners): their fills were the opaque
+ * page or its greys. Here the page fill becomes the glass surface and the greys a faint ink tint,
+ * so cards, chips, checkboxes, all-day rows and blocks frost over the wallpaper instead of
+ * painting grey strips; hovers and selection (other tokens) keep showing. Scoped to .content,
+ * so menus and popovers (portaled outside it) keep their solid fills.
+ */
+html[data-glass] .content {
+  --design-fill: color-mix(in oklch, var(--color-foreground) 6%, transparent);
+  --background: var(--design-surface); --accent: var(--design-fill); --muted: var(--design-fill);
+  --color-card: var(--design-surface); --color-muted: var(--design-fill);
+}
+html[data-glass] .content .all-day-row { background: var(--design-fill); }
+html[data-glass] .content .all-day-row .round-check:not([aria-checked="true"]) { background: transparent; }
+/* Month: cells see through, and the 1px gaps (the grid's border fill) become lines drawn by each cell. */
+html[data-glass] .content .month-grid { background: transparent; }
+html[data-glass] .content .month-day { background: transparent; }
+html[data-glass] .content :is(.month-day, .month-weekday) { box-shadow: 0 0 0 1px var(--color-border); }
+html[data-glass] .content .month-day.current-week { box-shadow: 0 0 0 1px var(--color-border), inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent); }
+/* Ink drawn in the page colour on a solid fill (a done checkbox's tick, a pressed chip's label) stays solid. */
+html[data-glass] .content :is(.checkbox[aria-checked="true"], .task-row[data-done] .checkbox, .task-row[data-pending="complete"] .checkbox)::before { border-color: var(--color-background); }
+html[data-glass] .content .filter-chip[aria-pressed="true"] { color: var(--color-background); }
+@media (max-width: 767px) {
+  html[data-glass] .sidebar { -webkit-backdrop-filter: var(--design-frost); backdrop-filter: var(--design-frost); }
+  html[data-glass] .toolbar { background: var(--design-panel); -webkit-backdrop-filter: var(--design-frost); backdrop-filter: var(--design-frost); }
+}
+/* Reduced transparency: every panel opaque again (the wallpaper stays hidden behind them). */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-glass] { --design-glass: 100% !important; }
 }
 
 /* Goals ticket 29: a Coach draft's removed item (calendar block, list row): hatched until the draft is decided. */

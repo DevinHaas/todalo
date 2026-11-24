@@ -57,7 +57,7 @@ export function focusDialog(dialog: HTMLElement | null) {
 
 function Dialog({ title, pending, onClose, children }: { title: string; pending: boolean; onClose: () => void; children: ReactNode }) {
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog}>
+    <div role="dialog" aria-modal="true" aria-label={title} className="dialog task-editor" tabIndex={-1} ref={focusDialog} data-region="dialog">
       <h2 className="dialog-title">{title}</h2>
       {children}
     </div>

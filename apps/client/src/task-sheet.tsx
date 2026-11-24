@@ -144,7 +144,7 @@ export function TaskEditor({ task, labels, shareUrl, onSave, onClose, onInsert, 
   return <div className="dialog-backdrop task-sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !pending) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-labelledby="task-editor-title" className="dialog task-editor task-sheet" tabIndex={-1} ref={focusSheet}
       // On the dialog, so Escape closes it with focus anywhere in it (popovers and the quick add stop their own).
-      onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }}>
+      onKeyDown={(event) => { if (event.key === "Escape" && !pending) onClose(); }} data-region="task-sheet">
       {/* Not a <form>: the sub-task quick add is one, and a nested form's submit never reaches React (WebKit). */}
       <div ref={releaseFocus} className="sheet-form">
         <header className="sheet-header">

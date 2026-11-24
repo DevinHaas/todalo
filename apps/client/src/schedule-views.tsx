@@ -61,7 +61,7 @@ export function DisplayMenu() {
   return <>
     <button type="button" className="display-button" aria-haspopup="dialog" onClick={() => setOpen(true)}><List /><span>Display</span></button>
     {open && <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) close(); }} onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="display-title" className="dialog display-dialog">
+      <div role="dialog" aria-modal="true" aria-labelledby="display-title" className="dialog display-dialog" data-region="dialog">
         <div className="display-heading"><h2 id="display-title" className="dialog-title">Layout</h2><HelpCircle aria-hidden="true" /><button type="button" className="icon-button" aria-label="Close" autoFocus onClick={close}><X /></button></div>
         <div className="segmented" role="group" aria-label="Layout">
           <button type="button" aria-pressed={display.layout === "list"} onClick={() => display.set({ layout: "list" })}><List />List</button>
@@ -163,7 +163,7 @@ export function UpcomingList({ tasks, events = [], slots, composer, now = new Da
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount, as legacy.
   }, []);
 
-  return <div className="upcoming">
+  return <div className="upcoming" data-region="task-list">
     <div className="week-nav">
       <button type="button" className="button ghost small" data-view-nav="previous-week" onClick={() => navigate("previous-week")}>Previous week</button>
       <button type="button" className="button outline small" data-view-nav="today" onClick={() => navigate("today")}>Today</button>
@@ -308,7 +308,7 @@ function ScheduleGrid({ days, byDay, eventDays, slots, header }: { days: Date[];
 
   return <>
     {planner?.toolbar && <div className="ui flex items-start justify-end gap-2 pb-2">{planner.toolbar}</div>}
-    <div ref={scroll} className="schedule scrollbar-subtle">
+    <div ref={scroll} className="schedule scrollbar-subtle" data-region="schedule">
     <div ref={head} className="schedule-head">{header}</div>
     <div className="schedule-body" style={{ height: 24 * HOUR_HEIGHT }}>
       {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="hour-line" style={{ top: hour * HOUR_HEIGHT, gridTemplateColumns: template }}>
@@ -357,8 +357,8 @@ type Ghost = Range & { title: string; color: string | null; key?: string };
 /** Column `column` of `columns` across the day column; the full width when alone. */
 const sideBySide = ({ column, columns }: { column: number; columns: number }): CSSProperties => columns > 1
   ? { left: `calc(${(column / columns) * 100}% + 0.125rem)`, width: `calc(${100 / columns}% - 0.25rem)`, right: "auto" } : {};
-/** A task block's goal colour: a left edge and a light tint; the neutral task colour without a goal. */
-const tone = (color: string | null): CSSProperties => color ? { borderLeft: `3px solid ${color}`, backgroundColor: `color-mix(in srgb, ${color} 18%, var(--color-background))` } : {};
+/** A task block's goal colour: a left edge and a light tint (over the glass surface when glass is on); the neutral task colour without a goal. */
+const tone = (color: string | null): CSSProperties => color ? { borderLeft: `3px solid ${color}`, backgroundColor: `color-mix(in srgb, ${color} 18%, var(--design-surface, var(--color-background)))` } : {};
 
 /**
  * One scheduled task on the grid, in its goal's colour. Drag to move, drag the
@@ -471,7 +471,7 @@ export function CalendarView({ tasks, events = [], slots, now = new Date() }: { 
     return () => window.removeEventListener(SHOW_DAY, show);
   }, []);
   const navigate = (action: ViewDateAction) => setAnchor(current => navigateViewDate(current, action, new Date()));
-  return <div aria-label="Calendar view" className="calendar">{calendarRange === "week"
+  return <div aria-label="Calendar view" className="calendar" data-region="calendar">{calendarRange === "week"
     ? <WeekSchedule tasks={tasks} events={events} anchor={anchor} onNavigate={navigate} slots={slots} now={now} />
     : <MonthGrid tasks={tasks} events={events} month={anchor} setMonth={setAnchor} onNavigate={navigate} slots={slots} now={now} />}</div>;
 }

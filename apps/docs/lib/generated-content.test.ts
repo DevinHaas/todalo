@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { keyboardCommands } from "../../../packages/ramble/src/keyboard";
-import { ReleaseNotes, ShortcutTable } from "../components/generated-content";
+import { themeRegions, themeVariables } from "../../client/src/theme-reference";
+import { ReleaseNotes, ShortcutTable, ThemeRegionTable, ThemeVariableTable } from "../components/generated-content";
 import { releases } from "./releases";
 import { UNDOCUMENTED, documentedCommands, helpKeys, shortcutGroups } from "./shortcuts";
 
@@ -42,6 +43,21 @@ describe("Use keyboard shortcuts", () => {
     const row = shortcutGroups().flatMap((group) => group.rows).find((entry) => entry.id === "task.delete")!;
     expect(row.mac).toEqual([["Mod+⌫"]]);
     expect(row.other).toEqual([["Shift+Delete"]]);
+  });
+});
+
+describe("Use custom CSS", () => {
+  it("embeds the generated variable and region tables", () => {
+    expect(article("customize-with-css")).toContain("<ThemeVariableTable />");
+    expect(article("customize-with-css")).toContain("<ThemeRegionTable />");
+  });
+
+  it("lists every variable and region of the client's theming reference", () => {
+    const variables = renderToStaticMarkup(createElement(ThemeVariableTable));
+    const regions = renderToStaticMarkup(createElement(ThemeRegionTable));
+    expect(themeVariables.length).toBeGreaterThan(50);
+    for (const variable of themeVariables) expect(variables, variable.name).toContain(`<td><code>${variable.name}</code></td><td>${escape(variable.description)}</td>`);
+    for (const entry of themeRegions) expect(regions, entry.region).toContain(`<td><code>${escape(`[data-region="${entry.region}"]`)}</code></td><td>${escape(entry.description)}</td>`);
   });
 });
 

@@ -318,7 +318,7 @@ function ProjectList(body: Body) {
   const { groups, all, now, project, actions, selection, reorder, manual, sectioned } = body;
   const tree = listTree(all);
   const row = (task: TaskDto) => <TaskRow key={task.id} task={task} now={now} projectName={project.name} actions={actions} selection={selection?.row(task)} tools={<RowTools task={task} dates={body.dates} />} {...tree(task)} />;
-  return <div className="sections">
+  return <div className="sections" data-region="task-list">
     {sectioned && newSection(body, null)}
     {groups.map(group => {
       // Todoist: unsectioned tasks lead without a heading.

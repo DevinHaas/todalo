@@ -5,7 +5,15 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { queries, session } from "./runtime";
+// Appearance › Font (personalization.ts fontStacks): @font-face rules only; a face's files
+// download once text uses it, so only the chosen font loads.
 import "@fontsource-variable/geist";
+import "@fontsource-variable/jetbrains-mono";
+import "@fontsource-variable/source-serif-4";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource/ibm-plex-mono/700.css";
 import "./ui/styles.css"; // includes ./styles.css (legacy layer)
 import { trackSoftwareKeyboard } from "./software-keyboard";
 import { isTauri } from "@tauri-apps/api/core";

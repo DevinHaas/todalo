@@ -250,8 +250,9 @@ category page. Sections appear in the order of their first article (by
 sections few: two or three per category, or one for a small category. Reuse
 the exact spelling of an existing section, or you create a new one.
 
-Add `badge: "experiment"` to Coach articles. Leave `published: false`; the
-owner publishes after review.
+Add `badge: "experiment"` to Coach articles and `badge: "advanced"` to
+articles for advanced features, such as custom CSS. Leave `published: false`;
+the owner publishes after review.
 
 ## Closing
 

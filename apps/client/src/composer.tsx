@@ -287,7 +287,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={() => close()}><AudioLines /></Link>;
   return <>
     <form ref={node => { form.current = node; return releaseFocus(node); }} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }} data-region="composer">
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
         <div ref={backdrop} className="quick-add-backdrop" aria-hidden="true">
@@ -405,7 +405,7 @@ export function CustomRepeatDialog({ recurrence, onClose, onConfirm }: { recurre
   const confirm = () => { if (valid) onConfirm({ n: count, unit, basedOn, until: ends === "on" ? fromDateValue(until) : null }); };
   return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-labelledby="custom-repeat-title" className="dialog custom-repeat"
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}>
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }} data-region="dialog">
       <h2 id="custom-repeat-title" className="dialog-title">Custom repeat</h2>
       <form ref={releaseFocus} onSubmit={(event) => { event.preventDefault(); confirm(); }}>
         <p className="panel-heading">Based on</p>

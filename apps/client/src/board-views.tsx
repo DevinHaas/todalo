@@ -63,7 +63,7 @@ export function StatusBoard({ tasks, onOpen, onMove }: {
   return <DndContext sensors={sensors} collisionDetection={collision} accessibility={{ announcements: dragAnnouncements(label) }}
     onDragStart={({ active: start }) => setActive(String(start.id))} onDragOver={({ over }) => setTarget(over ? statusOf(String(over.id)) : null)}
     onDragCancel={reset} onDragEnd={end}>
-    <div className="board" aria-label="Board view">
+    <div className="board" aria-label="Board view" data-region="board">
       {boardColumns.map(column => {
         const cards = treeOrder(tasks.filter(task => task.status === column.status));
         return <Column key={column.status} status={column.status} label={column.label} target={target === column.status && dragged?.status !== column.status}>

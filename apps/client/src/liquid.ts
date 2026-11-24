@@ -62,6 +62,7 @@ export type LiquidParams = {
   /** A glint travelling around the open bar's rim (as on macOS notifications): strength, and seconds per lap. */
   shine: number;
   shineLap: number;
+  /** Empty: the accent (--color-brand), so Settings › Appearance recolours the button. */
   blobColor: string;
 };
 
@@ -70,7 +71,7 @@ export const liquidDefaults: LiquidParams = {
   wobbleSpeed: 0.45, wobbleAmp: 1.8, barWobble: 0.15, stretch: 1,
   goo: 20, neck: 7, pinch: 1.2, satellites: 0, recoil: 1.5, settle: 1.2,
   gloss: 0.55, shadow: 0.45, shine: 0.7, shineLap: 6,
-  blobColor: "#dc4c3e",
+  blobColor: "",
 };
 
 /** A rounded box: centre, half size, corner radius. */
@@ -571,3 +572,6 @@ export function cssColor(value: string): [number, number, number] {
   const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
   return [r / 255, g / 255, b / 255];
 }
+
+/** A CSS colour (a token's value too) as #rrggbb, for APIs that only take hex. */
+export const cssHex = (value: string) => `#${cssColor(value).map(c => Math.round(c * 255).toString(16).padStart(2, "0")).join("")}`;

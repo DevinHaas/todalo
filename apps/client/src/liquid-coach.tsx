@@ -30,12 +30,17 @@ const boxOf = (element: Element | null, round: boolean): Box => {
   return { x: rect.left + w, y: rect.top + h, w, h, r: radius };
 };
 
-const themeColors = (blob: string): LiquidColors => {
+/** The tokens the liquid paints with; a change in any (mode, accent, design) repaints it. */
+const themeTokens = () => {
   const style = getComputedStyle(document.documentElement);
-  const bar = cssColor(style.getPropertyValue("--color-background"));
+  return ["--color-brand", "--color-background", "--color-border"].map(token => style.getPropertyValue(token)) as [string, string, string];
+};
+
+const themeColors = (blob: string, [brand, background, border] = themeTokens()): LiquidColors => {
+  const bar = cssColor(background);
   // The glint: a cool silver on a light bar (white would vanish), white on a dark one.
   const light = bar[0] * 0.3 + bar[1] * 0.59 + bar[2] * 0.11 > 0.5;
-  return { blob: cssColor(blob), bar, line: cssColor(style.getPropertyValue("--color-border")), shine: light ? [0.62, 0.68, 0.84] : [1, 1, 1] };
+  return { blob: cssColor(blob || brand), bar, line: cssColor(border), shine: light ? [0.62, 0.68, 0.84] : [1, 1, 1] };
 };
 
 /**
@@ -89,9 +94,10 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
       const dt = Math.min((now - last) / 1000, 1 / 20);
       last = now;
       const { params, open } = live.current;
-      // The theme (the `dark` class) or the blob colour changed: read the tokens again.
-      const key = params.blobColor + document.documentElement.className;
-      if (key !== colorKey) { colors = themeColors(params.blobColor); colorKey = key; }
+      // The theme (dark mode, the accent, the design) or the blob colour changed: read the tokens again.
+      // ponytail: three custom properties read per frame; cheap while styles are clean.
+      const tokens = themeTokens(), key = params.blobColor + tokens.join("|");
+      if (key !== colorKey) { colors = themeColors(params.blobColor, tokens); colorKey = key; }
       sim.params = params;
       const boxes = targets();
       sim.setTargets(boxes);
@@ -133,7 +139,7 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
   return <LiquidActive.Provider value={active}>
     <div ref={host} data-coach-bar="" data-liquid={active ? "on" : "off"} data-open={open || undefined} style={active ? undefined : { "--liquid-bar": open ? 1 : 0 } as CSSProperties}
       className="ui pointer-events-none sticky bottom-0 z-[25] mt-auto! -mb-6! flex pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
-      onKeyDown={(event) => { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); onOpenChange(false); } }}>
+      onKeyDown={(event) => { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); onOpenChange(false); } }} data-region="coach-bar">
       {/* Behind the content, above the page: the liquid. */}
       {active && <canvas ref={canvas} aria-hidden="true" className="pointer-events-none fixed inset-0 size-full" />}
       <div ref={bar} inert={!open} data-liquid-bar="" style={{ width: `calc(${width})`, marginLeft: `max(0px, min((100% - ${width}) / 2, 100% - ${width} - ${room}px))` }}
