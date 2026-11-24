@@ -16,8 +16,7 @@ const write = (userId: string, entity: string, entityId: string) => {
 };
 const owned = <T extends { userId: string }>(rows: Map<string, T>, userId: string, ids: string[]) => ids.flatMap(id => { const row = rows.get(id); return row && row.userId === userId ? [row] : []; });
 const source: SyncSource = {
-  cursor: async () => state.xmin,
-  changes: async (userId, since, limit) => state.log.filter(row => row.userId === userId && row.xid >= since).slice(0, limit),
+  window: async (userId, since, limit) => ({ cursor: state.xmin, rows: since === null ? [] : state.log.filter(row => row.userId === userId && row.xid >= since).slice(0, limit) }),
   tasks: async (userId, ids) => owned(state.tasks, userId, ids).map(({ userId: _owner, ...dto }) => dto),
   projects: async (userId, ids) => owned(state.projects, userId, ids).map(toProjectDto),
   labels: async () => [], filters: async () => [], comments: async () => [],

@@ -127,8 +127,10 @@ const scenarios: Record<string, Scenario> = {
     sample = await measure(p, () => row.locator("[role=checkbox]").click(),
       `!document.querySelector('main [data-task-id="${id}"]') || document.querySelector('main [data-task-id="${id}"] [role=checkbox]')?.getAttribute("aria-checked") === "true"`, name(scan, "complete"));
     await confirmed;
-    const server = await p.evaluate(id => { const entry = performance.getEntriesByType("resource").filter(e => e.name.includes(`/tasks/${id}/complete`)).at(-1) as PerformanceResourceTiming; return entry.responseEnd - entry.startTime; }, id);
-    if (!scan) record("complete", { ...sample, server });
+    const server = await p.evaluate(id => { const entry = performance.getEntriesByType("resource").filter(e => e.name.includes(`/tasks/${id}/complete`)).at(-1) as PerformanceResourceTiming; return [entry.responseEnd - entry.startTime, entry.requestStart - entry.startTime]; }, id);
+    // `queued`: waiting for a connection. The preview server is HTTP/1.1 (6 per host) and the open
+    // sheet's reads can hold them all; production (Cloudflare, HTTP/2) and the apps (HTTP/2) don't queue.
+    if (!scan) record("complete", { ...sample, server: server[0], queued: server[1] });
 
     // Today's composer: open, type 40 characters, Enter adds the row.
     const text = `Perf composer ${label} ${run} ${"x".repeat(20)}`.slice(0, 40);
@@ -136,7 +138,7 @@ const scenarios: Record<string, Scenario> = {
     if (!scan) record("composer:open", sample);
     sample = await measure(p, () => p.keyboard.type(text), `document.activeElement?.value === ${JSON.stringify(text)}`, name(scan, "composer:type40"));
     if (!scan) record("composer:type40", { ...sample, perKey: sample.ms / text.length });
-    sample = await measure(p, () => p.keyboard.press("Enter"), `[...document.querySelectorAll("main .task-title")].some(t => t.textContent === ${JSON.stringify(text)})`, name(scan, "composer:add"));
+    sample = await measure(p, () => p.keyboard.press("Enter"), `[...document.querySelectorAll("main .task-title")].some(t => t.textContent === ${JSON.stringify(text.trim())})`, name(scan, "composer:add")); // titles are saved trimmed
     if (!scan) record("composer:add", sample);
     await p.keyboard.press("Escape");
 
@@ -268,7 +270,7 @@ function summarize() {
   return Object.fromEntries(Object.entries(timings).map(([id, samples]) => {
     const pick = (key: string) => samples.map(s => s[key]).filter((v): v is number => typeof v === "number");
     const extra: Record<string, number> = {};
-    for (const key of ["dom", "inp", "tbt", "server", "savedAt", "perKey", "fcp", "lcp", "ttfb", "jsKB", "apiCount", "domNodes", "janky", "max"]) { const v = pick(key); if (v.length) extra[key] = pct(v, 0.5); }
+    for (const key of ["dom", "inp", "tbt", "server", "queued", "savedAt", "perKey", "fcp", "lcp", "ttfb", "jsKB", "apiCount", "domNodes", "janky", "max"]) { const v = pick(key); if (v.length) extra[key] = pct(v, 0.5); }
     return [id, { p50: pct(pick("ms"), 0.5), p95: pct(pick("ms"), 0.95), n: samples.length, ...extra, ...(samples[0].apiChain ? { apiChain: samples[0].apiChain } : {}) }];
   }));
 }

@@ -26,6 +26,10 @@ export async function getTasksForUser(userId: string, projectId?: string) {
   return rows.map(task => ({ ...task, labelIds: labels.get(task.id) ?? [] }));
 }
 
+/** Quick Find's candidates: every task's ID and title only, in manual order (not the full rows). */
+export const getTaskTitles = (userId: string) =>
+  db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.userId, userId)).orderBy(...manualOrder);
+
 /** The user's tasks among `ids` (the live sync delta); missing and foreign IDs are left out. */
 export async function getTasksByIds(userId: string, ids: string[]) {
   if (!ids.length) return [];

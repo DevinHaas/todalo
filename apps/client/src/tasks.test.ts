@@ -215,11 +215,16 @@ describe("task mutations", () => {
     const bodies: TaskDetails[] = [];
     const { cache, writes } = setup({ update: async (_id, body) => { bodies.push(body); if (bodies.length === 1) throw new AccountTransportError("SAVE_FAILED"); return task("a", { title: body.title, updatedAt: "2026-10-04T09:00:00.000Z" }); } });
     cache.setQueryData(["user", "alice", "project", "p1"], { project: {}, tasks: [] });
+    cache.setQueryData(["user", "alice", "metadata", "list"], { labels: [], filters: [] });
+    cache.setQueryData(["user", "alice", "metadata", "label", "l1"], { label: {}, tasks: [] });
     const saved = await new MutationObserver(cache, { ...writes.update, retryDelay: 0 }).mutate({ id: "a", details });
     expect(bodies).toEqual([details, details]);
     expect(cache.getQueryData(taskKeys.task("alice", "a"))).toEqual(saved);
     expect(cache.getQueryState(today)?.isInvalidated).toBe(false); // reconciled, not refetched (a failed write refetches it)
     expect(cache.getQueryState(["user", "alice", "project", "p1"])?.isInvalidated).toBe(true);
+    // Label pages list tasks; the sidebar's labels-and-filters list doesn't change with a task.
+    expect(cache.getQueryState(["user", "alice", "metadata", "label", "l1"])?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(["user", "alice", "metadata", "list"])?.isInvalidated).toBe(false);
   });
 
   it("does not retry a stale or missing edit", async () => {

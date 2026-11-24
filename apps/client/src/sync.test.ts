@@ -133,6 +133,24 @@ describe("createSync", () => {
     expect(fake.changes.mock.calls).toEqual([[null], ["1"], ["1"]]);
   });
 
+  it("a delta that overlapped a write but only updates known tasks is applied without a second read (own write, own frame)", async () => {
+    const cache = new QueryClient();
+    cache.setQueryData(taskKeys.today("u"), { tasks: [task("t", { title: "Old" })], openCount: 0 });
+    let answer!: (value: SyncDelta) => void;
+    const fake = transport(delta({ full: true, cursor: "1" }));
+    fake.changes.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
+    const sync = createSync({ transport: fake, cache, userId: "u" });
+    await sync.pull();
+    const write = await begin(cache, taskChanges("u", tasks => tasks.map(row => row.id === "t" ? { ...row, title: "Mine" } : row)));
+    const pulled = sync.pull();
+    await tick();
+    answer(delta({ cursor: "2", tasks: [task("t", { title: "Mine", updatedAt: "2026-11-07T12:00:00.000Z" })], deleted: { task: ["gone"] } }));
+    commit(write); void settle(write);
+    await pulled;
+    expect(today(cache).tasks.map(row => row.title)).toEqual(["Mine"]);
+    expect(fake.changes.mock.calls).toEqual([[null], ["1"]]);
+  });
+
   it("pulls asked for during a pull coalesce into one more", async () => {
     const cache = new QueryClient();
     const fake = transport(delta({ full: true, cursor: "1" }), delta({ cursor: "2" }), delta({ cursor: "3" }));

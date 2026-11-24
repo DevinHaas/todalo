@@ -80,13 +80,26 @@ export class SessionController {
 
   clearError() { this.googleError = null; this.update({ ...this.state, error: null }); }
 
-  async refresh() {
-    if (this.mutationCount > 0) return;
+  /** The account read in flight: window focus and visibilitychange fire together, one read serves both. */
+  private refreshing: { generation: number; run: Promise<void> } | null = null;
+
+  refresh(): Promise<void> {
+    if (this.mutationCount > 0) return Promise.resolve();
+    if (this.refreshing?.generation === this.generation) return this.refreshing.run;
     const generation = ++this.generation;
+    const run = this.read(generation);
+    this.refreshing = { generation, run };
+    void run.finally(() => { if (this.refreshing?.run === run) this.refreshing = null; });
+    return run;
+  }
+
+  private async read(generation: number) {
     try {
       const account = await this.transport.account();
       if (generation !== this.generation) return;
       if (account?.user.id !== this.state.account?.user.id || !account) this.clearUserCache();
+      // Unchanged (the usual answer on focus): keep the same state, so the app doesn't re-render.
+      if (account && this.state.status === "signed-in" && this.state.error === null && JSON.stringify(account) === JSON.stringify(this.state.account)) return;
       this.update({ status: account ? "signed-in" : "signed-out", account, error: null });
     } catch (error) {
       // Not reaching the server says nothing about the session: a signed-in UI

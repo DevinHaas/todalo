@@ -196,3 +196,17 @@ it("opens signed in as the remembered account, then follows the server (signed o
   rememberedAccount(storage).save(account);
   expect(new SessionController(transport, () => {}, undefined, rememberedAccount(storage), new Date("2026-11-01").getTime()).getSnapshot().status).toBe("loading");
 });
+
+it("serves focus and visibilitychange with one account read, and an unchanged answer notifies nobody", async () => {
+  let reads = 0;
+  const transport: AccountTransport = { account: async () => { reads += 1; return { ...account, user: { ...account.user } }; }, signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {} };
+  const session = new SessionController(transport, () => {});
+  await session.refresh();
+  const before = session.getSnapshot();
+  let notified = 0;
+  session.subscribe(() => { notified += 1; });
+  await Promise.all([session.refresh(), session.refresh()]);
+  expect(reads).toBe(2);
+  expect(notified).toBe(0);
+  expect(session.getSnapshot()).toBe(before);
+});

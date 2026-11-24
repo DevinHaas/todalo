@@ -3,7 +3,7 @@ import type { QueryClient, QueryFilters, QueryKey } from "@tanstack/react-query"
 import type { SyncDelta } from "../../../packages/server/src/sync-delta";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { idle, readMark, writing, type Change } from "./optimistic";
-import { taskChanges, taskKeys, type TaskDto } from "./tasks";
+import { taskChanges, taskKeys, type TaskDto, type TodayDto } from "./tasks";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
 
 export type { SyncDelta };
@@ -131,6 +131,13 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
   };
   const everything = async () => { await idle(cache); await cache.invalidateQueries({ queryKey: taskKeys.user(userId) }); };
 
+  // Deletions never bring anything back; rows other than already-known tasks might.
+  const onlyKnownTasks = (delta: SyncDelta) => {
+    const known = new Set(cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.map(task => task.id));
+    return !delta.projects.length && !delta.labels.length && !delta.filters.length && !delta.comments.length && !delta.changed.length
+      && delta.tasks.every(task => known.has(task.id));
+  };
+
   async function once() {
     const mark = readMark(cache);
     const delta = await transport.changes(cursor);
@@ -143,9 +150,11 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
     }
     const { changes, refresh } = deltaChanges(userId, delta);
     await idle(cache);
-    // A write was open while this was read: the delta may predate it (a task deleted right after
-    // its create would come back for a moment). Read again from the same cursor.
-    if (mark.overlapped()) { again = true; return; }
+    // A write was open while this was read, so the delta may predate it: a task deleted right after
+    // its create would come back for a moment. Updates of tasks already here are safe (an older copy
+    // loses to the newer one, `newer`); anything else is read again from the same cursor. The usual
+    // case, this device's own write followed by its live frame's pull, needs no second read.
+    if (mark.overlapped() && !onlyKnownTasks(delta)) { again = true; return; }
     apply(cache, changes); // synchronously after idle: no write can start in between
     cursor = delta.cursor;
     await Promise.all(refresh.map(filters => cache.invalidateQueries(filters)));

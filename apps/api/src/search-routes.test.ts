@@ -17,6 +17,7 @@ const sections = [{ id: "doing", userId: "alice", projectId: "work", name: "Repo
 const app = createSearchRoutes({
   verify: async (headers) => headers.get("authorization")?.replace("Bearer ", "") ?? null,
   tasks: async (userId) => tasks.filter(item => item.userId === userId),
+  titles: async (userId) => tasks.filter(item => item.userId === userId).map(({ id, title }) => ({ id, title })),
   projects: async (userId) => projects.filter(item => item.userId === userId),
   sections: async (userId) => sections.filter(item => item.userId === userId),
 });

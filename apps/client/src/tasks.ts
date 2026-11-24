@@ -232,7 +232,8 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
   // write (refused as changed, or lost) may leave a stale copy: those reload it.
   const refresh = (id: string, collection = false): QueryFilters[] => [
     ...(collection ? [{ queryKey: taskKeys.today(userId) }] : []), { queryKey: taskKeys.task(userId, id) }, { queryKey: [...user, "project"] },
-    { queryKey: [...user, "metadata"] }, { queryKey: [...user, "search"] }, { queryKey: [...user, "goals"] },
+    // Label and filter pages list tasks; the sidebar's metadata list (labels, filters) doesn't.
+    { queryKey: [...user, "metadata", "label"] }, { queryKey: [...user, "metadata", "filter"] }, { queryKey: [...user, "search"] }, { queryKey: [...user, "goals"] },
   ];
   const cached = (id: string) => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id);
   const saved = (task: TaskDto) => taskChanges(userId, tasks => tasks.map(item => item.id === task.id ? task : item));

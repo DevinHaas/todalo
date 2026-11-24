@@ -2,7 +2,7 @@ import "./instrument"; // first: Sentry must load before the modules it instrume
 import { createApi } from "./app";
 import { productionDependencies } from "./production";
 import { auth } from "@todalo/auth";
-import { getOwnedTask, getProjectTaskList, getTasksForUser, getTodayCollection } from "@todalo/server/today";
+import { getOwnedTask, getProjectTaskList, getTaskTitles, getTasksForUser, getTodayCollection } from "@todalo/server/today";
 import * as projects from "@todalo/server/projects";
 import * as organization from "@todalo/server/organization";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
@@ -329,6 +329,7 @@ const app = createApi(dependencies)
 })).use(createSearchRoutes({
   verify,
   tasks: (userId) => getTasksForUser(userId),
+  titles: getTaskTitles,
   projects: projects.getProjectsForUser,
   sections: (userId) => organization.getSectionsForUser(userId),
 })).use(createCalendarRoutes({

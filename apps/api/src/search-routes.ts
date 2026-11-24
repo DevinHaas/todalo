@@ -7,6 +7,8 @@ export interface SearchStore {
   verify(headers: Headers): Promise<string | null>;
   /** getTasksForUser: every task of the user, sortOrder. */
   tasks(userId: string): Promise<TaskRecord[]>;
+  /** getTaskTitles: every task's ID and title (Quick Find lists nothing else). */
+  titles(userId: string): Promise<{ id: string; title: string }[]>;
   /** The user's projects by name and sections by sortOrder, name (Quick Find). */
   projects(userId: string): Promise<{ id: string; name: string }[]>;
   sections(userId: string): Promise<{ id: string; projectId: string; name: string }[]>;
@@ -27,7 +29,7 @@ export function createSearchRoutes(store: SearchStore) {
     .get("/find", async ({ request, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const [tasks, projects, sections] = await Promise.all([store.tasks(userId), store.projects(userId), store.sections(userId)]);
+      const [tasks, projects, sections] = await Promise.all([store.titles(userId), store.projects(userId), store.sections(userId)]);
       return { items: findItems(tasks, projects, sections) } satisfies FindDto;
     });
 }
