@@ -173,7 +173,7 @@ describe("live updates", () => {
     handlers.change({ data: '{"topic":"calendar"}' });
     handlers.change({ data: "not json" });
     expect(listener.ready).toHaveBeenCalledTimes(1);
-    expect(listener.change.mock.calls).toEqual([["calendar"]]);
+    expect(listener.change.mock.calls).toEqual([["calendar", undefined]]);
     source.readyState = 0; source.onerror!();
     expect(listener.closed).not.toHaveBeenCalled();
     source.readyState = 2; source.onerror!();

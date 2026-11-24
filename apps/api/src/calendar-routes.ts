@@ -3,6 +3,7 @@ import {
   accountShowEventsInput, calendarVisibilityInput,
   type CalendarAccountDto, type CalendarEventDto, type CalendarVisibilityInput, type LiveTopic,
 } from "@todalo/server/calendar-input";
+import type { LiveChange } from "@todalo/server/live";
 import { writeUser } from "./project-routes";
 
 /** A cached provider event row as packages/server reads it (dates as Date). */
@@ -23,7 +24,7 @@ export interface CalendarStore {
   disconnect(userId: string, accountId: string, session: Headers): Promise<boolean>;
   /** Google push callback; returns the calendar owner to notify. */
   webhook(headers: Headers): Promise<{ status: 200 | 404; userId?: string }>;
-  subscribe(userId: string, listener: (topic: LiveTopic) => void): () => void;
+  subscribe(userId: string, listener: (change: LiveChange) => void): () => void;
   publish(userId: string, topic: LiveTopic): void;
   heartbeatMs?: number;
 }
@@ -119,7 +120,7 @@ export function createCalendarRoutes(store: CalendarStore) {
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
           const send = (text: string) => { try { controller.enqueue(encoder.encode(text)); } catch { stop(); } };
-          const unsubscribe = store.subscribe(userId, (topic) => send(frame("change", { topic })));
+          const unsubscribe = store.subscribe(userId, (change) => send(frame("change", change)));
           const heartbeat = setInterval(() => send(": heartbeat\n\n"), heartbeatMs);
           stop = () => { clearInterval(heartbeat); unsubscribe(); };
           // Elysia re-wraps streamed bodies, so a client disconnect may never reach

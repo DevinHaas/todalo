@@ -2,8 +2,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { QueryClient, QueryFilters, QueryKey } from "@tanstack/react-query";
 import type { SyncDelta } from "../../../packages/server/src/sync-delta";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { idle, type Change } from "./optimistic";
-import { taskChanges, taskKeys, type TaskDto } from "./tasks";
+import { idle, readMark, writing, type Change } from "./optimistic";
+import { taskChanges, taskKeys, type TaskDto, type TodayDto } from "./tasks";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
 
 export type { SyncDelta };
@@ -131,7 +131,15 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
   };
   const everything = async () => { await idle(cache); await cache.invalidateQueries({ queryKey: taskKeys.user(userId) }); };
 
+  // Deletions never bring anything back; rows other than already-known tasks might.
+  const onlyKnownTasks = (delta: SyncDelta) => {
+    const known = new Set(cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.map(task => task.id));
+    return !delta.projects.length && !delta.labels.length && !delta.filters.length && !delta.comments.length && !delta.changed.length
+      && delta.tasks.every(task => known.has(task.id));
+  };
+
   async function once() {
+    const mark = readMark(cache);
     const delta = await transport.changes(cursor);
     const first = cursor === null;
     if (delta.full) {
@@ -142,9 +150,29 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
     }
     const { changes, refresh } = deltaChanges(userId, delta);
     await idle(cache);
+    // A write was open while this was read, so the delta may predate it: a task deleted right after
+    // its create would come back for a moment. Updates of tasks already here are safe (an older copy
+    // loses to the newer one, `newer`); anything else is read again from the same cursor. The usual
+    // case, this device's own write followed by its live frame's pull, needs no second read.
+    if (mark.overlapped() && !onlyKnownTasks(delta)) { again = true; return; }
     apply(cache, changes); // synchronously after idle: no write can start in between
     cursor = delta.cursor;
     await Promise.all(refresh.map(filters => cache.invalidateQueries(filters)));
+  }
+
+  /**
+   * A live frame's written tasks (calendar.ts LiveWritten): patched in at once, without moving
+   * the cursor. Skipped while a write of this device is open (the frame may predate it); the pull
+   * that follows every frame still runs and decides.
+   * ponytail: a frame delayed past a later write's settle could still show an older copy until that pull.
+   */
+  async function applyWritten(written: { tasks?: TaskDto[]; deleted?: string[] }) {
+    if (writing(cache)) return;
+    const delta: SyncDelta = {
+      cursor: "", full: false, tasks: written.tasks ?? [], projects: [], labels: [], filters: [], comments: [], changed: [],
+      deleted: { task: written.deleted ?? [], project: [], label: [], filter: [], comment: [] },
+    };
+    apply(cache, deltaChanges(userId, delta).changes);
   }
 
   function pull(): Promise<void> {
@@ -158,6 +186,7 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
 
   return {
     pull,
+    apply: applyWritten,
     reload: () => working(async () => {
       cursor = (await transport.changes(null)).cursor;
       await everything();

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Archive, CalendarDays, ChevronDown, ChevronRight, Flag, FlagTriangleRight, GitBranch, Goal, Hash, Inbox, MessageSquare, Plus, Repeat, Tag, X } from "lucide-react";
 import {
@@ -9,12 +9,13 @@ import { AccountTransportError } from "./errors";
 import { releaseFocus } from "./software-keyboard";
 import { eventDayKey, type CalendarEventDto } from "./calendar";
 import { EventRow } from "./calendar-views";
+import type { DraftItemDto } from "./coach";
 import { dayKey } from "./schedule";
 import { goalColorValue } from "./goals";
 import { copyText, taskPath } from "./links";
 import { Dropdown, type Option } from "./popover";
 import { ComposerChoices } from "./composer";
-import { MilestoneTasks, TaskGoals, TaskTree, subtasksOf } from "./task-tree";
+import { MilestoneTasks, TaskGoals, subtasksOf, treeIndex, useTaskTree, type TaskGoal } from "./task-tree";
 import { GoalIcon } from "./goal-views";
 import { PendingAttachments, PendingChip, PendingNewTasks, PendingSubtaskRows, ownLook, pendingRowClass, usePendingChanges } from "./pending-changes";
 import { CalendarSkeleton, TaskDetailSkeleton, TaskListSkeleton } from "./skeletons";
@@ -43,7 +44,8 @@ const collapseListeners = new Set<() => void>();
 export const collapsedTasks = {
   get: () => collapsed,
   subscribe(listener: () => void) { collapseListeners.add(listener); return () => { collapseListeners.delete(listener); }; },
-  set(next: ReadonlySet<string>) { collapsed = next; collapseListeners.forEach(listener => listener()); },
+  // Clearing an empty set (every navigation does) would re-render every row for nothing.
+  set(next: ReadonlySet<string>) { if (next === collapsed || (!next.size && !collapsed.size)) return; collapsed = next; collapseListeners.forEach(listener => listener()); },
   toggle(id: string) { const next = new Set(collapsed); if (!next.delete(id)) next.add(id); collapsedTasks.set(next); },
 };
 
@@ -72,12 +74,23 @@ export function listTree(tasks: readonly TaskDto[]) {
 
 /** Hidden while any ancestor is collapsed (Shift+E, the row chevron). */
 function hiddenBy(task: TaskDto, tasks: readonly TaskDto[] | null, closed: ReadonlySet<string>) {
-  const byId = new Map((tasks ?? []).map(item => [item.id, item]));
-  for (let parent = task.parentId, guard = 0; parent && guard < 10; parent = byId.get(parent)?.parentId ?? null, guard++) if (closed.has(parent)) return true;
+  if (!task.parentId || !closed.size) return false;
+  const { byId } = treeIndex(tasks);
+  for (let parent: string | null = task.parentId, guard = 0; parent && guard < 10; parent = byId.get(parent)?.parentId ?? null, guard++) if (closed.has(parent)) return true;
   return false;
 }
 
-export function TaskRow({ task, now, projectName, actions, selection, depth = 0, nested = false, inToday = false, tools }: {
+const none: readonly never[] = [];
+
+type TaskRowProps = Parameters<typeof TaskRowWrapper>[0];
+/**
+ * Memoised on its inputs (`now` to the minute, since lists pass a new Date each render): with
+ * the tree store (task-tree.ts) a change elsewhere in the list re-renders only rows it touches.
+ */
+export const TaskRow = memo(TaskRowWrapper, (a: TaskRowProps, b: TaskRowProps) => a.task === b.task && Math.floor(a.now.getTime() / 60_000) === Math.floor(b.now.getTime() / 60_000)
+  && a.projectName === b.projectName && a.actions === b.actions && a.selection === b.selection && a.depth === b.depth && a.nested === b.nested && a.inToday === b.inToday && a.tools === b.tools);
+
+function TaskRowWrapper({ task, now, projectName, actions, selection, depth = 0, nested = false, inToday = false, tools }: {
   task: TaskDto; now: Date; projectName?: string; actions?: RowActions; selection?: RowSelection;
   /** Hover tools before the delete button (the project page's edit, date, comment and menu). */
   tools?: ReactNode;
@@ -88,43 +101,65 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
   /** On the Today page an all-day today date is implied and not shown. */
   inToday?: boolean;
 }) {
-  const tree = useContext(TaskTree);
   const milestone = useContext(MilestoneTasks).has(task.id);
   // Ticket 14c: a goal task's circle is in its goal's colour, with the goal's icon in the meta line.
   const goal = useContext(TaskGoals)(task);
-  const ring = goal ? { "--ring-color": goalColorValue(goal.color) } as CSSProperties : undefined;
   const closed = useSyncExternalStore(collapsedTasks.subscribe, collapsedTasks.get, collapsedTasks.get);
-  const hidden = hiddenBy(task, tree, closed);
   const [expanded, setExpanded] = useState(false);
+  // Only this row's slice of the tree: hidden, sub-task counts, and the open children while shown inline.
+  const tree = useTaskTree(tasks => {
+    const sub = subtasksOf(task.id, tasks);
+    return `${hiddenBy(task, tasks, closed)}|${sub.done.length}|${sub.total}|${expanded && !nested ? sub.open.map(child => child.id).join(",") : ""}`;
+  });
+  const hidden = hiddenBy(task, tree, closed);
   const dialog = useContext(TaskDialogs);
   const { labels } = useContext(ComposerChoices);
   const subtasks = subtasksOf(task.id, tree);
   // Ticket 29: a Coach draft's pending change to this task, and what it would add under it.
   const pending = usePendingChanges();
   const change = pending.byTask.get(task.id);
-  const under = pending.under.get(task.id) ?? [];
-  const open = dialog ? (event: MouseEvent) => {
-    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    dialog.open(task.id);
-  } : undefined;
+  const under = pending.under.get(task.id) ?? none;
   const showing = nested ? !closed.has(task.id) : expanded;
-  const date = shortDateLabel(task, now, inToday);
   const labelNames = task.labelIds.map(id => labels?.find(label => label.id === id)?.name).filter(Boolean);
+  const labelText = labelNames.length === task.labelIds.length ? labelNames.join(", ") : `${task.labelIds.length} label${task.labelIds.length > 1 ? "s" : ""}`;
   const editor = dialog?.editor?.(task);
   if (editor && !hidden) return <>{editor}</>;
+  // The row itself is memoised on these values: a change elsewhere in the list leaves it alone.
+  return <>{dialog?.slot(task.id, "above")}
+    <TaskRowBody task={task} minute={Math.floor(now.getTime() / 60_000)} projectName={projectName} actions={actions} selected={selection?.selected} onSelect={selection?.toggle}
+      depth={depth} nested={nested} inToday={inToday} tools={tools} milestone={milestone} goal={goal} hidden={hidden} open={dialog?.open} edit={dialog?.edit}
+      labelText={labelText} change={change} under={under} done={subtasks.done.length} total={subtasks.total} showing={showing} setExpanded={setExpanded} />
+  {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}
+  {!hidden && <PendingSubtaskRows taskId={task.id} depth={depth} />}
+  {dialog?.slot(task.id, "below")}</>;
+}
+
+const TaskRowBody = memo(function TaskRowBody({ task, minute, projectName, actions, selected, onSelect, depth, nested, inToday, tools, milestone, goal, hidden, open, edit, labelText, change, under, done, total, showing, setExpanded }: {
+  task: TaskDto; minute: number; projectName?: string; actions?: RowActions; selected?: boolean; onSelect?: () => void;
+  depth: number; nested: boolean; inToday: boolean; tools?: ReactNode; milestone: boolean; goal: TaskGoal | null; hidden: boolean;
+  open?: (id: string) => void; edit?: (id: string) => void; labelText: string;
+  change?: DraftItemDto; under: readonly DraftItemDto[]; done: number; total: number; showing: boolean; setExpanded: (change: (value: boolean) => boolean) => void;
+}) {
+  const now = new Date(minute * 60_000);
+  const ring = goal ? { "--ring-color": goalColorValue(goal.color) } as CSSProperties : undefined;
+  const onOpen = open ? (event: MouseEvent) => {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    open(task.id);
+  } : undefined;
+  const date = shortDateLabel(task, now, inToday);
   // Goals ticket 31: a Later task stays listed, muted, with a "Later" chip.
   const later = task.horizon === "later" && task.status !== "done";
-  return <>{dialog?.slot(task.id, "above")}<div className={`${task.parentId ? "task-row child" : "task-row"} group/task ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
+  return <div className={`${task.parentId ? "task-row child" : "task-row"} group/task ${pendingRowClass(change)}${later && !change ? " opacity-60" : ""}`} data-horizon={task.horizon ?? undefined} data-task-id={task.id} data-parent-id={task.parentId ?? undefined} hidden={hidden}
     data-depth={depth || undefined} data-pending={change?.op} style={{ ...(depth ? { "--depth": depth } : {}), ...(change && !ownLook(change) && goal ? { outlineColor: goalColorValue(goal.color) } : {}) } as CSSProperties}
-    data-done={task.status === "done" || undefined} data-selected={selection?.selected || undefined} data-region="task-row">
-    {selection && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={selection.selected} onChange={selection.toggle} />}
+    data-done={task.status === "done" || undefined} data-selected={selected || undefined} data-region="task-row">
+    {onSelect && <input type="checkbox" className="select-box" aria-label={`Select ${task.title}`} checked={Boolean(selected)} onChange={onSelect} />}
     {actions
       ? <button type="button" role="checkbox" aria-checked={task.status === "done"} aria-label={`Complete ${task.title}`} className="checkbox" data-priority={task.priority} style={ring} onClick={() => actions.complete(task)} />
       : <span className="checkbox" data-priority={task.priority} style={ring} aria-hidden="true" />}
     <div className="row-body">
-      <Link to={taskPath(task.id)} className="task-title" onClick={open}>{task.title}{milestone && <MilestoneMark />}</Link>
-      {dialog?.edit && <button type="button" hidden data-edit onClick={() => dialog.edit!(task.id)}>Edit {task.title}</button>}
+      <Link to={taskPath(task.id)} className="task-title" onClick={onOpen}>{task.title}{milestone && <MilestoneMark />}</Link>
+      {edit && <button type="button" hidden data-edit onClick={() => edit(task.id)}>Edit {task.title}</button>}
       <div className="row-meta">
         {date && <span className={isOverdue(task, now) ? "pill due overdue" : isDueToday(task, now) ? "pill due today" : "pill due"}><CalendarDays />{date}</span>}
         {change && <PendingChip change={change} />}
@@ -133,11 +168,11 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
         {task.priority < 4 && <span className="pill priority" aria-label={`Priority ${task.priority}`}><Flag data-priority={task.priority} />P{task.priority}</span>}
         {later && <span className="pill" data-horizon-chip="later"><Archive />Later</span>}
         {task.deadline && <span className="pill"><Goal />Deadline {deadlineLabel(task.deadline)}</span>}
-        {task.labelIds.length > 0 && <span className="pill"><Tag />{labelNames.length === task.labelIds.length ? labelNames.join(", ") : `${task.labelIds.length} label${task.labelIds.length > 1 ? "s" : ""}`}</span>}
-        {subtasks.total > 0 && <button type="button" className="pill subtasks" aria-expanded={showing}
-          aria-label={`Sub-tasks ${subtasks.done.length} of ${subtasks.total} done, ${showing ? "hide" : "show"}`}
+        {task.labelIds.length > 0 && <span className="pill"><Tag />{labelText}</span>}
+        {total > 0 && <button type="button" className="pill subtasks" aria-expanded={showing}
+          aria-label={`Sub-tasks ${done} of ${total} done, ${showing ? "hide" : "show"}`}
           onClick={() => nested ? collapsedTasks.toggle(task.id) : setExpanded(value => !value)}>
-          <GitBranch />{subtasks.done.length}/{subtasks.total}<ChevronRight className="chevron" />
+          <GitBranch />{done}/{total}<ChevronRight className="chevron" />
         </button>}
         {goal && <span className="pill" title={goal.title}><GoalIcon color={goal.color} icon={goal.icon} size="xs" /><span className="sr-only">Goal {goal.title}</span></span>}
         {(task.commentCount ?? 0) > 0 && <span className="pill comments" aria-label={`${task.commentCount} comment${task.commentCount! > 1 ? "s" : ""}`}><MessageSquare />{task.commentCount}</span>}
@@ -146,17 +181,30 @@ export function TaskRow({ task, now, projectName, actions, selection, depth = 0,
     </div>
     {tools}
     {actions && <button type="button" className="icon-button row-delete" aria-label={`Delete ${task.title}`} onClick={() => actions.remove(task)}><X /></button>}
-  </div>
-  {!nested && expanded && !hidden && subtasks.open.map(child => <TaskRow key={child.id} task={child} now={now} projectName={projectName} actions={actions} depth={depth + 1} inToday={inToday} />)}
-  {!hidden && <PendingSubtaskRows taskId={task.id} depth={depth} />}
-  {dialog?.slot(task.id, "below")}</>;
-}
+  </div>;
+});
 
 /** The small flag after a milestone's title (task rows, board cards, the goal page). */
 export const MilestoneMark = () => <span className="milestone-mark" title="Milestone"><FlagTriangleRight aria-hidden="true" /><span className="sr-only">Milestone</span></span>;
 
 // The task composer with smart quick add (tickets 5, 12) lives in composer.tsx.
 export { Composer } from "./composer";
+
+/**
+ * A long list's rows: the first screenful when it mounts and all of them a frame later, so switching
+ * to a 400-row list paints its top before building the rest (keyboard navigation, selection and
+ * find have the full list a frame later). VITE_PROGRESSIVE_ROWS=0 renders everything at once.
+ */
+const FIRST_ROWS = import.meta.env.VITE_PROGRESSIVE_ROWS === "0" ? Infinity : 30;
+export function useRowBudget() {
+  const [budget, setBudget] = useState(FIRST_ROWS);
+  useEffect(() => {
+    if (budget === Infinity) return;
+    const frame = requestAnimationFrame(() => setBudget(Infinity));
+    return () => cancelAnimationFrame(frame);
+  }, [budget]);
+  return budget;
+}
 
 export function TodayView({ state, onRetry, now = new Date(), projectNames = {}, actions, composer, showCompleted = false, calendar, events = [], selection }: {
   state: ReadState<TodayDto>; onRetry: () => void; now?: Date; projectNames?: Record<string, string>;
@@ -169,6 +217,7 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
   selection?: SelectionSlots;
 }) {
   const [overdueOpen, setOverdueOpen] = useState(true);
+  const budget = useRowBudget();
   const header = <><div className="project-header"><h1 className="page-title">Today</h1>{!calendar && state.data && selection?.control}</div><p className="page-count">{state.data ? `${state.data.openCount} tasks` : " "}</p></>;
   if (state.status === "pending") return <div>{header}{calendar ? <CalendarSkeleton days={1} /> : <TaskListSkeleton />}</div>;
   if (!state.data) return <div>{header}<Failure error={state.error} onRetry={onRetry} /></div>;
@@ -182,12 +231,12 @@ export function TodayView({ state, onRetry, now = new Date(), projectNames = {},
       <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
         <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>
       </button>
-      {overdueOpen && overdue.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
+      {overdueOpen && overdue.slice(0, budget).map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
     </section>}
     <section>
       <h2 className="section-heading">{todayHeading(now)}</h2>
       {todayEvents.map(event => <EventRow key={event.id} event={event} />)}
-      {today.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} inToday {...tree(task)} />)}
+      {today.slice(0, Math.max(0, budget - (overdueOpen ? overdue.length : 0))).map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} inToday {...tree(task)} />)}
       <PendingNewTasks day={dayKey(now)} />
       {today.length === 0 && overdue.length === 0 && todayEvents.length === 0 && <p className="state">Nothing is due today.</p>}
       {composer ?? <span className="composer" aria-disabled="true"><Plus />Add task</span>}

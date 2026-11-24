@@ -134,7 +134,15 @@ fn event_link(value: &str) -> Option<reqwest::Url> {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum LiveMessage {
     Ready,
-    Change { topic: String },
+    Change {
+        topic: String,
+        /// A task write's frame: the tasks it wrote and the IDs it deleted (arrays only), applied
+        /// by the webview before it pulls the delta.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tasks: Option<Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        deleted: Option<Value>,
+    },
     Closed { error: Option<String> },
 }
 
@@ -183,6 +191,8 @@ async fn stream(state: &NativeAuth, on_event: &Channel<LiveMessage>) -> Result<(
         .get(state.url("/api/v1/stream")?)
         .bearer_auth(&*token)
         .header("accept", "text/event-stream")
+        // Events must arrive as they are sent; other reads take gzip/brotli (Cargo.toml).
+        .header("accept-encoding", "identity")
         .timeout(STREAM_LIFETIME)
         .send()
         .await
@@ -240,6 +250,10 @@ fn take_frames(buffer: &mut String) -> Vec<LiveMessage> {
                     #[derive(Deserialize)]
                     struct Change {
                         topic: String,
+                        #[serde(default)]
+                        tasks: Option<Value>,
+                        #[serde(default)]
+                        deleted: Option<Value>,
                     }
                     let change: Change = serde_json::from_str(&data).ok()?;
                     let known = change.topic.len() <= 64
@@ -249,6 +263,8 @@ fn take_frames(buffer: &mut String) -> Vec<LiveMessage> {
                             .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
                     known.then_some(LiveMessage::Change {
                         topic: change.topic,
+                        tasks: change.tasks.filter(Value::is_array),
+                        deleted: change.deleted.filter(Value::is_array),
                     })
                 }
                 _ => None,
@@ -265,6 +281,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn a_task_writes_frame_keeps_its_tasks_and_deleted_ids() {
+        let mut buffer = String::from(
+            "event: change\ndata: {\"topic\":\"sync\",\"tasks\":[{\"id\":\"t1\"}],\"deleted\":\"not-a-list\"}\n\n",
+        );
+        assert_eq!(
+            take_frames(&mut buffer),
+            vec![LiveMessage::Change {
+                topic: "sync".into(),
+                tasks: Some(json!([{ "id": "t1" }])),
+                deleted: None,
+            }]
+        );
+    }
+
+    #[test]
     fn stream_frames_map_to_ready_and_change_only() {
         let mut buffer = String::from(
             "event: ready\ndata: {}\n\n: heartbeat\n\nevent: change\ndata: {\"topic\":\"calendar\"}\n\nevent: chan",
@@ -274,7 +305,9 @@ mod tests {
             vec![
                 LiveMessage::Ready,
                 LiveMessage::Change {
-                    topic: "calendar".into()
+                    topic: "calendar".into(),
+                    tasks: None,
+                    deleted: None,
                 }
             ]
         );
@@ -283,7 +316,9 @@ mod tests {
         assert_eq!(
             take_frames(&mut buffer),
             vec![LiveMessage::Change {
-                topic: "tasks".into()
+                topic: "tasks".into(),
+                tasks: None,
+                deleted: None,
             }]
         );
         assert!(buffer.is_empty());

@@ -12,12 +12,15 @@ import { toLabelDto, toSavedFilterDto } from "./metadata-input";
 import { getCommentsByIds } from "./comments";
 
 export const syncSource: SyncSource = {
-  async cursor() {
-    const result = await db.execute<{ cursor: string }>(sql`select pg_snapshot_xmin(pg_current_snapshot())::text as cursor`);
-    return Number(result.rows[0]!.cursor);
+  async window(userId, since, limit) {
+    const cursor = db.execute<{ cursor: string }>(sql`select pg_snapshot_xmin(pg_current_snapshot())::text as cursor`);
+    if (since === null) return { cursor: Number((await cursor).rows[0]!.cursor), rows: [] };
+    // One neon-http batch (one round trip); its statements run in order, so the change log is
+    // read after the cursor was taken, as two separate reads did.
+    const [taken, rows] = await db.batch([cursor, db.select({ entity: syncChanges.entity, entityId: syncChanges.entityId }).from(syncChanges)
+      .where(and(eq(syncChanges.userId, userId), gte(syncChanges.xid, since))).limit(limit)]);
+    return { cursor: Number(taken.rows[0]!.cursor), rows };
   },
-  changes: (userId, since, limit) => db.select({ entity: syncChanges.entity, entityId: syncChanges.entityId }).from(syncChanges)
-    .where(and(eq(syncChanges.userId, userId), gte(syncChanges.xid, since))).limit(limit),
   tasks: async (userId, ids) => (await getTasksByIds(userId, ids)).map(toTaskDto),
   projects: async (userId, ids) => (await db.select().from(projects).where(and(eq(projects.userId, userId), inArray(projects.id, ids)))).map(toProjectDto),
   labels: async (userId, ids) => (await db.select().from(labels).where(and(eq(labels.userId, userId), inArray(labels.id, ids)))).map(toLabelDto),

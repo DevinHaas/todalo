@@ -42,7 +42,9 @@ export type CalendarVisibilityInput = z.infer<typeof calendarVisibilityInput>;
  * Live stream contract, GET /api/v1/stream (text/event-stream).
  * - `event: ready` once per connection: the client refetches every live topic,
  *   since changes may have been missed while it was disconnected or suspended.
- * - `event: change` with `data: {"topic": LiveTopic}` after a server-side change.
+ * - `event: change` with `data: {"topic": LiveTopic}` after a server-side change. A task
+ *   write's `sync` frame adds `"tasks": [TaskDto]` (what it wrote) or `"deleted": [id]`: the client
+ *   applies them at once, then pulls the delta as for any `sync`.
  * - `: heartbeat` comments keep idle proxies from closing the connection.
  * Clients ignore topics they do not know, so the server can add topics first.
  */

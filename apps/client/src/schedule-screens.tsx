@@ -28,6 +28,13 @@ import { useBulkSelection } from "./bulk-screens";
 import { reportCoachError } from "./coach-errors";
 import { CalendarSkeleton, MonthSkeleton, TaskListSkeleton } from "./skeletons";
 
+const taskDay = (task: TaskDto) => task.dueDate ? dayKey(new Date(task.dueDate)) : "";
+function tasksByDay(tasks: TaskDto[]) {
+  const byDay = new Map<string, TaskDto[]>();
+  for (const task of tasks) { const key = taskDay(task); const list = byDay.get(key); if (list) list.push(task); else byDay.set(key, [task]); }
+  return byDay;
+}
+
 /** Rows, edit dialog and slot composer shared by the schedule layouts. */
 function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, selection, planner: scope }: { projectId?: string | null; selection?: SelectionSlots; planner?: "day" | "week" } = {}) {
   const withPlanner = scope !== undefined;
@@ -38,10 +45,15 @@ function useSchedule(account: Account, tasks: TaskDto[], { projectId = null, sel
   const dialog = useContext(TaskDialogs);
   const [slot, setSlot] = useState<{ start: Date; end: Date } | null>(null);
   const now = new Date();
-  // Indent a sub-task under its parent when both are listed on the same day.
-  const day = (task: TaskDto) => task.dueDate ? dayKey(new Date(task.dueDate)) : "";
-  const trees = new Map<string, ReturnType<typeof listTree>>();
-  const treeOf = (task: TaskDto) => { const key = day(task); if (!trees.has(key)) trees.set(key, listTree(tasks.filter(item => day(item) === key))); return trees.get(key)!(task); };
+  // Indent a sub-task under its parent when both are listed on the same day. Tasks are grouped
+  // by day in one pass (not a filter of every task per day); each day's tree is built on first use.
+  const trees = useMemo(() => ({ byDay: tasksByDay(tasks), built: new Map<string, ReturnType<typeof listTree>>() }), [tasks]);
+  const treeOf = (task: TaskDto) => {
+    const key = taskDay(task);
+    let tree = trees.built.get(key);
+    if (!tree) trees.built.set(key, tree = listTree(trees.byDay.get(key) ?? []));
+    return tree(task);
+  };
   const slots: ScheduleSlots = {
     row: task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={writes.actions} selection={selection?.row(task)} {...treeOf(task)} />,
     open: task => dialog?.open(task.id),

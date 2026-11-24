@@ -33,9 +33,16 @@ export async function notifyReady(title: string, body: string, onOpen: () => voi
   } catch { /* no notifications on this device */ }
 }
 
+const notifiedKey = (userId: string, kind: string) => `todalo:ritual-notified:${userId}:${kind}`;
+
+/** Whether this device already notified the ritual for `period` (read only; false without storage). */
+export function notifiedFor(userId: string, kind: string, period: string) {
+  try { return localStorage.getItem(notifiedKey(userId, kind)) === period; } catch { return false; }
+}
+
 /** One notification per ritual per period, remembered on this device. */
 export function firstTimeFor(userId: string, kind: string, period: string) {
-  const key = `todalo:ritual-notified:${userId}:${kind}`;
+  const key = notifiedKey(userId, kind);
   try {
     if (localStorage.getItem(key) === period) return false;
     localStorage.setItem(key, period);

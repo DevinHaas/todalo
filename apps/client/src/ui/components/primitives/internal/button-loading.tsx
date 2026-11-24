@@ -122,21 +122,24 @@ export function useButtonLoadingState<TElement extends HTMLElement>({
     [ref],
   );
 
-  React.useLayoutEffect(() => {
-    if (loading) {
-      return;
-    }
-
+  // The width to hold while loading, kept current by a ResizeObserver: it reports after layout,
+  // where measuring in a layout effect (re-run on every render, since children are new each time)
+  // forced a synchronous layout of the whole page whenever a button rendered.
+  React.useEffect(() => {
     const buttonElement = buttonElementRef.current;
-    if (!buttonElement) {
+    if (loading || !buttonElement || typeof ResizeObserver === "undefined") {
       return;
     }
 
-    const measuredInlineSize = buttonElement.getBoundingClientRect().width;
-    if (measuredInlineSize > 0) {
-      stableInlineSizeRef.current = measuredInlineSize;
-    }
-  }, [children, className, loading, measurementKey, style]);
+    const observer = new ResizeObserver(([entry]) => {
+      const measuredInlineSize = entry?.borderBoxSize?.[0]?.inlineSize ?? 0;
+      if (measuredInlineSize > 0) {
+        stableInlineSizeRef.current = measuredInlineSize;
+      }
+    });
+    observer.observe(buttonElement);
+    return () => observer.disconnect();
+  }, [loading, measurementKey]);
 
   return {
     buttonAriaBusy: loading || undefined,

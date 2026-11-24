@@ -101,7 +101,11 @@ async fn set_profile_photo(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Perf: CrabNebula DevTools first, so its tracing layer sees every command (`--features devtools`).
+    #[cfg(feature = "devtools")]
+    let builder = builder.plugin(tauri_plugin_devtools::init());
+    builder
         // Rust-only: the webview gets no opener or deep-link permission.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -115,7 +119,17 @@ pub fn run() {
         .manage(calendar::LiveStream::default())
         .manage(coach::ChatgptLoopback::default())
         .setup(|app| {
+            use tauri::Manager;
             use tauri_plugin_deep_link::DeepLinkExt;
+            // Perf: open the API connection (TCP + TLS, ~35 ms) while the webview boots, so the
+            // first read after launch doesn't wait for it. The answer is ignored.
+            let auth = app.state::<NativeAuth>();
+            if let Ok(url) = auth.url("/") {
+                let client = auth.client.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = client.head(url).send().await;
+                });
+            }
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let urls: Vec<String> = event.urls().iter().map(|url| url.to_string()).collect();

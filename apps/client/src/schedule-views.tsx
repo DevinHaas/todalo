@@ -14,6 +14,7 @@ import { eventsByDay, type CalendarEventDto } from "./calendar";
 import { useLocation } from "react-router";
 import { EventBlock, EventChip, EventRow } from "./calendar-views";
 import { Button, cn } from "./ui";
+import { useRowBudget } from "./views";
 
 type Display = DisplaySettings & { set(change: Partial<DisplaySettings>): void };
 const DisplayContext = createContext<Display>({ ...defaultDisplay, set() {} });
@@ -132,6 +133,25 @@ export function UpcomingList({ tasks, events = [], slots, composer, now = new Da
   const { overdue, days, later } = upcomingSections(tasks, range, showCompleted, now);
   const eventDays = eventsByDay(events);
   const active = parseDayKey(activeDay);
+  // A year of day sections at once was ~370 composers and 11k nodes: six weeks render, and four
+  // more each time the end of the list nears (a day navigated to renders at once). Without
+  // IntersectionObserver (tests) every day renders.
+  const [shownUntil, setShownUntil] = useState(() => typeof IntersectionObserver === "undefined" ? "9999-12-31" : dayKey(addDays(now, 42)));
+  const showUntil = (day: Date) => setShownUntil(key => key < dayKey(day) ? dayKey(day) : key);
+  const more = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const target = more.current, container = list.current;
+    if (!target || !container) return;
+    // Observed again after each step: a sentinel still in range adds the next weeks too.
+    const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) setShownUntil(key => dayKey(addDays(parseDayKey(key), 28))); }, { root: container, rootMargin: "0px 0px 800px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [shownUntil]);
+  const shownDays = days.filter(day => day.key <= shownUntil);
+  const allShown = shownDays.length === days.length;
+  // The first screenful of rows at once, the rest a frame later (views.tsx useRowBudget).
+  let left = useRowBudget();
+  const take = <T,>(items: T[]) => { const shown = items.slice(0, Math.max(0, left)); left -= items.length; return shown; };
 
   const scrollTo = (key: string, container = list.current) => {
     const section = container?.querySelector<HTMLElement>(`section[id="${key}"]`);
@@ -139,6 +159,7 @@ export function UpcomingList({ tasks, events = [], slots, composer, now = new Da
   };
   function goToDay(day: Date) {
     setRange(current => extendWindow(current, day));
+    showUntil(addDays(day, 7));
     setActiveDay(dayKey(day));
     requestAnimationFrame(() => scrollTo(dayKey(day)));
   }
@@ -180,15 +201,16 @@ export function UpcomingList({ tasks, events = [], slots, composer, now = new Da
         <button type="button" className="section-toggle" aria-expanded={overdueOpen} onClick={() => setOverdueOpen(open => !open)}>
           <ChevronDown className={overdueOpen ? "" : "closed"} />Overdue<span className="muted-count">{overdue.length}</span>
         </button>
-        {overdueOpen && overdue.map(slots.row)}
+        {overdueOpen && take(overdue).map(slots.row)}
       </section>}
-      {days.map(({ day, key, tasks: dayTasks }) => <section key={key} id={key}>
+      {shownDays.map(({ day, key, tasks: dayTasks }) => <section key={key} id={key}>
         <h2 className="section-heading muted">{labels.day(day, now)}</h2>
         {eventDays.get(key)?.map(event => <EventRow key={event.id} event={event} />)}
-        {dayTasks.map(slots.row)}
+        {take(dayTasks).map(slots.row)}
         {composer(day)}
       </section>)}
-      {later.length > 0 && <section><h2 className="section-heading muted">Later</h2>{later.map(slots.row)}</section>}
+      {!allShown && <div ref={more} className="h-px" aria-hidden="true" />}
+      {allShown && later.length > 0 && <section><h2 className="section-heading muted">Later</h2>{later.map(slots.row)}</section>}
     </div>
   </div>;
 }

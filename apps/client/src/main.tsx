@@ -4,7 +4,7 @@ import { applySavedDesign } from "./personalization";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
-import { queries, session } from "./runtime";
+import { queries, restored, session } from "./runtime";
 // Appearance › Font (personalization.ts fontStacks): @font-face rules only; a face's files
 // download once text uses it, so only the chosen font loads.
 import "@fontsource-variable/geist";
@@ -35,6 +35,19 @@ session.subscribe(() => {
   if (status === "signed-in" && account) identify(account.user);
   else if (status === "signed-out") identify(null);
 });
+// Web: the app shell is served by public/sw.js. After a deploy, a page from
+// the cached shell can ask for a chunk the server no longer has: reload once, by when the worker
+// has already fetched the new shell.
+if (import.meta.env.PROD && !isTauri() && "serviceWorker" in navigator) {
+  addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+  addEventListener("vite:preloadError", () => {
+    // At most once a minute, so a chunk that is really gone can't loop.
+    if (Date.now() - Number(sessionStorage.getItem("todalo.reloadedAt") ?? 0) < 60_000) return;
+    sessionStorage.setItem("todalo.reloadedAt", String(Date.now()));
+    location.reload();
+  });
+}
 const root = createRoot(document.getElementById("root")!);
-root.render(<QueryClientProvider client={queries}><App /><Toaster manager={toasts} /></QueryClientProvider>);
+// After the last session's reads are back in the cache (a localStorage read): the first frame shows them.
+void restored.then(() => root.render(<QueryClientProvider client={queries}><App /><Toaster manager={toasts} /></QueryClientProvider>));
 if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());

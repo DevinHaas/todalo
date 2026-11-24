@@ -14,7 +14,7 @@ import { createRambleRecorder, type RambleView } from "./ramble";
 import { platform } from "./ramble-screen";
 import { showCalendarDay, useDisplay } from "./schedule-views";
 import { parseDayKey } from "./schedule";
-import { askNotificationPermission, firstTimeFor, notifyReady } from "./ritual-notify";
+import { askNotificationPermission, firstTimeFor, notifiedFor, notifyReady } from "./ritual-notify";
 import { openPlan } from "./schedule-screens";
 import { planRitual } from "./plan-views";
 import { LoadFailure } from "./goal-views";
@@ -133,8 +133,14 @@ function useRitualNotifications(userId: string, data: RitualsDto | undefined, re
       const now = new Date();
       return state ? readyRituals(state, `${pad(now.getHours())}:${pad(now.getMinutes())}`, now.getDay()) : [];
     };
+    let fetchedAt = 0;
     const tick = async () => {
-      if (!due(latest.current.data).length) return;
+      const ready = due(latest.current.data);
+      if (!ready.length) return;
+      // Already notified for every due ritual: a fresh read matters only if the cached state is old
+      // (a new period), so every 5 minutes instead of every 30 seconds for the rest of the day.
+      if (ready.every(({ kind, period }) => notifiedFor(userId, kind, period)) && Date.now() - fetchedAt < 5 * 60_000) return;
+      fetchedAt = Date.now();
       // The cached state may be hours old: confirm against a fresh read before notifying.
       for (const { kind, period } of due((await latest.current.refetch()).data)) {
         if (firstTimeFor(userId, kind, period)) void notifyReady(readyTitles[kind], readyBodies[kind], () => openRitual(kind));

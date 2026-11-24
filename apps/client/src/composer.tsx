@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useReducer, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useId, useMemo, useReducer, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent, type SetStateAction } from "react";
 import { AlarmClock, ArrowUp, AudioLines, Calendar1, CalendarIcon, Check, Flag, Goal, Hash, Inbox, Paperclip, Plus, Tag, X } from "lucide-react";
 import { Link, useInRouterContext } from "react-router";
 import type { QuickAddMatch } from "@todalo/ramble/quick-add";
@@ -117,6 +117,9 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const operation = useRef<{ key: string; id: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement | null>(null);
+  // Stable: an inline ref callback is a new ref each render, and React 19 runs the old one's
+  // cleanup (releaseFocus: blur the focused field) on every keystroke's render.
+  const formRef = useCallback((node: HTMLFormElement | null) => { form.current = node; return releaseFocus(node); }, []);
   const closeNow = useRef((_refocus?: boolean) => {});
   const trigger = useRef<HTMLButtonElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
@@ -137,7 +140,14 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const suggestions = mention && mention.start !== dismissed && choices.labels
     ? choices.labels.filter(label => !metadata.labelIds.includes(label.id) && label.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
   const highlighted = Math.min(active, suggestions.length - 1);
-  const schedule = scheduleOf(sync);
+  const schedule = useMemo(() => scheduleOf(sync), [sync]);
+  // The chips row (ComposerChips, memoised) calls the latest schedule actions through these
+  // stable wrappers, so typing a title does not re-render it.
+  const latest = useRef<ScheduleActions>({ date: () => {}, start: () => {}, end: () => {}, repeat: () => {} });
+  const scheduleActions = useMemo<ScheduleActions>(() => ({
+    date: (date) => latest.current.date(date), start: (time) => latest.current.start(time),
+    end: (time) => latest.current.end(time), repeat: (recurrence) => latest.current.repeat(recurrence),
+  }), []);
 
   const reset = () => {
     setTitle(""); setParsedTitle(""); setDescription(""); setDescribing(false); setRejected(new Set()); dispatch({ type: "seed", date: seeded, time: "" });
@@ -178,6 +188,7 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   function changeRepeat(recurrence: Recurrence | undefined) {
     dispatch({ type: "manualRecurrence", recurrence, matchText: manualPhrase("recurrence", recurrence ? canonicalRecurrenceText(recurrence) : null) });
   }
+  latest.current = { date: changeDate, start: changeStart, end: changeEnd, repeat: changeRepeat };
   function pickLabel(label: Choice) {
     if (!mention) return;
     const next = withoutMention(title, mention, caret);
@@ -245,48 +256,16 @@ export function Composer({ dueDate, dueDateEnd, destination, onCreate, onCancel,
   const projects: Option<string>[] = [{ value: "", label: "Inbox", icon: <Inbox /> },
     ...projectOptions(choices.projects, projectId).map(choice => ({ value: choice.id, label: choice.name, icon: <Hash /> }))];
   const priorityName = metadata.priority === 4 && quick ? "Priority" : `Priority ${metadata.priority}`;
-  const chips = <div className="composer-pills">
-    {/* The + menu holds what the chips do not: the description and labels. */}
-    <Popover label="More options" triggerClassName="chip chip-square" trigger={<Plus />} data={{ "data-composer-more": "" }}>
-      {close => <>
-        {!describing && <button type="button" className="popover-item add-description" onClick={() => { setDescribing(true); close(false); }}>Add description</button>}
-        <p className="panel-heading">Labels</p>
-        {!choices.labels ? <LinesSkeleton rows={3} label="Loading labels" /> : choices.labels.length > 0 ? choices.labels.map(choice => <label key={choice.id} className="popover-item label-option">
-          <input type="checkbox" checked={metadata.labelIds.includes(choice.id)} onChange={(event) => setMetadata(current => ({ ...current, labelIds: event.target.checked ? [...current.labelIds, choice.id] : current.labelIds.filter(id => id !== choice.id) }))} />{choice.name}
-        </label>) : <p className="state">Create labels in Labels.</p>}
-      </>}
-    </Popover>
-    {metadata.labelIds.map(id => choices.labels?.find(label => label.id === id)).filter(label => label !== undefined).map(label =>
-      <button key={label.id} type="button" className="chip set" aria-label={`Remove label ${label.name}`}
-        onClick={() => setMetadata(current => ({ ...current, labelIds: current.labelIds.filter(id => id !== label.id) }))}>
-        <Tag style={{ color: label.color ?? CHARCOAL }} />{label.name}<X />
-      </button>)}
-    <Popover className={schedule.date ? "chip-group set" : "chip-group"} label={`Date: ${label}${time ? ` ${time}` : ""}`} data={{ "data-tone": today ? "today" : "date" }}
-      trigger={<>{today ? <Calendar1 /> : <CalendarIcon />}{label}{time && ` ${time}`}</>}
-      after={schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => changeDate(undefined)}><X /></button>}>
-      {close => <SchedulePanel schedule={schedule} onDate={(date) => { changeDate(date); close(); }} onStart={changeStart} onEnd={changeEnd}
-        onRepeat={(recurrence) => { changeRepeat(recurrence); close(); }} onCustom={() => { setCustomRepeat(true); close(false); }} />}
-    </Popover>
-    <Popover className={deadline ? "chip-group set" : "chip-group"} label={`Deadline: ${deadline ? dueDateLabel(deadline) : "none"}`} data={{ "data-metadata-field": "deadline" }}
-      trigger={<><Goal />{deadline ? dueDateLabel(deadline) : "Deadline"}</>}
-      after={deadline && <button type="button" className="icon-button small" aria-label="Clear deadline" onClick={() => setMetadata(current => ({ ...current, deadline: "" }))}><X /></button>}>
-      {close => <DatePanel value={deadline} none="No deadline" onPick={(date) => { setMetadata(current => ({ ...current, deadline: dateValue(date) })); close(); }} />}
-    </Popover>
-    <Dropdown label="Priority" value={metadata.priority} options={priorityOptions} className={metadata.priority !== 4 ? "chip set" : "chip"} data={{ "data-metadata-field": "priority" }}
-      onChange={(priority) => setMetadata(current => ({ ...current, priority }))} triggerContent={<><Flag data-priority={metadata.priority} />{priorityName}</>} />
-    {/* ponytail: legacy stub pills, no feature behind them yet. */}
-    <button type="button" className="chip" disabled><AlarmClock />Reminders</button>
-    {!quick && <button type="button" className="chip" disabled><Paperclip />Attachment</button>}
-    {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="chip" aria-label={`Position: ${position.edge}`}
-      onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
-  </div>;
+  const chips = <ComposerChips describing={describing} onDescribe={setDescribing} labels={choices.labels} metadata={metadata} setMetadata={setMetadata}
+    schedule={schedule} label={label} time={time} today={today} priorityName={priorityName} quick={quick} position={position} setPosition={setPosition}
+    onCustomRepeat={setCustomRepeat} actions={scheduleActions} />;
   // A sub-task's project is its parent's: shown, not picked.
   const projectPicker = parentId ? <span className="chip">{projectId ? <Hash /> : <Inbox />}{projectId ? choices.projects?.find(item => item.id === projectId)?.name ?? "Project" : "Inbox"}</span>
     : <Dropdown label="Project" value={project ?? ""} options={projects} onChange={(value) => setProject(value || null)} className={quick ? "chip" : "chip project-picker"} chevron={!quick} />;
   // Legacy composer waveform: Ramble with this draft's date as the default (ticket 21).
   const ramble = (className: string) => routed && <Link to={schedule.date ? `/ramble?date=${dateValue(schedule.date)}` : "/ramble"} className={className} aria-label="Open Ramble" onClick={() => close()}><AudioLines /></Link>;
   return <>
-    <form ref={node => { form.current = node; return releaseFocus(node); }} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
+    <form ref={formRef} className={quick ? "composer-form quick" : "composer-form"} onSubmit={(event) => { event.stopPropagation(); void submit(event); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }} data-region="composer">
       {error && <p role="alert" className="form-error">{error}</p>}
       <div className="quick-add-title">
@@ -432,3 +411,51 @@ export function CustomRepeatDialog({ recurrence, onClose, onConfirm }: { recurre
     </div>
   </div>;
 }
+
+interface ScheduleActions { date(date: Date | undefined): void; start(time: string): void; end(time: string): void; repeat(recurrence: Recurrence | undefined): void }
+type ComposerMetadata = { priority: number; deadline: string; labelIds: string[] };
+
+/** The composer's chips (labels, date, deadline, priority): memoised, so a title keystroke skips them. */
+const ComposerChips = memo(function ComposerChips({ describing, onDescribe, labels, metadata, setMetadata, schedule, label, time, today, priorityName, quick, position, setPosition, onCustomRepeat, actions }: {
+  describing: boolean; onDescribe(value: boolean): void; labels: Choice[] | undefined;
+  metadata: ComposerMetadata; setMetadata: Dispatch<SetStateAction<ComposerMetadata>>;
+  schedule: ReturnType<typeof scheduleOf>; label: string; time: string; today: boolean; priorityName: string; quick: boolean;
+  position: Placement | undefined; setPosition: Dispatch<SetStateAction<Placement | undefined>>; onCustomRepeat(value: boolean): void; actions: ScheduleActions;
+}) {
+  const deadline = fromDateValue(metadata.deadline);
+  return <div className="composer-pills">
+    {/* The + menu holds what the chips do not: the description and labels. */}
+    <Popover label="More options" triggerClassName="chip chip-square" trigger={<Plus />} data={{ "data-composer-more": "" }}>
+      {close => <>
+        {!describing && <button type="button" className="popover-item add-description" onClick={() => { onDescribe(true); close(false); }}>Add description</button>}
+        <p className="panel-heading">Labels</p>
+        {!labels ? <LinesSkeleton rows={3} label="Loading labels" /> : labels.length > 0 ? labels.map(choice => <label key={choice.id} className="popover-item label-option">
+          <input type="checkbox" checked={metadata.labelIds.includes(choice.id)} onChange={(event) => setMetadata(current => ({ ...current, labelIds: event.target.checked ? [...current.labelIds, choice.id] : current.labelIds.filter(id => id !== choice.id) }))} />{choice.name}
+        </label>) : <p className="state">Create labels in Labels.</p>}
+      </>}
+    </Popover>
+    {metadata.labelIds.map(id => labels?.find(label => label.id === id)).filter(label => label !== undefined).map(label =>
+      <button key={label.id} type="button" className="chip set" aria-label={`Remove label ${label.name}`}
+        onClick={() => setMetadata(current => ({ ...current, labelIds: current.labelIds.filter(id => id !== label.id) }))}>
+        <Tag style={{ color: label.color ?? CHARCOAL }} />{label.name}<X />
+      </button>)}
+    <Popover className={schedule.date ? "chip-group set" : "chip-group"} label={`Date: ${label}${time ? ` ${time}` : ""}`} data={{ "data-tone": today ? "today" : "date" }}
+      trigger={<>{today ? <Calendar1 /> : <CalendarIcon />}{label}{time && ` ${time}`}</>}
+      after={schedule.date && <button type="button" className="icon-button small" aria-label="Clear date" onClick={() => actions.date(undefined)}><X /></button>}>
+      {close => <SchedulePanel schedule={schedule} onDate={(date) => { actions.date(date); close(); }} onStart={actions.start} onEnd={actions.end}
+        onRepeat={(recurrence) => { actions.repeat(recurrence); close(); }} onCustom={() => { onCustomRepeat(true); close(false); }} />}
+    </Popover>
+    <Popover className={deadline ? "chip-group set" : "chip-group"} label={`Deadline: ${deadline ? dueDateLabel(deadline) : "none"}`} data={{ "data-metadata-field": "deadline" }}
+      trigger={<><Goal />{deadline ? dueDateLabel(deadline) : "Deadline"}</>}
+      after={deadline && <button type="button" className="icon-button small" aria-label="Clear deadline" onClick={() => setMetadata(current => ({ ...current, deadline: "" }))}><X /></button>}>
+      {close => <DatePanel value={deadline} none="No deadline" onPick={(date) => { setMetadata(current => ({ ...current, deadline: dateValue(date) })); close(); }} />}
+    </Popover>
+    <Dropdown label="Priority" value={metadata.priority} options={priorityOptions} className={metadata.priority !== 4 ? "chip set" : "chip"} data={{ "data-metadata-field": "priority" }}
+      onChange={(priority) => setMetadata(current => ({ ...current, priority }))} triggerContent={<><Flag data-priority={metadata.priority} />{priorityName}</>} />
+    {/* ponytail: legacy stub pills, no feature behind them yet. */}
+    <button type="button" className="chip" disabled><AlarmClock />Reminders</button>
+    {!quick && <button type="button" className="chip" disabled><Paperclip />Attachment</button>}
+    {(position?.edge === "top" || position?.edge === "bottom") && <button type="button" className="chip" aria-label={`Position: ${position.edge}`}
+      onClick={() => setPosition({ edge: position.edge === "top" ? "bottom" : "top" })}>{position.edge === "top" ? "Add at top" : "Add at bottom"}</button>}
+  </div>;
+});

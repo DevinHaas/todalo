@@ -35,6 +35,15 @@ interface SessionState {
 
 const transient = new Set(["CONNECTION_FAILED", "ACCOUNT_UNAVAILABLE"]);
 
+/** Where the last signed-in account is kept between launches (only its own fields, never a token). */
+export interface RememberedAccount { load(): Account | null; save(account: Account | null): void }
+export function rememberedAccount(storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = localStorage, key = "todalo.account"): RememberedAccount {
+  return {
+    load() { try { const value = JSON.parse(storage.getItem(key) ?? "null") as Account | null; return value?.user?.id ? value : null; } catch { return null; } },
+    save(account) { try { if (account) storage.setItem(key, JSON.stringify(account)); else storage.removeItem(key); } catch { /* not remembered */ } },
+  };
+}
+
 export class SessionController {
   private state: SessionState = { status: "loading", account: null, error: null };
   private listeners = new Set<() => void>();
@@ -46,7 +55,14 @@ export class SessionController {
   private googlePending = false;
   private googleError: string | null = null;
 
-  constructor(private transport: AccountTransport, private clearUserCache: () => void, private google?: GoogleTransport) {}
+  /**
+   * `remembered`: a launch opens signed in as the last account (its cached screens show at once)
+   * while `refresh` asks the server; a rejected session signs out as before.
+   */
+  constructor(private transport: AccountTransport, private clearUserCache: () => void, private google?: GoogleTransport, private remembered?: RememberedAccount, now = Date.now()) {
+    const account = remembered?.load();
+    if (account && new Date(account.expiresAt).getTime() > now) this.state = { status: "signed-in", account, error: null };
+  }
 
   getSnapshot = () => this.state;
   getGooglePending = () => this.googlePending;
@@ -58,18 +74,32 @@ export class SessionController {
 
   private update(state: SessionState) {
     this.state = state;
+    if (state.status !== "loading") this.remembered?.save(state.status === "signed-in" ? state.account : null);
     for (const listener of this.listeners) listener();
   }
 
   clearError() { this.googleError = null; this.update({ ...this.state, error: null }); }
 
-  async refresh() {
-    if (this.mutationCount > 0) return;
+  /** The account read in flight: window focus and visibilitychange fire together, one read serves both. */
+  private refreshing: { generation: number; run: Promise<void> } | null = null;
+
+  refresh(): Promise<void> {
+    if (this.mutationCount > 0) return Promise.resolve();
+    if (this.refreshing?.generation === this.generation) return this.refreshing.run;
     const generation = ++this.generation;
+    const run = this.read(generation);
+    this.refreshing = { generation, run };
+    void run.finally(() => { if (this.refreshing?.run === run) this.refreshing = null; });
+    return run;
+  }
+
+  private async read(generation: number) {
     try {
       const account = await this.transport.account();
       if (generation !== this.generation) return;
       if (account?.user.id !== this.state.account?.user.id || !account) this.clearUserCache();
+      // Unchanged (the usual answer on focus): keep the same state, so the app doesn't re-render.
+      if (account && this.state.status === "signed-in" && this.state.error === null && JSON.stringify(account) === JSON.stringify(this.state.account)) return;
       this.update({ status: account ? "signed-in" : "signed-out", account, error: null });
     } catch (error) {
       // Not reaching the server says nothing about the session: a signed-in UI

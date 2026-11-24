@@ -23,7 +23,7 @@ export async function GET(request: Request) {
           unsubscribe();
         }
       };
-      unsubscribe = subscribe(userId, (topic) => { if (topic === "calendar") send(`data: sync\n\n`); });
+      unsubscribe = subscribe(userId, (change) => { if (change.topic === "calendar") send(`data: sync\n\n`); });
       heartbeat = setInterval(() => send(`: heartbeat\n\n`), 25_000);
     },
     cancel() {

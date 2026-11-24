@@ -1,0 +1,1488 @@
+{
+  "meta": {
+    "label": "cpu4-step6",
+    "date": "2026-11-24T06:34:13.822Z",
+    "git": "152dd40+wip",
+    "runs": 2,
+    "cpu": 4,
+    "tasks": 406
+  },
+  "summary": {
+    "load:cold": {
+      "p50": 2125.300000011921,
+      "p95": 2125.300000011921,
+      "n": 2,
+      "dom": 2042.5,
+      "tbt": 231,
+      "fcp": 400,
+      "lcp": 400,
+      "ttfb": 3.2000000029802322,
+      "jsKB": 530,
+      "apiCount": 18,
+      "domNodes": 3758,
+      "apiChain": "/api/v1/account 320→917, /api/v1/settings/keyboard 995→1196, /api/v1/rituals 998→1206, /api/v1/goals 1000→1613, /api/v1/metadata 1001→1617, /api/v1/projects 1001→1594, /api/v1/today 1004→1984, /api/v1/calendar/events 1005→1411, /api/v1/settings/personalization 1012→1615, /api/v1/imports/todoist 1017→1792, /api/v1/settings 1017→1814, /api/v1/seasons/current 1630→1834, /api/v1/seasons/past 1631→1988, /api/v1/goal-links 1633→2016, /api/v1/sync 1639→2038"
+    },
+    "load:warm": {
+      "p50": 472.80000001192093,
+      "p95": 472.80000001192093,
+      "n": 2,
+      "dom": 457.80000001192093,
+      "tbt": 255,
+      "fcp": 0,
+      "lcp": 0,
+      "ttfb": 1.1000000089406967,
+      "jsKB": 1,
+      "apiCount": 0,
+      "domNodes": 3758
+    },
+    "tab:inbox (first)": {
+      "p50": 343.29999999701977,
+      "p95": 343.29999999701977,
+      "n": 2,
+      "dom": 163.79999999701977,
+      "inp": 32,
+      "tbt": 129
+    },
+    "tab:today (first)": {
+      "p50": 168.5,
+      "p95": 168.5,
+      "n": 2,
+      "dom": 94.19999998807907,
+      "inp": 32,
+      "tbt": 24
+    },
+    "tab:upcoming (first)": {
+      "p50": 483.30000001192093,
+      "p95": 483.30000001192093,
+      "n": 2,
+      "dom": 449.5,
+      "inp": 32,
+      "tbt": 246
+    },
+    "tab:inbox": {
+      "p50": 370.80000001192093,
+      "p95": 370.80000001192093,
+      "n": 2,
+      "dom": 191.1000000089407,
+      "inp": 32,
+      "tbt": 165
+    },
+    "tab:today": {
+      "p50": 157.19999998807907,
+      "p95": 157.19999998807907,
+      "n": 2,
+      "dom": 82,
+      "inp": 32,
+      "tbt": 24
+    },
+    "tab:upcoming": {
+      "p50": 423.20000000298023,
+      "p95": 423.20000000298023,
+      "n": 2,
+      "dom": 393.20000000298023,
+      "inp": 32,
+      "tbt": 226
+    },
+    "sheet:open": {
+      "p50": 323.5,
+      "p95": 323.5,
+      "n": 2,
+      "dom": 269.29999999701977,
+      "inp": 0,
+      "tbt": 221
+    },
+    "sheet:type": {
+      "p50": 165,
+      "p95": 165,
+      "n": 2,
+      "dom": 157.5,
+      "inp": 96,
+      "tbt": 22
+    },
+    "edit:title": {
+      "p50": 166.8999999910593,
+      "p95": 166.8999999910593,
+      "n": 2,
+      "dom": 158.79999999701977,
+      "inp": 128,
+      "tbt": 72
+    },
+    "complete": {
+      "p50": 256.90000000596046,
+      "p95": 256.90000000596046,
+      "n": 2,
+      "dom": 173.40000000596046,
+      "inp": 120,
+      "tbt": 61,
+      "server": 609.5
+    },
+    "composer:open": {
+      "p50": 84.59999999403954,
+      "p95": 84.59999999403954,
+      "n": 2,
+      "dom": 64.79999999701977,
+      "inp": 80,
+      "tbt": 15
+    },
+    "composer:type40": {
+      "p50": 362.3999999910593,
+      "p95": 362.3999999910593,
+      "n": 2,
+      "dom": 341.5,
+      "inp": 64,
+      "tbt": 4,
+      "perKey": 9.059999999776483
+    },
+    "composer:add": {
+      "p50": 162.1000000089407,
+      "p95": 162.1000000089407,
+      "n": 2,
+      "dom": 131.70000000298023,
+      "inp": 72,
+      "tbt": 14
+    },
+    "scroll:today": {
+      "p50": 18.299999997019768,
+      "p95": 18.299999997019768,
+      "n": 2,
+      "janky": 2,
+      "max": 38.8999999910593
+    },
+    "quickadd:open": {
+      "p50": 161.79999999701977,
+      "p95": 161.79999999701977,
+      "n": 2,
+      "dom": 151.09999999403954,
+      "inp": 0,
+      "tbt": 100
+    },
+    "quickadd:add": {
+      "p50": 306.20000000298023,
+      "p95": 306.20000000298023,
+      "n": 2,
+      "dom": 294,
+      "inp": 144,
+      "tbt": 176,
+      "savedAt": 1501.800048828125
+    },
+    "upcoming:cold": {
+      "p50": 2189.699999988079,
+      "p95": 2189.699999988079,
+      "n": 2,
+      "apiCount": 19,
+      "domNodes": 9654
+    },
+    "upcoming:warm": {
+      "p50": 820.2999999970198,
+      "p95": 820.2999999970198,
+      "n": 2,
+      "apiCount": 0,
+      "domNodes": 9654
+    },
+    "scroll:upcoming": {
+      "p50": 27.69999998807907,
+      "p95": 27.69999998807907,
+      "n": 2,
+      "janky": 7,
+      "max": 66.79999999701977
+    }
+  },
+  "renders": {
+    "tab:inbox (first)": {
+      "total": 5307,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1187,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 808,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 808,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 415,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 405,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 405,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 404,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 404,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 353,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today (first)": {
+      "total": 2925,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 529,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 261,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming (first)": {
+      "total": 4990,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1167,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 700,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 700,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 361,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:inbox": {
+      "total": 5312,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1189,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 808,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 808,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 415,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 405,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 404,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 404,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 353,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today": {
+      "total": 2925,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 529,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 261,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming": {
+      "total": 4990,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1167,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 700,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 700,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 361,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:open": {
+      "total": 1247,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 36,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "FloatingTree",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:type": {
+      "total": 818,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 51,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 25,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 18,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 9,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "edit:title": {
+      "total": 2097,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 750,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 750,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 98,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 36,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 26,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 25,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 21,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 12,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "complete": {
+      "total": 1173,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 498,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 498,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 29,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "DialogPortal",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:open": {
+      "total": 2453,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 540,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 261,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 252,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRow",
+          "renders": 249,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 249,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 249,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 249,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 14,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:type40": {
+      "total": 1164,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 400,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 200,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 80,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Calendar1",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Goal",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Flag",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "AlarmClock",
+          "renders": 40,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:add": {
+      "total": 1283,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 69,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 21,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 6,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:open": {
+      "total": 1013,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 405,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 405,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 43,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "DialogPortal",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 4,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:add": {
+      "total": 1077,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRow",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 62,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 21,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        }
+      ]
+    }
+  },
+  "api": {},
+  "bundle": {
+    "initialJS": {
+      "kb": 1740.7333984375,
+      "gzipKB": 533.421875
+    },
+    "initialCSS": {
+      "kb": 367.865234375,
+      "gzipKB": 53.1533203125
+    },
+    "totalJS": {
+      "kb": 2415.4189453125,
+      "gzipKB": 715.525390625
+    },
+    "chunks": 8,
+    "largest": [
+      "bulk-views-AdL_GQq1.js 933KB (279 gz)",
+      "index-BrxR7THQ.js 805KB (253 gz)",
+      "settings-dialog-U7x39Nw-.js 590KB (153 gz)",
+      "index-D6GBG_Ky.css 368KB (53 gz)",
+      "dist-BY9j4ReK.js 49KB (16 gz)",
+      "dist-BoHMOFax.js 22KB (8 gz)"
+    ]
+  },
+  "samples": {
+    "load:cold": [
+      {
+        "ms": 2125.300000011921,
+        "dom": 2042.5,
+        "ttfb": 3.2000000029802322,
+        "dcl": 304,
+        "fcp": 400,
+        "lcp": 400,
+        "jsKB": 530,
+        "cssKB": 54,
+        "apiCount": 15,
+        "domNodes": 3726,
+        "tbt": 231,
+        "apiChain": "/api/v1/account 320→917, /api/v1/settings/keyboard 995→1196, /api/v1/rituals 998→1206, /api/v1/goals 1000→1613, /api/v1/metadata 1001→1617, /api/v1/projects 1001→1594, /api/v1/today 1004→1984, /api/v1/calendar/events 1005→1411, /api/v1/settings/personalization 1012→1615, /api/v1/imports/todoist 1017→1792, /api/v1/settings 1017→1814, /api/v1/seasons/current 1630→1834, /api/v1/seasons/past 1631→1988, /api/v1/goal-links 1633→2016, /api/v1/sync 1639→2038"
+      },
+      {
+        "ms": 2056.9000000059605,
+        "dom": 1971.2999999970198,
+        "ttfb": 1.0999999940395355,
+        "dcl": 202.79999999701977,
+        "fcp": 264,
+        "lcp": 264,
+        "jsKB": 530,
+        "cssKB": 54,
+        "apiCount": 18,
+        "domNodes": 3758,
+        "tbt": 211,
+        "apiChain": "/api/v1/account 217→826, /api/v1/settings/keyboard 897→1103, /api/v1/rituals 898→1102, /api/v1/goals 899→1103, /api/v1/metadata 900→1102, /api/v1/projects 901→1103, /api/v1/coach 902→1301, /api/v1/today 903→1915, /api/v1/calendar/events 905→1302, /api/v1/settings/personalization 909→1301, /api/v1/imports/todoist 912→1302, /api/v1/settings 913→1306, /api/v1/seasons/current 1111→1498, /api/v1/goal-links 1113→1500, /api/v1/seasons/past 1143→1500, /api/v1/coach/chat 1337→1535, /api/v1/coach/drafts 1338→1694, /api/v1/sync 1360→1696"
+      }
+    ],
+    "load:warm": [
+      {
+        "ms": 470.20000000298023,
+        "dom": 457.80000001192093,
+        "ttfb": 1.1000000089406967,
+        "dcl": 56.400000005960464,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3758,
+        "tbt": 254,
+        "apiChain": ""
+      },
+      {
+        "ms": 472.80000001192093,
+        "dom": 456.80000001192093,
+        "ttfb": 0.9000000059604645,
+        "dcl": 51.6000000089407,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3758,
+        "tbt": 255,
+        "apiChain": ""
+      }
+    ],
+    "tab:inbox (first)": [
+      {
+        "dom": 163.79999999701977,
+        "ms": 343.29999999701977,
+        "at": 1795501969441.9,
+        "inputAt": 1795501969098.6,
+        "inp": 32,
+        "tbt": 129,
+        "longtasks": 1
+      },
+      {
+        "dom": 139.59999999403954,
+        "ms": 319.59999999403954,
+        "at": 1795501999916.4,
+        "inputAt": 1795501999596.7998,
+        "inp": 24,
+        "tbt": 128,
+        "longtasks": 1
+      }
+    ],
+    "tab:today (first)": [
+      {
+        "dom": 94.19999998807907,
+        "ms": 168.5,
+        "at": 1795501969710,
+        "inputAt": 1795501969541.5,
+        "inp": 32,
+        "tbt": 24,
+        "longtasks": 1
+      },
+      {
+        "dom": 90.5,
+        "ms": 162.20000000298023,
+        "at": 1795502000176.9,
+        "inputAt": 1795502000014.7,
+        "inp": 24,
+        "tbt": 21,
+        "longtasks": 1
+      }
+    ],
+    "tab:upcoming (first)": [
+      {
+        "dom": 449.5,
+        "ms": 483.30000001192093,
+        "at": 1795501970241.5,
+        "inputAt": 1795501969758.2,
+        "inp": 32,
+        "tbt": 246,
+        "longtasks": 1
+      },
+      {
+        "dom": 435.70000000298023,
+        "ms": 472.29999999701977,
+        "at": 1795502000700.7,
+        "inputAt": 1795502000228.4,
+        "inp": 32,
+        "tbt": 244,
+        "longtasks": 1
+      }
+    ],
+    "tab:inbox": [
+      {
+        "dom": 184.90000000596046,
+        "ms": 361.09999999403954,
+        "at": 1795501970669.2,
+        "inputAt": 1795501970308.1,
+        "inp": 32,
+        "tbt": 160,
+        "longtasks": 2
+      },
+      {
+        "dom": 191.1000000089407,
+        "ms": 370.80000001192093,
+        "at": 1795502001150.5,
+        "inputAt": 1795502000779.7,
+        "inp": 32,
+        "tbt": 165,
+        "longtasks": 2
+      }
+    ],
+    "tab:today": [
+      {
+        "dom": 82,
+        "ms": 157.19999998807907,
+        "at": 1795501970883.2,
+        "inputAt": 1795501970726,
+        "inp": 24,
+        "tbt": 24,
+        "longtasks": 1
+      },
+      {
+        "dom": 80.19999998807907,
+        "ms": 154.59999999403954,
+        "at": 1795502001368.0999,
+        "inputAt": 1795502001213.5,
+        "inp": 32,
+        "tbt": 23,
+        "longtasks": 1
+      }
+    ],
+    "tab:upcoming": [
+      {
+        "dom": 389.19999998807907,
+        "ms": 421,
+        "at": 1795501971345.5,
+        "inputAt": 1795501970924.5,
+        "inp": 32,
+        "tbt": 221,
+        "longtasks": 1
+      },
+      {
+        "dom": 393.20000000298023,
+        "ms": 423.20000000298023,
+        "at": 1795502001835.7,
+        "inputAt": 1795502001411.7998,
+        "inp": 32,
+        "tbt": 226,
+        "longtasks": 1
+      }
+    ],
+    "sheet:open": [
+      {
+        "dom": 269.29999999701977,
+        "ms": 323.5,
+        "at": 1795501974388.8,
+        "inputAt": 1795501974065.3,
+        "inp": 0,
+        "tbt": 221,
+        "longtasks": 1
+      },
+      {
+        "dom": 256.59999999403954,
+        "ms": 308.29999999701977,
+        "at": 1795502004792.5,
+        "inputAt": 1795502004484.2002,
+        "inp": 0,
+        "tbt": 208,
+        "longtasks": 1
+      }
+    ],
+    "sheet:type": [
+      {
+        "dom": 157.5,
+        "ms": 165,
+        "at": 1795501974765.5,
+        "inputAt": 1795501974600.5,
+        "inp": 96,
+        "tbt": 20,
+        "longtasks": 2
+      },
+      {
+        "dom": 142.20000000298023,
+        "ms": 150.40000000596046,
+        "at": 1795502005150.9001,
+        "inputAt": 1795502005000.5,
+        "inp": 80,
+        "tbt": 22,
+        "longtasks": 2
+      }
+    ],
+    "edit:title": [
+      {
+        "dom": 158.79999999701977,
+        "ms": 166.8999999910593,
+        "at": 1795501974944.2,
+        "inputAt": 1795501974777.3,
+        "inp": 128,
+        "tbt": 72,
+        "longtasks": 1
+      },
+      {
+        "dom": 110.70000000298023,
+        "ms": 119,
+        "at": 1795502005345.4001,
+        "inputAt": 1795502005226.4001,
+        "inp": 80,
+        "tbt": 10,
+        "longtasks": 1
+      }
+    ],
+    "complete": [
+      {
+        "dom": 173.40000000596046,
+        "ms": 256.90000000596046,
+        "at": 1795501978235.5999,
+        "inputAt": 1795501977978.7,
+        "inp": 120,
+        "tbt": 61,
+        "longtasks": 3,
+        "server": 609.5
+      },
+      {
+        "dom": 170.5,
+        "ms": 243.79999999701977,
+        "at": 1795502008108.9001,
+        "inputAt": 1795502007865.1,
+        "inp": 112,
+        "tbt": 60,
+        "longtasks": 3,
+        "server": 601.1000000089407
+      }
+    ],
+    "composer:open": [
+      {
+        "dom": 63.599999994039536,
+        "ms": 84.59999999403954,
+        "at": 1795501978845.5999,
+        "inputAt": 1795501978761,
+        "inp": 80,
+        "tbt": 15,
+        "longtasks": 1
+      },
+      {
+        "dom": 64.79999999701977,
+        "ms": 79.70000000298023,
+        "at": 1795502008714.4001,
+        "inputAt": 1795502008634.7002,
+        "inp": 0,
+        "tbt": 15,
+        "longtasks": 1
+      }
+    ],
+    "composer:type40": [
+      {
+        "dom": 341.5,
+        "ms": 362.3999999910593,
+        "at": 1795501979210.9,
+        "inputAt": 1795501978848.5,
+        "inp": 64,
+        "tbt": 4,
+        "longtasks": 1,
+        "perKey": 9.059999999776483
+      },
+      {
+        "dom": 338.5,
+        "ms": 350.5,
+        "at": 1795502009067.3,
+        "inputAt": 1795502008716.8,
+        "inp": 64,
+        "tbt": 4,
+        "longtasks": 1,
+        "perKey": 8.7625
+      }
+    ],
+    "composer:add": [
+      {
+        "dom": 131.70000000298023,
+        "ms": 162.1000000089407,
+        "at": 1795501979376.5,
+        "inputAt": 1795501979214.4,
+        "inp": 72,
+        "tbt": 14,
+        "longtasks": 2
+      },
+      {
+        "dom": 126.5,
+        "ms": 158.20000000298023,
+        "at": 1795502009229.1,
+        "inputAt": 1795502009070.9001,
+        "inp": 72,
+        "tbt": 14,
+        "longtasks": 2
+      }
+    ],
+    "scroll:today": [
+      {
+        "ms": 18.299999997019768,
+        "p50": 16.69999998807907,
+        "p95": 18.299999997019768,
+        "max": 38.8999999910593,
+        "janky": 2,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 18.299999997019768,
+        "p50": 16.799999997019768,
+        "p95": 18.299999997019768,
+        "max": 24.599999994039536,
+        "janky": 2,
+        "frames": 120,
+        "scroller": "HTML"
+      }
+    ],
+    "quickadd:open": [
+      {
+        "dom": 148,
+        "ms": 159,
+        "at": 1795501982040,
+        "inputAt": 1795501981881,
+        "inp": 0,
+        "tbt": 98,
+        "longtasks": 1
+      },
+      {
+        "dom": 151.09999999403954,
+        "ms": 161.79999999701977,
+        "at": 1795502011896.2002,
+        "inputAt": 1795502011734.4001,
+        "inp": 0,
+        "tbt": 100,
+        "longtasks": 1
+      }
+    ],
+    "quickadd:add": [
+      {
+        "dom": 289.90000000596046,
+        "ms": 300.90000000596046,
+        "at": 1795501982597.5,
+        "inputAt": 1795501982296.5999,
+        "inp": 144,
+        "tbt": 172,
+        "longtasks": 2,
+        "savedAt": 1462.60009765625
+      },
+      {
+        "dom": 294,
+        "ms": 306.20000000298023,
+        "at": 1795502012495.6,
+        "inputAt": 1795502012189.4001,
+        "inp": 144,
+        "tbt": 176,
+        "longtasks": 2,
+        "savedAt": 1501.800048828125
+      }
+    ],
+    "upcoming:cold": [
+      {
+        "ms": 2189.2000000029802,
+        "domNodes": 9654,
+        "apiCount": 18
+      },
+      {
+        "ms": 2189.699999988079,
+        "domNodes": 9654,
+        "apiCount": 19
+      }
+    ],
+    "upcoming:warm": [
+      {
+        "ms": 820.2999999970198,
+        "domNodes": 9654,
+        "apiCount": 0
+      },
+      {
+        "ms": 815.2000000029802,
+        "domNodes": 9654,
+        "apiCount": 0
+      }
+    ],
+    "scroll:upcoming": [
+      {
+        "ms": 25.30000001192093,
+        "p50": 16.599999994039536,
+        "p95": 25.30000001192093,
+        "max": 66.79999999701977,
+        "janky": 7,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 27.69999998807907,
+        "p50": 16.799999997019768,
+        "p95": 27.69999998807907,
+        "max": 57.30000001192093,
+        "janky": 7,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      }
+    ]
+  }
+}

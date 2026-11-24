@@ -2,7 +2,7 @@ import "./instrument"; // first: Sentry must load before the modules it instrume
 import { createApi } from "./app";
 import { productionDependencies } from "./production";
 import { auth } from "@todalo/auth";
-import { getOwnedTask, getTasksForUser, getTodayTasksForUser } from "@todalo/server/today";
+import { getOwnedTask, getProjectTaskList, getTaskTitles, getTasksForUser, getTodayCollection } from "@todalo/server/today";
 import * as projects from "@todalo/server/projects";
 import * as organization from "@todalo/server/organization";
 import { TaskOrganizationError } from "@todalo/db/task-organization-validation";
@@ -54,26 +54,19 @@ import { todoistClient } from "./todoist";
 import * as todoistImport from "@todalo/server/todoist-import-run";
 import { db } from "@todalo/db";
 import { sql } from "drizzle-orm";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
+import { sessionCache } from "./session-cache";
+import { clientFile } from "./client-files";
 
 // The browser build of apps/client (app.todalo.app), served next to its API so
 // /api stays same-origin and live sync shares this process's bus.
 const clientDist = resolve(import.meta.dir, "../../client/dist");
 async function serveClient(request: Request) {
-  const path = new URL(request.url).pathname; // URL already dropped any ../ segments
+  const path = new URL(request.url).pathname;
   // This GET catch-all outranks auth-routes' `.mount(auth.handler)`, so API paths go back to
   // Better Auth as before (Google callback, get-session, native-oauth/authorize; else its 404).
   if (path.startsWith("/api/")) return auth.handler(request);
-  const target = resolve(clientDist, `.${path}`);
-  const file = Bun.file(target);
-  if (target.startsWith(clientDist + sep) && await file.exists()) {
-    const immutable = path.startsWith("/assets/"); // Vite hashes these names
-    return new Response(file, { headers: { "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache" } });
-  }
-  // A missing hashed asset is a stale tab after a deploy: 404, not HTML posing as JS.
-  const index = Bun.file(`${clientDist}/index.html`);
-  if (path.startsWith("/assets/") || !await index.exists()) return new Response("NOT_FOUND", { status: 404 });
-  return new Response(index, { headers: { "cache-control": "no-cache" } });
+  return await clientFile(clientDist, path, request.headers.get("accept-encoding")) ?? new Response("NOT_FOUND", { status: 404 });
 }
 
 // Opening the database link costs seconds; pay it at boot, not on the first Ramble.
@@ -84,21 +77,47 @@ const dependencies = productionDependencies();
 const commitTodos = dependencies.commit;
 dependencies.commit = async (userId, ...rest) => { const count = await commitTodos(userId, ...rest); live.publish(userId, "sync"); return count; };
 const idConflict = (error: unknown) => { if (error instanceof metadata.MetadataIdConflictError) return null; throw error; };
-const verify = async (headers: Headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null;
+// One session lookup per token per 30 s (session-cache.ts); /api/auth requests drop their token.
+const sessions = sessionCache(async (headers) => (await auth.api.getSession({ headers, query: { disableCookieCache: true } }))?.user.id ?? null);
+const verify = sessions.verify;
+// The account read runs on every focus; a member number only moves when an earlier account is
+// deleted. ponytail: per-process, 10 min; a deletion shows in later numbers within that time.
+const memberships = new Map<string, { at: number; value: ReturnType<typeof membership> }>();
+const cachedMembership = (userId: string) => {
+  const hit = memberships.get(userId);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.value;
+  if (memberships.size > 10_000) memberships.clear();
+  const value = membership(userId);
+  memberships.set(userId, { at: Date.now(), value });
+  value.catch(() => memberships.delete(userId));
+  return value;
+};
+/** A task write answers with the task (or the deleted ID): the live frame carries it (live.ts). */
+function taskWritten(method: string, path: string, value: unknown): Omit<live.LiveChange, "topic"> | undefined {
+  if (!/^\/api\/v1\/tasks(\/[^/]+(\/complete)?)?$/.test(path)) return undefined;
+  // `status(201, body)` answers arrive wrapped.
+  const body = value && typeof value === "object" && "response" in value ? (value as { response: unknown }).response : value;
+  if (!body || typeof body !== "object") return undefined;
+  if ("task" in body && body.task && typeof body.task === "object") return { tasks: [body.task] };
+  if (method === "DELETE" && "id" in body && typeof body.id === "string") return { deleted: [body.id] };
+  return undefined;
+}
 const app = createApi(dependencies)
   // Live sync: every successful /api/v1 write tells the user's devices (this one
   // included) to pull the delta. Hooks cover the routes registered after them.
   .onAfterResponse(async ({ request, set, responseValue }) => {
-    if (request.method === "GET" || !new URL(request.url).pathname.startsWith("/api/v1/")) return;
+    const path = new URL(request.url).pathname;
+    if (request.method === "GET" || !path.startsWith("/api/v1/")) return;
     const code = responseValue instanceof Response ? responseValue.status : Number(set.status ?? 200);
     if (code >= 400) return;
     const userId = await verify(request.headers).catch(() => null);
-    if (userId) live.publish(userId, "sync");
+    if (userId) live.publish(userId, { topic: "sync", ...taskWritten(request.method, path, responseValue) });
   })
   .use(createSyncRoutes({ verify, delta: getSyncDelta }))
-  .use(createAuthRoutes(auth, membership)).use(createTaskRoutes({
+  .use(createAuthRoutes(auth, cachedMembership, sessions)).use(createTaskRoutes({
   verify,
-  today: (userId) => getTodayTasksForUser(userId),
+  // The DTO's columns only, long-completed tasks left out (today.ts getTodayCollection).
+  today: (userId) => getTodayCollection(userId),
   task: getOwnedTask,
   allowedOrigins: dependencies.allowedOrigins,
   ...taskOperations,
@@ -118,7 +137,7 @@ const app = createApi(dependencies)
   allowedOrigins: dependencies.allowedOrigins,
   list: projects.getProjectSummaries,
   get: projects.getOwnedProject,
-  tasks: getTasksForUser,
+  tasks: getProjectTaskList,
   create: projects.createProject,
   update: projects.updateProject,
   remove: projects.deleteProject,
@@ -310,6 +329,7 @@ const app = createApi(dependencies)
 })).use(createSearchRoutes({
   verify,
   tasks: (userId) => getTasksForUser(userId),
+  titles: getTaskTitles,
   projects: projects.getProjectsForUser,
   sections: (userId) => organization.getSectionsForUser(userId),
 })).use(createCalendarRoutes({

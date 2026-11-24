@@ -21,14 +21,14 @@ export const change = <T,>(queryKey: QueryKey, patch: (data: T) => T): Change =>
 
 interface Layer { patches: Map<string, (data: unknown) => unknown>; done: boolean }
 interface Entry { key: QueryKey; base: unknown; layers: Layer[]; last: unknown }
-interface Book { entries: Map<string, Entry>; inflight: number; stale: QueryFilters[]; idle: (() => void)[] }
+interface Book { entries: Map<string, Entry>; inflight: number; begun: number; stale: QueryFilters[]; idle: (() => void)[] }
 /** An open write, returned by `begin` (TanStack: the onMutate context). */
 export interface Write { cache: QueryClient; layer: Layer; settled?: boolean }
 
 const books = new WeakMap<QueryClient, Book>();
 const book = (cache: QueryClient) => {
   let found = books.get(cache);
-  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, stale: [], idle: [] });
+  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, begun: 0, stale: [], idle: [] });
   return found;
 };
 const dataOf = (cache: QueryClient, hash: string) => cache.getQueryCache().get(hash)?.state.data;
@@ -64,7 +64,8 @@ function track(cache: QueryClient, layer: Layer, changes: Change[]) {
 
 /** Starts a write: cancels in-flight reads of what it changes, then patches them. */
 export async function begin(cache: QueryClient, changes: Change[] = []): Promise<Write> {
-  book(cache).inflight++;
+  const state = book(cache);
+  state.inflight++; state.begun++;
   const layer: Layer = { patches: new Map(), done: false };
   await Promise.all(changes.map(({ filters }) => cache.cancelQueries(filters)));
   track(cache, layer, changes);
@@ -119,17 +120,33 @@ export async function idle(cache: QueryClient): Promise<void> {
   while (state.inflight > 0) await new Promise<void>(resolve => state.idle.push(resolve));
 }
 
+/** Whether a write is open (begun, not yet settled). */
+export const writing = (cache: QueryClient) => book(cache).inflight > 0;
+
+/**
+ * Marks the start of a server read that doesn't go through the cache (sync.ts deltas); `overlapped`
+ * then says whether a write was open meanwhile, so the read may predate it (a task deleted just
+ * after its create would come back) and should be read again.
+ */
+export function readMark(cache: QueryClient) {
+  const state = book(cache), begun = state.inflight > 0 ? -1 : state.begun;
+  return { overlapped: () => begun < 0 || state.begun !== begun };
+}
+
 /** The pattern as TanStack mutation callbacks: spread into the mutation's options. */
 export function optimistic<V, R = unknown>(cache: QueryClient, plan: {
   apply?: (input: V) => Change[];
   reconcile?: (result: R, input: V) => Change[];
-  refresh?: (input: V) => QueryFilters[];
+  /** `failed`: the write was refused or lost (the screen's copy may be stale). */
+  refresh?: (input: V, failed: boolean) => QueryFilters[];
 }) {
   return {
     onMutate: (input: V) => begin(cache, plan.apply?.(input)),
     onError: (_error: Error, _input: V, write?: Write) => { if (write) rollback(write); },
     onSuccess: (result: R, input: V, write?: Write) => { if (write) commit(write, plan.reconcile?.(result, input)); },
-    onSettled: (_result: unknown, _error: Error | null, input: V, write?: Write) => write ? settle(write, plan.refresh?.(input)) : undefined,
+    // Not returned: mutateAsync resolves with the server's answer, and the follow-up refetch
+    // (every read the write touched, Today included) runs behind it.
+    onSettled: (_result: unknown, error: Error | null, input: V, write?: Write) => { if (write) void settle(write, plan.refresh?.(input, error !== null)); },
   };
 }
 
@@ -138,5 +155,5 @@ export async function optimisticWrite<R>(cache: QueryClient, changes: Change[], 
   const write = await begin(cache, changes);
   try { const result = await run(); commit(write, reconcile?.(result)); return result; }
   catch (error) { rollback(write); throw error; }
-  finally { await settle(write, refresh); }
+  finally { void settle(write, refresh); } // the refetch runs behind the answer
 }

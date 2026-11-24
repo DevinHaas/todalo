@@ -2,6 +2,7 @@ import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { queryOptions, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import type { CalendarAccountDto, CalendarEventDto, CalendarVisibilityInput } from "../../../packages/server/src/calendar-input";
 import { AccountTransportError, nativeAccountError, type AccountErrorCode } from "./errors";
+import type { TaskDto } from "./tasks";
 import { dayKey } from "./schedule";
 import { change, optimistic } from "./optimistic";
 
@@ -148,7 +149,16 @@ export function openEvent(event: CalendarEventDto, click: { preventDefault(): vo
 
 /* Live updates: client side of GET /api/v1/stream (contract in packages/server/src/calendar-input.ts). */
 
-export interface LiveListener { ready(): void; change(topic: string): void; closed(error?: AccountTransportError): void }
+/** What a task write's `sync` frame carries (calendar-input.ts contract): applied before the pull. */
+export interface LiveWritten { tasks?: TaskDto[]; deleted?: string[] }
+/** The frame's tasks and deleted IDs, kept only when well formed. */
+export function liveWritten(frame: { tasks?: unknown; deleted?: unknown }): LiveWritten | undefined {
+  const tasks = Array.isArray(frame.tasks) ? frame.tasks.filter((task): task is TaskDto => Boolean(task) && typeof task === "object" && typeof (task as TaskDto).id === "string") : [];
+  const deleted = Array.isArray(frame.deleted) ? frame.deleted.filter((id): id is string => typeof id === "string") : [];
+  return tasks.length || deleted.length ? { tasks, deleted } : undefined;
+}
+
+export interface LiveListener { ready(): void; change(topic: string, written?: LiveWritten): void; closed(error?: AccountTransportError): void }
 /** Opens one stream; the returned function closes it. `closed` fires when it ends by itself. */
 export interface LiveTransport { open(listener: LiveListener): () => void }
 
@@ -159,7 +169,9 @@ export function browserLiveTransport(create = (url: string) => new EventSource(u
       const source = create("/api/v1/stream");
       source.addEventListener("ready", () => listener.ready());
       source.addEventListener("change", (event) => {
-        try { listener.change(String(JSON.parse((event as MessageEvent).data).topic)); } catch { /* malformed frames are ignored */ }
+        let frame: { topic?: unknown; tasks?: unknown; deleted?: unknown };
+        try { frame = JSON.parse((event as MessageEvent).data); } catch { return; /* malformed frames are ignored */ }
+        listener.change(String(frame.topic), liveWritten(frame));
       });
       source.onerror = () => { if (source.readyState === EventSource.CLOSED) listener.closed(); };
       return () => source.close();
@@ -167,7 +179,7 @@ export function browserLiveTransport(create = (url: string) => new EventSource(u
   };
 }
 
-type NativeLiveMessage = { type: "ready" } | { type: "change"; topic: string } | { type: "closed"; error: string | null };
+type NativeLiveMessage = { type: "ready" } | { type: "change"; topic: string; tasks?: unknown; deleted?: unknown } | { type: "closed"; error: string | null };
 /** Native: Rust holds the bearer and forwards parsed frames over a channel. */
 export function nativeLiveTransport(): LiveTransport {
   let current = 0;
@@ -180,7 +192,7 @@ export function nativeLiveTransport(): LiveTransport {
       channel.onmessage = (message) => {
         if (!open) return;
         if (message.type === "ready") listener.ready();
-        else if (message.type === "change") listener.change(message.topic);
+        else if (message.type === "change") listener.change(message.topic, liveWritten(message));
         else { open = false; listener.closed(message.error ? nativeAccountError(message.error) : undefined); }
       };
       invoke("live_stream", { onEvent: channel }).catch((error) => { if (open) { open = false; listener.closed(nativeAccountError(error)); } });
@@ -209,7 +221,7 @@ export const liveTopicKeys: Record<string, (userId: string) => QueryKey[]> = {
 export function startLiveUpdates({ transport, cache, userId, onUnauthenticated, sync, delays = [1_000, 2_000, 5_000, 15_000, 30_000], page = document }: {
   transport: LiveTransport; cache: QueryClient; userId: string; onUnauthenticated(): void;
   /** Pulls the delta (sync.ts): on each `sync` change, and to catch up on connect and resume. */
-  sync?: { pull(): Promise<void> };
+  sync?: { pull(): Promise<void>; apply?(written: LiveWritten): Promise<void> };
   delays?: number[]; page?: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 }) {
   let close: (() => void) | null = null;
@@ -225,7 +237,8 @@ export function startLiveUpdates({ transport, cache, userId, onUnauthenticated, 
     clearTimeout(timer);
     close = transport.open({
       ready() { failures = 0; refresh([...Object.keys(liveTopicKeys), "sync"]); },
-      change(topic) { refresh([topic]); },
+      // A task write's frame carries the tasks: shown now, then the pull as for any change.
+      change(topic, written) { if (written) void sync?.apply?.(written).catch(() => {}); refresh([topic]); },
       closed(error) {
         close = null;
         if (stopped) return;

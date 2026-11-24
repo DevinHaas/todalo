@@ -60,9 +60,10 @@ export function createProjectRoutes(store: ProjectStore) {
     .get("/projects/:id", async ({ request, params, status }) => {
       const userId = await store.verify(request.headers);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const project = await store.get(userId, params.id);
+      // One round trip: the sections and tasks reads are the user's own rows, so they can run
+      // beside the project read (empty for another user's or a missing project).
+      const [project, sections, tasks] = await Promise.all([store.get(userId, params.id), store.sections(userId, params.id), store.tasks(userId, params.id)]);
       if (!project) return status(404, NOT_FOUND);
-      const [sections, tasks] = await Promise.all([store.sections(userId, project.id), store.tasks(userId, project.id)]);
       return { project: toProjectDto(project), sections: sections.map(toSectionDto), tasks: tasks.map(toTaskDto) } satisfies ProjectDetailDto;
     })
     .get("/destinations", async ({ request, status }) => {

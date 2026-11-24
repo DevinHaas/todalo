@@ -48,11 +48,14 @@ export function usePersonalization(userId: string) {
 export function PersonalizationSync({ userId }: { userId: string }) {
   const { document, loaded, saved, update } = usePersonalization(userId);
   const design = document.design;
+  // By value: without a saved design the fallback is a new object each render, and repainting
+  // the root's variables forces a style recalc of the whole page.
+  const designKey = JSON.stringify(design);
   useEffect(() => {
     if (!loaded) return;
     if (saved && theme.mode() !== design.mode) theme.setMode(design.mode);
     applyDesign(design);
-  }, [loaded, saved, design]);
+  }, [loaded, saved, designKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Only the image background shows the picture (the colours one keeps it stored, not painted).
   const wallpaper = design.background === "image" ? document.wallpaper : null;
   useEffect(() => { if (loaded) applyWallpaper(wallpaper); }, [loaded, wallpaper]);

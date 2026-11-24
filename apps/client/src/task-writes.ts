@@ -14,7 +14,9 @@ export function useTaskWrites(userId: string) {
   const complete = useMutation(writes.complete);
   const remove = useMutation(writes.remove);
   const update = useMutation(writes.update);
-  const actions: RowActions = { complete: (task) => complete.mutate({ task, operationId: operationId() }), remove: (task) => remove.mutate(task) };
+  // Stable (TanStack's mutate is), so memoised rows keep it between renders.
+  const { mutate: completeTask } = complete, { mutate: removeTask } = remove;
+  const actions = useMemo<RowActions>(() => ({ complete: (task) => completeTask({ task, operationId: operationId() }), remove: (task) => removeTask(task) }), [completeTask, removeTask]);
   // Failures are toasted (toasts.ts); screens show no inline write banner.
   return { create, complete, remove, update, actions };
 }

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import { SessionController, type Account, type AccountTransport } from "./session";
+import { rememberedAccount, SessionController, type Account, type AccountTransport } from "./session";
 import { AccountTransportError, nativeAccountError } from "./errors";
 import { browserTransport } from "./transport";
 
@@ -167,4 +167,46 @@ it("maps the browser's delete-user refusals to safe copy and sends the password 
 it("recognises the native delete messages exactly", () => {
   expect(nativeAccountError("For your safety, enter your password. Signed in with Google? Log out, sign in again, then delete within a day.").code).toBe("DELETE_SIGN_IN_AGAIN");
   expect(nativeAccountError("This account has no password. Leave the field empty, or log out and sign in with Google again first.").code).toBe("DELETE_NO_PASSWORD");
+});
+
+it("opens signed in as the remembered account, then follows the server (signed out forgets it)", async () => {
+  const store = new Map<string, string>();
+  const storage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => { store.set(key, value); }, removeItem: (key: string) => { store.delete(key); } };
+  let current: Account | null = account;
+  const transport: AccountTransport = { account: async () => current, signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {} };
+  const now = new Date("2026-10-01T00:00:00.000Z").getTime();
+  // Nothing remembered: the usual loading state until the server answers, which is remembered.
+  const first = new SessionController(transport, () => {}, undefined, rememberedAccount(storage), now);
+  expect(first.getSnapshot().status).toBe("loading");
+  await first.refresh();
+  expect(rememberedAccount(storage).load()).toEqual(account);
+  // Next launch: signed in at once, without clearing the cache when the server agrees.
+  let cleared = 0;
+  const next = new SessionController(transport, () => { cleared++; }, undefined, rememberedAccount(storage), now);
+  expect(next.getSnapshot()).toEqual({ status: "signed-in", account, error: null });
+  await next.refresh();
+  expect(cleared).toBe(0);
+  // The session ended elsewhere: signed out, cache cleared, nothing remembered.
+  current = null;
+  await next.refresh();
+  expect(next.getSnapshot().status).toBe("signed-out");
+  expect(cleared).toBe(1);
+  expect(rememberedAccount(storage).load()).toBeNull();
+  // An expired remembered session is not used.
+  rememberedAccount(storage).save(account);
+  expect(new SessionController(transport, () => {}, undefined, rememberedAccount(storage), new Date("2026-11-01").getTime()).getSnapshot().status).toBe("loading");
+});
+
+it("serves focus and visibilitychange with one account read, and an unchanged answer notifies nobody", async () => {
+  let reads = 0;
+  const transport: AccountTransport = { account: async () => { reads += 1; return { ...account, user: { ...account.user } }; }, signIn: async () => account, signUp: async () => account, signOut: async () => {}, deleteAccount: async () => {} };
+  const session = new SessionController(transport, () => {});
+  await session.refresh();
+  const before = session.getSnapshot();
+  let notified = 0;
+  session.subscribe(() => { notified += 1; });
+  await Promise.all([session.refresh(), session.refresh()]);
+  expect(reads).toBe(2);
+  expect(notified).toBe(0);
+  expect(session.getSnapshot()).toBe(before);
 });

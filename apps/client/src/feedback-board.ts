@@ -5,20 +5,29 @@
 // CSP allows only because tauri.conf.json keeps Tauri from adding nonces to style-src.
 import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { destroy, init, open, type FeatureSpaceOptions } from "featurespace";
+import type { FeatureSpaceOptions } from "featurespace";
 import { cssHex } from "./liquid";
 import { appVersion } from "./releases";
 import type { Account } from "./session";
 
 // The widget takes the accent as a hex value: the SDK appends alpha to it for tints (a CSS variable would break those).
 const accent = () => cssHex(getComputedStyle(document.documentElement).getPropertyValue("--color-brand"));
+// The SDK (and its screenshot library) is its own chunk, loaded once the app has started.
+const sdk = () => import("featurespace");
 let options: FeatureSpaceOptions | null = null, painted = "";
-const start = () => { if (options) init({ ...options, color: painted = accent() }); };
+let started: ReturnType<typeof sdk> | null = null;
+const start = () => {
+  const current = options;
+  if (current) started = sdk().then(featurespace => { if (options === current) featurespace.init({ ...current, color: painted = accent() }); return featurespace; });
+};
 
 /** Opens the form, first restarting the widget if the accent changed since it started. */
 export function openFeedback() {
-  if (options && accent() !== painted) { destroy(); start(); }
-  open();
+  if (!started) start();
+  void started?.then(({ destroy, init, open }) => {
+    if (options && accent() !== painted) { destroy(); init({ ...options, color: painted = accent() }); }
+    open();
+  });
 }
 
 export function useFeedbackBoard({ user }: Account) {
@@ -38,7 +47,7 @@ export function useFeedbackBoard({ user }: Account) {
         { label: "Feature request", category: "Feature", placeholder: "What should Todalo do?", details: "What would you use it for?" },
       ],
     };
-    start();
-    return () => { options = null; destroy(); };
+    const timer = setTimeout(start, 2000);
+    return () => { clearTimeout(timer); options = null; void started?.then(({ destroy }) => destroy()); started = null; };
   }, [id, email, name]);
 }

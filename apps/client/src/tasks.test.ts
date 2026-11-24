@@ -172,7 +172,7 @@ describe("task mutations", () => {
     expect(calls).toEqual([id, id]);
     expect(saved.size).toBe(1);
     expect(cache.getQueryData(taskKeys.task("alice", id))).toEqual(created);
-    expect(cache.getQueryState(today)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(today)?.isInvalidated).toBe(false); // reconciled from the answer; the live sync pull brings the rest
   });
 
   it("does not retry a rejected create, so the composer can keep the input", async () => {
@@ -211,15 +211,20 @@ describe("task mutations", () => {
     expect(stale.cache.getQueryState(today)?.isInvalidated).toBe(true);
   });
 
-  it("saves an edit, retries a lost response with the same body, and refreshes the task, Today and project lists", async () => {
+  it("saves an edit, retries a lost response with the same body, and refreshes the task and project lists", async () => {
     const bodies: TaskDetails[] = [];
     const { cache, writes } = setup({ update: async (_id, body) => { bodies.push(body); if (bodies.length === 1) throw new AccountTransportError("SAVE_FAILED"); return task("a", { title: body.title, updatedAt: "2026-10-04T09:00:00.000Z" }); } });
     cache.setQueryData(["user", "alice", "project", "p1"], { project: {}, tasks: [] });
+    cache.setQueryData(["user", "alice", "metadata", "list"], { labels: [], filters: [] });
+    cache.setQueryData(["user", "alice", "metadata", "label", "l1"], { label: {}, tasks: [] });
     const saved = await new MutationObserver(cache, { ...writes.update, retryDelay: 0 }).mutate({ id: "a", details });
     expect(bodies).toEqual([details, details]);
     expect(cache.getQueryData(taskKeys.task("alice", "a"))).toEqual(saved);
-    expect(cache.getQueryState(today)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(today)?.isInvalidated).toBe(false); // reconciled, not refetched (a failed write refetches it)
     expect(cache.getQueryState(["user", "alice", "project", "p1"])?.isInvalidated).toBe(true);
+    // Label pages list tasks; the sidebar's labels-and-filters list doesn't change with a task.
+    expect(cache.getQueryState(["user", "alice", "metadata", "label", "l1"])?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(["user", "alice", "metadata", "list"])?.isInvalidated).toBe(false);
   });
 
   it("does not retry a stale or missing edit", async () => {
@@ -256,6 +261,33 @@ describe("task mutations", () => {
     // Another device's version still conflicts.
     version = "elsewhere";
     await expect(new MutationObserver(cache, writes.update).mutate({ id: "a", details: { ...details, updatedAt: "v3" } })).rejects.toMatchObject({ code: "TASK_CHANGED" });
+  });
+
+  it("sends a delete, completion or edit of a task still being created only after its create (else the server misses it, then creates it)", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const { cache, writes } = setup({
+      create: async (input) => { await gate; order.push("create"); return task(input.id, { title: input.title }); },
+      remove: async () => { order.push("remove"); return true; },
+      complete: async () => { order.push("complete"); return task("new", { status: "done" }); },
+      update: async (_id, body) => { order.push("update"); return task("new", { title: body.title }); },
+    });
+    const created = new MutationObserver(cache, writes.create).mutate({ id: "new", title: "Plan", dueDate: null });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const draft = cache.getQueryData<TodayDto>(today)!.tasks.find(row => row.id === "new")!;
+    const others = [
+      new MutationObserver(cache, writes.update).mutate({ id: "new", details: { ...details, updatedAt: "" } }),
+      new MutationObserver(cache, writes.complete).mutate({ task: draft, operationId: TAP }),
+      new MutationObserver(cache, writes.remove).mutate(draft),
+    ];
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(order).toEqual([]);
+    release();
+    await Promise.all([created, ...others]);
+    expect(order[0]).toBe("create");
+    expect([...order].sort()).toEqual(["complete", "create", "remove", "update"]);
+    expect(cache.getQueryData<TodayDto>(today)!.tasks.map(row => row.id)).toEqual(["a", "b"]);
   });
 
   it("deletes optimistically and treats a task already gone after a retry as deleted", async () => {
@@ -333,5 +365,30 @@ describe("task editor", () => {
     expect(html).toContain("Edit task details");
     expect(html).toContain("Due 5 Oct · Every month");
     expect(render(createElement(TaskView, { state: { status: "success", data: task("t"), error: null }, onRetry: noop }))).not.toContain("Edit task details");
+  });
+});
+
+describe("treeOrder matches the previous (quadratic) definition", () => {
+  const reference = <T extends { id: string; parentId: string | null }>(tasks: T[]): T[] => {
+    const ids = new Set(tasks.map(task => task.id));
+    const seen = new Set<string>();
+    const visit = (task: T): T[] => {
+      if (seen.has(task.id)) return [];
+      seen.add(task.id);
+      return [task, ...tasks.filter(child => child.parentId === task.id).flatMap(visit)];
+    };
+    return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(visit);
+  };
+  it("on random lists with nesting, orphans and cycles", () => {
+    let seed = 7;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let round = 0; round < 200; round++) {
+      const size = 1 + Math.floor(random() * 40);
+      const list = Array.from({ length: size }, (_, i) => ({ id: `t${i}`, parentId: null as string | null }));
+      // Parents: none, another task in the list (cycles possible), or one outside it (an orphan).
+      for (const task of list) { const pick = random(); task.parentId = pick < 0.4 ? null : pick < 0.9 ? `t${Math.floor(random() * size)}` : "outside"; }
+      list.sort(() => random() - 0.5);
+      expect(treeOrder(list).map(task => task.id)).toEqual(reference(list).map(task => task.id));
+    }
   });
 });

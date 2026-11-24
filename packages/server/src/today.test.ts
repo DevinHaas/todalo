@@ -110,3 +110,39 @@ describe("Today server query", () => {
     expect(await getTasksForUser("alice", "unknown")).toEqual([]);
   });
 });
+
+describe("recentCollection", async () => {
+  const { recentCollection } = await import("./today");
+  const now = new Date("2026-11-24T12:00:00Z");
+  const old = "2026-09-01T12:00:00Z", recent = "2026-11-20T12:00:00Z";
+  const row = (id: string, status: string, completedAt: string | null, parentId: string | null = null) => ({ id, status, completedAt, parentId });
+  it("drops tasks completed before the window unless an open tree shows them", () => {
+    const rows = [
+      row("open", "todo", null), row("recent", "done", recent), row("old", "done", old),
+      // An open parent's old completed child (its progress) and its own done ancestor (breadcrumb).
+      row("root", "done", old), row("parent", "todo", null, "root"), row("child-done", "done", old, "parent"),
+      // An old completed tree with nothing open stays out.
+      row("old-parent", "done", old), row("old-child", "done", old, "old-parent"),
+    ];
+    expect(recentCollection(rows, now).map(task => task.id)).toEqual(["open", "recent", "root", "parent", "child-done"]);
+  });
+});
+
+describe("byManualOrder (merging the parallel Today reads)", async () => {
+  const { byManualOrder } = await import("./today");
+  it("orders like the SQL: sort order, then created_at to the microsecond, then ID by code point", () => {
+    const row = (id: string, sortOrder: number | null, createdText: string) => ({ id, sortOrder, createdText });
+    const rows = [
+      row("b", 1, "2026-11-24 05:30:47.688123"), row("a", 1, "2026-11-24 05:30:47.688123"), row("c", 1, "2026-11-24 05:30:47.6881"),
+      row("d", 1, "2026-11-24 05:30:47"), row("e", 0, "2026-12-01 00:00:00"), row("f", null, "2026-11-01 00:00:00"),
+    ];
+    expect([...rows].sort(byManualOrder).map(r => r.id)).toEqual(["f", "e", "d", "c", "a", "b"]);
+  });
+});
+
+describe("readParts (TODAY_READ_PARTS)", async () => {
+  const { readParts } = await import("./today");
+  it("takes 1, 2, 4 or 8 and falls back to 4", () => {
+    expect([undefined, "1", "2", "4", "8", "3", "0", "x", "16"].map(readParts)).toEqual([4, 1, 2, 4, 8, 4, 4, 4, 4]);
+  });
+});

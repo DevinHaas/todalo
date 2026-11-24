@@ -61,9 +61,10 @@ export function createMetadataRoutes(store: MetadataStore) {
     .get("/labels/:id", async ({ request, params, status }) => {
       const userId = await reader(request);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const label = await store.label(userId, params.id);
+      // One round trip: the user's tasks are read beside the label.
+      const [label, all] = await Promise.all([store.label(userId, params.id), store.tasks(userId)]);
       if (!label) return status(404, LABEL_NOT_FOUND);
-      const tasks = (await store.tasks(userId)).filter(task => task.labelIds.includes(label.id));
+      const tasks = all.filter(task => task.labelIds.includes(label.id));
       return { label: toLabelDto(label), tasks: tasks.map(toTaskDto) } satisfies LabelDetailDto;
     })
     .post("/labels", async ({ request, body, status }) => {
@@ -94,16 +95,15 @@ export function createMetadataRoutes(store: MetadataStore) {
     .get("/filters/:id", async ({ request, params, status }) => {
       const userId = await reader(request);
       if (!userId) return status(401, UNAUTHENTICATED);
-      const filter = await store.filter(userId, params.id);
+      // One round trip: everything a filter can need is read beside it (the user's own rows).
+      const [filter, all, { labels }, projects, sections] = await Promise.all([store.filter(userId, params.id), store.tasks(userId), store.metadata(userId), store.projects(userId), store.sections(userId)]);
       if (!filter) return status(404, FILTER_NOT_FOUND);
       // Evaluated here, in the server's zone, exactly as the legacy filter page.
       const now = new Date();
-      const all = await store.tasks(userId);
       if (!filter.query) {
         const tasks = filter.definition ? all.filter(task => matchesSavedFilter(task, filter.definition!, now)) : [];
         return { filter, tasks: tasks.map(toTaskDto) } satisfies FilterDetailDto;
       }
-      const [{ labels }, projects, sections] = await Promise.all([store.metadata(userId), store.projects(userId), store.sections(userId)]);
       const groups = runFilterQuery(filter.query, all, { now, labels, projects, sections }).map(group => ({ title: group.title, tasks: group.tasks.map(toTaskDto) }));
       const union = new Set(groups.flatMap(group => group.tasks.map(task => task.id)));
       return { filter, tasks: all.filter(task => union.has(task.id)).map(toTaskDto), groups } satisfies FilterDetailDto;

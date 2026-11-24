@@ -34,10 +34,12 @@ export interface SyncDelta {
 }
 
 export interface SyncSource {
-  /** The current snapshot xmin. */
-  cursor(): Promise<number>;
-  /** The user's change-log rows written by transactions at or after `since`, at most `limit`. */
-  changes(userId: string, since: number, limit: number): Promise<{ entity: string; entityId: string }[]>;
+  /**
+   * The current snapshot xmin (`cursor`) and, with `since`, the user's change-log rows written by
+   * transactions at or after it (at most `limit`), read after the cursor was taken: anything
+   * committing later is at or above the cursor. One round trip.
+   */
+  window(userId: string, since: number | null, limit: number): Promise<{ cursor: number; rows: { entity: string; entityId: string }[] }>;
   tasks(userId: string, ids: string[]): Promise<TaskDto[]>;
   projects(userId: string, ids: string[]): Promise<ProjectDto[]>;
   labels(userId: string, ids: string[]): Promise<LabelDto[]>;
@@ -56,12 +58,10 @@ const blank = (cursor: number, full: boolean): SyncDelta => ({
 });
 
 export async function buildDelta(source: SyncSource, userId: string, since: string | null | undefined): Promise<SyncDelta> {
-  // The cursor is taken first: anything committing later is at or above it.
-  const cursor = await source.cursor();
   const from = parseCursor(since);
+  const { cursor, rows } = await source.window(userId, from, MAX_DELTA + 1);
   // A cursor ahead of the server's came from another database (restore, branch).
   if (from === null || from > cursor) return blank(cursor, true);
-  const rows = await source.changes(userId, from, MAX_DELTA + 1);
   if (rows.length > MAX_DELTA) return blank(cursor, true);
   const ids = (entity: string) => [...new Set(rows.filter(row => row.entity === entity).map(row => row.entityId))];
   const delta = blank(cursor, false);
