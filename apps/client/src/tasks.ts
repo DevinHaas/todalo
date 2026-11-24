@@ -246,10 +246,16 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
   // version written elsewhere still conflicts.
   // ponytail: `replaced` grows by one entry per edit for the session; fine at human edit rates.
   const running = new Map<string, Promise<unknown>>();
+  // A task's create still on its way: its delete, completion or edit waits for it. Sent at once,
+  // it could reach the server first, miss the task ("not found"), and the create would then
+  // bring back a task the user had already deleted.
+  const creating = new Map<string, Promise<unknown>>();
+  const created = (id: string) => creating.get(id)?.catch(() => {});
   const replaced = new Map<string, string>();
   const latest = (id: string, version: string) => { let current = version; while (replaced.has(`${id}@${current}`)) current = replaced.get(`${id}@${current}`)!; return current; };
   const edit = (id: string, details: TaskDetails) => {
     const run = (running.get(id) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      await created(id);
       const base = latest(id, details.updatedAt);
       const task = await transport.update(id, { ...details, updatedAt: base });
       if (!task) throw new AccountTransportError("TASK_NOT_FOUND");
@@ -268,7 +274,13 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
   });
   return {
     create: {
-      mutationFn: (task: NewTask) => transport.create(task),
+      mutationFn: (task: NewTask) => {
+        const run = transport.create(task);
+        creating.set(task.id, run);
+        const done = () => { if (creating.get(task.id) === run) creating.delete(task.id); };
+        run.then(done, done);
+        return run;
+      },
       retry, retryDelay,
       ...keep(optimistic<NewTask, TaskDto>(cache, {
         apply: (input) => taskChanges(userId, tasks => tasks.some(item => item.id === input.id) ? tasks : placeTask(tasks, draftTask(input, input.parentId ? cached(input.parentId) : undefined), input.placement)),
@@ -278,7 +290,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       meta: { action: (task: NewTask) => `add "${task.title}"` },
     } satisfies MutationOptions<TaskDto, Error, NewTask, Write>,
     complete: {
-      mutationFn: ({ task, operationId }: Completion) => confirmingCriteria(confirm => transport.complete(task.id, task.dueDate, operationId, confirm)),
+      mutationFn: async ({ task, operationId }: Completion) => { await created(task.id); return confirmingCriteria(confirm => transport.complete(task.id, task.dueDate, operationId, confirm)); },
       retry, retryDelay,
       ...completed,
       onMutate: (input: Completion) => { feedback?.play("taskCompleted"); return completed.onMutate(input); },
@@ -297,7 +309,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       meta: { action: ({ id, details }: { id: string; details: TaskDetails }) => editAction(cached(id), details) },
     } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }, Write>,
     remove: {
-      mutationFn: (task: TaskDto) => transport.remove(task.id),
+      mutationFn: async (task: TaskDto) => { await created(task.id); return transport.remove(task.id); },
       retry, retryDelay,
       // Its sub-tasks go with it.
       ...optimistic<TaskDto>(cache, { apply: (task) => taskChanges(userId, tasks => tasks.filter(item => item.id !== task.id && item.parentId !== task.id)), refresh: (task, failed) => refresh(task.id, failed) }),

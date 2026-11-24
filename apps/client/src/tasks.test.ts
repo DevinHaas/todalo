@@ -258,6 +258,33 @@ describe("task mutations", () => {
     await expect(new MutationObserver(cache, writes.update).mutate({ id: "a", details: { ...details, updatedAt: "v3" } })).rejects.toMatchObject({ code: "TASK_CHANGED" });
   });
 
+  it("sends a delete, completion or edit of a task still being created only after its create (else the server misses it, then creates it)", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const { cache, writes } = setup({
+      create: async (input) => { await gate; order.push("create"); return task(input.id, { title: input.title }); },
+      remove: async () => { order.push("remove"); return true; },
+      complete: async () => { order.push("complete"); return task("new", { status: "done" }); },
+      update: async (_id, body) => { order.push("update"); return task("new", { title: body.title }); },
+    });
+    const created = new MutationObserver(cache, writes.create).mutate({ id: "new", title: "Plan", dueDate: null });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const draft = cache.getQueryData<TodayDto>(today)!.tasks.find(row => row.id === "new")!;
+    const others = [
+      new MutationObserver(cache, writes.update).mutate({ id: "new", details: { ...details, updatedAt: "" } }),
+      new MutationObserver(cache, writes.complete).mutate({ task: draft, operationId: TAP }),
+      new MutationObserver(cache, writes.remove).mutate(draft),
+    ];
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(order).toEqual([]);
+    release();
+    await Promise.all([created, ...others]);
+    expect(order[0]).toBe("create");
+    expect([...order].sort()).toEqual(["complete", "create", "remove", "update"]);
+    expect(cache.getQueryData<TodayDto>(today)!.tasks.map(row => row.id)).toEqual(["a", "b"]);
+  });
+
   it("deletes optimistically and treats a task already gone after a retry as deleted", async () => {
     let calls = 0;
     const { cache, writes } = setup({ remove: async () => { calls += 1; if (calls === 1) throw new AccountTransportError("SAVE_FAILED"); return false; } });

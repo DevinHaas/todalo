@@ -95,7 +95,9 @@ describe("createSync", () => {
   it("never clobbers a pending optimistic write: the delta lands after it settles, and an older copy loses", async () => {
     const cache = new QueryClient();
     cache.setQueryData(taskKeys.today("u"), { tasks: [task("t", { title: "Old" })], openCount: 0 });
-    const sync = createSync({ transport: transport(delta({ full: true, cursor: "1" }), delta({ cursor: "2", tasks: [task("t", { title: "Stale server copy", updatedAt: "2026-11-07T10:00:00.000Z" }), task("other")] })), cache, userId: "u" });
+    const stale = delta({ cursor: "2", tasks: [task("t", { title: "Stale server copy", updatedAt: "2026-11-07T10:00:00.000Z" }), task("other")] });
+    // The pull overlaps the write, so it reads again once the write settles (same answer here).
+    const sync = createSync({ transport: transport(delta({ full: true, cursor: "1" }), stale, stale), cache, userId: "u" });
     await sync.pull();
     // An edit is in flight (optimistic.ts): the screen shows its patch.
     const write = await begin(cache, taskChanges("u", tasks => tasks.map(row => row.id === "t" ? { ...row, title: "Mine" } : row)));
@@ -109,6 +111,26 @@ describe("createSync", () => {
     await pulled;
     expect(today(cache).tasks.map(row => [row.id, row.title])).toEqual([["t", "Mine"], ["other", "other"]]);
     expect(sync.state).toBe("synced");
+  });
+
+  it("a delta read while a write was open is read again: a task deleted right after its create doesn't come back", async () => {
+    const cache = new QueryClient();
+    cache.setQueryData(taskKeys.today("u"), { tasks: [task("a")], openCount: 0 });
+    let answer!: (value: SyncDelta) => void;
+    const fake = transport(delta({ full: true, cursor: "1" }));
+    fake.changes.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
+    fake.changes.mockResolvedValueOnce(delta({ cursor: "3", deleted: { task: ["new"] } }));
+    const sync = createSync({ transport: fake, cache, userId: "u" });
+    await sync.pull();
+    // The create's live frame starts a pull; the user deletes the task while it's in flight.
+    const pulled = sync.pull();
+    await tick();
+    const write = await begin(cache, taskChanges("u", tasks => tasks.filter(row => row.id !== "new")));
+    answer(delta({ cursor: "2", tasks: [task("new")] })); // read before the delete reached the server
+    commit(write); void settle(write);
+    await pulled;
+    expect(today(cache).tasks.map(row => row.id)).toEqual(["a"]);
+    expect(fake.changes.mock.calls).toEqual([[null], ["1"], ["1"]]);
   });
 
   it("pulls asked for during a pull coalesce into one more", async () => {
@@ -148,5 +170,16 @@ describe("live frames that carry the write (calendar.ts liveWritten, sync.apply)
     await sync.apply({ tasks: [task("a", { title: "Edited elsewhere", updatedAt: "2026-11-08T10:00:00.000Z" }), task("new")], deleted: ["gone"] });
     expect(today(cache).tasks.map(row => [row.id, row.title])).toEqual([["a", "Edited elsewhere"], ["new", "new"]]);
     expect(fake.changes).not.toHaveBeenCalled();
+  });
+
+  it("are skipped while a write of this device is open (the frame may predate it; the pull that follows decides)", async () => {
+    const cache = new QueryClient();
+    cache.setQueryData(taskKeys.today("u"), { tasks: [task("a")], openCount: 0 });
+    const sync = createSync({ transport: { changes: vi.fn<SyncTransport["changes"]>() }, cache, userId: "u" });
+    const write = await begin(cache, taskChanges("u", tasks => tasks.filter(row => row.id !== "new")));
+    const applied = sync.apply({ tasks: [task("new")] }); // the create's frame, after the delete began
+    commit(write); void settle(write);
+    await applied;
+    expect(today(cache).tasks.map(row => row.id)).toEqual(["a"]);
   });
 });

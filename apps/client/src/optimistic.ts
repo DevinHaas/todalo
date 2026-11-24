@@ -21,14 +21,14 @@ export const change = <T,>(queryKey: QueryKey, patch: (data: T) => T): Change =>
 
 interface Layer { patches: Map<string, (data: unknown) => unknown>; done: boolean }
 interface Entry { key: QueryKey; base: unknown; layers: Layer[]; last: unknown }
-interface Book { entries: Map<string, Entry>; inflight: number; stale: QueryFilters[]; idle: (() => void)[] }
+interface Book { entries: Map<string, Entry>; inflight: number; begun: number; stale: QueryFilters[]; idle: (() => void)[] }
 /** An open write, returned by `begin` (TanStack: the onMutate context). */
 export interface Write { cache: QueryClient; layer: Layer; settled?: boolean }
 
 const books = new WeakMap<QueryClient, Book>();
 const book = (cache: QueryClient) => {
   let found = books.get(cache);
-  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, stale: [], idle: [] });
+  if (!found) books.set(cache, found = { entries: new Map(), inflight: 0, begun: 0, stale: [], idle: [] });
   return found;
 };
 const dataOf = (cache: QueryClient, hash: string) => cache.getQueryCache().get(hash)?.state.data;
@@ -64,7 +64,8 @@ function track(cache: QueryClient, layer: Layer, changes: Change[]) {
 
 /** Starts a write: cancels in-flight reads of what it changes, then patches them. */
 export async function begin(cache: QueryClient, changes: Change[] = []): Promise<Write> {
-  book(cache).inflight++;
+  const state = book(cache);
+  state.inflight++; state.begun++;
   const layer: Layer = { patches: new Map(), done: false };
   await Promise.all(changes.map(({ filters }) => cache.cancelQueries(filters)));
   track(cache, layer, changes);
@@ -117,6 +118,19 @@ export function settle(write: Write, refresh: QueryFilters[] = []): Promise<unkn
 export async function idle(cache: QueryClient): Promise<void> {
   const state = book(cache);
   while (state.inflight > 0) await new Promise<void>(resolve => state.idle.push(resolve));
+}
+
+/** Whether a write is open (begun, not yet settled). */
+export const writing = (cache: QueryClient) => book(cache).inflight > 0;
+
+/**
+ * Marks the start of a server read that doesn't go through the cache (sync.ts deltas); `overlapped`
+ * then says whether a write was open meanwhile, so the read may predate it (a task deleted just
+ * after its create would come back) and should be read again.
+ */
+export function readMark(cache: QueryClient) {
+  const state = book(cache), begun = state.inflight > 0 ? -1 : state.begun;
+  return { overlapped: () => begun < 0 || state.begun !== begun };
 }
 
 /** The pattern as TanStack mutation callbacks: spread into the mutation's options. */

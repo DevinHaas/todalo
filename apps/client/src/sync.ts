@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { QueryClient, QueryFilters, QueryKey } from "@tanstack/react-query";
 import type { SyncDelta } from "../../../packages/server/src/sync-delta";
 import { AccountTransportError, nativeAccountError } from "./errors";
-import { idle, type Change } from "./optimistic";
+import { idle, readMark, writing, type Change } from "./optimistic";
 import { taskChanges, taskKeys, type TaskDto } from "./tasks";
 import type { CommentDto } from "../../../packages/server/src/comment-dto";
 
@@ -132,6 +132,7 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
   const everything = async () => { await idle(cache); await cache.invalidateQueries({ queryKey: taskKeys.user(userId) }); };
 
   async function once() {
+    const mark = readMark(cache);
     const delta = await transport.changes(cursor);
     const first = cursor === null;
     if (delta.full) {
@@ -142,23 +143,27 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
     }
     const { changes, refresh } = deltaChanges(userId, delta);
     await idle(cache);
+    // A write was open while this was read: the delta may predate it (a task deleted right after
+    // its create would come back for a moment). Read again from the same cursor.
+    if (mark.overlapped()) { again = true; return; }
     apply(cache, changes); // synchronously after idle: no write can start in between
     cursor = delta.cursor;
     await Promise.all(refresh.map(filters => cache.invalidateQueries(filters)));
   }
 
   /**
-   * A live frame's written tasks (calendar.ts LiveWritten): patched in at once, after any
-   * optimistic write as a pull's are, without moving the cursor. The pull that follows still runs.
+   * A live frame's written tasks (calendar.ts LiveWritten): patched in at once, without moving
+   * the cursor. Skipped while a write of this device is open (the frame may predate it); the pull
+   * that follows every frame still runs and decides.
+   * ponytail: a frame delayed past a later write's settle could still show an older copy until that pull.
    */
   async function applyWritten(written: { tasks?: TaskDto[]; deleted?: string[] }) {
+    if (writing(cache)) return;
     const delta: SyncDelta = {
       cursor: "", full: false, tasks: written.tasks ?? [], projects: [], labels: [], filters: [], comments: [], changed: [],
       deleted: { task: written.deleted ?? [], project: [], label: [], filter: [], comment: [] },
     };
-    const { changes } = deltaChanges(userId, delta);
-    await idle(cache);
-    apply(cache, changes);
+    apply(cache, deltaChanges(userId, delta).changes);
   }
 
   function pull(): Promise<void> {
