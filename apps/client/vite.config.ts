@@ -56,5 +56,10 @@ export default defineConfig({
     // these same paths to Elysia; no credentials are bundled into this client.
     proxy: { "/api": { target: process.env.CLIENT_API_PROXY_TARGET ?? "http://127.0.0.1:3001", changeOrigin: false, ws: true } },
   },
-  build: { target: "safari15.4", ...(reactScan && { minify: false }) },
+  build: {
+    target: "safari15.4", ...(reactScan && { minify: false }),
+    // The vendored UI library (src/ui) is imported through its barrel; its modules only define
+    // components, so ones the app doesn't use (combobox, accordion, menubar, …) can be dropped.
+    rolldownOptions: { treeshake: { moduleSideEffects: [{ test: /\/src\/ui\/.*\.tsx?$/, sideEffects: false }] } },
+  },
 });
