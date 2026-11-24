@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,7 +30,7 @@ import { useOpenSettings } from "./settings-nav";
 import { PersonalizationSync, useSidebarLayout } from "./personalization-screens";
 import { sidebarViews, type SidebarEntry } from "./personalization";
 import { CriteriaConfirmHost, GoalsSidebar, SeasonsSidebar, useGoalsShown, useMilestoneTaskIds, useTaskGoalOf } from "./goal-screens";
-import { MilestoneTasks, TaskGoals } from "./task-tree";
+import { MilestoneTasks, TaskGoals, TaskTreeStores, taskTreeStore } from "./task-tree";
 import { openRitual, RitualHost, RitualsSidebar, useRitualTaskIds } from "./ritual-screens";
 import { CoachChatButton, CoachChatHost } from "./coach-chat-screens";
 import { FavoritesSidebar } from "./metadata-screens";
@@ -132,6 +132,9 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
     placeholderData: () => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id) });
   // Every owned task: rows' sub-task progress and inline children (no extra request; Shell keeps it loaded).
   const all = useQuery(reads.today(userId)).data?.tasks ?? null;
+  // Rows subscribe to their own slice of it (task-tree.ts): set after each commit, before paint.
+  const [treeStore] = useState(() => { const store = taskTreeStore(); store.set(all); return store; });
+  useLayoutEffect(() => treeStore.set(all), [treeStore, all]);
   const milestones = useMilestoneTaskIds(userId);
   const goalOfTask = useTaskGoalOf(userId);
   // Ticket 29: the Coach drafts' pending changes, shown in place in rows and the sheet.
@@ -142,31 +145,38 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
   const ritualItems = useRitualTaskIds(userId);
   const { pathname } = useLocation();
   useEffect(() => { setId(null); setInserting(null); setEditing(null); }, [pathname]);
-  const create = writes.create.mutateAsync;
+  // The mutations' functions, not their results (a new object each render), so the dialog
+  // context below stays the same between renders and memoised rows keep it.
+  const create = writes.create.mutateAsync, update = writes.update.mutateAsync, reorganize = organize.mutateAsync;
+  // Stable across renders, so memoised rows (views.tsx TaskRowBody) keep their props.
+  const rituals = useRef(ritualItems);
+  rituals.current = ritualItems;
+  const open = useCallback((next: string) => {
+    const ritual = rituals.current.get(next);
+    if (ritual) { openRitual(ritual); return; }
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next);
+  }, []);
+  const edit = useCallback((next: string) => { setInserting(null); setEditing(next); }, []);
   const dialog = useMemo<TaskDialog>(() => ({
-    open(next) {
-      const ritual = ritualItems.get(next);
-      if (ritual) { openRitual(ritual); return; }
-      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setInserting(null); setEditing(null); setId(next); },
-    edit(next) { setInserting(null); setEditing(next); },
+    open, edit,
     editor: (task) => editing === task.id ? <div className="dialog quick-add inline-quick-add row-edit" aria-label={`Edit ${task.title}`}>
       <Composer key={task.id} startOpen quick editing={task} dueDate={() => task.dueDate} projectId={task.projectId} sectionId={task.sectionId}
         onCancel={() => { setEditing(null); focusRow(task.id, null); }}
         onUpdate={async (details, projectId) => {
-          await writes.update.mutateAsync({ id: task.id, details });
-          if (projectId !== task.projectId) await organize.mutateAsync({ task, change: { projectId, sectionId: null } });
+          await update({ id: task.id, details });
+          if (projectId !== task.projectId) await reorganize({ task, change: { projectId, sectionId: null } });
         }} />
     </div> : null,
     slot: (anchor, edge) => inserting?.task.id === anchor && inserting.edge === edge
       ? <InsertComposer edge={edge} task={inserting.task} onClose={() => { setInserting(null); focusRow(anchor, opener.current); }}
         // The composer follows the task just added, as the next draft does (legacy onCreated).
         onCreate={async (task, direction) => { const created = await create(task); setInserting({ edge: direction, task: created }); }} /> : null,
-  }), [inserting, create, editing, writes.update, organize, ritualItems]);
+  }), [inserting, create, editing, update, reorganize, open, edit]);
   const close = () => { if (id) focusRow(id, opener.current); setId(null); };
   const neighbour = (step: -1 | 1) => id ? taskNeighbour(id, step) : undefined;
   const task = id ? query.data : null;
   const sheet = useTaskSheet(account, task, close);
-  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><MilestoneTasks.Provider value={milestones}><TaskGoals.Provider value={goalOfTask}><PendingChangesContext.Provider value={pending}>
+  return <TaskDialogs.Provider value={dialog}><TaskTree.Provider value={all}><TaskTreeStores.Provider value={treeStore}><MilestoneTasks.Provider value={milestones}><TaskGoals.Provider value={goalOfTask}><PendingChangesContext.Provider value={pending}>
     <TaskContextMenu userId={userId} onOpen={dialog.open}>{children}</TaskContextMenu>
     {/* Saving keeps the sheet open (Previous/Next and sub-tasks switch the task in place). */}
     {task && <TaskEditor key={task.id} task={task} labels={extras.labels} shareUrl={extras.shareUrl} onClose={close} {...sheet}
@@ -174,7 +184,7 @@ function TaskDialogHost({ account, children }: { account: Account; children: Rea
       onSave={(details) => writes.update.mutateAsync({ id: task.id, details })}
       onOpen={setId}
       onInsert={(edge) => { close(); setInserting({ edge, task }); }} />}
-  </PendingChangesContext.Provider></TaskGoals.Provider></MilestoneTasks.Provider></TaskTree.Provider></TaskDialogs.Provider>;
+  </PendingChangesContext.Provider></TaskGoals.Provider></MilestoneTasks.Provider></TaskTreeStores.Provider></TaskTree.Provider></TaskDialogs.Provider>;
 }
 
 /** The page column: lists keep a readable width; board and calendar layouts use the full width. */

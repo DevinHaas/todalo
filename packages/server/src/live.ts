@@ -3,7 +3,12 @@
 // and the stream's subscribers must run in the same process.
 import type { LiveTopic } from "./calendar-input";
 
-type Listener = (topic: LiveTopic) => void;
+/**
+ * A change frame (calendar-input.ts contract). A task write's frame also carries the tasks it
+ * wrote or deleted, so other devices show them at once; they still pull the delta after it.
+ */
+export interface LiveChange { topic: LiveTopic; tasks?: unknown[]; deleted?: string[] }
+type Listener = (change: LiveChange) => void;
 
 // ponytail: in-memory, single-instance ceiling — swap for Redis/Postgres pub/sub
 // before running more than one API process. Stashed on globalThis so it survives
@@ -22,9 +27,10 @@ export function subscribe(userId: string, listener: Listener) {
   };
 }
 
-export function publish(userId: string, topic: LiveTopic) {
+export function publish(userId: string, change: LiveTopic | LiveChange) {
+  const frame = typeof change === "string" ? { topic: change } : change;
   for (const listener of subscribers.get(userId) ?? []) {
     // One closed or failing stream never stops delivery to the user's other devices.
-    try { listener(topic); } catch { /* the stream's own cancel unsubscribes it */ }
+    try { listener(frame); } catch { /* the stream's own cancel unsubscribes it */ }
   }
 }

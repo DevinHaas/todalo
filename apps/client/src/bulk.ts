@@ -105,7 +105,8 @@ export function boardDrop(tasks: TaskDto[], id: string, overId: string): Reorder
 /** The project page's tasks after the move, in the server's terms (planReorder; no anchor appends). */
 export function reorderTasks(tasks: TaskDto[], id: string, anchorId: string | null, position?: ReorderPosition): TaskDto[] {
   const order = planReorder(tasks.map(task => task.id), id, anchorId, position);
-  return order ? order.map(taskId => tasks.find(task => task.id === taskId)!) : tasks;
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  return order ? order.map(taskId => byId.get(taskId)!) : tasks;
 }
 
 export interface BulkSelection { tasks: TaskDto[] }
@@ -148,8 +149,10 @@ export function bulkMutations(transport: BulkTransport, cache: QueryClient, user
   const written = (done: boolean) => { if (!done) throw new AccountTransportError("TASK_NOT_FOUND"); };
   // A retried delete that finds everything gone was applied by the lost attempt.
   const attempts = new WeakMap<object, number>();
-  const only = (selection: BulkSelection) => (tasks: TaskDto[]) => tasks.filter(task => !selection.tasks.some(selected => selected.id === task.id || selected.id === task.parentId));
-  const matching = (selection: BulkSelection, patch: Partial<TaskDto>) => (tasks: TaskDto[]) => tasks.map(task => selection.tasks.some(selected => selected.id === task.id) ? { ...task, ...patch } : task);
+  // A Set of the selection per patch (a select-all of 1,500 tasks was millions of comparisons).
+  const idsOf = (selection: BulkSelection) => new Set(selection.tasks.map(selected => selected.id));
+  const only = (selection: BulkSelection) => { const ids = idsOf(selection); return (tasks: TaskDto[]) => tasks.filter(task => !ids.has(task.id) && !(task.parentId && ids.has(task.parentId))); };
+  const matching = (selection: BulkSelection, patch: Partial<TaskDto>) => { const ids = idsOf(selection); return (tasks: TaskDto[]) => tasks.map(task => ids.has(task.id) ? { ...task, ...patch } : task); };
   const completed = lists<BulkCompletion>(selection => matching(selection, { status: "done", completedAt: new Date().toISOString() }));
   return {
     complete: {

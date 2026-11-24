@@ -101,7 +101,11 @@ async fn set_profile_photo(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Perf: CrabNebula DevTools first, so its tracing layer sees every command (`--features devtools`).
+    #[cfg(feature = "devtools")]
+    let builder = builder.plugin(tauri_plugin_devtools::init());
+    builder
         // Rust-only: the webview gets no opener or deep-link permission.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())

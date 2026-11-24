@@ -115,6 +115,8 @@ html[data-titlebar="overlay"] .sidebar-toggle { width: 2rem; height: 2rem; }
 .organizer { display: grid; gap: .5rem; margin: 1rem 0; }
 /* Task rows (task-detail-redesign 03): circle + title, then a metadata line with the project at its end. */
 .task-row { --depth: 0; display: flex; align-items: flex-start; gap: .75rem; min-height: 3rem; padding-block: .5rem; border-bottom: 1px solid var(--border); }
+/* Perf: offscreen rows skip style, layout and paint (lists run to hundreds of rows); `auto` keeps a row's last measured height as its placeholder. */
+.task-row { content-visibility: auto; contain-intrinsic-size: auto 3.25rem; }
 /* Collapsed sub-tasks (Shift+E); the drag handle goes with its row. */
 [hidden], .sortable-row:has(> .task-row[hidden]) { display: none !important; }
 .checkbox { --ring-color: var(--muted-foreground); width: 1.25rem; height: 1.25rem; margin-top: .125rem; flex-shrink: 0; border: 1px solid var(--ring-color); border-radius: 999px; box-shadow: none; }

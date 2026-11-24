@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { session } from "./runtime";
 import { GoogleButton } from "./google";
@@ -8,13 +8,15 @@ import { RambleScreen } from "./ramble-screen";
 import { UpcomingScreen } from "./schedule-screens";
 import { ProjectScreen, ProjectsScreen } from "./project-screens";
 import { GoalScreen, PastSeasonScreen, SeasonScreen } from "./goal-screens";
-import { UiGallery } from "./ui-gallery";
 import { FilterScreen, InboxScreen, LabelScreen, MetadataScreen } from "./metadata-screens";
 import { ComposerChoicesProvider, SmartDatesProvider } from "./settings-screen";
 import { SearchScreen } from "./search-screens";
 import { ImportPrompt } from "./import-screen";
 import { isSettingsPath, legacySettingsPath, settingsBackground } from "./settings-nav";
-import { SettingsDialog } from "./settings-dialog";
+
+// Rarely opened and heavy (Settings' badge card brings three.js): their own chunks, loaded on first open.
+const SettingsDialog = lazy(() => import("./settings-dialog").then(module => ({ default: module.SettingsDialog })));
+const UiGallery = lazy(() => import("./ui-gallery").then(module => ({ default: module.UiGallery })));
 
 export default function App() {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -102,13 +104,13 @@ function SignedIn({ account, error }: { account: Account; error: string | null }
         <Route path="/account" element={<Navigate to={legacySettingsPath(location.hash)} replace />} />
         <Route path="/ramble" element={<RambleScreen />} />
         <Route path="/search" element={<SearchScreen account={account} />} />
-        <Route path="/ui" element={<UiGallery />} />
+        <Route path="/ui" element={<Suspense fallback={null}><UiGallery /></Suspense>} />
         {/* /home and unknown routes redirect to Today. */}
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Route>
     </Routes>
     {settings && <Routes>
-      <Route path="/settings/:section?" element={<SettingsDialog account={account} error={error} />} />
+      <Route path="/settings/:section?" element={<Suspense fallback={null}><SettingsDialog account={account} error={error} /></Suspense>} />
       <Route path="*" element={null} />
     </Routes>}
     <ImportPrompt userId={account.user.id} />

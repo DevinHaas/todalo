@@ -18,6 +18,9 @@ export function createSessionAuth({ onUserDeleted, ...options }: Pick<BetterAuth
       if (!profileImageAllowed(user.image)) throw new APIError("BAD_REQUEST", { message: "Choose a JPEG, PNG or WebP photo." });
     } } } },
     advanced: { disableOriginCheck: false, disableCSRFCheck: false },
+    // One joined query where Better Auth would read session then user (every session lookup):
+    // a round trip saved per uncached request. Uses the schema's drizzle relations.
+    experimental: { joins: true },
     plugins: [bearer({ requireSignature: true }), nativeOAuth()],
     account: {
       accountLinking: { enabled: true, trustedProviders: ["google"], allowDifferentEmails: true },

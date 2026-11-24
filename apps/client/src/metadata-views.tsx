@@ -8,7 +8,7 @@ import {
   SidebarSectionHeader, Switch, Textarea, cn, sidebarItemClassName,
 } from "./ui";
 import { operationId, treeOrder, type TaskDto } from "./tasks";
-import { Failure, listTree, TaskRow, type ReadState, type RowActions, type SelectionSlots } from "./views";
+import { Failure, listTree, TaskRow, useRowBudget, type ReadState, type RowActions, type SelectionSlots } from "./views";
 import { PendingNewTasks } from "./pending-changes";
 import { CHARCOAL, namedColors, type FilterAssistDto, type FilterFields, type LabelDto, type LabelFields, type MetadataDto, type SavedFilterDto } from "./metadata";
 import { definitionToQuery, FILTER_QUERY_MAX } from "../../../packages/server/src/filter-query";
@@ -289,11 +289,13 @@ export interface CollectionSlots {
 
 /** Legacy ListView body (label, filter, Inbox and search pages): selection toolbar and bucketed rows, or the chosen layout. */
 export function CollectionBody({ tasks, projectNames = {}, actions, now = new Date(), selection, layout }: CollectionSlots & { tasks: TaskDto[] }) {
+  // The first screenful at once, the rest a frame later (views.tsx useRowBudget), shared across buckets.
+  let left = useRowBudget();
   if (layout) return <>{layout(tasks)}</>;
   return <>{selection?.toolbar}<div className="sections" data-region="task-list">
-    {listBuckets(tasks, now).map(bucket => { const tree = listTree(bucket.items); return <section key={bucket.label}>
+    {listBuckets(tasks, now).map(bucket => { const tree = listTree(bucket.items); const shown = bucket.items.slice(0, Math.max(0, left)); left -= bucket.items.length; return <section key={bucket.label}>
       <h2 className="section-heading muted">{bucket.label}</h2>
-      {bucket.items.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
+      {shown.map(task => <TaskRow key={task.id} task={task} now={now} projectName={task.projectId ? projectNames[task.projectId] : undefined} actions={actions} selection={selection?.row(task)} {...tree(task)} />)}
     </section>; })}
   </div></>;
 }

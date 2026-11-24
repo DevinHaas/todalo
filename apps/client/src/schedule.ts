@@ -46,11 +46,13 @@ export function nextLayout(layout: Layout, direction = 1): Layout {
   return cycle[(cycle.indexOf(layout) + direction + cycle.length) % cycle.length];
 }
 
-// Per call, not a cached Intl.DateTimeFormat: that pins the zone it was built in,
-// while these must follow the zone the getDate()/getHours() reads use.
-const fmt = (options: Intl.DateTimeFormatOptions) => ({ format: (date: Date) => date.toLocaleString("en-US", options) });
-const monthShort = fmt({ month: "short" }), monthLong = fmt({ month: "long" });
-const weekdayLong = fmt({ weekday: "long" }), weekdayShort = fmt({ weekday: "short" });
+// The en-US names by getMonth()/getDay(): the same zone as the getDate()/getHours() reads (a cached
+// Intl.DateTimeFormat would pin the zone it was built in), without building a formatter per call.
+const names = (list: string) => list.split(" ");
+const months = names("January February March April May June July August September October November December");
+const weekdays = names("Sunday Monday Tuesday Wednesday Thursday Friday Saturday");
+const monthShort = { format: (date: Date) => months[date.getMonth()].slice(0, 3) }, monthLong = { format: (date: Date) => months[date.getMonth()] };
+const weekdayLong = { format: (date: Date) => weekdays[date.getDay()] }, weekdayShort = { format: (date: Date) => weekdays[date.getDay()].slice(0, 3) };
 /** date-fns tokens the legacy views render (en-US). */
 export const labels = {
   /** "d MMM · Today · EEEE", "· Tomorrow ·" for the next day. */

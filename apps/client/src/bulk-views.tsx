@@ -82,7 +82,8 @@ const plural = (count: number) => `${count} task${count === 1 ? "" : "s"}`;
  * that skipped tasks changed elsewhere says so.
  */
 export function SelectionToolbar({ selection, tasks, actions }: { selection: Selection; tasks: TaskDto[]; actions: BulkActions }) {
-  const selected = selection.ids.map(id => tasks.find(task => task.id === id)).filter((task): task is TaskDto => Boolean(task));
+  const byId = new Map(tasks.map(task => [task.id, task]));
+  const selected = selection.ids.map(id => byId.get(id)).filter((task): task is TaskDto => Boolean(task));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

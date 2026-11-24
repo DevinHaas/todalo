@@ -123,13 +123,16 @@ export async function idle(cache: QueryClient): Promise<void> {
 export function optimistic<V, R = unknown>(cache: QueryClient, plan: {
   apply?: (input: V) => Change[];
   reconcile?: (result: R, input: V) => Change[];
-  refresh?: (input: V) => QueryFilters[];
+  /** `failed`: the write was refused or lost (the screen's copy may be stale). */
+  refresh?: (input: V, failed: boolean) => QueryFilters[];
 }) {
   return {
     onMutate: (input: V) => begin(cache, plan.apply?.(input)),
     onError: (_error: Error, _input: V, write?: Write) => { if (write) rollback(write); },
     onSuccess: (result: R, input: V, write?: Write) => { if (write) commit(write, plan.reconcile?.(result, input)); },
-    onSettled: (_result: unknown, _error: Error | null, input: V, write?: Write) => write ? settle(write, plan.refresh?.(input)) : undefined,
+    // Not returned: mutateAsync resolves with the server's answer, and the follow-up refetch
+    // (every read the write touched, Today included) runs behind it.
+    onSettled: (_result: unknown, error: Error | null, input: V, write?: Write) => { if (write) void settle(write, plan.refresh?.(input, error !== null)); },
   };
 }
 
@@ -138,5 +141,5 @@ export async function optimisticWrite<R>(cache: QueryClient, changes: Change[], 
   const write = await begin(cache, changes);
   try { const result = await run(); commit(write, reconcile?.(result)); return result; }
   catch (error) { rollback(write); throw error; }
-  finally { await settle(write, refresh); }
+  finally { void settle(write, refresh); } // the refetch runs behind the answer
 }

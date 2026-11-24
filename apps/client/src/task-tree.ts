@@ -1,4 +1,4 @@
-import { createContext } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 import type { TaskDto } from "./tasks";
 
 /**
@@ -14,16 +14,63 @@ export const MilestoneTasks = createContext<ReadonlySet<string>>(new Set());
 export interface TaskGoal { id: string; title: string; color: string; icon: string }
 export const TaskGoals = createContext<(task: TaskDto) => TaskGoal | null>(() => null);
 
+/** Tasks by ID and children by parent ID, built once per task list (every row of a list shares it). */
+const indexes = new WeakMap<readonly TaskDto[], { byId: Map<string, TaskDto>; children: Map<string, TaskDto[]> }>();
+const empty: readonly TaskDto[] = [];
+export function treeIndex(tasks: readonly TaskDto[] | null) {
+  const list = tasks ?? empty;
+  let index = indexes.get(list);
+  if (!index) {
+    index = { byId: new Map(), children: new Map() };
+    for (const task of list) {
+      index.byId.set(task.id, task);
+      if (task.parentId) { const siblings = index.children.get(task.parentId); if (siblings) siblings.push(task); else index.children.set(task.parentId, [task]); }
+    }
+    indexes.set(list, index);
+  }
+  return index;
+}
+
+/**
+ * The same collection as a store (the dialog host sets it after each commit): a row subscribes
+ * to its own subtree's summary, so a change elsewhere in the list does not re-render it.
+ */
+export function taskTreeStore() {
+  let tasks: readonly TaskDto[] | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => tasks,
+    set(next: readonly TaskDto[] | null) { if (next === tasks) return; tasks = next; for (const listener of listeners) listener(); },
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+}
+export type TaskTreeStore = ReturnType<typeof taskTreeStore>;
+export const TaskTreeStores = createContext<TaskTreeStore | null>(null);
+const noStore: TaskTreeStore = taskTreeStore();
+
+/**
+ * The tree a row reads: from the store when there is one (re-rendering only when `select`'s
+ * string changes), else the TaskTree context. `select` must return a primitive.
+ */
+export function useTaskTree(select: (tasks: readonly TaskDto[] | null) => string): readonly TaskDto[] | null {
+  const store = useContext(TaskTreeStores);
+  const context = useContext(store ? TaskTreeStoreless : TaskTree);
+  useSyncExternalStore((store ?? noStore).subscribe, () => select((store ?? noStore).get()), () => select(null));
+  return store ? store.get() : context;
+}
+// Read in place of TaskTree when a store is present, so the context's changes don't re-render.
+const TaskTreeStoreless = createContext<readonly TaskDto[] | null>(null);
+
 /** Direct children (open, done) and their count. */
 export function subtasksOf(id: string, tasks: readonly TaskDto[] | null) {
-  const children = (tasks ?? []).filter(task => task.parentId === id);
+  const children = treeIndex(tasks).children.get(id) ?? empty;
   const open = children.filter(task => task.status !== "done");
   return { open, done: children.filter(task => task.status === "done"), total: children.length };
 }
 
 /** Ancestors, root first (the sheet's breadcrumb). */
 export function ancestorsOf(task: TaskDto, tasks: readonly TaskDto[] | null) {
-  const byId = new Map((tasks ?? []).map(item => [item.id, item]));
+  const { byId } = treeIndex(tasks);
   const chain: TaskDto[] = [];
   for (let parent = task.parentId ? byId.get(task.parentId) : undefined; parent && !chain.includes(parent) && chain.length < 10; parent = parent.parentId ? byId.get(parent.parentId) : undefined) chain.unshift(parent);
   return chain;

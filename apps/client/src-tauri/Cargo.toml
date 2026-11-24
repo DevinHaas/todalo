@@ -18,7 +18,7 @@ tauri-build = { version = "2.7.1", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2.12.1", features = [] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "brotli", "http2"] }
 tokio = { version = "1", features = ["sync", "time", "net", "io-util", "macros"] }
 zeroize = "1"
 security-framework = "=3.7.0"
@@ -31,3 +31,8 @@ base64 = "0.22"
 getrandom = "0.3"
 # Goals ticket 14b: ritual-ready notifications, sent from the webview (notification:allow-notify).
 tauri-plugin-notification = "2.8.0"
+# Perf: CrabNebula DevTools (IPC, spans, logs), only with `--features devtools` (apps/client/perf/README.md).
+tauri-plugin-devtools = { version = "2.2.3", optional = true }
+
+[features]
+devtools = ["dep:tauri-plugin-devtools"]

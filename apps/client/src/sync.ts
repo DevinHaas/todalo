@@ -147,6 +147,20 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
     await Promise.all(refresh.map(filters => cache.invalidateQueries(filters)));
   }
 
+  /**
+   * A live frame's written tasks (calendar.ts LiveWritten): patched in at once, after any
+   * optimistic write as a pull's are, without moving the cursor. The pull that follows still runs.
+   */
+  async function applyWritten(written: { tasks?: TaskDto[]; deleted?: string[] }) {
+    const delta: SyncDelta = {
+      cursor: "", full: false, tasks: written.tasks ?? [], projects: [], labels: [], filters: [], comments: [], changed: [],
+      deleted: { task: written.deleted ?? [], project: [], label: [], filter: [], comment: [] },
+    };
+    const { changes } = deltaChanges(userId, delta);
+    await idle(cache);
+    apply(cache, changes);
+  }
+
   function pull(): Promise<void> {
     if (pulling) { again = true; return pulling; }
     pulling = working(async () => {
@@ -158,6 +172,7 @@ export function createSync({ transport, cache, userId }: { transport: SyncTransp
 
   return {
     pull,
+    apply: applyWritten,
     reload: () => working(async () => {
       cursor = (await transport.changes(null)).cursor;
       await everything();

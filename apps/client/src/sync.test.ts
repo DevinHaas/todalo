@@ -131,3 +131,22 @@ describe("createSync", () => {
     expect(fake.changes.mock.calls).toEqual([[null], ["7"]]);
   });
 });
+
+describe("live frames that carry the write (calendar.ts liveWritten, sync.apply)", () => {
+  it("keeps only well-formed tasks and IDs", async () => {
+    const { liveWritten } = await import("./calendar");
+    expect(liveWritten({ tasks: [task("a"), { nope: 1 }, null], deleted: ["x", 3] })).toEqual({ tasks: [task("a")], deleted: ["x"] });
+    expect(liveWritten({ tasks: "no", deleted: {} })).toBeUndefined();
+    expect(liveWritten({})).toBeUndefined();
+  });
+
+  it("applies the written tasks at once without moving the cursor or fetching", async () => {
+    const cache = new QueryClient();
+    cache.setQueryData(taskKeys.today("u"), { tasks: [task("a"), task("gone")], openCount: 0 });
+    const fake = { changes: vi.fn<SyncTransport["changes"]>() };
+    const sync = createSync({ transport: fake, cache, userId: "u" });
+    await sync.apply({ tasks: [task("a", { title: "Edited elsewhere", updatedAt: "2026-11-08T10:00:00.000Z" }), task("new")], deleted: ["gone"] });
+    expect(today(cache).tasks.map(row => [row.id, row.title])).toEqual([["a", "Edited elsewhere"], ["new", "new"]]);
+    expect(fake.changes).not.toHaveBeenCalled();
+  });
+});

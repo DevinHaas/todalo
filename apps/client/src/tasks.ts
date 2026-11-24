@@ -143,10 +143,9 @@ const retry = (failures: number, error: unknown) => failures < 2 && ambiguous(er
 const retryDelay = (failures: number) => 300 * 2 ** failures;
 
 /** Legacy count rule (packages/server countTodayTasks): open, dated, due before tomorrow. */
-const counted = (task: TaskDto, now = new Date()) => {
-  const tomorrow = startOfDay(now); tomorrow.setDate(tomorrow.getDate() + 1);
-  return task.status !== "done" && task.dueDate !== null && new Date(task.dueDate) < tomorrow;
-};
+const startOfTomorrow = (now = new Date()) => { const tomorrow = startOfDay(now); tomorrow.setDate(tomorrow.getDate() + 1); return tomorrow.getTime(); };
+// `tomorrow` once per list, not per task (a Date per task added up at 1,500 tasks).
+const counted = (task: TaskDto, tomorrow = startOfTomorrow()) => task.status !== "done" && task.dueDate !== null && Date.parse(task.dueDate) < tomorrow;
 
 /**
  * Every cached read that lists tasks gets `change`: Today (the full task
@@ -157,7 +156,7 @@ const counted = (task: TaskDto, now = new Date()) => {
  */
 export function taskChanges(userId: string, change: (tasks: TaskDto[]) => TaskDto[]): Change[] {
   const user = taskKeys.user(userId);
-  const open = (tasks: TaskDto[]) => tasks.filter(task => counted(task)).length;
+  const open = (tasks: TaskDto[]) => { const tomorrow = startOfTomorrow(); return tasks.filter(task => counted(task, tomorrow)).length; };
   const lists = (member: (task: TaskDto, key: QueryKey) => boolean | undefined) => (data: { tasks?: TaskDto[] } | null | undefined, key: QueryKey) => {
     if (!data || !Array.isArray(data.tasks)) return data;
     const had = new Set(data.tasks.map(task => task.id));
@@ -227,8 +226,12 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
   const user = taskKeys.user(userId);
   // Today (and the sidebar count), the task, project, label/filter, search and goal reads
   // (a completed milestone ticks its criteria).
-  const refresh = (id: string): QueryFilters[] => [
-    { queryKey: taskKeys.today(userId) }, { queryKey: taskKeys.task(userId, id) }, { queryKey: [...user, "project"] },
+  // Not the whole Today collection (170 KB at 400 tasks) after every write: the write's answer
+  // reconciles its task, and this device's own live frame pulls the delta (cascades included).
+  // Only a placed create moves other tasks' order, which the answer doesn't carry, and a failed
+  // write (refused as changed, or lost) may leave a stale copy: those reload it.
+  const refresh = (id: string, collection = false): QueryFilters[] => [
+    ...(collection ? [{ queryKey: taskKeys.today(userId) }] : []), { queryKey: taskKeys.task(userId, id) }, { queryKey: [...user, "project"] },
     { queryKey: [...user, "metadata"] }, { queryKey: [...user, "search"] }, { queryKey: [...user, "goals"] },
   ];
   const cached = (id: string) => cache.getQueryData<TodayDto>(taskKeys.today(userId))?.tasks.find(task => task.id === id);
@@ -261,7 +264,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
   const completed = optimistic<Completion, TaskDto | null>(cache, {
     apply: ({ task }) => taskChanges(userId, tasks => tasks.map(item => item.id === task.id ? { ...item, status: "done" as const, completedAt: new Date().toISOString() } : item)),
     reconcile: (task) => task ? saved(task) : [],
-    refresh: ({ task }) => refresh(task.id),
+    refresh: ({ task }, failed) => refresh(task.id, failed),
   });
   return {
     create: {
@@ -270,7 +273,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       ...keep(optimistic<NewTask, TaskDto>(cache, {
         apply: (input) => taskChanges(userId, tasks => tasks.some(item => item.id === input.id) ? tasks : placeTask(tasks, draftTask(input, input.parentId ? cached(input.parentId) : undefined), input.placement)),
         reconcile: saved,
-        refresh: (input) => refresh(input.id),
+        refresh: (input, failed) => refresh(input.id, failed || Boolean(input.placement)),
       })),
       meta: { action: (task: NewTask) => `add "${task.title}"` },
     } satisfies MutationOptions<TaskDto, Error, NewTask, Write>,
@@ -289,7 +292,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
         apply: ({ id, details }) => taskChanges(userId, tasks => tasks.map(item => item.id === id ? editedTask(item, details) : item)),
         // The saved copy at once too, so the next write starts from the new version.
         reconcile: saved,
-        refresh: ({ id }) => refresh(id),
+        refresh: ({ id }, failed) => refresh(id, failed),
       })),
       meta: { action: ({ id, details }: { id: string; details: TaskDetails }) => editAction(cached(id), details) },
     } satisfies MutationOptions<TaskDto, Error, { id: string; details: TaskDetails }, Write>,
@@ -297,7 +300,7 @@ export function taskMutations(transport: TaskTransport, cache: QueryClient, user
       mutationFn: (task: TaskDto) => transport.remove(task.id),
       retry, retryDelay,
       // Its sub-tasks go with it.
-      ...optimistic<TaskDto>(cache, { apply: (task) => taskChanges(userId, tasks => tasks.filter(item => item.id !== task.id && item.parentId !== task.id)), refresh: (task) => refresh(task.id) }),
+      ...optimistic<TaskDto>(cache, { apply: (task) => taskChanges(userId, tasks => tasks.filter(item => item.id !== task.id && item.parentId !== task.id)), refresh: (task, failed) => refresh(task.id, failed) }),
       meta: { action: (task: TaskDto) => `delete "${task.title}"` },
     } satisfies MutationOptions<boolean, Error, TaskDto, Write>,
   };
@@ -314,13 +317,21 @@ export const isOverdue = (task: Pick<TaskDto, "dueDate">, now = new Date()) =>
 /** Depth-first: every task follows its visible parent, at any depth (MAX_SUBTASK_DEPTH). */
 export function treeOrder<T extends { id: string; parentId: string | null }>(tasks: T[]): T[] {
   const ids = new Set(tasks.map(task => task.id));
-  const seen = new Set<string>();
-  const visit = (task: T): T[] => {
-    if (seen.has(task.id)) return [];
+  // Children by parent, in list order: one pass (a filter per task was O(n²), ~45 ms at 1,500 tasks).
+  const children = new Map<string, T[]>();
+  for (const task of tasks) if (task.parentId && ids.has(task.parentId)) {
+    const siblings = children.get(task.parentId);
+    if (siblings) siblings.push(task); else children.set(task.parentId, [task]);
+  }
+  const seen = new Set<string>(), ordered: T[] = [];
+  const visit = (task: T) => {
+    if (seen.has(task.id)) return;
     seen.add(task.id);
-    return [task, ...tasks.filter(child => child.parentId === task.id).flatMap(visit)];
+    ordered.push(task);
+    for (const child of children.get(task.id) ?? []) visit(child);
   };
-  return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(visit);
+  for (const task of tasks) if (!task.parentId || !ids.has(task.parentId)) visit(task);
+  return ordered;
 }
 
 /** Indent level of each row in a list: 0 unless its parent is in the same list. */

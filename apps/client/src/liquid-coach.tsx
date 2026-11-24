@@ -89,14 +89,20 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
     const sim = new LiquidSim(live.current.params, targets());
     if (import.meta.env.DEV) Object.assign(window, { liquid: sim });
     let colors = themeColors(live.current.params.blobColor), colorKey = "";
+    // The tokens are read when the theme can have changed (mode and design repaint <html>'s class
+    // and style; custom CSS is a <style> in <head>), not per frame: reading computed style right
+    // after a DOM change forces a style recalc of the whole page.
+    let tokens = themeTokens();
+    const retheme = new MutationObserver(() => { tokens = themeTokens(); });
+    retheme.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    retheme.observe(document.head, { childList: true, subtree: true, characterData: true });
     let last = performance.now(), time = 0, frame = 0, lap = 0;
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 20);
       last = now;
       const { params, open } = live.current;
-      // The theme (dark mode, the accent, the design) or the blob colour changed: read the tokens again.
-      // ponytail: three custom properties read per frame; cheap while styles are clean.
-      const tokens = themeTokens(), key = params.blobColor + tokens.join("|");
+      // The theme (dark mode, the accent, the design) or the blob colour changed: new colours.
+      const key = params.blobColor + tokens.join("|");
       if (key !== colorKey) { colors = themeColors(params.blobColor, tokens); colorKey = key; }
       sim.params = params;
       const boxes = targets();
@@ -119,6 +125,7 @@ export function LiquidCoach({ open, onOpenChange, params = liquidDefaults, docke
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
+      retheme.disconnect();
       const element = target();
       if (element) { element.style.clipPath = ""; element.style.opacity = ""; }
     };

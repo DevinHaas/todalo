@@ -172,7 +172,7 @@ describe("task mutations", () => {
     expect(calls).toEqual([id, id]);
     expect(saved.size).toBe(1);
     expect(cache.getQueryData(taskKeys.task("alice", id))).toEqual(created);
-    expect(cache.getQueryState(today)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(today)?.isInvalidated).toBe(false); // reconciled from the answer; the live sync pull brings the rest
   });
 
   it("does not retry a rejected create, so the composer can keep the input", async () => {
@@ -211,14 +211,14 @@ describe("task mutations", () => {
     expect(stale.cache.getQueryState(today)?.isInvalidated).toBe(true);
   });
 
-  it("saves an edit, retries a lost response with the same body, and refreshes the task, Today and project lists", async () => {
+  it("saves an edit, retries a lost response with the same body, and refreshes the task and project lists", async () => {
     const bodies: TaskDetails[] = [];
     const { cache, writes } = setup({ update: async (_id, body) => { bodies.push(body); if (bodies.length === 1) throw new AccountTransportError("SAVE_FAILED"); return task("a", { title: body.title, updatedAt: "2026-10-04T09:00:00.000Z" }); } });
     cache.setQueryData(["user", "alice", "project", "p1"], { project: {}, tasks: [] });
     const saved = await new MutationObserver(cache, { ...writes.update, retryDelay: 0 }).mutate({ id: "a", details });
     expect(bodies).toEqual([details, details]);
     expect(cache.getQueryData(taskKeys.task("alice", "a"))).toEqual(saved);
-    expect(cache.getQueryState(today)?.isInvalidated).toBe(true);
+    expect(cache.getQueryState(today)?.isInvalidated).toBe(false); // reconciled, not refetched (a failed write refetches it)
     expect(cache.getQueryState(["user", "alice", "project", "p1"])?.isInvalidated).toBe(true);
   });
 
@@ -333,5 +333,30 @@ describe("task editor", () => {
     expect(html).toContain("Edit task details");
     expect(html).toContain("Due 5 Oct · Every month");
     expect(render(createElement(TaskView, { state: { status: "success", data: task("t"), error: null }, onRetry: noop }))).not.toContain("Edit task details");
+  });
+});
+
+describe("treeOrder matches the previous (quadratic) definition", () => {
+  const reference = <T extends { id: string; parentId: string | null }>(tasks: T[]): T[] => {
+    const ids = new Set(tasks.map(task => task.id));
+    const seen = new Set<string>();
+    const visit = (task: T): T[] => {
+      if (seen.has(task.id)) return [];
+      seen.add(task.id);
+      return [task, ...tasks.filter(child => child.parentId === task.id).flatMap(visit)];
+    };
+    return tasks.filter(task => !task.parentId || !ids.has(task.parentId)).flatMap(visit);
+  };
+  it("on random lists with nesting, orphans and cycles", () => {
+    let seed = 7;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let round = 0; round < 200; round++) {
+      const size = 1 + Math.floor(random() * 40);
+      const list = Array.from({ length: size }, (_, i) => ({ id: `t${i}`, parentId: null as string | null }));
+      // Parents: none, another task in the list (cycles possible), or one outside it (an orphan).
+      for (const task of list) { const pick = random(); task.parentId = pick < 0.4 ? null : pick < 0.9 ? `t${Math.floor(random() * size)}` : "outside"; }
+      list.sort(() => random() - 0.5);
+      expect(treeOrder(list).map(task => task.id)).toEqual(reference(list).map(task => task.id));
+    }
   });
 });

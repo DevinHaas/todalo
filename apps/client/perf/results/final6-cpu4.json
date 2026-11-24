@@ -1,0 +1,1672 @@
+{
+  "meta": {
+    "label": "final6-cpu4",
+    "date": "2026-11-24T07:57:53.671Z",
+    "git": "152dd40+wip",
+    "runs": 3,
+    "cpu": 4,
+    "tasks": 408
+  },
+  "summary": {
+    "load:cold": {
+      "p50": 619.9000000059605,
+      "p95": 1191.7999999970198,
+      "n": 3,
+      "dom": 585.7000000029802,
+      "tbt": 136,
+      "fcp": 276,
+      "lcp": 276,
+      "ttfb": 1.1000000089406967,
+      "jsKB": 478,
+      "apiCount": 2,
+      "domNodes": 3730,
+      "apiChain": "/api/v1/today 24→431, /api/v1/account 210→1003"
+    },
+    "load:warm": {
+      "p50": 301.09999999403954,
+      "p95": 311.1000000089407,
+      "n": 3,
+      "dom": 288.59999999403954,
+      "tbt": 95,
+      "fcp": 0,
+      "lcp": 0,
+      "ttfb": 0.8999999910593033,
+      "jsKB": 2,
+      "apiCount": 0,
+      "domNodes": 3759
+    },
+    "tab:inbox (first)": {
+      "p50": 169.29999999701977,
+      "p95": 177.29999999701977,
+      "n": 3,
+      "dom": 129.19999998807907,
+      "inp": 24,
+      "tbt": 0
+    },
+    "tab:today (first)": {
+      "p50": 113.3999999910593,
+      "p95": 120.70000000298023,
+      "n": 3,
+      "dom": 87.70000000298023,
+      "inp": 32,
+      "tbt": 0
+    },
+    "tab:upcoming (first)": {
+      "p50": 257.1000000089407,
+      "p95": 263.19999998807907,
+      "n": 3,
+      "dom": 227.1000000089407,
+      "inp": 32,
+      "tbt": 57
+    },
+    "tab:inbox": {
+      "p50": 236.69999998807907,
+      "p95": 238.1000000089407,
+      "n": 3,
+      "dom": 197.3999999910593,
+      "inp": 32,
+      "tbt": 27
+    },
+    "tab:today": {
+      "p50": 103.5,
+      "p95": 103.90000000596046,
+      "n": 3,
+      "dom": 76.90000000596046,
+      "inp": 32,
+      "tbt": 0
+    },
+    "tab:upcoming": {
+      "p50": 165,
+      "p95": 167.29999999701977,
+      "n": 3,
+      "dom": 136.59999999403954,
+      "inp": 32,
+      "tbt": 0
+    },
+    "sheet:open": {
+      "p50": 163.6000000089407,
+      "p95": 179.20000000298023,
+      "n": 3,
+      "dom": 118.30000001192093,
+      "inp": 0,
+      "tbt": 83
+    },
+    "sheet:type": {
+      "p50": 93.5,
+      "p95": 101,
+      "n": 3,
+      "dom": 78.8999999910593,
+      "inp": 40,
+      "tbt": 0
+    },
+    "edit:title": {
+      "p50": 84.70000000298023,
+      "p95": 85,
+      "n": 3,
+      "dom": 75.29999999701977,
+      "inp": 48,
+      "tbt": 0
+    },
+    "complete": {
+      "p50": 136.6000000089407,
+      "p95": 137.29999999701977,
+      "n": 3,
+      "dom": 83.30000001192093,
+      "inp": 56,
+      "tbt": 0,
+      "server": 476.5
+    },
+    "composer:open": {
+      "p50": 50.79999999701977,
+      "p95": 53.400000005960464,
+      "n": 3,
+      "dom": 29.5,
+      "inp": 40,
+      "tbt": 0
+    },
+    "composer:type40": {
+      "p50": 181.30000001192093,
+      "p95": 391.09999999403954,
+      "n": 3,
+      "dom": 170.30000001192093,
+      "inp": 40,
+      "tbt": 0,
+      "perKey": 4.532500000298024
+    },
+    "composer:add": {
+      "p50": 73,
+      "p95": 87.59999999403954,
+      "n": 3,
+      "dom": 37.1000000089407,
+      "inp": 32,
+      "tbt": 0
+    },
+    "scroll:today": {
+      "p50": 18.5,
+      "p95": 18.69999998807907,
+      "n": 3,
+      "janky": 2,
+      "max": 29.900000005960464
+    },
+    "quickadd:open": {
+      "p50": 65.40000000596046,
+      "p95": 68.90000000596046,
+      "n": 3,
+      "dom": 46.8999999910593,
+      "inp": 0,
+      "tbt": 0
+    },
+    "quickadd:add": {
+      "p50": 91.1000000089407,
+      "p95": 97.09999999403954,
+      "n": 3,
+      "dom": 58.400000005960464,
+      "inp": 40,
+      "tbt": 0,
+      "savedAt": 266.39990234375
+    },
+    "upcoming:cold": {
+      "p50": 676.8999999910593,
+      "p95": 679.1000000089407,
+      "n": 3,
+      "apiCount": 2,
+      "domNodes": 9626
+    },
+    "upcoming:warm": {
+      "p50": 356.29999999701977,
+      "p95": 365.90000000596046,
+      "n": 3,
+      "apiCount": 0,
+      "domNodes": 9655
+    },
+    "scroll:upcoming": {
+      "p50": 18.19999998807907,
+      "p95": 18.5,
+      "n": 3,
+      "janky": 1,
+      "max": 112
+    }
+  },
+  "renders": {
+    "tab:inbox (first)": {
+      "total": 4519,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1192,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 417,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 407,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 407,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 354,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today (first)": {
+      "total": 2425,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 529,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 261,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming (first)": {
+      "total": 4288,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1168,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 361,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 352,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:inbox": {
+      "total": 4519,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1192,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 417,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 407,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 407,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 406,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 354,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today": {
+      "total": 2425,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 529,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 261,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 251,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 250,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming": {
+      "total": 4283,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1166,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 361,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 351,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 350,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:open": {
+      "total": 1312,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "TaskRowWrapper",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 500,
+          "unnecessary": 0
+        },
+        {
+          "name": "anonymous",
+          "renders": 44,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 20,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "FloatingTree",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 10,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:type": {
+      "total": 204,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 34,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 8,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 4,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "edit:title": {
+      "total": 484,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 81,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 24,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 22,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 19,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 17,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 15,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 9,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "complete": {
+      "total": 192,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 33,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 14,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "DialogPortal",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "Sparkles",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 2,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:open": {
+      "total": 198,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 38,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "DialogPortal",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "MenuRoot",
+          "renders": 3,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:type40": {
+      "total": 400,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 120,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 40,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:add": {
+      "total": 249,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 55,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 5,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:open": {
+      "total": 205,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 43,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "DialogPortal",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:add": {
+      "total": 239,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 52,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 5,
+          "unnecessary": 0
+        }
+      ]
+    }
+  },
+  "api": {},
+  "bundle": {
+    "initialJS": {
+      "kb": 1583.5029296875,
+      "gzipKB": 479.7314453125
+    },
+    "initialCSS": {
+      "kb": 367.923828125,
+      "gzipKB": 53.1787109375
+    },
+    "totalJS": {
+      "kb": 2258.197265625,
+      "gzipKB": 661.8564453125
+    },
+    "chunks": 8,
+    "largest": [
+      "bulk-views-BhuEhjX_.js 935KB (280 gz)",
+      "index-DGNh3uWp.js 646KB (199 gz)",
+      "settings-dialog-Cc8KxtYw.js 590KB (153 gz)",
+      "index-CcIYMc-f.css 368KB (53 gz)",
+      "dist-BY9j4ReK.js 49KB (16 gz)",
+      "dist-BoHMOFax.js 22KB (8 gz)"
+    ]
+  },
+  "samples": {
+    "load:cold": [
+      {
+        "ms": 1191.7999999970198,
+        "dom": 1146.2999999970198,
+        "ttfb": 1.7000000029802322,
+        "dcl": 195.5,
+        "fcp": 248,
+        "lcp": 248,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3730,
+        "tbt": 196,
+        "apiChain": "/api/v1/today 24→431, /api/v1/account 210→1003"
+      },
+      {
+        "ms": 619.9000000059605,
+        "dom": 585.7000000029802,
+        "ttfb": 1.1000000089406967,
+        "dcl": 196.70000000298023,
+        "fcp": 276,
+        "lcp": 276,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3730,
+        "tbt": 136,
+        "apiChain": "/api/v1/today 22→417, /api/v1/account 212→412"
+      },
+      {
+        "ms": 611.3999999910593,
+        "dom": 578.0999999940395,
+        "ttfb": 1.0999999940395355,
+        "dcl": 189,
+        "fcp": 280,
+        "lcp": 280,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3730,
+        "tbt": 123,
+        "apiChain": "/api/v1/today 22→428, /api/v1/account 202→410"
+      }
+    ],
+    "load:warm": [
+      {
+        "ms": 311.1000000089407,
+        "dom": 300.20000000298023,
+        "ttfb": 1,
+        "dcl": 51.6000000089407,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 2,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3759,
+        "tbt": 98,
+        "apiChain": ""
+      },
+      {
+        "ms": 299.8999999910593,
+        "dom": 288.3999999910593,
+        "ttfb": 0.8999999910593033,
+        "dcl": 44.69999998807907,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 2,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3759,
+        "tbt": 95,
+        "apiChain": ""
+      },
+      {
+        "ms": 301.09999999403954,
+        "dom": 288.59999999403954,
+        "ttfb": 0.7999999970197678,
+        "dcl": 48.20000000298023,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 2,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3759,
+        "tbt": 91,
+        "apiChain": ""
+      }
+    ],
+    "tab:inbox (first)": [
+      {
+        "dom": 137.70000000298023,
+        "ms": 177.29999999701977,
+        "at": 1795506998579.6,
+        "inputAt": 1795506998402.3,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 129.19999998807907,
+        "ms": 169.29999999701977,
+        "at": 1795507017995.4001,
+        "inputAt": 1795507017826.1,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 127.8999999910593,
+        "ms": 168.59999999403954,
+        "at": 1795507037442.4001,
+        "inputAt": 1795507037273.8,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:today (first)": [
+      {
+        "dom": 83.09999999403954,
+        "ms": 109.19999998807907,
+        "at": 1795506998775.2002,
+        "inputAt": 1795506998666,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 93.29999999701977,
+        "ms": 120.70000000298023,
+        "at": 1795507018197.4001,
+        "inputAt": 1795507018076.7002,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 87.70000000298023,
+        "ms": 113.3999999910593,
+        "at": 1795507037653,
+        "inputAt": 1795507037539.6,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:upcoming (first)": [
+      {
+        "dom": 227.1000000089407,
+        "ms": 257.1000000089407,
+        "at": 1795506999091,
+        "inputAt": 1795506998833.9001,
+        "inp": 32,
+        "tbt": 62,
+        "longtasks": 1
+      },
+      {
+        "dom": 172,
+        "ms": 204.69999998807907,
+        "at": 1795507018445.8,
+        "inputAt": 1795507018241.1,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 229.79999999701977,
+        "ms": 263.19999998807907,
+        "at": 1795507037968.5,
+        "inputAt": 1795507037705.3,
+        "inp": 32,
+        "tbt": 57,
+        "longtasks": 1
+      }
+    ],
+    "tab:inbox": [
+      {
+        "dom": 199.70000000298023,
+        "ms": 238.1000000089407,
+        "at": 1795506999387.8,
+        "inputAt": 1795506999149.7002,
+        "inp": 32,
+        "tbt": 27,
+        "longtasks": 1
+      },
+      {
+        "dom": 129.79999999701977,
+        "ms": 170.20000000298023,
+        "at": 1795507018678.7002,
+        "inputAt": 1795507018508.5,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 197.3999999910593,
+        "ms": 236.69999998807907,
+        "at": 1795507038258,
+        "inputAt": 1795507038021.3,
+        "inp": 32,
+        "tbt": 27,
+        "longtasks": 1
+      }
+    ],
+    "tab:today": [
+      {
+        "dom": 76.90000000596046,
+        "ms": 103.30000001192093,
+        "at": 1795506999552.5,
+        "inputAt": 1795506999449.2002,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 78.3999999910593,
+        "ms": 103.5,
+        "at": 1795507018860.4001,
+        "inputAt": 1795507018756.9001,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 76.6000000089407,
+        "ms": 103.90000000596046,
+        "at": 1795507038427,
+        "inputAt": 1795507038322.2,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:upcoming": [
+      {
+        "dom": 127,
+        "ms": 153.70000000298023,
+        "at": 1795506999752.9001,
+        "inputAt": 1795506999599.2002,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 139.20000000298023,
+        "ms": 167.29999999701977,
+        "at": 1795507019074.7002,
+        "inputAt": 1795507018907.4001,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 136.59999999403954,
+        "ms": 165,
+        "at": 1795507038637.9001,
+        "inputAt": 1795507038472.9001,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "sheet:open": [
+      {
+        "dom": 129.6000000089407,
+        "ms": 179.20000000298023,
+        "at": 1795507001282.4001,
+        "inputAt": 1795507001103.2002,
+        "inp": 0,
+        "tbt": 83,
+        "longtasks": 1
+      },
+      {
+        "dom": 118.30000001192093,
+        "ms": 163.6000000089407,
+        "at": 1795507020577.9001,
+        "inputAt": 1795507020414.3,
+        "inp": 0,
+        "tbt": 102,
+        "longtasks": 1
+      },
+      {
+        "dom": 107.79999999701977,
+        "ms": 152.29999999701977,
+        "at": 1795507040056.8,
+        "inputAt": 1795507039904.5,
+        "inp": 0,
+        "tbt": 60,
+        "longtasks": 1
+      }
+    ],
+    "sheet:type": [
+      {
+        "dom": 85.79999999701977,
+        "ms": 101,
+        "at": 1795507001506.4001,
+        "inputAt": 1795507001405.4001,
+        "inp": 48,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 78.8999999910593,
+        "ms": 93.5,
+        "at": 1795507020786.1,
+        "inputAt": 1795507020692.6,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 46.20000000298023,
+        "ms": 74.70000000298023,
+        "at": 1795507040262.1,
+        "inputAt": 1795507040187.4,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "edit:title": [
+      {
+        "dom": 77.70000000298023,
+        "ms": 84.70000000298023,
+        "at": 1795507001593.9001,
+        "inputAt": 1795507001509.2002,
+        "inp": 48,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 75.29999999701977,
+        "ms": 85,
+        "at": 1795507020873.7002,
+        "inputAt": 1795507020788.7002,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 63.1000000089407,
+        "ms": 70.70000000298023,
+        "at": 1795507040346.6,
+        "inputAt": 1795507040275.9,
+        "inp": 48,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "complete": [
+      {
+        "dom": 83.30000001192093,
+        "ms": 136.6000000089407,
+        "at": 1795507002361.8,
+        "inputAt": 1795507002225.2002,
+        "inp": 56,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 476.5
+      },
+      {
+        "dom": 77.59999999403954,
+        "ms": 137.29999999701977,
+        "at": 1795507021541.9001,
+        "inputAt": 1795507021404.6,
+        "inp": 56,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 458
+      },
+      {
+        "dom": 83.40000000596046,
+        "ms": 132.80000001192093,
+        "at": 1795507041092.2,
+        "inputAt": 1795507040959.4,
+        "inp": 56,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 503.1000000089407
+      }
+    ],
+    "composer:open": [
+      {
+        "dom": 29.5,
+        "ms": 50.29999999701977,
+        "at": 1795507002867.2002,
+        "inputAt": 1795507002816.9001,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 34.900000005960464,
+        "ms": 53.400000005960464,
+        "at": 1795507022044.2002,
+        "inputAt": 1795507021990.8,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 29.299999997019768,
+        "ms": 50.79999999701977,
+        "at": 1795507041620.8,
+        "inputAt": 1795507041570,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "composer:type40": [
+      {
+        "dom": 167.30000001192093,
+        "ms": 179,
+        "at": 1795507003049.7002,
+        "inputAt": 1795507002870.7002,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 4.475
+      },
+      {
+        "dom": 368.8999999910593,
+        "ms": 391.09999999403954,
+        "at": 1795507022437.7002,
+        "inputAt": 1795507022046.6,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 9.777499999850988
+      },
+      {
+        "dom": 170.30000001192093,
+        "ms": 181.30000001192093,
+        "at": 1795507041804.2,
+        "inputAt": 1795507041622.9,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 4.532500000298024
+      }
+    ],
+    "composer:add": [
+      {
+        "dom": 37.1000000089407,
+        "ms": 73,
+        "at": 1795507003126.4001,
+        "inputAt": 1795507003053.4001,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 43.8999999910593,
+        "ms": 87.59999999403954,
+        "at": 1795507022529.2002,
+        "inputAt": 1795507022441.6,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 36.70000000298023,
+        "ms": 72.20000000298023,
+        "at": 1795507041879.8,
+        "inputAt": 1795507041807.6,
+        "inp": 32,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "scroll:today": [
+      {
+        "ms": 18.400000005960464,
+        "p50": 16.599999994039536,
+        "p95": 18.400000005960464,
+        "max": 30.200000002980232,
+        "janky": 2,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 18.5,
+        "p50": 16.799999997019768,
+        "p95": 18.5,
+        "max": 24.200000002980232,
+        "janky": 2,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 18.69999998807907,
+        "p50": 16.599999994039536,
+        "p95": 18.69999998807907,
+        "max": 29.900000005960464,
+        "janky": 1,
+        "frames": 120,
+        "scroller": "HTML"
+      }
+    ],
+    "quickadd:open": [
+      {
+        "dom": 43.400000005960464,
+        "ms": 65.40000000596046,
+        "at": 1795507005531.8,
+        "inputAt": 1795507005466.4001,
+        "inp": 56,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 46.8999999910593,
+        "ms": 62.29999999701977,
+        "at": 1795507024968.4001,
+        "inputAt": 1795507024906.1,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 50.70000000298023,
+        "ms": 68.90000000596046,
+        "at": 1795507044342.2,
+        "inputAt": 1795507044273.3,
+        "inp": 0,
+        "tbt": 1,
+        "longtasks": 1
+      }
+    ],
+    "quickadd:add": [
+      {
+        "dom": 57.6000000089407,
+        "ms": 87.6000000089407,
+        "at": 1795507005758.8,
+        "inputAt": 1795507005671.2002,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 266.39990234375
+      },
+      {
+        "dom": 58.400000005960464,
+        "ms": 91.1000000089407,
+        "at": 1795507025217.4001,
+        "inputAt": 1795507025126.3,
+        "inp": 40,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 265
+      },
+      {
+        "dom": 64.3999999910593,
+        "ms": 97.09999999403954,
+        "at": 1795507044635.1,
+        "inputAt": 1795507044538,
+        "inp": 48,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 271.10009765625
+      }
+    ],
+    "upcoming:cold": [
+      {
+        "ms": 676.1999999880791,
+        "domNodes": 9626,
+        "apiCount": 2
+      },
+      {
+        "ms": 676.8999999910593,
+        "domNodes": 9626,
+        "apiCount": 2
+      },
+      {
+        "ms": 679.1000000089407,
+        "domNodes": 9626,
+        "apiCount": 3
+      }
+    ],
+    "upcoming:warm": [
+      {
+        "ms": 352.29999999701977,
+        "domNodes": 9655,
+        "apiCount": 0
+      },
+      {
+        "ms": 356.29999999701977,
+        "domNodes": 9655,
+        "apiCount": 0
+      },
+      {
+        "ms": 365.90000000596046,
+        "domNodes": 9655,
+        "apiCount": 0
+      }
+    ],
+    "scroll:upcoming": [
+      {
+        "ms": 18.5,
+        "p50": 16.600000008940697,
+        "p95": 18.5,
+        "max": 116,
+        "janky": 1,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 17.700000002980232,
+        "p50": 16.69999998807907,
+        "p95": 17.700000002980232,
+        "max": 95.90000000596046,
+        "janky": 2,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 18.19999998807907,
+        "p50": 16.799999997019768,
+        "p95": 18.19999998807907,
+        "max": 112,
+        "janky": 1,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      }
+    ]
+  }
+}

@@ -50,12 +50,15 @@ export function ProjectsScreen({ account }: { account: Account }) {
 /** The sidebar's My Projects: every project that is not archived. */
 export function ProjectsSidebar({ userId }: { userId: string }) {
   const query = useQuery(projectReads.list(userId));
+  // Pointing at (or tabbing to) a project starts its read, so the page usually opens with it.
+  const cache = useQueryClient();
+  const prefetch = (id: string) => () => void cache.prefetchQuery(projectReads.detail(userId, id));
   if (query.isPending) return <SidebarSkeleton rows={4} label="Loading projects" />;
   const active = (query.data ?? []).filter(project => !project.archived);
   // Always shown (the old Projects link in the views is gone): the heading opens the projects page.
   return <section className="ui flex flex-col" aria-label="My Projects">
     <SidebarSectionHeader title={<NavLink to="/projects" end className="no-underline hover:text-foreground">My Projects</NavLink>} />
-    {active.map(project => <NavLink key={project.id} to={`/projects/${encodeURIComponent(project.id)}`} className={cn(sidebarItemClassName, "flex-none!")}>
+    {active.map(project => <NavLink key={project.id} to={`/projects/${encodeURIComponent(project.id)}`} className={cn(sidebarItemClassName, "flex-none!")} onPointerEnter={prefetch(project.id)} onFocus={prefetch(project.id)}>
       <Hash style={{ color: project.color ?? "var(--color-priority-4)" }} /><span className="flex-1 truncate">{project.name}</span>
     </NavLink>)}
     {!active.length && <NavLink to="/projects" end className={cn(sidebarItemClassName, "flex-none! text-muted-foreground")}><Plus /><span className="truncate">Add a project</span></NavLink>}

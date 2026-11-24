@@ -1,0 +1,2257 @@
+{
+  "meta": {
+    "label": "eu-colocated",
+    "date": "2026-11-24T11:31:08.531Z",
+    "git": "152dd40+wip",
+    "runs": 5,
+    "cpu": 1,
+    "tasks": 412
+  },
+  "summary": {
+    "load:cold": {
+      "p50": 139.09999999403954,
+      "p95": 162.90000000596046,
+      "n": 5,
+      "dom": 127.09999999403954,
+      "tbt": 0,
+      "fcp": 0,
+      "lcp": 0,
+      "ttfb": 1.4000000059604645,
+      "jsKB": 478,
+      "apiCount": 2,
+      "domNodes": 3702,
+      "apiChain": "/api/v1/today 11→39, /api/v1/account 77→113"
+    },
+    "load:warm": {
+      "p50": 67.40000000596046,
+      "p95": 71.7000000178814,
+      "n": 5,
+      "dom": 66.2000000178814,
+      "tbt": 0,
+      "fcp": 0,
+      "lcp": 0,
+      "ttfb": 1.800000011920929,
+      "jsKB": 1,
+      "apiCount": 0,
+      "domNodes": 3699
+    },
+    "tab:inbox (first)": {
+      "p50": 48,
+      "p95": 58.599999994039536,
+      "n": 5,
+      "dom": 39.400000005960464,
+      "inp": 16,
+      "tbt": 0
+    },
+    "tab:today (first)": {
+      "p50": 37.29999998211861,
+      "p95": 37.400000005960464,
+      "n": 5,
+      "dom": 28.099999994039536,
+      "inp": 16,
+      "tbt": 0
+    },
+    "tab:upcoming (first)": {
+      "p50": 50.80000001192093,
+      "p95": 63.29999998211861,
+      "n": 5,
+      "dom": 44,
+      "inp": 16,
+      "tbt": 0
+    },
+    "tab:inbox": {
+      "p50": 42.69999998807907,
+      "p95": 45.5,
+      "n": 5,
+      "dom": 34.69999998807907,
+      "inp": 16,
+      "tbt": 0
+    },
+    "tab:today": {
+      "p50": 37.30000001192093,
+      "p95": 37.89999997615814,
+      "n": 5,
+      "dom": 28.400000005960464,
+      "inp": 16,
+      "tbt": 0
+    },
+    "tab:upcoming": {
+      "p50": 44.29999998211861,
+      "p95": 46.79999998211861,
+      "n": 5,
+      "dom": 38.69999998807907,
+      "inp": 16,
+      "tbt": 0
+    },
+    "sheet:open": {
+      "p50": 50.80000001192093,
+      "p95": 61.79999998211861,
+      "n": 5,
+      "dom": 27.5,
+      "inp": 0,
+      "tbt": 0
+    },
+    "sheet:type": {
+      "p50": 21.200000017881393,
+      "p95": 24.19999998807907,
+      "n": 5,
+      "dom": 8.099999994039536,
+      "inp": 16,
+      "tbt": 0
+    },
+    "edit:title": {
+      "p50": 30.900000005960464,
+      "p95": 32.79999998211861,
+      "n": 5,
+      "dom": 20.80000001192093,
+      "inp": 16,
+      "tbt": 0
+    },
+    "complete": {
+      "p50": 33.19999998807907,
+      "p95": 34.69999998807907,
+      "n": 5,
+      "dom": 21.200000017881393,
+      "inp": 16,
+      "tbt": 0,
+      "server": 37.5
+    },
+    "composer:open": {
+      "p50": 16.80000001192093,
+      "p95": 17.80000001192093,
+      "n": 5,
+      "dom": 7.199999988079071,
+      "inp": 0,
+      "tbt": 0
+    },
+    "composer:type40": {
+      "p50": 48.5,
+      "p95": 48.599999994039536,
+      "n": 5,
+      "dom": 35.900000005960464,
+      "inp": 24,
+      "tbt": 0,
+      "perKey": 1.2125
+    },
+    "composer:add": {
+      "p50": 36.19999998807907,
+      "p95": 36.5,
+      "n": 5,
+      "dom": 16.600000023841858,
+      "inp": 16,
+      "tbt": 0
+    },
+    "scroll:today": {
+      "p50": 17.400000005960464,
+      "p95": 17.599999994039536,
+      "n": 5,
+      "janky": 0,
+      "max": 18
+    },
+    "quickadd:open": {
+      "p50": 16.400000005960464,
+      "p95": 17.599999994039536,
+      "n": 5,
+      "dom": 13,
+      "inp": 0,
+      "tbt": 0
+    },
+    "quickadd:add": {
+      "p50": 32.5,
+      "p95": 35.80000001192093,
+      "n": 5,
+      "dom": 13.100000023841858,
+      "inp": 0,
+      "tbt": 0,
+      "savedAt": 46.800048828125
+    },
+    "upcoming:cold": {
+      "p50": 157,
+      "p95": 170.19999998807907,
+      "n": 5,
+      "apiCount": 6,
+      "domNodes": 9574
+    },
+    "upcoming:warm": {
+      "p50": 96.7000000178814,
+      "p95": 140.30000001192093,
+      "n": 5,
+      "apiCount": 0,
+      "domNodes": 9571
+    },
+    "scroll:upcoming": {
+      "p50": 17.19999998807907,
+      "p95": 17.30000001192093,
+      "n": 5,
+      "janky": 0,
+      "max": 17.5
+    },
+    "sync:other-device": {
+      "p50": 65.80029296875,
+      "p95": 70.699951171875,
+      "n": 5
+    }
+  },
+  "renders": {
+    "tab:inbox (first)": {
+      "total": 4536,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1197,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 421,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 411,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 356,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today (first)": {
+      "total": 2349,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 514,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 256,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 246,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming (first)": {
+      "total": 4196,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1146,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 356,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 346,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 346,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:inbox": {
+      "total": 4536,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1197,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 421,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 411,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 410,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 356,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:today": {
+      "total": 2349,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 514,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 256,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 246,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 245,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "tab:upcoming": {
+      "total": 4196,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 1146,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 356,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 346,
+          "unnecessary": 0
+        },
+        {
+          "name": "CalendarDays",
+          "renders": 346,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowWrapper",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskRowBody",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingAttachments",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "PendingSubtaskRows",
+          "renders": 345,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 92,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:open": {
+      "total": 354,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 51,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 24,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 18,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 14,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Bar",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "FloatingTree",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 9,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "sheet:type": {
+      "total": 319,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 51,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 27,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 18,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 12,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "FloatingTree",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "edit:title": {
+      "total": 465,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 76,
+          "unnecessary": 0
+        },
+        {
+          "name": "Property",
+          "renders": 27,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 19,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 17,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 15,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "AutoGrow",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 9,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 8,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "complete": {
+      "total": 156,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 24,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskContextMenu",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenu",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuRoot",
+          "renders": 2,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:open": {
+      "total": 40,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 10,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "MenuRoot",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "FloatingTree",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "TaskContextMenu",
+          "renders": 1,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenu",
+          "renders": 1,
+          "unnecessary": 0
+        },
+        {
+          "name": "ContextMenuRoot",
+          "renders": 1,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 1,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:type40": {
+      "total": 404,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 120,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 40,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 2,
+          "unnecessary": 0
+        },
+        {
+          "name": "SyncStatus",
+          "renders": 1,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "composer:add": {
+      "total": 228,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 50,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "ChevronDown",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 4,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:open": {
+      "total": 182,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 38,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 11,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Button",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 4,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "SidebarSectionHeader",
+          "renders": 3,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 3,
+          "unnecessary": 0
+        }
+      ]
+    },
+    "quickadd:add": {
+      "total": 212,
+      "unnecessary": 0,
+      "top": [
+        {
+          "name": "anonymous",
+          "renders": 46,
+          "unnecessary": 0
+        },
+        {
+          "name": "LinkWithRef",
+          "renders": 16,
+          "unnecessary": 0
+        },
+        {
+          "name": "Popover",
+          "renders": 13,
+          "unnecessary": 0
+        },
+        {
+          "name": "NavLinkWithRef",
+          "renders": 7,
+          "unnecessary": 0
+        },
+        {
+          "name": "Plus",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Dropdown",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "Inbox",
+          "renders": 6,
+          "unnecessary": 0
+        },
+        {
+          "name": "X",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "AudioLines",
+          "renders": 5,
+          "unnecessary": 0
+        },
+        {
+          "name": "Composer",
+          "renders": 4,
+          "unnecessary": 0
+        }
+      ]
+    }
+  },
+  "api": {
+    "/api/v1/account": {
+      "queries": 1,
+      "p50": 17.848750000004657,
+      "p95": 18.75733300000138,
+      "kb": 0.2412109375,
+      "gzipKB": 0.208984375,
+      "brotliKB": 0.171875,
+      "encoding": "none"
+    },
+    "/api/v1/calendar/events": {
+      "queries": 3,
+      "p50": 20.37629200000083,
+      "p95": 21.75358299999789,
+      "kb": 0.0126953125,
+      "gzipKB": 0.0322265625,
+      "brotliKB": 0.0166015625,
+      "encoding": "none"
+    },
+    "/api/v1/coach": {
+      "queries": 5,
+      "p50": 36.09262500000477,
+      "p95": 37.960542000000714,
+      "kb": 0.0615234375,
+      "gzipKB": 0.0625,
+      "brotliKB": 0.05078125,
+      "encoding": "none"
+    },
+    "/api/v1/goal-links": {
+      "queries": 2,
+      "p50": 17.791666999997688,
+      "p95": 19.925499999997555,
+      "kb": 0.025390625,
+      "gzipKB": 0.041015625,
+      "brotliKB": 0.029296875,
+      "encoding": "none"
+    },
+    "/api/v1/goals": {
+      "queries": 2,
+      "p50": 17.572583000001032,
+      "p95": 19.07566699999734,
+      "kb": 0.0263671875,
+      "gzipKB": 0.0458984375,
+      "brotliKB": 0.0302734375,
+      "encoding": "none"
+    },
+    "/api/v1/imports/todoist?timeZone=Europe%2FZurich": {
+      "queries": 1,
+      "p50": 17.235167000006186,
+      "p95": 19.21679099999892,
+      "kb": 0.03125,
+      "gzipKB": 0.05078125,
+      "brotliKB": 0.03515625,
+      "encoding": "none"
+    },
+    "/api/v1/metadata": {
+      "queries": 2,
+      "p50": 19.117208000010578,
+      "p95": 20.17970900000364,
+      "kb": 0.025390625,
+      "gzipKB": 0.041015625,
+      "brotliKB": 0.029296875,
+      "encoding": "none"
+    },
+    "/api/v1/projects": {
+      "queries": 1,
+      "p50": 17.48329200000444,
+      "p95": 18.402541999996174,
+      "kb": 0.0146484375,
+      "gzipKB": 0.0341796875,
+      "brotliKB": 0.0185546875,
+      "encoding": "none"
+    },
+    "/api/v1/rituals?timeZone=Europe%2FZurich": {
+      "queries": 5,
+      "p50": 82.46629199999734,
+      "p95": 84.7752499999915,
+      "kb": 0.5439453125,
+      "gzipKB": 0.240234375,
+      "brotliKB": 0.1953125,
+      "encoding": "none"
+    },
+    "/api/v1/seasons/current?timeZone=Europe%2FZurich": {
+      "queries": 1,
+      "p50": 16.799750000005588,
+      "p95": 18.048125000001164,
+      "kb": 0.0146484375,
+      "gzipKB": 0.0341796875,
+      "brotliKB": 0.0185546875,
+      "encoding": "none"
+    },
+    "/api/v1/seasons/past": {
+      "queries": 1,
+      "p50": 16.280000000013388,
+      "p95": 17.844083999996656,
+      "kb": 0.013671875,
+      "gzipKB": 0.033203125,
+      "brotliKB": 0.017578125,
+      "encoding": "none"
+    },
+    "/api/v1/settings": {
+      "queries": 1,
+      "p50": 16.113083000003826,
+      "p95": 17.166874999995343,
+      "kb": 0.0654296875,
+      "gzipKB": 0.0830078125,
+      "brotliKB": 0.056640625,
+      "encoding": "none"
+    },
+    "/api/v1/settings/keyboard": {
+      "queries": 1,
+      "p50": 15.983042000007117,
+      "p95": 19.15320800000336,
+      "kb": 0.0771484375,
+      "gzipKB": 0.0810546875,
+      "brotliKB": 0.0576171875,
+      "encoding": "none"
+    },
+    "/api/v1/settings/personalization": {
+      "queries": 1,
+      "p50": 17.009332999994513,
+      "p95": 17.9620419999992,
+      "kb": 0.0234375,
+      "gzipKB": 0.04296875,
+      "brotliKB": 0.02734375,
+      "encoding": "none"
+    },
+    "/api/v1/sync": {
+      "queries": 1,
+      "p50": 16.04141599999275,
+      "p95": 16.78308300000208,
+      "kb": 0.1728515625,
+      "gzipKB": 0.1201171875,
+      "brotliKB": 0.0869140625,
+      "encoding": "none"
+    },
+    "/api/v1/today": {
+      "queries": 5,
+      "p50": 23.00487499999872,
+      "p95": 24.459708000009414,
+      "kb": 170.1005859375,
+      "gzipKB": 14.1513671875,
+      "brotliKB": 10.7470703125,
+      "encoding": "none"
+    },
+    "POST /api/v1/tasks": {
+      "queries": 3,
+      "p50": 21.593542000002344,
+      "p95": 28.351459000012255
+    },
+    "PATCH /api/v1/tasks/:id": {
+      "queries": 7,
+      "p50": 36.98941599999671,
+      "p95": 39.1196670000063
+    },
+    "POST /api/v1/tasks/:id/complete": {
+      "queries": 5,
+      "p50": 38.91112500001327,
+      "p95": 42.93695899999875
+    },
+    "DELETE /api/v1/tasks/:id": {
+      "queries": 1,
+      "p50": 21.755083999989438,
+      "p95": 37.10845900001004
+    }
+  },
+  "bundle": {
+    "initialJS": {
+      "kb": 1584.087890625,
+      "gzipKB": 479.9677734375
+    },
+    "initialCSS": {
+      "kb": 367.974609375,
+      "gzipKB": 53.189453125
+    },
+    "totalJS": {
+      "kb": 2258.7822265625,
+      "gzipKB": 662.0908203125
+    },
+    "chunks": 8,
+    "largest": [
+      "bulk-views-CtK_fgiG.js 936KB (280 gz)",
+      "index-CEfuv9gZ.js 647KB (199 gz)",
+      "settings-dialog-DSO3VoDy.js 590KB (153 gz)",
+      "index-DuETLK_o.css 368KB (53 gz)",
+      "dist-BY9j4ReK.js 49KB (16 gz)",
+      "dist-BoHMOFax.js 22KB (8 gz)"
+    ]
+  },
+  "samples": {
+    "load:cold": [
+      {
+        "ms": 162.90000000596046,
+        "dom": 150.2000000178814,
+        "ttfb": 1.7000000178813934,
+        "dcl": 73.30000001192093,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3730,
+        "tbt": 0,
+        "apiChain": "/api/v1/today 11→39, /api/v1/account 77→113"
+      },
+      {
+        "ms": 149.40000000596046,
+        "dom": 137.10000002384186,
+        "ttfb": 1.9000000059604645,
+        "dcl": 75.7000000178814,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3716,
+        "tbt": 0,
+        "apiChain": "/api/v1/today 10→51, /api/v1/account 79→99"
+      },
+      {
+        "ms": 134.09999999403954,
+        "dom": 121.40000000596046,
+        "ttfb": 1.199999988079071,
+        "dcl": 65,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3702,
+        "tbt": 0,
+        "apiChain": "/api/v1/today 7→51, /api/v1/account 68→87"
+      },
+      {
+        "ms": 139.09999999403954,
+        "dom": 127.09999999403954,
+        "ttfb": 1.4000000059604645,
+        "dcl": 68.80000001192093,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3688,
+        "tbt": 0,
+        "apiChain": "/api/v1/today 10→52, /api/v1/account 72→91"
+      },
+      {
+        "ms": 137.19999998807907,
+        "dom": 125.40000000596046,
+        "ttfb": 1.199999988079071,
+        "dcl": 66.7999999821186,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 478,
+        "cssKB": 54,
+        "apiCount": 2,
+        "domNodes": 3674,
+        "tbt": 0,
+        "apiChain": "/api/v1/today 7→50, /api/v1/account 70→90"
+      }
+    ],
+    "load:warm": [
+      {
+        "ms": 71.7000000178814,
+        "dom": 70.30000001192093,
+        "ttfb": 2.2000000178813934,
+        "dcl": 40.5,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3727,
+        "tbt": 0,
+        "apiChain": ""
+      },
+      {
+        "ms": 68.90000000596046,
+        "dom": 67.80000001192093,
+        "ttfb": 1.699999988079071,
+        "dcl": 37.400000005960464,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3713,
+        "tbt": 0,
+        "apiChain": ""
+      },
+      {
+        "ms": 66.2000000178814,
+        "dom": 64.90000000596046,
+        "ttfb": 1.800000011920929,
+        "dcl": 36.5,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3699,
+        "tbt": 0,
+        "apiChain": ""
+      },
+      {
+        "ms": 65.90000000596046,
+        "dom": 64.80000001192093,
+        "ttfb": 1.7000000178813934,
+        "dcl": 35.30000001192093,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3685,
+        "tbt": 0,
+        "apiChain": ""
+      },
+      {
+        "ms": 67.40000000596046,
+        "dom": 66.2000000178814,
+        "ttfb": 1.9000000059604645,
+        "dcl": 38.10000002384186,
+        "fcp": 0,
+        "lcp": 0,
+        "jsKB": 1,
+        "cssKB": 0,
+        "apiCount": 0,
+        "domNodes": 3671,
+        "tbt": 0,
+        "apiChain": ""
+      }
+    ],
+    "tab:inbox (first)": [
+      {
+        "dom": 37.70000001788139,
+        "ms": 46.20000001788139,
+        "at": 1795519776310.4,
+        "inputAt": 1795519776264.2,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 39.400000005960464,
+        "ms": 48,
+        "at": 1795519792512.3,
+        "inputAt": 1795519792464.3,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 39.099999994039536,
+        "ms": 48,
+        "at": 1795519808395,
+        "inputAt": 1795519808347,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 44.30000001192093,
+        "ms": 58.599999994039536,
+        "at": 1795519824310.3,
+        "inputAt": 1795519824251.7,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 41.099999994039536,
+        "ms": 57,
+        "at": 1795519840262.8,
+        "inputAt": 1795519840205.8,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:today (first)": [
+      {
+        "dom": 29.099999994039536,
+        "ms": 37.400000005960464,
+        "at": 1795519776399.0999,
+        "inputAt": 1795519776361.7,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 28.099999994039536,
+        "ms": 37.29999998211861,
+        "at": 1795519792601.3,
+        "inputAt": 1795519792564,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 28.099999994039536,
+        "ms": 37.29999998211861,
+        "at": 1795519808483.8,
+        "inputAt": 1795519808446.5,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 21.400000005960464,
+        "ms": 29.900000005960464,
+        "at": 1795519824372.5,
+        "inputAt": 1795519824342.6,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 23.80000001192093,
+        "ms": 33.099999994039536,
+        "at": 1795519840326.3,
+        "inputAt": 1795519840293.2,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:upcoming (first)": [
+      {
+        "dom": 44,
+        "ms": 50.80000001192093,
+        "at": 1795519776481.4,
+        "inputAt": 1795519776430.5999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 39.30000001192093,
+        "ms": 45.900000005960464,
+        "at": 1795519792679.1,
+        "inputAt": 1795519792633.2002,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 48.099999994039536,
+        "ms": 57.400000005960464,
+        "at": 1795519808570,
+        "inputAt": 1795519808512.6,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 57,
+        "ms": 63.29999998211861,
+        "at": 1795519824465.7,
+        "inputAt": 1795519824402.4001,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 43.900000005960464,
+        "ms": 50.400000005960464,
+        "at": 1795519840405.7,
+        "inputAt": 1795519840355.3,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:inbox": [
+      {
+        "dom": 34.099999994039536,
+        "ms": 42.5,
+        "at": 1795519776555.2,
+        "inputAt": 1795519776512.7,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 37.599999994039536,
+        "ms": 45.5,
+        "at": 1795519792759.4001,
+        "inputAt": 1795519792713.9001,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 35.900000005960464,
+        "ms": 44.599999994039536,
+        "at": 1795519808640.7,
+        "inputAt": 1795519808596.1,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 34.69999998807907,
+        "ms": 42.69999998807907,
+        "at": 1795519824544.3,
+        "inputAt": 1795519824501.6,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 34.30000001192093,
+        "ms": 42.400000005960464,
+        "at": 1795519840481.2,
+        "inputAt": 1795519840438.8,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:today": [
+      {
+        "dom": 27.900000005960464,
+        "ms": 37.30000001192093,
+        "at": 1795519776616.5,
+        "inputAt": 1795519776579.2,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 26.400000005960464,
+        "ms": 37.099999994039536,
+        "at": 1795519792834.3,
+        "inputAt": 1795519792797.2002,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 30.399999976158142,
+        "ms": 37.89999997615814,
+        "at": 1795519808717.3,
+        "inputAt": 1795519808679.4,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 30.100000023841858,
+        "ms": 37,
+        "at": 1795519824605.3,
+        "inputAt": 1795519824568.3,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 28.400000005960464,
+        "ms": 37.30000001192093,
+        "at": 1795519840542.7,
+        "inputAt": 1795519840505.4,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "tab:upcoming": [
+      {
+        "dom": 38.099999994039536,
+        "ms": 43.5,
+        "at": 1795519776689.0999,
+        "inputAt": 1795519776645.5999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 38.69999998807907,
+        "ms": 44.29999998211861,
+        "at": 1795519792908.2002,
+        "inputAt": 1795519792863.9001,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 40.69999998807907,
+        "ms": 46.79999998211861,
+        "at": 1795519808793.8,
+        "inputAt": 1795519808747,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 40.10000002384186,
+        "ms": 45.80000001192093,
+        "at": 1795519824680.6,
+        "inputAt": 1795519824634.8,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 38.60000002384186,
+        "ms": 43.900000005960464,
+        "at": 1795519840615.8,
+        "inputAt": 1795519840571.9,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "sheet:open": [
+      {
+        "dom": 27.099999994039536,
+        "ms": 50.80000001192093,
+        "at": 1795519777470.9,
+        "inputAt": 1795519777420.0999,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 27.5,
+        "ms": 49.69999998807907,
+        "at": 1795519793686.7998,
+        "inputAt": 1795519793637.0999,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 26.5,
+        "ms": 50.400000005960464,
+        "at": 1795519809604.0999,
+        "inputAt": 1795519809553.7,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 33.599999994039536,
+        "ms": 61.79999998211861,
+        "at": 1795519825472.3,
+        "inputAt": 1795519825410.5,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 29.900000005960464,
+        "ms": 60.80000001192093,
+        "at": 1795519841406.2,
+        "inputAt": 1795519841345.4,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "sheet:type": [
+      {
+        "dom": 8,
+        "ms": 24.19999998807907,
+        "at": 1795519777535.5999,
+        "inputAt": 1795519777511.4,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 8,
+        "ms": 20.69999998807907,
+        "at": 1795519793753.2,
+        "inputAt": 1795519793732.5,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 8.800000011920929,
+        "ms": 18.80000001192093,
+        "at": 1795519809669.5,
+        "inputAt": 1795519809650.7,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 9.100000023841858,
+        "ms": 21.200000017881393,
+        "at": 1795519825542.6,
+        "inputAt": 1795519825521.4001,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 8.099999994039536,
+        "ms": 23.900000005960464,
+        "at": 1795519841477,
+        "inputAt": 1795519841453.0999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "edit:title": [
+      {
+        "dom": 19.200000017881393,
+        "ms": 30.900000005960464,
+        "at": 1795519777570.0999,
+        "inputAt": 1795519777539.2,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 19.5,
+        "ms": 30.5,
+        "at": 1795519793786.4,
+        "inputAt": 1795519793755.9,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 20.80000001192093,
+        "ms": 30.200000017881393,
+        "at": 1795519809703,
+        "inputAt": 1795519809672.7998,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 21,
+        "ms": 32,
+        "at": 1795519825575.7002,
+        "inputAt": 1795519825543.7002,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 21.899999976158142,
+        "ms": 32.79999998211861,
+        "at": 1795519841510.7998,
+        "inputAt": 1795519841478,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "complete": [
+      {
+        "dom": 17.299999982118607,
+        "ms": 30,
+        "at": 1795519778004.4,
+        "inputAt": 1795519777974.4,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 202.7999999821186
+      },
+      {
+        "dom": 21.200000017881393,
+        "ms": 33.5,
+        "at": 1795519794186.7,
+        "inputAt": 1795519794153.2,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 36.599999994039536
+      },
+      {
+        "dom": 19.80000001192093,
+        "ms": 34.69999998807907,
+        "at": 1795519810088.2998,
+        "inputAt": 1795519810053.5999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 37.79999998211861
+      },
+      {
+        "dom": 21.5,
+        "ms": 33.19999998807907,
+        "at": 1795519825976.2002,
+        "inputAt": 1795519825943,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 36.10000002384186
+      },
+      {
+        "dom": 21.599999994039536,
+        "ms": 33.19999998807907,
+        "at": 1795519841911.2,
+        "inputAt": 1795519841878,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0,
+        "server": 37.5
+      }
+    ],
+    "composer:open": [
+      {
+        "dom": 7.0999999940395355,
+        "ms": 17.80000001192093,
+        "at": 1795519778237.3,
+        "inputAt": 1795519778219.5,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 7.199999988079071,
+        "ms": 14.900000005960464,
+        "at": 1795519794253.4,
+        "inputAt": 1795519794238.5,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 7.0999999940395355,
+        "ms": 16.30000001192093,
+        "at": 1795519810153,
+        "inputAt": 1795519810136.7,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 8.200000017881393,
+        "ms": 16.80000001192093,
+        "at": 1795519826043.1,
+        "inputAt": 1795519826026.3,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 7.5999999940395355,
+        "ms": 17,
+        "at": 1795519841978.0999,
+        "inputAt": 1795519841961.0999,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "composer:type40": [
+      {
+        "dom": 37.80000001192093,
+        "ms": 47.30000001192093,
+        "at": 1795519778286.3,
+        "inputAt": 1795519778239,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 1.1825000002980233
+      },
+      {
+        "dom": 34.5,
+        "ms": 48.19999998807907,
+        "at": 1795519794303.0999,
+        "inputAt": 1795519794254.9,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 1.2049999997019767
+      },
+      {
+        "dom": 37.599999994039536,
+        "ms": 48.599999994039536,
+        "at": 1795519810202.7,
+        "inputAt": 1795519810154.0999,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 1.2149999998509884
+      },
+      {
+        "dom": 35.69999998807907,
+        "ms": 48.599999994039536,
+        "at": 1795519826092.7002,
+        "inputAt": 1795519826044.1,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 1.2149999998509884
+      },
+      {
+        "dom": 35.900000005960464,
+        "ms": 48.5,
+        "at": 1795519842027.5999,
+        "inputAt": 1795519841979.0999,
+        "inp": 24,
+        "tbt": 0,
+        "longtasks": 0,
+        "perKey": 1.2125
+      }
+    ],
+    "composer:add": [
+      {
+        "dom": 16.900000005960464,
+        "ms": 35.70000001788139,
+        "at": 1795519778323.8,
+        "inputAt": 1795519778288.0999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 15.900000005960464,
+        "ms": 36.400000005960464,
+        "at": 1795519794340.5,
+        "inputAt": 1795519794304.0999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 16.600000023841858,
+        "ms": 36.5,
+        "at": 1795519810240.7998,
+        "inputAt": 1795519810204.2998,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 16.399999976158142,
+        "ms": 35.89999997615814,
+        "at": 1795519826129.9001,
+        "inputAt": 1795519826094,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 16.69999998807907,
+        "ms": 36.19999998807907,
+        "at": 1795519842064.9,
+        "inputAt": 1795519842028.7,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "scroll:today": [
+      {
+        "ms": 17.599999994039536,
+        "p50": 16.69999998807907,
+        "p95": 17.599999994039536,
+        "max": 17.80000001192093,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 17.400000005960464,
+        "p50": 16.69999998807907,
+        "p95": 17.400000005960464,
+        "max": 18,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 17.5,
+        "p50": 16.69999998807907,
+        "p95": 17.5,
+        "max": 18.200000017881393,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 16.80000001192093,
+        "p50": 16.69999998807907,
+        "p95": 16.80000001192093,
+        "max": 18.900000005960464,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "HTML"
+      },
+      {
+        "ms": 16.899999976158142,
+        "p50": 16.69999998807907,
+        "p95": 16.899999976158142,
+        "max": 18,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "HTML"
+      }
+    ],
+    "quickadd:open": [
+      {
+        "dom": 13,
+        "ms": 16.400000005960464,
+        "at": 1795519780487,
+        "inputAt": 1795519780470.5999,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 12.200000017881393,
+        "ms": 15.800000011920929,
+        "at": 1795519796487,
+        "inputAt": 1795519796471.2,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 13,
+        "ms": 16.30000001192093,
+        "at": 1795519812403.5,
+        "inputAt": 1795519812387.2,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 14.699999988079071,
+        "ms": 17.599999994039536,
+        "at": 1795519828295.1,
+        "inputAt": 1795519828277.5,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      },
+      {
+        "dom": 12.700000017881393,
+        "ms": 17,
+        "at": 1795519844228.2998,
+        "inputAt": 1795519844211.2998,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0
+      }
+    ],
+    "quickadd:add": [
+      {
+        "dom": 13.100000023841858,
+        "ms": 29.700000017881393,
+        "at": 1795519780543.9,
+        "inputAt": 1795519780514.2,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 46
+      },
+      {
+        "dom": 13,
+        "ms": 33.5,
+        "at": 1795519796546.5999,
+        "inputAt": 1795519796513.0999,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 47.5
+      },
+      {
+        "dom": 13.199999988079071,
+        "ms": 30.099999994039536,
+        "at": 1795519812461.2,
+        "inputAt": 1795519812431.0999,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 45.699951171875
+      },
+      {
+        "dom": 15.199999988079071,
+        "ms": 35.80000001192093,
+        "at": 1795519828370.5,
+        "inputAt": 1795519828334.7002,
+        "inp": 16,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 49.099853515625
+      },
+      {
+        "dom": 12.800000011920929,
+        "ms": 32.5,
+        "at": 1795519844287.4,
+        "inputAt": 1795519844254.9,
+        "inp": 0,
+        "tbt": 0,
+        "longtasks": 0,
+        "savedAt": 46.800048828125
+      }
+    ],
+    "upcoming:cold": [
+      {
+        "ms": 157.40000000596046,
+        "domNodes": 9626,
+        "apiCount": 6
+      },
+      {
+        "ms": 156.40000000596046,
+        "domNodes": 9600,
+        "apiCount": 6
+      },
+      {
+        "ms": 154.40000000596046,
+        "domNodes": 9574,
+        "apiCount": 6
+      },
+      {
+        "ms": 170.19999998807907,
+        "domNodes": 9548,
+        "apiCount": 6
+      },
+      {
+        "ms": 157,
+        "domNodes": 9522,
+        "apiCount": 6
+      }
+    ],
+    "upcoming:warm": [
+      {
+        "ms": 140.30000001192093,
+        "domNodes": 9623,
+        "apiCount": 4
+      },
+      {
+        "ms": 92.09999999403954,
+        "domNodes": 9597,
+        "apiCount": 0
+      },
+      {
+        "ms": 97.5,
+        "domNodes": 9571,
+        "apiCount": 0
+      },
+      {
+        "ms": 94.5,
+        "domNodes": 9545,
+        "apiCount": 0
+      },
+      {
+        "ms": 96.7000000178814,
+        "domNodes": 9519,
+        "apiCount": 0
+      }
+    ],
+    "scroll:upcoming": [
+      {
+        "ms": 17.19999998807907,
+        "p50": 16.69999998807907,
+        "p95": 17.19999998807907,
+        "max": 17.5,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 17,
+        "p50": 16.69999998807907,
+        "p95": 17,
+        "max": 17.100000023841858,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 17.099999994039536,
+        "p50": 16.69999998807907,
+        "p95": 17.099999994039536,
+        "max": 28.80000001192093,
+        "janky": 1,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 17.299999982118607,
+        "p50": 16.69999998807907,
+        "p95": 17.299999982118607,
+        "max": 17.599999994039536,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      },
+      {
+        "ms": 17.30000001192093,
+        "p50": 16.69999998807907,
+        "p95": 17.30000001192093,
+        "max": 17.5,
+        "janky": 0,
+        "frames": 120,
+        "scroller": "upcoming-scroll"
+      }
+    ],
+    "sync:other-device": [
+      {
+        "ms": 60.400146484375
+      },
+      {
+        "ms": 54.800048828125
+      },
+      {
+        "ms": 70.699951171875
+      },
+      {
+        "ms": 66.60009765625
+      },
+      {
+        "ms": 65.80029296875
+      }
+    ]
+  }
+}

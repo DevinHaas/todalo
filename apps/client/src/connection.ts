@@ -2,12 +2,15 @@ import { MutationCache, onlineManager, QueryCache, QueryClient, type Mutation } 
 import { AccountTransportError } from "./errors";
 
 /**
- * How often visible screens refetch their reads so another device's changes
- * show up (ticket 22). TanStack pauses the interval while the page is hidden
- * (focusManager follows visibilitychange, which the iOS webview fires on
- * background/foreground) and refetches stale reads on return and on reconnect.
+ * How often visible screens refetch their reads (ticket 22). Since live sync (sync.ts,
+ * calendar.ts startLiveUpdates) pushes changes and catches up on every connect and resume, this
+ * is only the safety net for a stream that died silently: every few minutes, not every minute
+ * (each poll refetches every active read, `/today` included). TanStack pauses it while the page
+ * is hidden and refetches stale reads on return and on reconnect.
  */
-export const POLL_INTERVAL_MS = 60_000;
+export const POLL_INTERVAL_MS = 5 * 60_000;
+/** How long a read counts as fresh when a screen mounts it again (userQueryClient). */
+export const STALE_MS = 30_000;
 
 export type Connection = "online" | "offline" | "unreachable";
 
@@ -52,7 +55,9 @@ export function userQueryClient(connection: ConnectionMonitor, onError: (error: 
     queryCache: new QueryCache({ onError: failed, onSuccess: reached }),
     mutationCache: new MutationCache({ onError: (error, input, _context, mutation) => { failed(error); onWriteError?.(error, input, mutation); }, onSuccess: reached }),
     defaultOptions: {
-      queries: { retry: false, refetchInterval: POLL_INTERVAL_MS, refetchIntervalInBackground: false, refetchOnWindowFocus: true, refetchOnReconnect: true },
+      // staleTime: a read under 30 s old is not refetched when another screen mounts it (tab
+      // switches); live sync (sync.ts) patches or invalidates reads as changes happen anyway.
+      queries: { retry: false, staleTime: STALE_MS, refetchInterval: POLL_INTERVAL_MS, refetchIntervalInBackground: false, refetchOnWindowFocus: true, refetchOnReconnect: true },
       mutations: { retry: false, networkMode: "always" },
     },
   });
