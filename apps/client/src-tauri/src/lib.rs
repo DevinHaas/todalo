@@ -119,7 +119,17 @@ pub fn run() {
         .manage(calendar::LiveStream::default())
         .manage(coach::ChatgptLoopback::default())
         .setup(|app| {
+            use tauri::Manager;
             use tauri_plugin_deep_link::DeepLinkExt;
+            // Perf: open the API connection (TCP + TLS, ~35 ms) while the webview boots, so the
+            // first read after launch doesn't wait for it. The answer is ignored.
+            let auth = app.state::<NativeAuth>();
+            if let Ok(url) = auth.url("/") {
+                let client = auth.client.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = client.head(url).send().await;
+                });
+            }
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let urls: Vec<String> = event.urls().iter().map(|url| url.to_string()).collect();
