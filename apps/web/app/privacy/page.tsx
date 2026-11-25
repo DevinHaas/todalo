@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy · Todalo" };
 // Plain-language draft written from what the code does (docs/landing brief §2.6). Have it reviewed before launch.
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy." thin="Plainly put." updated="19 November 2026">
+    <LegalPage title="Privacy." thin="Plainly put." updated="24 November 2026">
       <p>Todalo is a planner. It keeps what you plan so you can come back to it, and nothing more is the goal. This page says what we store, who else sees it, and why.</p>
       <section>
         <h2>Who we are</h2>
@@ -43,9 +43,23 @@ export default function PrivacyPage() {
           </li>
         </ul>
         <p>
-          We keep the events of the calendars you turn on, and the access tokens Google gives us, in our database so the sync keeps running. No one at
-          Todalo reads your Google data, unless you ask us to for support, it&apos;s needed for security, or the law requires it. We don&apos;t sell it,
-          use it for ads, or use it to develop, improve or train generalised AI or machine learning models.
+          <strong>Who it&apos;s shared with.</strong> Only the AI provider you chose for the Coach, as described above, and only when you ask the Coach to
+          plan; and our hosting and database providers, which store it on our behalf and may not use it for anything else. Nothing else: we don&apos;t sell
+          it, share it with advertisers or data brokers, or use it for ads.
+        </p>
+        <p>
+          <strong>How it&apos;s protected.</strong> Google data travels only over encrypted connections (HTTPS/TLS) and is stored in our database, which is
+          encrypted at rest. Only your own signed-in account can read it through the app. No one at Todalo reads your Google data, unless you ask us to for
+          support, it&apos;s needed for security, or the law requires it.
+        </p>
+        <p>
+          <strong>How long we keep it.</strong> We keep the events of the calendars you turn on, and the access tokens Google gives us, only while your
+          calendar is connected, so the sync keeps running. Disconnecting deletes them, as does deleting your Todalo account.
+        </p>
+        <p>
+          <strong>AI.</strong> We don&apos;t use Google data, raw or aggregated, to develop, improve or train AI or machine learning models, and we only
+          send it to an AI provider for the Coach feature you asked for. The use of raw or derived user data received from Google Workspace APIs will
+          adhere to the Google User Data Policy, including the Limited Use requirements.
         </p>
         <p>
           Todalo&apos;s use and transfer to any other app of information received from Google APIs will adhere to the{" "}
@@ -70,7 +84,7 @@ export default function PrivacyPage() {
         <h2>AI</h2>
         <ul>
           <li>Ramble, our hosted voice capture, streams your audio to a speech-to-text provider (currently ElevenLabs) and sends the text to a language model to turn it into tasks.</li>
-          <li>When you use the Coach with your own key, your request goes to the provider you picked: OpenAI, Anthropic, OpenRouter, or a local model through Ollama. Their own privacy terms apply there.</li>
+          <li>When you use the Coach with your own key, your request goes to the provider you picked: OpenAI (with an API key or your ChatGPT account), Anthropic, OpenRouter, or a local model through Ollama. Their own privacy terms apply there. Through OpenRouter, Todalo only uses endpoints that don&apos;t train on your data. With a personal ChatGPT plan, OpenAI may train on what you send unless you turn off Improve the model for everyone in ChatGPT&apos;s data controls; the Coach settings say so where you sign in.</li>
           <li>API keys you add are encrypted at rest (AES-256-GCM) and only used for the requests you make.</li>
         </ul>
       </section>
@@ -85,8 +99,8 @@ export default function PrivacyPage() {
       <section>
         <h2>Where your data goes</h2>
         <p>
-          Our database host and the services above (Google, ElevenLabs, Sentry and the AI provider you choose) process data outside Switzerland, mostly in the
-          USA. Where a country doesn&apos;t offer protection the FADP recognises as adequate, we rely on the standard data processing terms these
+          Our database is hosted in the EU (Frankfurt). The services above (Google, ElevenLabs, Sentry and the AI provider you choose) process data outside
+          Switzerland, mostly in the USA. Where a country doesn&apos;t offer protection the FADP recognises as adequate, we rely on the standard data processing terms these
           providers publish, which include the standard contractual clauses the FADP accepts.
         </p>
       </section>

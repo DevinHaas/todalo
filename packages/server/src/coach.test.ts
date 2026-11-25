@@ -26,6 +26,8 @@ describe("chatRequest", () => {
     expect(body[budget]).toBeGreaterThan(0);
     expect(body.response_format).toEqual({ type: "json_schema", json_schema: { name: "goal_status_explanation", strict: true, schema: explanationSchema.schema } });
     expect(body.provider !== undefined).toBe(cfg.provider === "openrouter");
+    // Google Limited Use: calendar data must not reach endpoints that train on it.
+    if (cfg.provider === "openrouter") expect(body.provider.data_collection).toBe("deny");
   });
 
   it("omits response_format without a schema", () => {

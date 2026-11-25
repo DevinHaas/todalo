@@ -165,7 +165,9 @@ export function chatRequest(config: CoachConfig, { messages, schema }: CoachRequ
       ? { role, content: [{ type: "text", text: content }, ...images.map(image => ({ type: "image_url", image_url: { url: dataUrl(image) } }))] } : { role, content }),
     // Ollama's compatible endpoint reads max_tokens; hosted reasoning models need room to think first.
     ...local(config) ? { max_tokens: 2_000, temperature: 0.2 } : { max_completion_tokens: 4_000 },
-    ...config.provider === "openrouter" ? { reasoning: { effort: "low", exclude: true }, provider: { require_parameters: Boolean(schema) } } : {},
+    ...config.provider === "openrouter" ? { reasoning: { effort: "low", exclude: true }, provider: { require_parameters: Boolean(schema), data_collection: "deny" } } : {},
+    // data_collection "deny": only endpoints that don't train on prompts. Coach requests can carry
+    // Google Calendar data, which Google's Limited Use rules bar from AI training.
     ...schema ? { response_format: { type: "json_schema", json_schema: { name: schema.name, strict: true, schema: schema.schema } } } : {},
   };
   return {

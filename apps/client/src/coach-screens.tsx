@@ -442,6 +442,9 @@ function ChatgptSignIn({ userId, chatgpt }: { userId: string; chatgpt: ChatgptDt
       </div>
       <Hint>Runs the Coach on your ChatGPT plan instead of an API key. OpenAI asks you to allow sharing of your plan with todalo; usage counts against your plan. OpenAI has not published this sign-in for other apps, so it may change or stop working; another provider keeps the Coach running.</Hint>
     </>}
+    {/* Google Limited Use: calendar data must not train AI models, and Todalo can't opt a ChatGPT plan out itself. */}
+    <Hint data-coach-chatgpt-training="">With a connected calendar, the Coach sends your event times to ChatGPT when it plans. Unless you're on a Business or
+      Enterprise plan, OpenAI may train on them: turn off ChatGPT › Settings › Data controls › Improve the model for everyone.</Hint>
     {error && <FormError>{error}</FormError>}
   </div>;
 }
