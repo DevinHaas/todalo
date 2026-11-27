@@ -12,7 +12,7 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/badge/package.json packages/badge/package.json
 COPY apps/client/package.json apps/client/package.json
 COPY apps/docs/package.json apps/docs/package.json
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # The browser build of apps/client; index.ts serves it for app.todalo.app.
 # ponytail: vite only, no tsc; typechecking is a dev/CI step, like the API's own source here.
