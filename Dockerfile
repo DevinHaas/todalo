@@ -10,7 +10,7 @@ COPY packages/server/package.json ./packages/server/package.json
 COPY packages/badge/package.json ./packages/badge/package.json
 COPY apps/client/package.json ./apps/client/package.json
 COPY apps/docs/package.json ./apps/docs/package.json
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 FROM oven/bun:1 AS builder
 WORKDIR /app
@@ -26,7 +26,8 @@ ENV DATABASE_URL="postgres://user:pass@localhost:5432/db" \
     BETTER_AUTH_URL="http://localhost:3000" \
     GOOGLE_CLIENT_ID="build-time-placeholder" \
     GOOGLE_CLIENT_SECRET="build-time-placeholder"
-RUN bun run --filter @todalo/web build
+# The Next cache survives between builds (BuildKit cache mount), so rebuilds are incremental.
+RUN --mount=type=cache,target=/app/apps/web/.next/cache bun run --filter @todalo/web build
 
 FROM oven/bun:1 AS runner
 WORKDIR /app

@@ -7,3 +7,7 @@ node_modules
 .local-models
 .git
 .env*
+# Not part of any server image; keeps unrelated edits from busting the build layers.
+apps/client/src-tauri
+apps/client/perf
+docs
