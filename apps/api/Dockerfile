@@ -17,6 +17,9 @@ RUN bun install --frozen-lockfile
 # The browser build of apps/client; index.ts serves it for app.todalo.app.
 # ponytail: vite only, no tsc; typechecking is a dev/CI step, like the API's own source here.
 FROM dependencies AS client
+# Build-time only (Coolify build variables); unset = analytics off.
+ARG VITE_POSTHOG_KEY
+ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
 COPY . .
 RUN cd apps/client && bunx vite build
 

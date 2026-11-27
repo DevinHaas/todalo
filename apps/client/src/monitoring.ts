@@ -32,13 +32,19 @@ const monitoring = dsn ? new Promise(resolve => setTimeout(resolve, 1000)).then(
 
 const key = import.meta.env.VITE_POSTHOG_KEY;
 // PostHog is its own chunk, loaded once the app has started; identify() calls wait for it in order.
-const analytics = key ? new Promise(resolve => setTimeout(resolve, 1500)).then(() => import("posthog-js")).then(({ default: posthog }) => {
+const analytics = key ? new Promise(resolve => setTimeout(resolve, 1500)).then(() => import("./posthog")).then(({ default: posthog }) => {
   posthog.init(key, {
     api_host: "https://eu.i.posthog.com",
     defaults: "2026-08-30",
-    // the Tauri CSP allows no remote scripts: no toolbar, surveys or recordings
+    // the Tauri CSP allows no remote scripts: replay, dead clicks and exceptions are bundled
+    // in ./posthog; no toolbar or surveys
     disable_external_dependency_loading: true,
-    disable_session_recording: true,
+    // Recordings feed FeatureSpace's friction detection (rage/dead clicks, errors). They show
+    // layout and clicks only: every text node and input is masked, so tasks, notes and
+    // calendar data never leave the device.
+    session_recording: { maskAllInputs: true, maskTextSelector: "*" },
+    capture_dead_clicks: true,
+    capture_exceptions: true,
   });
   posthog.register({ app, appVersion });
   return posthog;

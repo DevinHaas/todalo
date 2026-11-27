@@ -91,7 +91,12 @@ export default function PrivacyPage() {
       <section>
         <h2>Analytics and error reports</h2>
         <ul>
-          <li>We count how the app is used (which screens and features, linked to your account id and email) with PostHog, hosted in the EU. There are no session recordings.</li>
+          <li>We count how the app is used (which screens and features, linked to your account id and email) with PostHog, hosted in the EU.</li>
+          <li>
+            The app also records how you move through its screens (clicks, scrolling, layout), so we can spot where it gets confusing or stuck. Every piece of text and
+            every input is masked before it leaves your device: recordings never contain your tasks, notes, calendar events or anything you type. PostHog&apos;s AI reviews
+            recordings where something went wrong (repeated clicks, clicks that do nothing, errors) and writes a short note on what was unclear.
+          </li>
           <li>When something breaks, the app sends an error report with your account id to Sentry, so we can fix it.</li>
           <li>Neither is used for advertising or shared with data brokers, and we don&apos;t track you across other apps or websites.</li>
         </ul>
